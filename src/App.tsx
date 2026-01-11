@@ -140,31 +140,31 @@ export default function App() {
         containerRef.current.appendChild(renderer.domElement);
         rendererRef.current = renderer;
 
-        // Lighting
-        scene.add(new THREE.AmbientLight(0xffffff, 0.08));
-        const dir = new THREE.DirectionalLight(0xffffff, 0.15);
+        // Lighting - brighter ambient and directional
+        scene.add(new THREE.AmbientLight(0xffffff, 0.15));
+        const dir = new THREE.DirectionalLight(0xffffff, 0.25);
         dir.position.set(10, 20, 10);
         scene.add(dir);
 
-        // Ground
-        const ground = new THREE.Mesh(new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE), new THREE.MeshStandardMaterial({ color: "#12121a" }));
+        // Ground - slightly metallic for light reflection
+        const ground = new THREE.Mesh(new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE), new THREE.MeshStandardMaterial({ color: "#12121a", metalness: 0.3, roughness: 0.7 }));
         ground.rotation.x = -Math.PI / 2;
         ground.position.set(GRID_SIZE / 2, 0, GRID_SIZE / 2);
         ground.name = "ground";
         scene.add(ground);
 
-        // Room floors
+        // Room floors - polished stone look
         roomFloors.forEach(r => {
-            const floor = new THREE.Mesh(new THREE.PlaneGeometry(r.w, r.h), new THREE.MeshStandardMaterial({ color: r.color }));
+            const floor = new THREE.Mesh(new THREE.PlaneGeometry(r.w, r.h), new THREE.MeshStandardMaterial({ color: r.color, metalness: 0.4, roughness: 0.6 }));
             floor.rotation.x = -Math.PI / 2;
             floor.position.set(r.x + r.w / 2, 0.01, r.z + r.h / 2);
             floor.name = "ground";
             scene.add(floor);
         });
 
-        // Wall sconces with point lights
+        // Wall sconces with brighter point lights
         candlePositions.forEach((pos) => {
-            const bracketMat = new THREE.MeshStandardMaterial({ color: "#3a2a1a" });
+            const bracketMat = new THREE.MeshStandardMaterial({ color: "#3a2a1a", metalness: 0.6, roughness: 0.4 });
             const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.4, 0.1), bracketMat);
             bracket.position.set(pos.x, 1.8, pos.z);
             scene.add(bracket);
@@ -173,26 +173,27 @@ export default function App() {
             arm.position.set(pos.x + pos.dx * 0.15, 1.7, pos.z + pos.dz * 0.15);
             scene.add(arm);
 
-            const candleMat = new THREE.MeshStandardMaterial({ color: "#e8d4a8", emissive: "#4a3a10", emissiveIntensity: 0.2 });
+            const candleMat = new THREE.MeshStandardMaterial({ color: "#e8d4a8", emissive: "#8a6a20", emissiveIntensity: 0.5 });
             const candle = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.25, 8), candleMat);
             candle.position.set(pos.x + pos.dx * 0.3, 1.85, pos.z + pos.dz * 0.3);
             scene.add(candle);
 
-            const flameMat = new THREE.MeshBasicMaterial({ color: "#ff9922" });
-            const flame = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), flameMat);
+            const flameMat = new THREE.MeshBasicMaterial({ color: "#ffcc44" });
+            const flame = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), flameMat);
             flame.position.set(pos.x + pos.dx * 0.3, 2.02, pos.z + pos.dz * 0.3);
             flame.scale.y = 1.8;
             scene.add(flame);
 
-            const light = new THREE.PointLight("#ff8833", 2.5, 14, 1.5);
+            // Brighter, longer range point light
+            const light = new THREE.PointLight("#ffaa44", 5, 18, 1.2);
             light.position.set(pos.x + pos.dx * 1.5, 2.2, pos.z + pos.dz * 1.5);
             scene.add(light);
         });
 
-        // Walls
+        // Walls - slight sheen
         mergedObstacles.forEach((o, i) => {
             const shade = 0x2d3748 + (i % 3) * 0x050505;
-            const mesh = new THREE.Mesh(new THREE.BoxGeometry(o.w, 2.5, o.h), new THREE.MeshStandardMaterial({ color: shade }));
+            const mesh = new THREE.Mesh(new THREE.BoxGeometry(o.w, 2.5, o.h), new THREE.MeshStandardMaterial({ color: shade, metalness: 0.2, roughness: 0.8 }));
             mesh.position.set(o.x + o.w / 2, 1.25, o.z + o.h / 2);
             mesh.name = "obstacle";
             scene.add(mesh);
@@ -245,7 +246,7 @@ export default function App() {
             group.add(base);
 
             const boxH = isPlayer ? 1 : 0.6;
-            const boxMat = new THREE.MeshStandardMaterial({ color: data.color });
+            const boxMat = new THREE.MeshStandardMaterial({ color: data.color, metalness: 0.5, roughness: 0.5 });
             const box = new THREE.Mesh(new THREE.BoxGeometry(0.6, boxH, 0.6), boxMat);
             box.position.y = boxH / 2;
             box.userData.unitId = unit.id;
