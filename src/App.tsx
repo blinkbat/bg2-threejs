@@ -51,6 +51,9 @@ export default function App() {
     const lastMouse = useRef({ x: 0, y: 0 });
     const lastAttack = useRef<Record<number, number>>({});
     const damageTexts = useRef<DamageText[]>([]);
+    const hitFlashRef = useRef<Record<number, number>>({});
+    const unitMeshRef = useRef<Record<number, THREE.Mesh>>({});
+    const unitOriginalColorRef = useRef<Record<number, THREE.Color>>({});
 
     // React state
     const [units, setUnits] = useState<Unit[]>(createInitialUnits);
@@ -70,6 +73,50 @@ export default function App() {
     useEffect(() => { pausedRef.current = paused; }, [paused]);
 
     const addLog = (text: string, color?: string) => setCombatLog(prev => [...prev.slice(-50), { text, color }]);
+
+    // 8-bit style sound effects using Web Audio API with natural randomness
+    const audioCtxRef = useRef<AudioContext | null>(null);
+    const getAudioCtx = () => {
+        if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+        return audioCtxRef.current;
+    };
+    const rand = (base: number, variance: number) => base * (1 + (Math.random() - 0.5) * variance);
+    const playTone = (freq: number, duration: number, volume: number, type: OscillatorType, freqEnd?: number, filterFreq?: number) => {
+        const ctx = getAudioCtx();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const filter = ctx.createBiquadFilter();
+
+        // Randomize duration and volume slightly
+        const dur = rand(duration, 0.3);
+        const vol = rand(volume, 0.2);
+
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, ctx.currentTime);
+        // Add slight detune for character (±15 cents)
+        osc.detune.setValueAtTime((Math.random() - 0.5) * 30, ctx.currentTime);
+        if (freqEnd !== undefined) osc.frequency.exponentialRampToValueAtTime(Math.max(freqEnd, 20), ctx.currentTime + dur);
+
+        // Low-pass filter with randomized cutoff
+        filter.type = "lowpass";
+        filter.frequency.setValueAtTime(filterFreq ? rand(filterFreq, 0.4) : rand(4000, 0.3), ctx.currentTime);
+        filter.Q.setValueAtTime(rand(1, 0.5), ctx.currentTime);
+
+        gain.gain.setValueAtTime(vol, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + dur);
+    };
+    const soundFnsRef = useRef({
+        playMove: () => playTone(800, 0.06, 0.12, "square", undefined, 3000),
+        playAttack: () => playTone(440, 0.08, 0.15, "square", 330, 2500),
+        playHit: () => playTone(120, 0.15, 0.25, "sawtooth", 40, 800),
+        playMiss: () => playTone(200, 0.12, 0.1, "triangle", 400, 2000),
+    });
 
     // =============================================================================
     // THREE.JS SETUP & GAME LOOP
@@ -198,10 +245,13 @@ export default function App() {
             group.add(base);
 
             const boxH = isPlayer ? 1 : 0.6;
-            const box = new THREE.Mesh(new THREE.BoxGeometry(0.6, boxH, 0.6), new THREE.MeshStandardMaterial({ color: data.color }));
+            const boxMat = new THREE.MeshStandardMaterial({ color: data.color });
+            const box = new THREE.Mesh(new THREE.BoxGeometry(0.6, boxH, 0.6), boxMat);
             box.position.y = boxH / 2;
             box.userData.unitId = unit.id;
             group.add(box);
+            unitMeshRef.current[unit.id] = box;
+            unitOriginalColorRef.current[unit.id] = new THREE.Color(data.color);
 
             const sel = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.55, 32), new THREE.MeshBasicMaterial({ color: "#00ff00", side: THREE.DoubleSide }));
             sel.rotation.x = -Math.PI / 2;
@@ -313,6 +363,7 @@ export default function App() {
                                 moveMarkerRef.current.visible = true;
                                 setTimeout(() => { if (moveMarkerRef.current) moveMarkerRef.current.visible = false; }, 500);
                             }
+                            soundFnsRef.current.playMove();
                             let idx = 0;
                             selectedRef.current.forEach(uid => {
                                 const u = unitsStateRef.current.find(u => u.id === uid);
@@ -354,6 +405,7 @@ export default function App() {
                                 pathsRef.current[uid] = [];
                             });
                             setUnits(prev => prev.map(u => selectedRef.current.includes(u.id) ? { ...u, target: id } : u));
+                            soundFnsRef.current.playAttack();
                             return;
                         } else if (clickedUnit && clickedUnit.team === "player") {
                             setSelectedIds(e.shiftKey ? prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id] : [id]);
@@ -431,6 +483,23 @@ export default function App() {
                 if (dt.life <= 0) { scene.remove(dt.mesh); return false; }
                 dt.mesh.quaternion.copy(camera.quaternion);
                 return true;
+            });
+
+            // Hit flash effect - flash white then fade back to original color
+            const FLASH_DURATION = 200;
+            Object.entries(hitFlashRef.current).forEach(([id, hitTime]) => {
+                const mesh = unitMeshRef.current[Number(id)];
+                const originalColor = unitOriginalColorRef.current[Number(id)];
+                if (!mesh || !originalColor) return;
+                const elapsed = now - hitTime;
+                if (elapsed > FLASH_DURATION) {
+                    (mesh.material as THREE.MeshStandardMaterial).color.copy(originalColor);
+                    delete hitFlashRef.current[Number(id)];
+                } else {
+                    const t = elapsed / FLASH_DURATION;
+                    const flashColor = new THREE.Color(1, 1, 1).lerp(originalColor, t);
+                    (mesh.material as THREE.MeshStandardMaterial).color.copy(flashColor);
+                }
             });
 
             const currentUnits = unitsStateRef.current;
@@ -528,6 +597,8 @@ export default function App() {
                                     if (roll >= hitNeeded || roll === 20) {
                                         const dmg = rollDamage(data.damage[0], data.damage[1]);
                                         setUnits(prev => prev.map(u => u.id === targetU.id ? { ...u, hp: u.hp - dmg } : u));
+                                        hitFlashRef.current[targetU.id] = now;
+                                        soundFnsRef.current.playHit();
                                         addLog(`${data.name} hits ${targetData.name} for ${dmg} damage! (${roll})`, isPlayer ? "#4ade80" : "#f87171");
                                         const dmgCanvas = document.createElement("canvas");
                                         dmgCanvas.width = 64; dmgCanvas.height = 32;
@@ -555,6 +626,7 @@ export default function App() {
                                             Object.values(unitsRef.current).forEach((ug: UnitGroup) => { if (ug.userData.attackTarget === targetU.id) ug.userData.attackTarget = null; });
                                         }
                                     } else {
+                                        soundFnsRef.current.playMiss();
                                         addLog(`${data.name} misses ${targetData.name}. (${roll})`, "#888");
                                     }
                                 }
