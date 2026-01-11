@@ -77,7 +77,7 @@ export default function App() {
     const [selBox, setSelBox] = useState<SelectionBox | null>(null);
     const [showPanel, setShowPanel] = useState(false);
     const [combatLog, setCombatLog] = useState<CombatLogEntry[]>([{ text: "Combat begins!", color: "#f59e0b" }]);
-    const [paused, setPaused] = useState(false);
+    const [paused, setPaused] = useState(true);
     const [hpBarPositions, setHpBarPositions] = useState<{ positions: Record<number, { x: number; y: number; visible: boolean }>; scale: number }>({ positions: {}, scale: 1 });
     const [skillCooldowns, setSkillCooldowns] = useState<Record<string, number>>({});
     const [targetingMode, setTargetingMode] = useState<{ casterId: number; skill: Skill } | null>(null);
@@ -191,7 +191,7 @@ export default function App() {
                 });
 
                 addLog(`${UNIT_DATA[casterId].name} casts ${skill.name}!`, "#ff6600");
-                soundFns.playAttack();
+                soundFns.playFireball();
             } else if (skill.type === "heal" && skill.targetType === "ally") {
                 // For heal, find closest ally to target position
                 const allies = unitsStateRef.current.filter(u => u.team === "player" && u.hp > 0);
@@ -230,6 +230,7 @@ export default function App() {
                 setUnits(prev => prev.map(u => u.id === healTargetId ? { ...u, hp: Math.min(targetData.maxHp, u.hp + healAmount) } : u));
 
                 addLog(`${UNIT_DATA[casterId].name} heals ${targetData.name} for ${healAmount}!`, "#22c55e");
+                soundFns.playHeal();
 
                 // Visual effect - green flash
                 const targetG = unitsRef.current[closestAllyId];
@@ -330,7 +331,8 @@ export default function App() {
         };
 
         const onMouseUp = (e: MouseEvent) => {
-            if (isBoxSel.current) {
+            // Skip move processing if in targeting mode - onClick handles skill targeting
+            if (isBoxSel.current && !targetingModeRef.current) {
                 const dx = Math.abs(boxEnd.current.x - boxStart.current.x), dy = Math.abs(boxEnd.current.y - boxStart.current.y);
                 if (dx > 5 || dy > 5) {
                     const inBox = getUnitsInBox(boxStart.current.x, boxStart.current.y, boxEnd.current.x, boxEnd.current.y);
@@ -377,6 +379,11 @@ export default function App() {
                         }
                     }
                 }
+                isBoxSel.current = false;
+                setSelBox(null);
+            }
+            // Always clear box selection state and dragging
+            if (isBoxSel.current) {
                 isBoxSel.current = false;
                 setSelBox(null);
             }
@@ -597,18 +604,21 @@ export default function App() {
                         explosion.position.set(targetPos.x, 0.1, targetPos.z);
                         scene.add(explosion);
                         setTimeout(() => scene.remove(explosion), 300);
+                        soundFns.playExplosion();
 
-                        // Deal damage to all enemies in radius
+                        // Deal damage to ALL units in radius (friendly fire!)
                         let hitCount = 0;
-                        currentUnitsForProjectiles.filter(u => u.team === "enemy" && u.hp > 0).forEach(enemy => {
-                            const eg = unitsRef.current[enemy.id];
-                            if (!eg) return;
-                            const enemyDist = Math.hypot(eg.position.x - targetPos.x, eg.position.z - targetPos.z);
-                            if (enemyDist <= aoeRadius) {
+                        currentUnitsForProjectiles.filter(u => u.hp > 0).forEach(target => {
+                            const tg = unitsRef.current[target.id];
+                            if (!tg) return;
+                            const targetDist = Math.hypot(tg.position.x - targetPos.x, tg.position.z - targetPos.z);
+                            if (targetDist <= aoeRadius) {
+                                const isPlayer = target.team === "player";
+                                const targetData = isPlayer ? UNIT_DATA[target.id] : KOBOLD_STATS;
                                 const rawDmg = rollDamage(damage[0], damage[1]);
-                                const dmg = Math.max(1, rawDmg - KOBOLD_STATS.armor);
-                                setUnits(prev => prev.map(u => u.id === enemy.id ? { ...u, hp: u.hp - dmg } : u));
-                                hitFlashRef.current[enemy.id] = now;
+                                const dmg = Math.max(1, rawDmg - targetData.armor);
+                                setUnits(prev => prev.map(u => u.id === target.id ? { ...u, hp: u.hp - dmg } : u));
+                                hitFlashRef.current[target.id] = now;
                                 hitCount++;
 
                                 // Spawn damage number
@@ -616,21 +626,21 @@ export default function App() {
                                 dmgCanvas.width = 64; dmgCanvas.height = 32;
                                 const dctx = dmgCanvas.getContext("2d")!;
                                 dctx.font = "bold 24px monospace";
-                                dctx.fillStyle = "#ff6600";
+                                dctx.fillStyle = isPlayer ? "#f87171" : "#ff6600";
                                 dctx.textAlign = "center";
                                 dctx.fillText(`-${dmg}`, 32, 24);
                                 const tex = new THREE.CanvasTexture(dmgCanvas);
                                 const sprite = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.4), new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
-                                sprite.position.set(eg.position.x, 1.5, eg.position.z);
+                                sprite.position.set(tg.position.x, 1.5, tg.position.z);
                                 scene.add(sprite);
                                 damageTexts.current.push({ mesh: sprite, life: 1000 });
 
-                                const newHp = Math.max(0, enemy.hp - dmg);
+                                const newHp = Math.max(0, target.hp - dmg);
                                 if (newHp <= 0) {
-                                    addLog(`${KOBOLD_STATS.name} is defeated!`, "#f59e0b");
-                                    eg.visible = false;
+                                    addLog(`${targetData.name} is defeated!`, "#f59e0b");
+                                    tg.visible = false;
                                     Object.values(unitsRef.current).forEach((ug: UnitGroup) => {
-                                        if (ug.userData.attackTarget === enemy.id) ug.userData.attackTarget = null;
+                                        if (ug.userData.attackTarget === target.id) ug.userData.attackTarget = null;
                                     });
                                 }
                             }
@@ -638,7 +648,7 @@ export default function App() {
 
                         if (hitCount > 0) {
                             soundFns.playHit();
-                            addLog(`${attackerData.name}'s Fireball hits ${hitCount} enemies!`, "#ff6600");
+                            addLog(`${attackerData.name}'s Fireball hits ${hitCount} targets!`, "#ff6600");
                         }
 
                         scene.remove(proj.mesh);
@@ -791,9 +801,11 @@ export default function App() {
                     }
 
                     // Find new target if we should auto-target and have no valid target
-                    // Players only auto-target when idle (no active move path) - allows repositioning
+                    // Players only auto-target when truly idle (no active path AND no manual target cleared recently)
                     const hasActivePath = pathsRef.current[unit.id]?.length > 0;
-                    const canAutoTarget = shouldAutoTarget && !targetStillValid && (!isPlayer || !hasActivePath);
+                    // Don't auto-target if unit has an active move command (path with no attackTarget)
+                    const isExecutingMoveCommand = hasActivePath && g.userData.attackTarget === null;
+                    const canAutoTarget = shouldAutoTarget && !targetStillValid && !isExecutingMoveCommand;
                     if (canAutoTarget) {
                         const aggroRange = isPlayer ? 12 : KOBOLD_STATS.aggroRange;
                         const enemyTeam = isPlayer ? "enemy" : "player";
@@ -813,7 +825,14 @@ export default function App() {
                         });
                         if (nearest !== null) {
                             g.userData.attackTarget = nearest;
-                            pathsRef.current[unit.id] = [];
+                            // Immediately calculate path to new target
+                            const targetG = unitsRef.current[nearest];
+                            if (targetG) {
+                                const path = findPath(g.position.x, g.position.z, targetG.position.x, targetG.position.z);
+                                pathsRef.current[unit.id] = path ? path.slice(1) : [];
+                            } else {
+                                pathsRef.current[unit.id] = [];
+                            }
                         }
                     }
 
@@ -882,7 +901,18 @@ export default function App() {
                                 }
                                 return;
                             } else {
-                                if (!pathsRef.current[unit.id]?.length || Math.random() < 0.02) {
+                                // Recalculate path only if:
+                                // 1. We have no path, OR
+                                // 2. Our path destination is far from current target position (target moved)
+                                const currentPath = pathsRef.current[unit.id];
+                                let needsNewPath = !currentPath?.length;
+                                if (!needsNewPath && currentPath && currentPath.length > 0) {
+                                    const pathEnd = currentPath[currentPath.length - 1];
+                                    const distToPathEnd = Math.hypot(pathEnd.x - targetX, pathEnd.z - targetZ);
+                                    // Recalculate if target moved more than 2 units from our path destination
+                                    needsNewPath = distToPathEnd > 2;
+                                }
+                                if (needsNewPath) {
                                     const path = findPath(g.position.x, g.position.z, targetX, targetZ);
                                     pathsRef.current[unit.id] = path ? path.slice(1) : [];
                                 }
