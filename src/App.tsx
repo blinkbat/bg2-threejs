@@ -63,6 +63,14 @@ export default function App() {
     const rangeIndicatorRef = useRef<THREE.Mesh | null>(null);
     const aoeIndicatorRef = useRef<THREE.Mesh | null>(null);
 
+    // Action queue for paused state - actions are queued and executed on unpause
+    type QueuedAction =
+        | { type: "skill"; casterId: number; skill: Skill; targetX: number; targetZ: number }
+        | { type: "move"; unitIds: number[]; targets: { id: number; x: number; z: number }[] }
+        | { type: "attack"; unitIds: number[]; targetId: number };
+    const actionQueueRef = useRef<QueuedAction[]>([]);
+    const processActionQueueRef = useRef<() => void>(() => {});
+
     // React state
     const [units, setUnits] = useState<Unit[]>(createInitialUnits);
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
@@ -147,6 +155,131 @@ export default function App() {
             }
         };
 
+        // Execute a skill (used for immediate cast and queued actions)
+        const executeSkill = (casterId: number, skill: Skill, targetX: number, targetZ: number) => {
+            const caster = unitsStateRef.current.find(u => u.id === casterId);
+            const casterG = unitsRef.current[casterId];
+            if (!caster || !casterG || caster.hp <= 0) return;
+            if ((caster.mana ?? 0) < skill.manaCost) {
+                addLog(`${UNIT_DATA[casterId].name}: Not enough mana!`, "#888");
+                return;
+            }
+
+            if (skill.type === "damage" && skill.targetType === "aoe") {
+                // Deduct mana and set cooldown
+                setUnits(prev => prev.map(u => u.id === casterId ? { ...u, mana: (u.mana ?? 0) - skill.manaCost } : u));
+                setSkillCooldowns(prev => ({ ...prev, [`${casterId}-${skill.name}`]: Date.now() + skill.cooldown }));
+
+                // Create projectile toward target location
+                const projectile = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.2, 12, 12),
+                    new THREE.MeshBasicMaterial({ color: skill.projectileColor || "#ff4400" })
+                );
+                projectile.position.set(casterG.position.x, 0.8, casterG.position.z);
+                scene.add(projectile);
+
+                projectilesRef.current.push({
+                    mesh: projectile,
+                    targetId: -1,
+                    attackerId: casterId,
+                    speed: 0.25,
+                    // @ts-expect-error - extending projectile type for AOE
+                    isAoe: true,
+                    aoeRadius: skill.aoeRadius,
+                    damage: skill.value,
+                    targetPos: { x: targetX, z: targetZ }
+                });
+
+                addLog(`${UNIT_DATA[casterId].name} casts ${skill.name}!`, "#ff6600");
+                soundFns.playAttack();
+            } else if (skill.type === "heal" && skill.targetType === "ally") {
+                // For heal, find closest ally to target position
+                const allies = unitsStateRef.current.filter(u => u.team === "player" && u.hp > 0);
+                let closestAllyId: number | null = null;
+                let closestDist = 2;
+
+                allies.forEach(ally => {
+                    const ag = unitsRef.current[ally.id];
+                    if (!ag) return;
+                    const d = Math.hypot(ag.position.x - targetX, ag.position.z - targetZ);
+                    if (d < closestDist) {
+                        closestDist = d;
+                        closestAllyId = ally.id;
+                    }
+                });
+
+                if (closestAllyId === null) {
+                    addLog(`${UNIT_DATA[casterId].name}: No ally at that location!`, "#888");
+                    return;
+                }
+
+                const targetAlly = unitsStateRef.current.find(u => u.id === closestAllyId);
+                if (targetAlly && targetAlly.hp >= UNIT_DATA[targetAlly.id].maxHp) {
+                    addLog(`${UNIT_DATA[casterId].name}: ${UNIT_DATA[closestAllyId].name} is at full health!`, "#888");
+                    return;
+                }
+
+                // Deduct mana and set cooldown
+                setUnits(prev => prev.map(u => u.id === casterId ? { ...u, mana: (u.mana ?? 0) - skill.manaCost } : u));
+                setSkillCooldowns(prev => ({ ...prev, [`${casterId}-${skill.name}`]: Date.now() + skill.cooldown }));
+
+                // Apply heal
+                const healAmount = rollDamage(skill.value[0], skill.value[1]);
+                const targetData = UNIT_DATA[closestAllyId];
+                const healTargetId = closestAllyId;
+                setUnits(prev => prev.map(u => u.id === healTargetId ? { ...u, hp: Math.min(targetData.maxHp, u.hp + healAmount) } : u));
+
+                addLog(`${UNIT_DATA[casterId].name} heals ${targetData.name} for ${healAmount}!`, "#22c55e");
+
+                // Visual effect - green flash
+                const targetG = unitsRef.current[closestAllyId];
+                if (targetG) {
+                    const mesh = unitMeshRef.current[closestAllyId];
+                    if (mesh) {
+                        (mesh.material as THREE.MeshStandardMaterial).color.set("#22ff22");
+                        setTimeout(() => {
+                            const orig = unitOriginalColorRef.current[healTargetId];
+                            if (orig) (mesh.material as THREE.MeshStandardMaterial).color.copy(orig);
+                        }, 200);
+                    }
+                }
+            }
+        };
+
+        // Execute attack targeting (used for immediate and queued actions)
+        const executeAttack = (unitIds: number[], targetId: number) => {
+            unitIds.forEach(uid => {
+                if (unitsRef.current[uid]) unitsRef.current[uid].userData.attackTarget = targetId;
+                pathsRef.current[uid] = [];
+            });
+            setUnits(prev => prev.map(u => unitIds.includes(u.id) ? { ...u, target: targetId } : u));
+            soundFns.playAttack();
+        };
+
+        // Execute move command (used for immediate and queued actions)
+        const executeMove = (targets: { id: number; x: number; z: number }[]) => {
+            targets.forEach(t => {
+                assignPath(t.id, t.x, t.z);
+                if (unitsRef.current[t.id]) unitsRef.current[t.id].userData.attackTarget = null;
+            });
+            setUnits(prev => prev.map(u => targets.some(t => t.id === u.id) ? { ...u, target: null } : u));
+        };
+
+        // Process queued actions (called when unpausing)
+        const processActionQueue = () => {
+            while (actionQueueRef.current.length > 0) {
+                const action = actionQueueRef.current.shift()!;
+                if (action.type === "skill") {
+                    executeSkill(action.casterId, action.skill, action.targetX, action.targetZ);
+                } else if (action.type === "attack") {
+                    executeAttack(action.unitIds, action.targetId);
+                } else if (action.type === "move") {
+                    executeMove(action.targets);
+                }
+            }
+        };
+        processActionQueueRef.current = processActionQueue;
+
         const onMouseDown = (e: MouseEvent) => {
             if (e.button === 2) { isDragging.current = true; lastMouse.current = { x: e.clientX, y: e.clientY }; }
             else if (e.button === 0) {
@@ -218,6 +351,9 @@ export default function App() {
                                 setTimeout(() => { if (moveMarkerRef.current) moveMarkerRef.current.visible = false; }, 500);
                             }
                             soundFns.playMove();
+
+                            // Build move targets
+                            const moveTargets: { id: number; x: number; z: number }[] = [];
                             let idx = 0;
                             selectedRef.current.forEach(uid => {
                                 const u = unitsStateRef.current.find(u => u.id === uid);
@@ -226,11 +362,17 @@ export default function App() {
                                     idx++;
                                     const tx = Math.max(0.5, Math.min(GRID_SIZE - 0.5, gx + ox));
                                     const tz = Math.max(0.5, Math.min(GRID_SIZE - 0.5, gz + oz));
-                                    assignPath(uid, tx, tz);
-                                    if (unitsRef.current[uid]) unitsRef.current[uid].userData.attackTarget = null;
+                                    moveTargets.push({ id: uid, x: tx, z: tz });
                                 }
                             });
-                            setUnits(prev => prev.map(u => selectedRef.current.includes(u.id) ? { ...u, target: null } : u));
+
+                            if (pausedRef.current) {
+                                // Queue move for when unpaused
+                                actionQueueRef.current.push({ type: "move", unitIds: moveTargets.map(t => t.id), targets: moveTargets });
+                                addLog(`Move queued for ${moveTargets.length} unit(s)`, "#888");
+                            } else {
+                                executeMove(moveTargets);
+                            }
                             break;
                         }
                     }
@@ -248,7 +390,7 @@ export default function App() {
             mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
             raycaster.setFromCamera(mouse, camera);
 
-            // Handle targeting mode click
+            // Handle targeting mode click (queue if paused)
             if (targetingModeRef.current) {
                 const { casterId, skill } = targetingModeRef.current;
                 const caster = unitsStateRef.current.find(u => u.id === casterId);
@@ -274,86 +416,19 @@ export default function App() {
                             return;
                         }
 
-                        // Cast the skill at this location
-                        if (skill.type === "damage" && skill.targetType === "aoe") {
-                            // Deduct mana and set cooldown
-                            setUnits(prev => prev.map(u => u.id === casterId ? { ...u, mana: (u.mana ?? 0) - skill.manaCost } : u));
-                            setSkillCooldowns(prev => ({ ...prev, [`${casterId}-${skill.name}`]: Date.now() + skill.cooldown }));
-
-                            // Create projectile toward target location
-                            const projectile = new THREE.Mesh(
-                                new THREE.SphereGeometry(0.2, 12, 12),
-                                new THREE.MeshBasicMaterial({ color: skill.projectileColor || "#ff4400" })
-                            );
-                            projectile.position.set(casterG.position.x, 0.8, casterG.position.z);
-                            scene.add(projectile);
-
-                            projectilesRef.current.push({
-                                mesh: projectile,
-                                targetId: -1,
-                                attackerId: casterId,
-                                speed: 0.25,
-                                // @ts-expect-error - extending projectile type for AOE
-                                isAoe: true,
-                                aoeRadius: skill.aoeRadius,
-                                damage: skill.value,
-                                targetPos: { x: targetX, z: targetZ }
-                            });
-
-                            addLog(`${UNIT_DATA[casterId].name} casts ${skill.name}!`, "#ff6600");
-                            soundFns.playAttack();
-                        } else if (skill.type === "heal" && skill.targetType === "ally") {
-                            // For heal, find closest ally to click position
-                            const allies = unitsStateRef.current.filter(u => u.team === "player" && u.hp > 0);
-                            let closestAllyId: number | null = null;
-                            let closestDist = 2; // Max distance from click to consider
-
-                            allies.forEach(ally => {
-                                const ag = unitsRef.current[ally.id];
-                                if (!ag) return;
-                                const d = Math.hypot(ag.position.x - targetX, ag.position.z - targetZ);
-                                if (d < closestDist) {
-                                    closestDist = d;
-                                    closestAllyId = ally.id;
-                                }
-                            });
-
-                            if (closestAllyId === null) {
-                                addLog(`${UNIT_DATA[casterId].name}: No ally at that location!`, "#888");
-                                return;
-                            }
-
-                            const targetAlly = unitsStateRef.current.find(u => u.id === closestAllyId);
-                            if (targetAlly && targetAlly.hp >= UNIT_DATA[targetAlly.id].maxHp) {
-                                addLog(`${UNIT_DATA[casterId].name}: ${UNIT_DATA[closestAllyId].name} is at full health!`, "#888");
-                                return;
-                            }
-
-                            // Deduct mana and set cooldown
-                            setUnits(prev => prev.map(u => u.id === casterId ? { ...u, mana: (u.mana ?? 0) - skill.manaCost } : u));
-                            setSkillCooldowns(prev => ({ ...prev, [`${casterId}-${skill.name}`]: Date.now() + skill.cooldown }));
-
-                            // Apply heal
-                            const healAmount = rollDamage(skill.value[0], skill.value[1]);
-                            const targetData = UNIT_DATA[closestAllyId];
-                            const healTargetId = closestAllyId;
-                            setUnits(prev => prev.map(u => u.id === healTargetId ? { ...u, hp: Math.min(targetData.maxHp, u.hp + healAmount) } : u));
-
-                            addLog(`${UNIT_DATA[casterId].name} heals ${targetData.name} for ${healAmount}!`, "#22c55e");
-
-                            // Visual effect - green flash
-                            const targetG = unitsRef.current[closestAllyId];
-                            if (targetG) {
-                                const mesh = unitMeshRef.current[closestAllyId];
-                                if (mesh) {
-                                    (mesh.material as THREE.MeshStandardMaterial).color.set("#22ff22");
-                                    setTimeout(() => {
-                                        const orig = unitOriginalColorRef.current[healTargetId];
-                                        if (orig) (mesh.material as THREE.MeshStandardMaterial).color.copy(orig);
-                                    }, 200);
-                                }
-                            }
+                        // Queue the skill if paused
+                        if (pausedRef.current) {
+                            actionQueueRef.current.push({ type: "skill", casterId, skill, targetX, targetZ });
+                            addLog(`${UNIT_DATA[casterId].name} prepares ${skill.name}... (queued)`, "#888");
+                            // Exit targeting mode
+                            setTargetingMode(null);
+                            if (rangeIndicatorRef.current) rangeIndicatorRef.current.visible = false;
+                            if (aoeIndicatorRef.current) aoeIndicatorRef.current.visible = false;
+                            return;
                         }
+
+                        // Execute skill immediately
+                        executeSkill(casterId, skill, targetX, targetZ);
 
                         // Exit targeting mode
                         setTargetingMode(null);
@@ -373,12 +448,14 @@ export default function App() {
                         const id = o.userData.unitId as number;
                         const clickedUnit = unitsStateRef.current.find(u => u.id === id);
                         if (clickedUnit && clickedUnit.team === "enemy" && clickedUnit.hp > 0 && selectedRef.current.length > 0) {
-                            selectedRef.current.forEach(uid => {
-                                if (unitsRef.current[uid]) unitsRef.current[uid].userData.attackTarget = id;
-                                pathsRef.current[uid] = [];
-                            });
-                            setUnits(prev => prev.map(u => selectedRef.current.includes(u.id) ? { ...u, target: id } : u));
-                            soundFns.playAttack();
+                            const unitIds = [...selectedRef.current];
+                            if (pausedRef.current) {
+                                // Queue attack for when unpaused
+                                actionQueueRef.current.push({ type: "attack", unitIds, targetId: id });
+                                addLog(`Attack queued on ${KOBOLD_STATS.name}`, "#888");
+                            } else {
+                                executeAttack(unitIds, id);
+                            }
                             return;
                         } else if (clickedUnit && clickedUnit.team === "player") {
                             setSelectedIds(e.shiftKey ? prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id] : [id]);
@@ -391,7 +468,16 @@ export default function App() {
         };
 
         const onKeyDown = (e: KeyboardEvent) => {
-            if (e.code === "Space") { e.preventDefault(); pausedRef.current = !pausedRef.current; setPaused(p => !p); }
+            if (e.code === "Space") {
+                e.preventDefault();
+                const waspaused = pausedRef.current;
+                pausedRef.current = !pausedRef.current;
+                setPaused(p => !p);
+                // Process queued actions when unpausing
+                if (waspaused && !pausedRef.current) {
+                    processActionQueue();
+                }
+            }
             if (e.code === "Escape" && targetingModeRef.current) {
                 setTargetingMode(null);
                 if (rangeIndicatorRef.current) rangeIndicatorRef.current.visible = false;
@@ -466,18 +552,23 @@ export default function App() {
             }
 
 
-            // Floating damage text
+            // Floating damage text (keep billboarding even when paused, but freeze animation)
             damageTexts.current = damageTexts.current.filter(dt => {
-                dt.mesh.position.y += 0.02;
-                dt.life -= 16;
-                (dt.mesh.material as THREE.MeshBasicMaterial).opacity = dt.life / 1000;
-                if (dt.life <= 0) { scene.remove(dt.mesh); return false; }
                 dt.mesh.quaternion.copy(camera.quaternion);
+                if (!pausedRef.current) {
+                    dt.mesh.position.y += 0.02;
+                    dt.life -= 16;
+                    (dt.mesh.material as THREE.MeshBasicMaterial).opacity = dt.life / 1000;
+                    if (dt.life <= 0) { scene.remove(dt.mesh); return false; }
+                }
                 return true;
             });
 
-            // Update projectiles
+            // Update projectiles (freeze when paused)
             const currentUnitsForProjectiles = unitsStateRef.current;
+            if (pausedRef.current) {
+                // Skip projectile updates when paused - they freeze in place
+            } else {
             projectilesRef.current = projectilesRef.current.filter(proj => {
                 // @ts-expect-error - AOE projectile extensions
                 const isAoe = proj.isAoe as boolean | undefined;
@@ -625,23 +716,26 @@ export default function App() {
                 proj.mesh.position.z += (dz / dist) * proj.speed;
                 return true;
             });
+            }
 
-            // Hit flash effect - flash white then fade back to original color
-            const FLASH_DURATION = 200;
-            Object.entries(hitFlashRef.current).forEach(([id, hitTime]) => {
-                const mesh = unitMeshRef.current[Number(id)];
-                const originalColor = unitOriginalColorRef.current[Number(id)];
-                if (!mesh || !originalColor) return;
-                const elapsed = now - hitTime;
-                if (elapsed > FLASH_DURATION) {
-                    (mesh.material as THREE.MeshStandardMaterial).color.copy(originalColor);
-                    delete hitFlashRef.current[Number(id)];
-                } else {
-                    const t = elapsed / FLASH_DURATION;
-                    const flashColor = new THREE.Color(1, 1, 1).lerp(originalColor, t);
-                    (mesh.material as THREE.MeshStandardMaterial).color.copy(flashColor);
-                }
-            });
+            // Hit flash effect - flash white then fade back to original color (freeze when paused)
+            if (!pausedRef.current) {
+                const FLASH_DURATION = 200;
+                Object.entries(hitFlashRef.current).forEach(([id, hitTime]) => {
+                    const mesh = unitMeshRef.current[Number(id)];
+                    const originalColor = unitOriginalColorRef.current[Number(id)];
+                    if (!mesh || !originalColor) return;
+                    const elapsed = now - hitTime;
+                    if (elapsed > FLASH_DURATION) {
+                        (mesh.material as THREE.MeshStandardMaterial).color.copy(originalColor);
+                        delete hitFlashRef.current[Number(id)];
+                    } else {
+                        const t = elapsed / FLASH_DURATION;
+                        const flashColor = new THREE.Color(1, 1, 1).lerp(originalColor, t);
+                        (mesh.material as THREE.MeshStandardMaterial).color.copy(flashColor);
+                    }
+                });
+            }
 
             const currentUnits = unitsStateRef.current;
 
@@ -925,6 +1019,7 @@ export default function App() {
 
     // Skill targeting handler - enters targeting mode
     const handleCastSkill = (casterId: number, skill: Skill) => {
+        // Allow entering targeting mode while paused - action will be queued
         const caster = units.find(u => u.id === casterId);
         if (!caster || caster.hp <= 0 || (caster.mana ?? 0) < skill.manaCost) return;
 
@@ -980,7 +1075,12 @@ export default function App() {
                     </div>
                 );
             })}
-            <HUD aliveEnemies={aliveEnemies} alivePlayers={alivePlayers} paused={paused} onTogglePause={() => setPaused(p => !p)} />
+            <HUD aliveEnemies={aliveEnemies} alivePlayers={alivePlayers} paused={paused} onTogglePause={() => {
+                const wasPaused = paused;
+                pausedRef.current = !paused;
+                setPaused(p => !p);
+                if (wasPaused) processActionQueueRef.current();
+            }} />
             <CombatLog log={combatLog} />
             <PartyBar units={units} selectedIds={selectedIds} onSelect={setSelectedIds} />
             {showPanel && selectedIds.length === 1 && <UnitPanel unitId={selectedIds[0]} units={units} onClose={() => setShowPanel(false)} onToggleAI={(id) => setUnits(prev => prev.map(u => u.id === id ? { ...u, aiEnabled: !u.aiEnabled } : u))} onCastSkill={handleCastSkill} skillCooldowns={skillCooldowns} />}
