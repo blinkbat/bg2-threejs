@@ -8,7 +8,7 @@ import * as THREE from "three";
 
 // Constants & Types
 import { GRID_SIZE, ATTACK_RANGE, ATTACK_COOLDOWN, MOVE_SPEED, UNIT_RADIUS, PAN_SPEED } from "./constants";
-import type { Unit, CombatLogEntry, SelectionBox, DamageText, FogTexture, UnitGroup } from "./types";
+import type { Unit, UnitData, CombatLogEntry, SelectionBox, DamageText, FogTexture, UnitGroup } from "./types";
 
 // Game Logic
 import { blocked, candlePositions, mergedObstacles, roomFloors } from "./dungeon";
@@ -55,6 +55,7 @@ export default function App() {
     const unitMeshRef = useRef<Record<number, THREE.Mesh>>({});
     const unitOriginalColorRef = useRef<Record<number, THREE.Color>>({});
     const moveStartRef = useRef<Record<number, { time: number; x: number; z: number }>>({});
+    const projectilesRef = useRef<{ mesh: THREE.Mesh; targetId: number; attackerId: number; speed: number }[]>([]);
 
     // React state
     const [units, setUnits] = useState<Unit[]>(createInitialUnits);
@@ -489,6 +490,75 @@ export default function App() {
                 return true;
             });
 
+            // Update projectiles
+            const currentUnitsForProjectiles = unitsStateRef.current;
+            projectilesRef.current = projectilesRef.current.filter(proj => {
+                const targetUnit = currentUnitsForProjectiles.find(u => u.id === proj.targetId);
+                const targetG = unitsRef.current[proj.targetId];
+                const attackerUnit = currentUnitsForProjectiles.find(u => u.id === proj.attackerId);
+
+                // Remove if target or attacker is gone
+                if (!targetUnit || !targetG || targetUnit.hp <= 0 || !attackerUnit) {
+                    scene.remove(proj.mesh);
+                    return false;
+                }
+
+                // Move toward target
+                const dx = targetG.position.x - proj.mesh.position.x;
+                const dz = targetG.position.z - proj.mesh.position.z;
+                const dist = Math.hypot(dx, dz);
+
+                if (dist < 0.3) {
+                    // Hit! Apply damage
+                    const attackerData = UNIT_DATA[proj.attackerId];
+                    const targetData = targetUnit.team === "player" ? UNIT_DATA[targetUnit.id] : KOBOLD_STATS;
+                    const roll = rollD20();
+                    const hitNeeded = attackerData.thac0 - targetData.ac;
+
+                    if (roll >= hitNeeded || roll === 20) {
+                        const dmg = rollDamage(attackerData.damage[0], attackerData.damage[1]);
+                        setUnits(prev => prev.map(u => u.id === targetUnit.id ? { ...u, hp: u.hp - dmg } : u));
+                        hitFlashRef.current[targetUnit.id] = now;
+                        soundFnsRef.current.playHit();
+                        addLog(`${attackerData.name} hits ${targetData.name} for ${dmg} damage! (${roll})`, "#4ade80");
+
+                        // Spawn damage number
+                        const dmgCanvas = document.createElement("canvas");
+                        dmgCanvas.width = 64; dmgCanvas.height = 32;
+                        const dctx = dmgCanvas.getContext("2d")!;
+                        dctx.font = "bold 24px monospace";
+                        dctx.fillStyle = "#4ade80";
+                        dctx.textAlign = "center";
+                        dctx.fillText(`-${dmg}`, 32, 24);
+                        const tex = new THREE.CanvasTexture(dmgCanvas);
+                        const sprite = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.4), new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
+                        sprite.position.set(targetG.position.x, 1.5, targetG.position.z);
+                        scene.add(sprite);
+                        damageTexts.current.push({ mesh: sprite, life: 1000 });
+
+                        const newHp = Math.max(0, targetUnit.hp - dmg);
+                        if (newHp <= 0) {
+                            addLog(`${targetData.name} is defeated!`, "#f59e0b");
+                            targetG.visible = false;
+                            Object.values(unitsRef.current).forEach((ug: UnitGroup) => {
+                                if (ug.userData.attackTarget === targetUnit.id) ug.userData.attackTarget = null;
+                            });
+                        }
+                    } else {
+                        soundFnsRef.current.playMiss();
+                        addLog(`${attackerData.name} misses ${targetData.name}. (${roll})`, "#888");
+                    }
+
+                    scene.remove(proj.mesh);
+                    return false;
+                }
+
+                // Move projectile
+                proj.mesh.position.x += (dx / dist) * proj.speed;
+                proj.mesh.position.z += (dz / dist) * proj.speed;
+                return true;
+            });
+
             // Hit flash effect - flash white then fade back to original color
             const FLASH_DURATION = 200;
             Object.entries(hitFlashRef.current).forEach(([id, hitTime]) => {
@@ -595,39 +665,59 @@ export default function App() {
                             targetX = targetG.position.x;
                             targetZ = targetG.position.z;
                             const dist = Math.hypot(targetX - g.position.x, targetZ - g.position.z);
-                            if (dist <= ATTACK_RANGE) {
+                            const isRanged = isPlayer && 'range' in data && data.range !== undefined;
+                            const unitRange = isRanged ? (data as UnitData).range! : ATTACK_RANGE;
+                            // Clear path when in range - ranged units should stop moving
+                            if (dist <= unitRange && pathsRef.current[unit.id]?.length > 0) {
+                                pathsRef.current[unit.id] = [];
+                            }
+                            if (dist <= unitRange) {
                                 if (!lastAttack.current[unit.id] || now - lastAttack.current[unit.id] > ATTACK_COOLDOWN) {
                                     lastAttack.current[unit.id] = now;
-                                    const targetData = targetU.team === "player" ? UNIT_DATA[targetU.id] : KOBOLD_STATS;
-                                    const roll = rollD20();
-                                    const hitNeeded = data.thac0 - targetData.ac;
-                                    if (roll >= hitNeeded || roll === 20) {
-                                        const dmg = rollDamage(data.damage[0], data.damage[1]);
-                                        setUnits(prev => prev.map(u => u.id === targetU.id ? { ...u, hp: u.hp - dmg } : u));
-                                        hitFlashRef.current[targetU.id] = now;
-                                        soundFnsRef.current.playHit();
-                                        addLog(`${data.name} hits ${targetData.name} for ${dmg} damage! (${roll})`, isPlayer ? "#4ade80" : "#f87171");
-                                        const dmgCanvas = document.createElement("canvas");
-                                        dmgCanvas.width = 64; dmgCanvas.height = 32;
-                                        const dctx = dmgCanvas.getContext("2d")!;
-                                        dctx.font = "bold 24px monospace";
-                                        dctx.fillStyle = isPlayer ? "#4ade80" : "#f87171";
-                                        dctx.textAlign = "center";
-                                        dctx.fillText(`-${dmg}`, 32, 24);
-                                        const tex = new THREE.CanvasTexture(dmgCanvas);
-                                        const sprite = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.4), new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
-                                        sprite.position.set(targetG.position.x, 1.5, targetG.position.z);
-                                        scene.add(sprite);
-                                        damageTexts.current.push({ mesh: sprite, life: 1000 });
-                                        const newHp = Math.max(0, targetU.hp - dmg);
-                                        if (newHp <= 0) {
-                                            addLog(`${targetData.name} is defeated!`, "#f59e0b");
-                                            targetG.visible = false;
-                                            Object.values(unitsRef.current).forEach((ug: UnitGroup) => { if (ug.userData.attackTarget === targetU.id) ug.userData.attackTarget = null; });
-                                        }
+                                    // Ranged attack - spawn projectile
+                                    if (isRanged && (data as UnitData).projectileColor) {
+                                        const rangedData = data as UnitData;
+                                        const projectile = new THREE.Mesh(
+                                            new THREE.SphereGeometry(0.1, 8, 8),
+                                            new THREE.MeshBasicMaterial({ color: rangedData.projectileColor })
+                                        );
+                                        projectile.position.set(g.position.x, 0.7, g.position.z);
+                                        scene.add(projectile);
+                                        projectilesRef.current.push({ mesh: projectile, targetId: targetU.id, attackerId: unit.id, speed: 0.3 });
+                                        soundFnsRef.current.playAttack();
                                     } else {
-                                        soundFnsRef.current.playMiss();
-                                        addLog(`${data.name} misses ${targetData.name}. (${roll})`, "#888");
+                                        // Melee attack - instant damage
+                                        const targetData = targetU.team === "player" ? UNIT_DATA[targetU.id] : KOBOLD_STATS;
+                                        const roll = rollD20();
+                                        const hitNeeded = data.thac0 - targetData.ac;
+                                        if (roll >= hitNeeded || roll === 20) {
+                                            const dmg = rollDamage(data.damage[0], data.damage[1]);
+                                            setUnits(prev => prev.map(u => u.id === targetU.id ? { ...u, hp: u.hp - dmg } : u));
+                                            hitFlashRef.current[targetU.id] = now;
+                                            soundFnsRef.current.playHit();
+                                            addLog(`${data.name} hits ${targetData.name} for ${dmg} damage! (${roll})`, isPlayer ? "#4ade80" : "#f87171");
+                                            const dmgCanvas = document.createElement("canvas");
+                                            dmgCanvas.width = 64; dmgCanvas.height = 32;
+                                            const dctx = dmgCanvas.getContext("2d")!;
+                                            dctx.font = "bold 24px monospace";
+                                            dctx.fillStyle = isPlayer ? "#4ade80" : "#f87171";
+                                            dctx.textAlign = "center";
+                                            dctx.fillText(`-${dmg}`, 32, 24);
+                                            const tex = new THREE.CanvasTexture(dmgCanvas);
+                                            const sprite = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.4), new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
+                                            sprite.position.set(targetG.position.x, 1.5, targetG.position.z);
+                                            scene.add(sprite);
+                                            damageTexts.current.push({ mesh: sprite, life: 1000 });
+                                            const newHp = Math.max(0, targetU.hp - dmg);
+                                            if (newHp <= 0) {
+                                                addLog(`${targetData.name} is defeated!`, "#f59e0b");
+                                                targetG.visible = false;
+                                                Object.values(unitsRef.current).forEach((ug: UnitGroup) => { if (ug.userData.attackTarget === targetU.id) ug.userData.attackTarget = null; });
+                                            }
+                                        } else {
+                                            soundFnsRef.current.playMiss();
+                                            addLog(`${data.name} misses ${targetData.name}. (${roll})`, "#888");
+                                        }
                                     }
                                 }
                                 return;

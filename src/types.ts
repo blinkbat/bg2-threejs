@@ -25,6 +25,8 @@ export interface UnitData {
     color: string;
     skills: string[];
     items: string[];
+    range?: number;
+    projectileColor?: string;
 }
 
 export interface KoboldStats {

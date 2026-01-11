@@ -1,15 +1,16 @@
 import type { UnitData, KoboldStats, Unit } from "./types";
 
 // =============================================================================
-// UNIT DATA - THAC0: lower=better, AC: lower=better
+// UNIT DATA - Simple party, no complex D&D logic yet
 // =============================================================================
 
 export const UNIT_DATA: Record<number, UnitData> = {
-    1: { name: "Keldorn", class: "Paladin", hp: 102, maxHp: 102, damage: [8, 16], thac0: 5, ac: 2, color: "#e63946", skills: ["Lay on Hands", "True Sight", "Dispel Magic"], items: ["Carsomyr +5", "Plate Mail", "Helm of Glory", "Potion x3"] },
-    2: { name: "Edwin", class: "Conjurer", hp: 42, maxHp: 42, damage: [4, 8], thac0: 18, ac: 5, color: "#457b9d", skills: ["Fireball", "Magic Missile", "Stoneskin", "Haste"], items: ["Staff of the Magi", "Edwin's Amulet", "Robe of Vecna", "Scroll Case"] },
-    3: { name: "Minsc", class: "Ranger", hp: 95, maxHp: 95, damage: [10, 18], thac0: 6, ac: 0, color: "#2a9d8f", skills: ["Berserk", "Charm Animal", "Tracking"], items: ["Lilarcor +3", "Full Plate", "Boo", "Potion x5"] },
-    4: { name: "Viconia", class: "Cleric", hp: 72, maxHp: 72, damage: [6, 14], thac0: 10, ac: 1, color: "#e9c46a", skills: ["Heal", "Flame Strike", "Hold Person", "Sanctuary"], items: ["Flail of Ages +3", "Dark Elven Chain", "Shield of Harmony", "Holy Symbol"] },
-    5: { name: "Yoshimo", class: "Bounty Hunter", hp: 58, maxHp: 58, damage: [6, 12], thac0: 12, ac: 3, color: "#9b5de5", skills: ["Set Snare", "Detect Traps", "Hide in Shadows", "Backstab"], items: ["Katana +2", "Leather Armor +3", "Trap Kit x10", "Thieves' Tools"] },
+    1: { name: "Barbarian", class: "Barbarian", hp: 120, maxHp: 120, damage: [8, 14], thac0: 8, ac: 4, color: "#c0392b", skills: [], items: ["Axe"] },
+    2: { name: "Paladin", class: "Paladin", hp: 100, maxHp: 100, damage: [6, 12], thac0: 10, ac: 2, color: "#f1c40f", skills: [], items: ["Mace"] },
+    3: { name: "Thief", class: "Thief", hp: 60, maxHp: 60, damage: [4, 8], thac0: 12, ac: 6, color: "#8e44ad", skills: [], items: ["Bow"], range: 7, projectileColor: "#a0522d" },
+    4: { name: "Wizard", class: "Wizard", hp: 40, maxHp: 40, damage: [6, 10], thac0: 14, ac: 8, color: "#3498db", skills: [], items: ["Staff"], range: 8, projectileColor: "#ff6600" },
+    5: { name: "Monk", class: "Monk", hp: 80, maxHp: 80, damage: [5, 10], thac0: 10, ac: 5, color: "#27ae60", skills: [], items: ["Fists"] },
+    6: { name: "Cleric", class: "Cleric", hp: 70, maxHp: 70, damage: [4, 8], thac0: 12, ac: 4, color: "#ecf0f1", skills: [], items: ["Staff"], range: 6, projectileColor: "#ffffaa" },
 };
 
 export const KOBOLD_STATS: KoboldStats = {
