@@ -460,6 +460,7 @@ export default function App() {
     const cameraOffset = useRef({ x: 6, z: 6 });
     const zoomLevel = useRef(10);
     const isDragging = useRef(false);
+    const keysPressed = useRef<Set<string>>(new Set());
     const isBoxSel = useRef(false);
     const boxStart = useRef({ x: 0, y: 0 });
     const boxEnd = useRef({ x: 0, y: 0 });
@@ -680,7 +681,7 @@ export default function App() {
         };
 
         const onMouseDown = (e: MouseEvent) => {
-            if (e.button === 2 || e.button === 1) { isDragging.current = true; lastMouse.current = { x: e.clientX, y: e.clientY }; }
+            if (e.button === 2) { isDragging.current = true; lastMouse.current = { x: e.clientX, y: e.clientY }; }
             else if (e.button === 0) {
                 const rect = renderer.domElement.getBoundingClientRect();
                 mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
@@ -785,7 +786,15 @@ export default function App() {
             }
         };
 
-        const onKeyDown = (e: KeyboardEvent) => { if (e.code === "Space") { e.preventDefault(); pausedRef.current = !pausedRef.current; setPaused(p => !p); } };
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.code === "Space") { e.preventDefault(); pausedRef.current = !pausedRef.current; setPaused(p => !p); }
+            if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyW", "KeyA", "KeyS", "KeyD"].includes(e.code)) {
+                keysPressed.current.add(e.code);
+            }
+        };
+        const onKeyUp = (e: KeyboardEvent) => {
+            keysPressed.current.delete(e.code);
+        };
         const onWheel = (e: WheelEvent) => {
             e.preventDefault();
             zoomLevel.current = Math.max(5, Math.min(30, zoomLevel.current + e.deltaY * 0.01));
@@ -802,11 +811,31 @@ export default function App() {
         renderer.domElement.addEventListener("contextmenu", (e) => e.preventDefault());
         renderer.domElement.addEventListener("wheel", onWheel, { passive: false });
         window.addEventListener("keydown", onKeyDown);
+        window.addEventListener("keyup", onKeyUp);
 
         let animId: number;
         const animate = () => {
             animId = requestAnimationFrame(animate);
             const now = Date.now();
+
+            // Keyboard panning (screen-space: up/down/left/right on screen, not world axes)
+            const panSpeed = 0.4;
+            let screenX = 0, screenY = 0;
+            if (keysPressed.current.has("ArrowUp") || keysPressed.current.has("KeyW")) screenY -= 1;
+            if (keysPressed.current.has("ArrowDown") || keysPressed.current.has("KeyS")) screenY += 1;
+            if (keysPressed.current.has("ArrowLeft") || keysPressed.current.has("KeyA")) screenX -= 1;
+            if (keysPressed.current.has("ArrowRight") || keysPressed.current.has("KeyD")) screenX += 1;
+            if (screenX !== 0 || screenY !== 0) {
+                const len = Math.hypot(screenX, screenY);
+                const normX = screenX / len, normY = screenY / len;
+                // Convert screen direction to world: isometric camera is rotated 45 degrees
+                // Screen right = world (+x, -z), Screen down = world (+x, +z)
+                const worldX = (normX + normY) * panSpeed;
+                const worldZ = (-normX + normY) * panSpeed;
+                cameraOffset.current.x = Math.max(0, Math.min(GRID_SIZE, cameraOffset.current.x + worldX));
+                cameraOffset.current.z = Math.max(0, Math.min(GRID_SIZE, cameraOffset.current.z + worldZ));
+                updateCamera();
+            }
 
             // Billboard HP bars
             Object.entries(hpBarsRef.current).forEach(([id, bars]) => {
@@ -1009,6 +1038,7 @@ export default function App() {
             cancelAnimationFrame(animId);
             window.removeEventListener("resize", onResize);
             window.removeEventListener("keydown", onKeyDown);
+            window.removeEventListener("keyup", onKeyUp);
             renderer.domElement.removeEventListener("wheel", onWheel);
             renderer.dispose();
             containerRef.current?.removeChild(renderer.domElement);
@@ -1029,7 +1059,7 @@ export default function App() {
             {selBox && <div style={{ position: "absolute", left: selBox.left, top: selBox.top, width: selBox.width, height: selBox.height, border: "1px solid #00ff00", backgroundColor: "rgba(0,255,0,0.1)", pointerEvents: "none" }} />}
             <div style={{ position: "absolute", top: 10, left: 10, fontFamily: "monospace", fontSize: 11, color: "#888", background: "rgba(0,0,0,0.6)", padding: "8px 12px", borderRadius: 4 }}>
                 <div>Click enemy to attack • Spacebar to pause</div>
-                <div>Drag to box-select • Right-drag to pan • Scroll to zoom</div>
+                <div>Drag to box-select • Right-drag/Arrows to pan • Scroll to zoom</div>
                 <div style={{ marginTop: 6, color: aliveEnemies === 0 ? "#4ade80" : alivePlayers === 0 ? "#f87171" : "#fff" }}>
                     {aliveEnemies === 0 ? "Victory!" : alivePlayers === 0 ? "Defeat!" : `Kobolds: ${aliveEnemies}`}
                 </div>
