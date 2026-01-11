@@ -1,449 +1,32 @@
 /**
  * BG2-STYLE ISOMETRIC TACTICS
- * - Dungeon: carved rooms/hallways, merged wall meshes for perf
- * - A* pathfinding: 8-dir, diagonal cost 1.41, no corner cutting
- * - Combat: D&D 2e THAC0 vs AC, roll d20 >= (THAC0 - AC) to hit
- * - Movement: constant speed + steering avoidance
- * - Fog of war: per-cell visibility with LOS checks through walls
+ * Main game component - orchestrates Three.js scene and game loop
  */
 
 import { useState, useRef, useEffect } from "react";
 import * as THREE from "three";
 
-// =============================================================================
-// TYPE DEFINITIONS
-// =============================================================================
+// Constants & Types
+import { GRID_SIZE, ATTACK_RANGE, ATTACK_COOLDOWN, MOVE_SPEED, UNIT_RADIUS, PAN_SPEED } from "./constants";
+import type { Unit, CombatLogEntry, SelectionBox, HpBar, DamageText, FogTexture, UnitGroup } from "./types";
 
-interface Unit {
-    id: number;
-    x: number;
-    z: number;
-    hp: number;
-    team: "player" | "enemy";
-    target: number | null;
-}
+// Game Logic
+import { blocked, candlePositions, mergedObstacles, roomFloors } from "./dungeon";
+import { findPath, updateVisibility } from "./pathfinding";
+import { UNIT_DATA, KOBOLD_STATS, createInitialUnits, rollDamage, rollD20 } from "./units";
 
-interface UnitData {
-    name: string;
-    class: string;
-    hp: number;
-    maxHp: number;
-    damage: [number, number];
-    thac0: number;
-    ac: number;
-    color: string;
-    skills: string[];
-    items: string[];
-}
-
-interface KoboldStats {
-    name: string;
-    hp: number;
-    maxHp: number;
-    damage: [number, number];
-    thac0: number;
-    ac: number;
-    color: string;
-    aggroRange: number;
-}
-
-interface Room {
-    x: number;
-    z: number;
-    w: number;
-    h: number;
-}
-
-interface CandlePosition {
-    x: number;
-    z: number;
-    dx: number;
-    dz: number;
-}
-
-interface MergedObstacle {
-    x: number;
-    z: number;
-    w: number;
-    h: number;
-}
-
-interface PathNode {
-    x: number;
-    z: number;
-    g: number;
-    h: number;
-    parent: PathNode | null;
-}
-
-interface CombatLogEntry {
-    text: string;
-    color?: string;
-}
-
-interface SelectionBox {
-    left: number;
-    top: number;
-    width: number;
-    height: number;
-}
-
-interface HpBar {
-    bg: THREE.Mesh;
-    fill: THREE.Mesh;
-    maxHp: number;
-}
-
-interface DamageText {
-    mesh: THREE.Mesh;
-    life: number;
-}
-
-interface FogTexture {
-    canvas: HTMLCanvasElement;
-    ctx: CanvasRenderingContext2D;
-    texture: THREE.CanvasTexture;
-}
-
-interface UnitGroup extends THREE.Group {
-    userData: {
-        unitId: number;
-        targetX: number;
-        targetZ: number;
-        attackTarget: number | null;
-    };
-}
-
-// =============================================================================
-// CONSTANTS
-// =============================================================================
-
-const GRID_SIZE = 40;
-const ATTACK_RANGE = 1.8;
-const ATTACK_COOLDOWN = 2000;
-const MOVE_SPEED = 0.05;
-const UNIT_RADIUS = 0.7;
-const VISION_RADIUS = 10;
-
-// =============================================================================
-// DUNGEON GENERATION - carve rooms/hallways from solid, then merge walls
-// =============================================================================
-
-const blocked: boolean[][] = Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(true));
-
-const carve = (x1: number, z1: number, x2: number, z2: number): void => {
-    for (let x = x1; x <= x2; x++) {
-        for (let z = z1; z <= z2; z++) {
-            if (x >= 0 && x < GRID_SIZE && z >= 0 && z < GRID_SIZE) blocked[x][z] = false;
-        }
-    }
-};
-
-// Rooms - big rooms
-const rooms = [
-    { x: 1, z: 1, w: 10, h: 10 },      // Room A - player spawn (SW)
-    { x: 1, z: 25, w: 9, h: 9 },       // Room B - NW
-    { x: 28, z: 1, w: 10, h: 10 },     // Room C - SE
-    { x: 28, z: 28, w: 11, h: 11 },    // Room D - kobold lair (NE)
-    { x: 14, z: 14, w: 12, h: 12 },    // Room E - central great hall
-    { x: 14, z: 1, w: 8, h: 8 },       // Room F - S middle
-    { x: 1, z: 14, w: 8, h: 8 },       // Room G - W middle
-    { x: 30, z: 14, w: 8, h: 8 },      // Room H - E middle
-    { x: 14, z: 32, w: 8, h: 7 },      // Room I - N middle
-];
-
-rooms.forEach(r => carve(r.x, r.z, r.x + r.w - 1, r.z + r.h - 1));
-
-// Hallways (5-6 wide)
-carve(10, 3, 14, 7);      // A to F
-carve(21, 3, 28, 7);      // F to C
-carve(3, 10, 7, 14);      // A to G
-carve(3, 22, 7, 25);      // G to B
-carve(8, 16, 14, 20);     // G to E
-carve(25, 16, 30, 20);    // E to H
-carve(32, 10, 36, 14);    // C to H
-carve(32, 22, 36, 28);    // H to D
-carve(16, 8, 20, 14);     // F to E
-carve(16, 26, 20, 32);    // E to I
-carve(8, 27, 14, 31);     // B to I
-carve(21, 34, 28, 37);    // I to D
-
-// Wall sconces - find wall cells adjacent to rooms, place sconce facing into room
-const candlePositions: CandlePosition[] = [];
-rooms.forEach(r => {
-    const midX = r.x + Math.floor(r.w / 2);
-    const midZ = r.z + Math.floor(r.h / 2);
-    
-    // South wall (wall cell just south of room)
-    const sWallZ = r.z - 1;
-    if (sWallZ >= 0 && blocked[midX]?.[sWallZ]) {
-        candlePositions.push({ x: midX + 0.5, z: sWallZ + 0.85, dx: 0, dz: 1 });
-    }
-    // North wall
-    const nWallZ = r.z + r.h;
-    if (nWallZ < GRID_SIZE && blocked[midX]?.[nWallZ]) {
-        candlePositions.push({ x: midX + 0.5, z: nWallZ + 0.15, dx: 0, dz: -1 });
-    }
-    // West wall
-    const wWallX = r.x - 1;
-    if (wWallX >= 0 && blocked[wWallX]?.[midZ]) {
-        candlePositions.push({ x: wWallX + 0.85, z: midZ + 0.5, dx: 1, dz: 0 });
-    }
-    // East wall
-    const eWallX = r.x + r.w;
-    if (eWallX < GRID_SIZE && blocked[eWallX]?.[midZ]) {
-        candlePositions.push({ x: eWallX + 0.15, z: midZ + 0.5, dx: -1, dz: 0 });
-    }
-});
-
-// Merge adjacent blocked cells into larger meshes (reduces draw calls significantly)
-const mergedObstacles: MergedObstacle[] = [];
-const used = new Set<string>();
-for (let x = 0; x < GRID_SIZE; x++) {
-    for (let z = 0; z < GRID_SIZE; z++) {
-        if (!blocked[x][z] || used.has(`${x},${z}`)) continue;
-        let w = 1, h = 1;
-        while (x + w < GRID_SIZE && blocked[x + w][z] && !used.has(`${x + w},${z}`)) w++;
-        outer: while (z + h < GRID_SIZE) {
-            for (let dx = 0; dx < w; dx++) {
-                if (!blocked[x + dx][z + h] || used.has(`${x + dx},${z + h}`)) break outer;
-            }
-            h++;
-        }
-        for (let dx = 0; dx < w; dx++) {
-            for (let dz = 0; dz < h; dz++) {
-                used.add(`${x + dx},${z + dz}`);
-            }
-        }
-        mergedObstacles.push({ x, z, w, h });
-    }
-}
-
-// =============================================================================
-// FOG OF WAR - Bresenham LOS, visibility states: 0=unseen, 1=seen, 2=visible
-// =============================================================================
-
-function hasLineOfSight(x0: number, z0: number, x1: number, z1: number): boolean {
-    // Bresenham's line - returns false if any blocked cell between start and end
-    const dx = Math.abs(x1 - x0), dz = Math.abs(z1 - z0);
-    const sx = x0 < x1 ? 1 : -1, sz = z0 < z1 ? 1 : -1;
-    let err = dx - dz;
-    let x = x0, z = z0;
-    
-    while (true) {
-        if (x === x1 && z === z1) return true;
-        if (blocked[x]?.[z] && !(x === x0 && z === z0)) return false;
-        const e2 = 2 * err;
-        if (e2 > -dz) { err -= dz; x += sx; }
-        if (e2 < dx) { err += dx; z += sz; }
-    }
-}
-
-function updateVisibility(visibility: number[][], playerUnits: Unit[], unitsRef: React.RefObject<Record<number, UnitGroup>>): number[][] {
-    // Decay: visible (2) -> seen (1), seen stays seen
-    for (let x = 0; x < GRID_SIZE; x++) {
-        for (let z = 0; z < GRID_SIZE; z++) {
-            if (visibility[x][z] === 2) visibility[x][z] = 1;
-        }
-    }
-
-    // Mark cells visible from each player unit
-    playerUnits.forEach((u: Unit) => {
-        const g = unitsRef.current[u.id];
-        if (!g || u.hp <= 0) return;
-        const ux = Math.floor(g.position.x), uz = Math.floor(g.position.z);
-        
-        for (let dx = -VISION_RADIUS; dx <= VISION_RADIUS; dx++) {
-            for (let dz = -VISION_RADIUS; dz <= VISION_RADIUS; dz++) {
-                const x = ux + dx, z = uz + dz;
-                if (x < 0 || x >= GRID_SIZE || z < 0 || z >= GRID_SIZE) continue;
-                if (dx * dx + dz * dz > VISION_RADIUS * VISION_RADIUS) continue;
-                if (hasLineOfSight(ux, uz, x, z)) visibility[x][z] = 2;
-            }
-        }
-    });
-    
-    return visibility;
-}
-
-// =============================================================================
-// A* PATHFINDING
-// =============================================================================
-
-function findPath(startX: number, startZ: number, endX: number, endZ: number): { x: number; z: number }[] | null {
-    const sx = Math.floor(startX), sz = Math.floor(startZ);
-    const ex = Math.floor(endX), ez = Math.floor(endZ);
-
-    if (sx === ex && sz === ez) return [{ x: endX, z: endZ }];
-    if (ex < 0 || ex >= GRID_SIZE || ez < 0 || ez >= GRID_SIZE) return null;
-
-    // Target blocked - find nearest unblocked
-    if (blocked[ex]?.[ez]) {
-        let best: { x: number; z: number } | null = null, bestDist = Infinity;
-        for (let dx = -2; dx <= 2; dx++) {
-            for (let dz = -2; dz <= 2; dz++) {
-                const nx = ex + dx, nz = ez + dz;
-                if (nx >= 0 && nx < GRID_SIZE && nz >= 0 && nz < GRID_SIZE && !blocked[nx][nz]) {
-                    const d = Math.hypot(dx, dz);
-                    if (d < bestDist) { bestDist = d; best = { x: nx, z: nz }; }
-                }
-            }
-        }
-        if (best) return findPath(startX, startZ, best.x + 0.5, best.z + 0.5);
-        return null;
-    }
-
-    const open: PathNode[] = [{ x: sx, z: sz, g: 0, h: Math.hypot(ex - sx, ez - sz), parent: null }];
-    const closed = new Set<string>();
-    const key = (x: number, z: number) => `${x},${z}`;
-
-    while (open.length > 0) {
-        open.sort((a, b) => (a.g + a.h) - (b.g + b.h));
-        const current = open.shift()!;
-
-        if (current.x === ex && current.z === ez) {
-            const path: { x: number; z: number }[] = [];
-            let node: PathNode | null = current;
-            while (node) {
-                path.unshift({ x: node.x + 0.5, z: node.z + 0.5 });
-                node = node.parent;
-            }
-            path[path.length - 1] = { x: endX, z: endZ };
-            return path;
-        }
-
-        closed.add(key(current.x, current.z));
-
-        const neighbors = [
-            { x: current.x - 1, z: current.z, cost: 1 },
-            { x: current.x + 1, z: current.z, cost: 1 },
-            { x: current.x, z: current.z - 1, cost: 1 },
-            { x: current.x, z: current.z + 1, cost: 1 },
-            { x: current.x - 1, z: current.z - 1, cost: 1.41 },
-            { x: current.x + 1, z: current.z - 1, cost: 1.41 },
-            { x: current.x - 1, z: current.z + 1, cost: 1.41 },
-            { x: current.x + 1, z: current.z + 1, cost: 1.41 },
-        ];
-
-        for (const n of neighbors) {
-            if (n.x < 0 || n.x >= GRID_SIZE || n.z < 0 || n.z >= GRID_SIZE) continue;
-            if (blocked[n.x][n.z]) continue;
-            if (closed.has(key(n.x, n.z))) continue;
-            // Diagonal: block if either adjacent cardinal is blocked (no corner cutting)
-            if (n.cost > 1 && (blocked[current.x]?.[n.z] || blocked[n.x]?.[current.z])) continue;
-
-            const g = current.g + n.cost;
-            const existing = open.find(o => o.x === n.x && o.z === n.z);
-            if (existing) {
-                if (g < existing.g) { existing.g = g; existing.parent = current; }
-            } else {
-                open.push({ x: n.x, z: n.z, g, h: Math.hypot(ex - n.x, ez - n.z), parent: current });
-            }
-        }
-    }
-    return null;
-}
-
-// =============================================================================
-// UNIT DATA - THAC0: lower=better, AC: lower=better
-// =============================================================================
-
-const UNIT_DATA: Record<number, UnitData> = {
-    1: { name: "Keldorn", class: "Paladin", hp: 102, maxHp: 102, damage: [8, 16], thac0: 5, ac: 2, color: "#e63946", skills: ["Lay on Hands", "True Sight", "Dispel Magic"], items: ["Carsomyr +5", "Plate Mail", "Helm of Glory", "Potion x3"] },
-    2: { name: "Edwin", class: "Conjurer", hp: 42, maxHp: 42, damage: [4, 8], thac0: 18, ac: 5, color: "#457b9d", skills: ["Fireball", "Magic Missile", "Stoneskin", "Haste"], items: ["Staff of the Magi", "Edwin's Amulet", "Robe of Vecna", "Scroll Case"] },
-    3: { name: "Minsc", class: "Ranger", hp: 95, maxHp: 95, damage: [10, 18], thac0: 6, ac: 0, color: "#2a9d8f", skills: ["Berserk", "Charm Animal", "Tracking"], items: ["Lilarcor +3", "Full Plate", "Boo", "Potion x5"] },
-    4: { name: "Viconia", class: "Cleric", hp: 72, maxHp: 72, damage: [6, 14], thac0: 10, ac: 1, color: "#e9c46a", skills: ["Heal", "Flame Strike", "Hold Person", "Sanctuary"], items: ["Flail of Ages +3", "Dark Elven Chain", "Shield of Harmony", "Holy Symbol"] },
-    5: { name: "Yoshimo", class: "Bounty Hunter", hp: 58, maxHp: 58, damage: [6, 12], thac0: 12, ac: 3, color: "#9b5de5", skills: ["Set Snare", "Detect Traps", "Hide in Shadows", "Backstab"], items: ["Katana +2", "Leather Armor +3", "Trap Kit x10", "Thieves' Tools"] },
-};
-
-const KOBOLD_STATS: KoboldStats = { name: "Kobold", hp: 12, maxHp: 12, damage: [1, 4], thac0: 20, ac: 7, color: "#8B4513", aggroRange: 6 };
-
-// =============================================================================
-// UI COMPONENTS
-// =============================================================================
-
-interface PartyBarProps {
-    units: Unit[];
-    selectedIds: number[];
-    onSelect: React.Dispatch<React.SetStateAction<number[]>>;
-}
-
-function PartyBar({ units, selectedIds, onSelect }: PartyBarProps) {
-    return (
-        <div style={{ position: "absolute", bottom: 10, left: "50%", transform: "translateX(-50%)", background: "linear-gradient(180deg, #1e1e2e 0%, #12121a 100%)", border: "2px solid #3d3d5c", borderRadius: 8, padding: 8, display: "flex", gap: 6 }}>
-            {units.filter((u: Unit) => u.team === "player").map((unit: Unit) => {
-                const data = UNIT_DATA[unit.id];
-                if (!data) return null;
-                const isSelected = selectedIds.includes(unit.id);
-                const hpPct = (unit.hp / data.maxHp) * 100;
-                const hpColor = hpPct > 50 ? "#22c55e" : hpPct > 25 ? "#eab308" : "#ef4444";
-                return (
-                    <div key={unit.id} onClick={(e) => { e.stopPropagation(); onSelect(e.shiftKey ? (prev: number[]) => prev.includes(unit.id) ? prev.filter((i: number) => i !== unit.id) : [...prev, unit.id] : [unit.id]); }} style={{ width: 56, cursor: "pointer", opacity: unit.hp <= 0 ? 0.4 : 1, background: isSelected ? "rgba(0,255,0,0.15)" : "transparent", border: isSelected ? "2px solid #00ff00" : "2px solid #333", borderRadius: 6, padding: 4 }}>
-                        <div style={{ width: "100%", height: 56, background: data.color, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: "bold", color: "#fff", textShadow: "1px 1px 2px #000", fontFamily: "serif" }}>{data.name[0]}</div>
-                        <div style={{ marginTop: 4, height: 6, background: "#111", borderRadius: 3, overflow: "hidden" }}><div style={{ width: `${Math.max(0, hpPct)}%`, height: "100%", background: hpColor }} /></div>
-                        <div style={{ fontSize: 9, color: "#aaa", textAlign: "center", marginTop: 2, fontFamily: "monospace" }}>{data.name}</div>
-                    </div>
-                );
-            })}
-        </div>
-    );
-}
-
-interface UnitPanelProps {
-    unitId: number;
-    units: Unit[];
-    onClose: () => void;
-}
-
-function UnitPanel({ unitId, units, onClose }: UnitPanelProps) {
-    const [tab, setTab] = useState("stats");
-    const data = UNIT_DATA[unitId];
-    const unit = units.find((u: Unit) => u.id === unitId);
-    if (!data || !unit) return null;
-    const hpPct = (unit.hp / data.maxHp) * 100;
-    const hpColor = hpPct > 50 ? "#22c55e" : hpPct > 25 ? "#eab308" : "#ef4444";
-    return (
-        <div style={{ position: "absolute", top: 10, right: 10, width: 240, background: "linear-gradient(180deg, #1e1e2e 0%, #12121a 100%)", border: "2px solid #3d3d5c", borderRadius: 8, fontFamily: "monospace", color: "#ddd", overflow: "hidden" }}>
-            <div style={{ background: data.color, padding: "10px 12px", display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ width: 44, height: 44, background: "rgba(0,0,0,0.3)", borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: "bold", fontFamily: "serif" }}>{data.name[0]}</div>
-                <div style={{ flex: 1 }}><div style={{ fontWeight: "bold", fontSize: 14 }}>{data.name}</div><div style={{ fontSize: 11, opacity: 0.8 }}>{data.class}</div></div>
-                <div onClick={onClose} style={{ cursor: "pointer", fontSize: 18, opacity: 0.7 }}>×</div>
-            </div>
-            <div style={{ padding: "8px 12px", borderBottom: "1px solid #333" }}>
-                <div style={{ fontSize: 11, marginBottom: 3 }}>HP: {Math.max(0, unit.hp)} / {data.maxHp}</div>
-                <div style={{ height: 10, background: "#111", borderRadius: 5, overflow: "hidden" }}><div style={{ width: `${Math.max(0, hpPct)}%`, height: "100%", background: hpColor }} /></div>
-            </div>
-            <div style={{ display: "flex", borderBottom: "1px solid #333" }}>
-                {["stats", "skills", "items"].map(t => (<div key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: "8px 0", textAlign: "center", fontSize: 11, textTransform: "uppercase", cursor: "pointer", background: tab === t ? "#2a2a3e" : "transparent", borderBottom: tab === t ? "2px solid #58a6ff" : "2px solid transparent", color: tab === t ? "#fff" : "#888" }}>{t}</div>))}
-            </div>
-            <div style={{ padding: 12, minHeight: 140 }}>
-                {tab === "stats" && (<div style={{ fontSize: 12 }}><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}><div style={{ background: "#1a1a2a", padding: "6px 8px", borderRadius: 4 }}><span style={{ color: "#888" }}>THAC0</span> <span style={{ float: "right" }}>{data.thac0}</span></div><div style={{ background: "#1a1a2a", padding: "6px 8px", borderRadius: 4 }}><span style={{ color: "#888" }}>AC</span> <span style={{ float: "right" }}>{data.ac}</span></div><div style={{ background: "#1a1a2a", padding: "6px 8px", borderRadius: 4, gridColumn: "span 2" }}><span style={{ color: "#888" }}>Damage</span> <span style={{ float: "right" }}>{data.damage[0]}-{data.damage[1]}</span></div></div></div>)}
-                {tab === "skills" && <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{data.skills.map((s: string, i: number) => <div key={i} style={{ background: "#1a1a2a", padding: "8px 10px", borderRadius: 4, fontSize: 12 }}>{s}</div>)}</div>}
-                {tab === "items" && <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{data.items.map((s: string, i: number) => <div key={i} style={{ background: "#1a1a2a", padding: "8px 10px", borderRadius: 4, fontSize: 12, display: "flex", alignItems: "center", gap: 8 }}><span style={{ width: 8, height: 8, background: i === 0 ? "#f59e0b" : "#555", borderRadius: 2 }} />{s}</div>)}</div>}
-            </div>
-        </div>
-    );
-}
-
-interface CombatLogProps {
-    log: CombatLogEntry[];
-}
-
-function CombatLog({ log }: CombatLogProps) {
-    const ref = useRef<HTMLDivElement>(null);
-    useEffect(() => { if (ref.current) ref.current.scrollTop = ref.current.scrollHeight; }, [log]);
-    return (
-        <div ref={ref} style={{ position: "absolute", bottom: 100, left: 10, width: 280, maxHeight: 150, background: "rgba(0,0,0,0.8)", border: "1px solid #333", borderRadius: 4, padding: 8, fontFamily: "monospace", fontSize: 11, color: "#ccc", overflowY: "auto" }}>
-            {log.slice(-20).map((entry: CombatLogEntry, i: number) => (<div key={i} style={{ marginBottom: 4, color: entry.color || "#ccc" }}>{entry.text}</div>))}
-        </div>
-    );
-}
+// UI Components
+import { PartyBar } from "./components/PartyBar";
+import { UnitPanel } from "./components/UnitPanel";
+import { CombatLog } from "./components/CombatLog";
+import { HUD } from "./components/HUD";
 
 // =============================================================================
 // MAIN COMPONENT
 // =============================================================================
 
 export default function App() {
+    // Three.js refs
     const containerRef = useRef<HTMLDivElement>(null);
     const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
     const cameraRef = useRef<THREE.OrthographicCamera | null>(null);
@@ -457,6 +40,7 @@ export default function App() {
     const fogMeshRef = useRef<THREE.Mesh | null>(null);
     const visibilityRef = useRef<number[][]>(Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(0)));
 
+    // Camera & input refs
     const cameraOffset = useRef({ x: 6, z: 6 });
     const zoomLevel = useRef(10);
     const isDragging = useRef(false);
@@ -468,16 +52,15 @@ export default function App() {
     const lastAttack = useRef<Record<number, number>>({});
     const damageTexts = useRef<DamageText[]>([]);
 
-    const [units, setUnits] = useState<Unit[]>([
-        ...Object.keys(UNIT_DATA).map((id, i) => ({ id: Number(id), x: 4.5 + (i % 3) * 2, z: 4.5 + Math.floor(i / 3) * 2, hp: UNIT_DATA[Number(id)].hp, team: "player" as const, target: null })),
-        ...[1,2,3,4,5,6,7,8,9,10,11,12].map((_, i) => ({ id: 100 + i, x: 30.5 + (i % 4) * 2, z: 30.5 + Math.floor(i / 4) * 2, hp: KOBOLD_STATS.maxHp, team: "enemy" as const, target: null })),
-    ]);
+    // React state
+    const [units, setUnits] = useState<Unit[]>(createInitialUnits);
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
     const [selBox, setSelBox] = useState<SelectionBox | null>(null);
     const [showPanel, setShowPanel] = useState(false);
     const [combatLog, setCombatLog] = useState<CombatLogEntry[]>([{ text: "Combat begins!", color: "#f59e0b" }]);
     const [paused, setPaused] = useState(false);
 
+    // Refs for accessing state in callbacks
     const selectedRef = useRef(selectedIds);
     const unitsStateRef = useRef(units);
     const pausedRef = useRef(paused);
@@ -487,12 +70,15 @@ export default function App() {
     useEffect(() => { pausedRef.current = paused; }, [paused]);
 
     const addLog = (text: string, color?: string) => setCombatLog(prev => [...prev.slice(-50), { text, color }]);
-    const rollDamage = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
-    const rollD20 = () => Math.floor(Math.random() * 20) + 1;
+
+    // =============================================================================
+    // THREE.JS SETUP & GAME LOOP
+    // =============================================================================
 
     useEffect(() => {
         if (!containerRef.current) return;
-        
+
+        // Scene setup
         const scene = new THREE.Scene();
         scene.background = new THREE.Color("#0d1117");
         sceneRef.current = scene;
@@ -507,28 +93,20 @@ export default function App() {
         containerRef.current.appendChild(renderer.domElement);
         rendererRef.current = renderer;
 
+        // Lighting
         scene.add(new THREE.AmbientLight(0xffffff, 0.08));
         const dir = new THREE.DirectionalLight(0xffffff, 0.15);
         dir.position.set(10, 20, 10);
         scene.add(dir);
 
+        // Ground
         const ground = new THREE.Mesh(new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE), new THREE.MeshStandardMaterial({ color: "#12121a" }));
         ground.rotation.x = -Math.PI / 2;
         ground.position.set(GRID_SIZE / 2, 0, GRID_SIZE / 2);
         ground.name = "ground";
         scene.add(ground);
 
-        const roomFloors = [
-            { x: 1, z: 1, w: 10, h: 10, color: "#1a2a1a" },
-            { x: 1, z: 25, w: 9, h: 9, color: "#1a1a2a" },
-            { x: 28, z: 1, w: 10, h: 10, color: "#2a1a1a" },
-            { x: 28, z: 28, w: 11, h: 11, color: "#2a1a2a" },
-            { x: 14, z: 14, w: 12, h: 12, color: "#1a2020" },
-            { x: 14, z: 1, w: 8, h: 8, color: "#20201a" },
-            { x: 1, z: 14, w: 8, h: 8, color: "#1a201a" },
-            { x: 30, z: 14, w: 8, h: 8, color: "#201a20" },
-            { x: 14, z: 32, w: 8, h: 7, color: "#1a1a20" },
-        ];
+        // Room floors
         roomFloors.forEach(r => {
             const floor = new THREE.Mesh(new THREE.PlaneGeometry(r.w, r.h), new THREE.MeshStandardMaterial({ color: r.color }));
             floor.rotation.x = -Math.PI / 2;
@@ -539,36 +117,32 @@ export default function App() {
 
         // Wall sconces with point lights
         candlePositions.forEach((pos) => {
-            // Iron bracket flush on wall face
             const bracketMat = new THREE.MeshStandardMaterial({ color: "#3a2a1a" });
             const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.4, 0.1), bracketMat);
             bracket.position.set(pos.x, 1.8, pos.z);
             scene.add(bracket);
-            
-            // Horizontal arm holding candle
+
             const arm = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.3), bracketMat);
             arm.position.set(pos.x + pos.dx * 0.15, 1.7, pos.z + pos.dz * 0.15);
             scene.add(arm);
-            
-            // Candle
+
             const candleMat = new THREE.MeshStandardMaterial({ color: "#e8d4a8", emissive: "#4a3a10", emissiveIntensity: 0.2 });
             const candle = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.25, 8), candleMat);
             candle.position.set(pos.x + pos.dx * 0.3, 1.85, pos.z + pos.dz * 0.3);
             scene.add(candle);
-            
-            // Flame
+
             const flameMat = new THREE.MeshBasicMaterial({ color: "#ff9922" });
             const flame = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), flameMat);
             flame.position.set(pos.x + pos.dx * 0.3, 2.02, pos.z + pos.dz * 0.3);
             flame.scale.y = 1.8;
             scene.add(flame);
-            
-            // Point light
+
             const light = new THREE.PointLight("#ff8833", 2.5, 14, 1.5);
             light.position.set(pos.x + pos.dx * 1.5, 2.2, pos.z + pos.dz * 1.5);
             scene.add(light);
         });
 
+        // Walls
         mergedObstacles.forEach((o, i) => {
             const shade = 0x2d3748 + (i % 3) * 0x050505;
             const mesh = new THREE.Mesh(new THREE.BoxGeometry(o.w, 2.5, o.h), new THREE.MeshStandardMaterial({ color: shade }));
@@ -577,13 +151,14 @@ export default function App() {
             scene.add(mesh);
         });
 
+        // Grid lines
         const gridMat = new THREE.LineBasicMaterial({ color: "#333" });
         for (let i = 0; i <= GRID_SIZE; i++) {
             scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.01, i), new THREE.Vector3(GRID_SIZE, 0.01, i)]), gridMat));
             scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(i, 0.01, 0), new THREE.Vector3(i, 0.01, GRID_SIZE)]), gridMat));
         }
 
-        // Fog of war texture - canvas updated each frame
+        // Fog of war
         const fogCanvas = document.createElement("canvas");
         fogCanvas.width = GRID_SIZE;
         fogCanvas.height = GRID_SIZE;
@@ -594,7 +169,7 @@ export default function App() {
         fogTexture.magFilter = THREE.NearestFilter;
         fogTexture.minFilter = THREE.NearestFilter;
         fogTextureRef.current = { canvas: fogCanvas, ctx: fogCtx, texture: fogTexture };
-        
+
         const fogMesh = new THREE.Mesh(
             new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE),
             new THREE.MeshBasicMaterial({ map: fogTexture, transparent: true })
@@ -604,12 +179,14 @@ export default function App() {
         scene.add(fogMesh);
         fogMeshRef.current = fogMesh;
 
+        // Move marker
         const marker = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.3, 4), new THREE.MeshBasicMaterial({ color: "#ffff00", side: THREE.DoubleSide, transparent: true, opacity: 0.8 }));
         marker.rotation.x = -Math.PI / 2;
         marker.visible = false;
         scene.add(marker);
         moveMarkerRef.current = marker;
 
+        // Create unit meshes
         units.forEach(unit => {
             const isPlayer = unit.team === "player";
             const data = isPlayer ? UNIT_DATA[unit.id] : KOBOLD_STATS;
@@ -648,6 +225,7 @@ export default function App() {
             pathsRef.current[unit.id] = [];
         });
 
+        // Camera helper
         const updateCamera = () => {
             const d = 20;
             camera.position.set(cameraOffset.current.x + d, d, cameraOffset.current.z + d);
@@ -655,6 +233,7 @@ export default function App() {
         };
         updateCamera();
 
+        // Input handling
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
 
@@ -813,13 +392,16 @@ export default function App() {
         window.addEventListener("keydown", onKeyDown);
         window.addEventListener("keyup", onKeyUp);
 
+        // =============================================================================
+        // GAME LOOP
+        // =============================================================================
+
         let animId: number;
         const animate = () => {
             animId = requestAnimationFrame(animate);
             const now = Date.now();
 
-            // Keyboard panning (screen-space: up/down/left/right on screen, not world axes)
-            const panSpeed = 0.4;
+            // Keyboard panning (screen-space)
             let screenX = 0, screenY = 0;
             if (keysPressed.current.has("ArrowUp") || keysPressed.current.has("KeyW")) screenY -= 1;
             if (keysPressed.current.has("ArrowDown") || keysPressed.current.has("KeyS")) screenY += 1;
@@ -828,10 +410,8 @@ export default function App() {
             if (screenX !== 0 || screenY !== 0) {
                 const len = Math.hypot(screenX, screenY);
                 const normX = screenX / len, normY = screenY / len;
-                // Convert screen direction to world: isometric camera is rotated 45 degrees
-                // Screen right = world (+x, -z), Screen down = world (+x, +z)
-                const worldX = (normX + normY) * panSpeed;
-                const worldZ = (-normX + normY) * panSpeed;
+                const worldX = (normX + normY) * PAN_SPEED;
+                const worldZ = (-normX + normY) * PAN_SPEED;
                 cameraOffset.current.x = Math.max(0, Math.min(GRID_SIZE, cameraOffset.current.x + worldX));
                 cameraOffset.current.z = Math.max(0, Math.min(GRID_SIZE, cameraOffset.current.z + worldZ));
                 updateCamera();
@@ -881,6 +461,7 @@ export default function App() {
                 g.visible = u.hp > 0 && vis === 2;
             });
 
+            // Game logic (when not paused)
             if (!pausedRef.current) {
                 const allGroups = Object.entries(unitsRef.current);
 
@@ -974,7 +555,7 @@ export default function App() {
                     const dx = targetX - g.position.x;
                     const dz = targetZ - g.position.z;
                     const distToTarget = Math.hypot(dx, dz);
-                    
+
                     if (distToTarget > 0.1) {
                         let desiredX = dx / distToTarget, desiredZ = dz / distToTarget;
                         let avoidX = 0, avoidZ = 0;
@@ -1024,6 +605,7 @@ export default function App() {
         };
         animate();
 
+        // Resize handler
         const onResize = () => {
             if (!containerRef.current) return;
             const w = containerRef.current.clientWidth, h = containerRef.current.clientHeight, a = w / h;
@@ -1034,6 +616,7 @@ export default function App() {
         };
         window.addEventListener("resize", onResize);
 
+        // Cleanup
         return () => {
             cancelAnimationFrame(animId);
             window.removeEventListener("resize", onResize);
@@ -1045,6 +628,7 @@ export default function App() {
         };
     }, []);
 
+    // Update selection rings
     useEffect(() => {
         Object.entries(selectRingsRef.current).forEach(([id, ring]) => { ring.visible = selectedIds.includes(Number(id)); });
         setShowPanel(selectedIds.length === 1 && units.find(u => u.id === selectedIds[0])?.team === "player");
@@ -1057,16 +641,7 @@ export default function App() {
         <div style={{ width: "100%", height: "100vh", position: "relative" }}>
             <div ref={containerRef} style={{ width: "100%", height: "100%" }} />
             {selBox && <div style={{ position: "absolute", left: selBox.left, top: selBox.top, width: selBox.width, height: selBox.height, border: "1px solid #00ff00", backgroundColor: "rgba(0,255,0,0.1)", pointerEvents: "none" }} />}
-            <div style={{ position: "absolute", top: 10, left: 10, fontFamily: "monospace", fontSize: 11, color: "#888", background: "rgba(0,0,0,0.6)", padding: "8px 12px", borderRadius: 4 }}>
-                <div>Click enemy to attack • Spacebar to pause</div>
-                <div>Drag to box-select • Right-drag/Arrows to pan • Scroll to zoom</div>
-                <div style={{ marginTop: 6, color: aliveEnemies === 0 ? "#4ade80" : alivePlayers === 0 ? "#f87171" : "#fff" }}>
-                    {aliveEnemies === 0 ? "Victory!" : alivePlayers === 0 ? "Defeat!" : `Kobolds: ${aliveEnemies}`}
-                </div>
-                <button onClick={() => setPaused(p => !p)} style={{ marginTop: 6, padding: "4px 10px", background: paused ? "#854d0e" : "#21262d", border: "1px solid #333", color: "#fff", borderRadius: 4, cursor: "pointer" }}>
-                    {paused ? "▶ Resume" : "⏸ Pause"}
-                </button>
-            </div>
+            <HUD aliveEnemies={aliveEnemies} alivePlayers={alivePlayers} paused={paused} onTogglePause={() => setPaused(p => !p)} />
             <CombatLog log={combatLog} />
             <PartyBar units={units} selectedIds={selectedIds} onSelect={setSelectedIds} />
             {showPanel && selectedIds.length === 1 && <UnitPanel unitId={selectedIds[0]} units={units} onClose={() => setShowPanel(false)} />}
