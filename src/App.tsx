@@ -8,12 +8,16 @@ import * as THREE from "three";
 
 // Constants & Types
 import { GRID_SIZE, ATTACK_RANGE, ATTACK_COOLDOWN, MOVE_SPEED, UNIT_RADIUS, PAN_SPEED } from "./constants";
-import type { Unit, UnitData, Skill, CombatLogEntry, SelectionBox, DamageText, FogTexture, UnitGroup } from "./types";
+import type { Unit, UnitData, Skill, CombatLogEntry, SelectionBox, DamageText, UnitGroup, FogTexture } from "./types";
 
 // Game Logic
-import { blocked, candlePositions, mergedObstacles, roomFloors } from "./dungeon";
+import { blocked } from "./dungeon";
 import { findPath, updateVisibility } from "./pathfinding";
 import { UNIT_DATA, KOBOLD_STATS, createInitialUnits, rollDamage, rollHit } from "./units";
+
+// Scene & Sound
+import { createScene, updateCamera } from "./scene";
+import { soundFns } from "./sound";
 
 // UI Components
 import { PartyBar } from "./components/PartyBar";
@@ -83,50 +87,6 @@ export default function App() {
 
     const addLog = (text: string, color?: string) => setCombatLog(prev => [...prev.slice(-50), { text, color }]);
 
-    // 8-bit style sound effects using Web Audio API with natural randomness
-    const audioCtxRef = useRef<AudioContext | null>(null);
-    const getAudioCtx = () => {
-        if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
-        return audioCtxRef.current;
-    };
-    const rand = (base: number, variance: number) => base * (1 + (Math.random() - 0.5) * variance);
-    const playTone = (freq: number, duration: number, volume: number, type: OscillatorType, freqEnd?: number, filterFreq?: number) => {
-        const ctx = getAudioCtx();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        const filter = ctx.createBiquadFilter();
-
-        // Randomize duration and volume slightly
-        const dur = rand(duration, 0.3);
-        const vol = rand(volume, 0.2);
-
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, ctx.currentTime);
-        // Add slight detune for character (±15 cents)
-        osc.detune.setValueAtTime((Math.random() - 0.5) * 30, ctx.currentTime);
-        if (freqEnd !== undefined) osc.frequency.exponentialRampToValueAtTime(Math.max(freqEnd, 20), ctx.currentTime + dur);
-
-        // Low-pass filter with randomized cutoff
-        filter.type = "lowpass";
-        filter.frequency.setValueAtTime(filterFreq ? rand(filterFreq, 0.4) : rand(4000, 0.3), ctx.currentTime);
-        filter.Q.setValueAtTime(rand(1, 0.5), ctx.currentTime);
-
-        gain.gain.setValueAtTime(vol, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
-
-        osc.connect(filter);
-        filter.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + dur);
-    };
-    const soundFnsRef = useRef({
-        playMove: () => playTone(800, 0.06, 0.12, "square", undefined, 3000),
-        playAttack: () => playTone(440, 0.08, 0.15, "square", 330, 2500),
-        playHit: () => playTone(120, 0.15, 0.25, "sawtooth", 40, 800),
-        playMiss: () => playTone(200, 0.12, 0.1, "triangle", 400, 2000),
-    });
-
     // =============================================================================
     // THREE.JS SETUP & GAME LOOP
     // =============================================================================
@@ -134,178 +94,28 @@ export default function App() {
     useEffect(() => {
         if (!containerRef.current) return;
 
-        // Scene setup
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color("#0d1117");
+        // Create scene using extracted module
+        const sceneRefs = createScene(containerRef.current, units);
+        const { scene, camera, renderer, flames, candleLights, fogTexture, fogMesh, moveMarker, rangeIndicator, aoeIndicator, unitGroups, selectRings, unitMeshes, unitOriginalColors, maxHp } = sceneRefs;
+
         sceneRef.current = scene;
-
-        const aspect = containerRef.current.clientWidth / containerRef.current.clientHeight;
-        const camera = new THREE.OrthographicCamera(-15 * aspect, 15 * aspect, 15, -15, 0.1, 1000);
         cameraRef.current = camera;
-
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight);
-        renderer.setPixelRatio(window.devicePixelRatio);
-        containerRef.current.appendChild(renderer.domElement);
         rendererRef.current = renderer;
-
-        // Lighting - brighter ambient and directional
-        scene.add(new THREE.AmbientLight(0xffffff, 0.15));
-        const dir = new THREE.DirectionalLight(0xffffff, 0.25);
-        dir.position.set(10, 20, 10);
-        scene.add(dir);
-
-        // Ground - slightly metallic for light reflection
-        const ground = new THREE.Mesh(new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE), new THREE.MeshStandardMaterial({ color: "#12121a", metalness: 0.3, roughness: 0.7 }));
-        ground.rotation.x = -Math.PI / 2;
-        ground.position.set(GRID_SIZE / 2, 0, GRID_SIZE / 2);
-        ground.name = "ground";
-        scene.add(ground);
-
-        // Room floors - polished stone look
-        roomFloors.forEach(r => {
-            const floor = new THREE.Mesh(new THREE.PlaneGeometry(r.w, r.h), new THREE.MeshStandardMaterial({ color: r.color, metalness: 0.4, roughness: 0.6 }));
-            floor.rotation.x = -Math.PI / 2;
-            floor.position.set(r.x + r.w / 2, 0.01, r.z + r.h / 2);
-            floor.name = "ground";
-            scene.add(floor);
-        });
-
-        // Torch lights with candle + flickering flame
-        const flames: THREE.Mesh[] = [];
-        const candleLights: THREE.PointLight[] = [];
-        candlePositions.forEach((pos) => {
-            const candle = new THREE.Mesh(
-                new THREE.CylinderGeometry(0.06, 0.08, 0.3, 8),
-                new THREE.MeshStandardMaterial({ color: "#e8d4a8", metalness: 0.1, roughness: 0.9 })
-            );
-            candle.position.set(pos.x + pos.dx * 0.3, 1.85, pos.z + pos.dz * 0.3);
-            scene.add(candle);
-
-            const flame = new THREE.Mesh(
-                new THREE.SphereGeometry(0.08, 8, 8),
-                new THREE.MeshBasicMaterial({ color: "#ffcc44", transparent: true, opacity: 0.85 })
-            );
-            flame.position.set(pos.x + pos.dx * 0.3, 2.05, pos.z + pos.dz * 0.3);
-            flame.scale.y = 1.8;
-            scene.add(flame);
-            flames.push(flame);
-
-            const light = new THREE.PointLight("#ffaa44", 5, 18, 1.2);
-            light.position.set(pos.x + pos.dx * 1.5, 2.2, pos.z + pos.dz * 1.5);
-            scene.add(light);
-            candleLights.push(light);
-        });
-
-        // Walls - slight sheen
-        mergedObstacles.forEach((o, i) => {
-            const shade = 0x2d3748 + (i % 3) * 0x050505;
-            const mesh = new THREE.Mesh(new THREE.BoxGeometry(o.w, 2.5, o.h), new THREE.MeshStandardMaterial({ color: shade, metalness: 0.2, roughness: 0.8 }));
-            mesh.position.set(o.x + o.w / 2, 1.25, o.z + o.h / 2);
-            mesh.name = "obstacle";
-            scene.add(mesh);
-        });
-
-        // Grid lines
-        const gridMat = new THREE.LineBasicMaterial({ color: "#333" });
-        for (let i = 0; i <= GRID_SIZE; i++) {
-            scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.01, i), new THREE.Vector3(GRID_SIZE, 0.01, i)]), gridMat));
-            scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(i, 0.01, 0), new THREE.Vector3(i, 0.01, GRID_SIZE)]), gridMat));
-        }
-
-        // Fog of war
-        const fogCanvas = document.createElement("canvas");
-        fogCanvas.width = GRID_SIZE;
-        fogCanvas.height = GRID_SIZE;
-        const fogCtx = fogCanvas.getContext("2d")!;
-        fogCtx.fillStyle = "#000";
-        fogCtx.fillRect(0, 0, GRID_SIZE, GRID_SIZE);
-        const fogTexture = new THREE.CanvasTexture(fogCanvas);
-        fogTexture.magFilter = THREE.NearestFilter;
-        fogTexture.minFilter = THREE.NearestFilter;
-        fogTextureRef.current = { canvas: fogCanvas, ctx: fogCtx, texture: fogTexture };
-
-        const fogMesh = new THREE.Mesh(
-            new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE),
-            new THREE.MeshBasicMaterial({ map: fogTexture, transparent: true, depthWrite: false })
-        );
-        fogMesh.rotation.x = -Math.PI / 2;
-        fogMesh.position.set(GRID_SIZE / 2, 2.6, GRID_SIZE / 2);
-        fogMesh.renderOrder = 999;
-        scene.add(fogMesh);
+        fogTextureRef.current = fogTexture;
         fogMeshRef.current = fogMesh;
-
-        // Move marker
-        const marker = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.3, 4), new THREE.MeshBasicMaterial({ color: "#ffff00", side: THREE.DoubleSide, transparent: true, opacity: 0.8 }));
-        marker.rotation.x = -Math.PI / 2;
-        marker.visible = false;
-        scene.add(marker);
-        moveMarkerRef.current = marker;
-
-        // Range indicator (shows skill range circle around caster)
-        const rangeIndicator = new THREE.Mesh(
-            new THREE.RingGeometry(0.1, 10, 64),
-            new THREE.MeshBasicMaterial({ color: "#3b82f6", side: THREE.DoubleSide, transparent: true, opacity: 0.2 })
-        );
-        rangeIndicator.rotation.x = -Math.PI / 2;
-        rangeIndicator.position.y = 0.02;
-        rangeIndicator.visible = false;
-        scene.add(rangeIndicator);
+        moveMarkerRef.current = moveMarker;
         rangeIndicatorRef.current = rangeIndicator;
-
-        // AOE indicator (shows AOE radius at cursor position)
-        const aoeIndicator = new THREE.Mesh(
-            new THREE.RingGeometry(0.1, 2.5, 32),
-            new THREE.MeshBasicMaterial({ color: "#ff4400", side: THREE.DoubleSide, transparent: true, opacity: 0.3 })
-        );
-        aoeIndicator.rotation.x = -Math.PI / 2;
-        aoeIndicator.position.y = 0.03;
-        aoeIndicator.visible = false;
-        scene.add(aoeIndicator);
         aoeIndicatorRef.current = aoeIndicator;
+        unitsRef.current = unitGroups;
+        selectRingsRef.current = selectRings;
+        unitMeshRef.current = unitMeshes;
+        unitOriginalColorRef.current = unitOriginalColors;
+        maxHpRef.current = maxHp;
+        units.forEach(unit => { pathsRef.current[unit.id] = []; });
 
-        // Create unit meshes
-        units.forEach(unit => {
-            const isPlayer = unit.team === "player";
-            const data = isPlayer ? UNIT_DATA[unit.id] : KOBOLD_STATS;
-            const group = new THREE.Group();
-
-            const base = new THREE.Mesh(new THREE.RingGeometry(0.35, 0.45, 32), new THREE.MeshBasicMaterial({ color: isPlayer ? "#444" : "#660000", side: THREE.DoubleSide, transparent: true, opacity: 0.5 }));
-            base.rotation.x = -Math.PI / 2;
-            base.position.y = 0.02;
-            group.add(base);
-
-            const boxH = isPlayer ? 1 : 0.6;
-            const boxMat = new THREE.MeshStandardMaterial({ color: data.color, metalness: 0.5, roughness: 0.5 });
-            const box = new THREE.Mesh(new THREE.BoxGeometry(0.6, boxH, 0.6), boxMat);
-            box.position.y = boxH / 2;
-            box.userData.unitId = unit.id;
-            group.add(box);
-            unitMeshRef.current[unit.id] = box;
-            unitOriginalColorRef.current[unit.id] = new THREE.Color(data.color);
-
-            const sel = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.55, 32), new THREE.MeshBasicMaterial({ color: "#00ff00", side: THREE.DoubleSide }));
-            sel.rotation.x = -Math.PI / 2;
-            sel.position.y = 0.03;
-            sel.visible = false;
-            group.add(sel);
-            selectRingsRef.current[unit.id] = sel;
-            maxHpRef.current[unit.id] = data.maxHp;
-
-            group.position.set(unit.x, 0, unit.z);
-            group.userData = { unitId: unit.id, targetX: unit.x, targetZ: unit.z, attackTarget: null };
-            scene.add(group);
-            unitsRef.current[unit.id] = group as UnitGroup;
-            pathsRef.current[unit.id] = [];
-        });
-
-        // Camera helper
-        const updateCamera = () => {
-            const d = 20;
-            camera.position.set(cameraOffset.current.x + d, d, cameraOffset.current.z + d);
-            camera.lookAt(cameraOffset.current.x, 0, cameraOffset.current.z);
-        };
-        updateCamera();
+        // Camera update helper
+        const updateCam = () => updateCamera(camera, cameraOffset.current);
+        updateCam();
 
         // Input handling
         const raycaster = new THREE.Raycaster();
@@ -362,7 +172,7 @@ export default function App() {
                 cameraOffset.current.x = Math.max(0, Math.min(GRID_SIZE, cameraOffset.current.x));
                 cameraOffset.current.z = Math.max(0, Math.min(GRID_SIZE, cameraOffset.current.z));
                 lastMouse.current = { x: e.clientX, y: e.clientY };
-                updateCamera();
+                updateCam();
             } else if (isBoxSel.current) {
                 boxEnd.current = { x: e.clientX, y: e.clientY };
                 const rect = renderer.domElement.getBoundingClientRect();
@@ -407,7 +217,7 @@ export default function App() {
                                 moveMarkerRef.current.visible = true;
                                 setTimeout(() => { if (moveMarkerRef.current) moveMarkerRef.current.visible = false; }, 500);
                             }
-                            soundFnsRef.current.playMove();
+                            soundFns.playMove();
                             let idx = 0;
                             selectedRef.current.forEach(uid => {
                                 const u = unitsStateRef.current.find(u => u.id === uid);
@@ -491,7 +301,7 @@ export default function App() {
                             });
 
                             addLog(`${UNIT_DATA[casterId].name} casts ${skill.name}!`, "#ff6600");
-                            soundFnsRef.current.playAttack();
+                            soundFns.playAttack();
                         } else if (skill.type === "heal" && skill.targetType === "ally") {
                             // For heal, find closest ally to click position
                             const allies = unitsStateRef.current.filter(u => u.team === "player" && u.hp > 0);
@@ -568,7 +378,7 @@ export default function App() {
                                 pathsRef.current[uid] = [];
                             });
                             setUnits(prev => prev.map(u => selectedRef.current.includes(u.id) ? { ...u, target: id } : u));
-                            soundFnsRef.current.playAttack();
+                            soundFns.playAttack();
                             return;
                         } else if (clickedUnit && clickedUnit.team === "player") {
                             setSelectedIds(e.shiftKey ? prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id] : [id]);
@@ -652,7 +462,7 @@ export default function App() {
                 const worldZ = (-normX + normY) * PAN_SPEED;
                 cameraOffset.current.x = Math.max(0, Math.min(GRID_SIZE, cameraOffset.current.x + worldX));
                 cameraOffset.current.z = Math.max(0, Math.min(GRID_SIZE, cameraOffset.current.z + worldZ));
-                updateCamera();
+                updateCam();
             }
 
 
@@ -736,7 +546,7 @@ export default function App() {
                         });
 
                         if (hitCount > 0) {
-                            soundFnsRef.current.playHit();
+                            soundFns.playHit();
                             addLog(`${attackerData.name}'s Fireball hits ${hitCount} enemies!`, "#ff6600");
                         }
 
@@ -776,7 +586,7 @@ export default function App() {
                         const dmg = Math.max(1, rawDmg - targetData.armor);
                         setUnits(prev => prev.map(u => u.id === targetUnit.id ? { ...u, hp: u.hp - dmg } : u));
                         hitFlashRef.current[targetUnit.id] = now;
-                        soundFnsRef.current.playHit();
+                        soundFns.playHit();
                         addLog(`${attackerData.name} hits ${targetData.name} for ${dmg} damage!`, "#4ade80");
 
                         // Spawn damage number
@@ -802,7 +612,7 @@ export default function App() {
                             });
                         }
                     } else {
-                        soundFnsRef.current.playMiss();
+                        soundFns.playMiss();
                         addLog(`${attackerData.name} misses ${targetData.name}.`, "#888");
                     }
 
@@ -941,7 +751,7 @@ export default function App() {
                                         projectile.position.set(g.position.x, 0.7, g.position.z);
                                         scene.add(projectile);
                                         projectilesRef.current.push({ mesh: projectile, targetId: targetU.id, attackerId: unit.id, speed: 0.3 });
-                                        soundFnsRef.current.playAttack();
+                                        soundFns.playAttack();
                                     } else {
                                         // Melee attack - instant damage
                                         const targetData = targetU.team === "player" ? UNIT_DATA[targetU.id] : KOBOLD_STATS;
@@ -950,7 +760,7 @@ export default function App() {
                                             const dmg = Math.max(1, rawDmg - targetData.armor);
                                             setUnits(prev => prev.map(u => u.id === targetU.id ? { ...u, hp: u.hp - dmg } : u));
                                             hitFlashRef.current[targetU.id] = now;
-                                            soundFnsRef.current.playHit();
+                                            soundFns.playHit();
                                             addLog(`${data.name} hits ${targetData.name} for ${dmg} damage!`, isPlayer ? "#4ade80" : "#f87171");
                                             const dmgCanvas = document.createElement("canvas");
                                             dmgCanvas.width = 64; dmgCanvas.height = 32;
@@ -971,7 +781,7 @@ export default function App() {
                                                 Object.values(unitsRef.current).forEach((ug: UnitGroup) => { if (ug.userData.attackTarget === targetU.id) ug.userData.attackTarget = null; });
                                             }
                                         } else {
-                                            soundFnsRef.current.playMiss();
+                                            soundFns.playMiss();
                                             addLog(`${data.name} misses ${targetData.name}.`, "#888");
                                         }
                                     }
