@@ -11,6 +11,7 @@ export interface Unit {
     hp: number;
     team: "player" | "enemy";
     target: number | null;
+    aiEnabled: boolean;
 }
 
 export interface UnitData {

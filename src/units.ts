@@ -32,7 +32,8 @@ export function createInitialUnits(): Unit[] {
             z: 4.5 + Math.floor(i / 3) * 2,
             hp: UNIT_DATA[Number(id)].hp,
             team: "player" as const,
-            target: null
+            target: null,
+            aiEnabled: true
         })),
         ...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((_, i) => ({
             id: 100 + i,
@@ -40,7 +41,8 @@ export function createInitialUnits(): Unit[] {
             z: 30.5 + Math.floor(i / 4) * 2,
             hp: KOBOLD_STATS.maxHp,
             team: "enemy" as const,
-            target: null
+            target: null,
+            aiEnabled: true
         })),
     ];
 }

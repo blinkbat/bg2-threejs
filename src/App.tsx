@@ -472,17 +472,42 @@ export default function App() {
                     const isPlayer = unit.team === "player";
                     const data = isPlayer ? UNIT_DATA[unit.id] : KOBOLD_STATS;
 
-                    // Enemy AI
-                    if (!isPlayer && !g.userData.attackTarget) {
-                        let nearest = null, nearestDist = KOBOLD_STATS.aggroRange;
-                        currentUnits.filter(u => u.team === "player" && u.hp > 0).forEach(p => {
-                            const pg = unitsRef.current[p.id];
-                            if (pg) {
-                                const d = Math.hypot(g.position.x - pg.position.x, g.position.z - pg.position.z);
-                                if (d < nearestDist) { nearestDist = d; nearest = p.id; }
+                    // AI targeting (enemies always, players when aiEnabled)
+                    const shouldAutoTarget = isPlayer ? unit.aiEnabled : true;
+                    const currentTarget = g.userData.attackTarget;
+
+                    // Check if current target is still valid
+                    let targetStillValid = false;
+                    if (currentTarget !== null && currentTarget !== undefined) {
+                        const targetUnit = currentUnits.find(u => u.id === currentTarget);
+                        targetStillValid = targetUnit !== undefined && targetUnit.hp > 0;
+                        if (!targetStillValid) {
+                            g.userData.attackTarget = null;
+                        }
+                    }
+
+                    // Find new target if we should auto-target and have no valid target
+                    if (shouldAutoTarget && !targetStillValid) {
+                        const aggroRange = isPlayer ? 12 : KOBOLD_STATS.aggroRange;
+                        const enemyTeam = isPlayer ? "enemy" : "player";
+                        let nearest: number | null = null, nearestDist = aggroRange;
+                        currentUnits.filter(u => u.team === enemyTeam && u.hp > 0).forEach(enemy => {
+                            const eg = unitsRef.current[enemy.id];
+                            if (!eg) return;
+                            // For players, check visibility array; for enemies, check if player visible
+                            const enemyX = Math.floor(eg.position.x), enemyZ = Math.floor(eg.position.z);
+                            const canSee = isPlayer
+                                ? (visibilityRef.current[enemyX]?.[enemyZ] === 2)
+                                : true; // Enemies can always see players
+                            if (canSee) {
+                                const d = Math.hypot(g.position.x - eg.position.x, g.position.z - eg.position.z);
+                                if (d < nearestDist) { nearestDist = d; nearest = enemy.id; }
                             }
                         });
-                        if (nearest) g.userData.attackTarget = nearest;
+                        if (nearest !== null) {
+                            g.userData.attackTarget = nearest;
+                            pathsRef.current[unit.id] = [];
+                        }
                     }
 
                     let targetX = g.position.x, targetZ = g.position.z;
@@ -644,7 +669,7 @@ export default function App() {
             <HUD aliveEnemies={aliveEnemies} alivePlayers={alivePlayers} paused={paused} onTogglePause={() => setPaused(p => !p)} />
             <CombatLog log={combatLog} />
             <PartyBar units={units} selectedIds={selectedIds} onSelect={setSelectedIds} />
-            {showPanel && selectedIds.length === 1 && <UnitPanel unitId={selectedIds[0]} units={units} onClose={() => setShowPanel(false)} />}
+            {showPanel && selectedIds.length === 1 && <UnitPanel unitId={selectedIds[0]} units={units} onClose={() => setShowPanel(false)} onToggleAI={(id) => setUnits(prev => prev.map(u => u.id === id ? { ...u, aiEnabled: !u.aiEnabled } : u))} />}
         </div>
     );
 }

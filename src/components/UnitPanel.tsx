@@ -6,9 +6,10 @@ interface UnitPanelProps {
     unitId: number;
     units: Unit[];
     onClose: () => void;
+    onToggleAI: (unitId: number) => void;
 }
 
-export function UnitPanel({ unitId, units, onClose }: UnitPanelProps) {
+export function UnitPanel({ unitId, units, onClose, onToggleAI }: UnitPanelProps) {
     const [tab, setTab] = useState("stats");
     const data = UNIT_DATA[unitId];
     const unit = units.find((u: Unit) => u.id === unitId);
@@ -30,7 +31,22 @@ export function UnitPanel({ unitId, units, onClose }: UnitPanelProps) {
                 {["stats", "skills", "items"].map(t => (<div key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: "8px 0", textAlign: "center", fontSize: 11, textTransform: "uppercase", cursor: "pointer", background: tab === t ? "#2a2a3e" : "transparent", borderBottom: tab === t ? "2px solid #58a6ff" : "2px solid transparent", color: tab === t ? "#fff" : "#888" }}>{t}</div>))}
             </div>
             <div style={{ padding: 12, minHeight: 140 }}>
-                {tab === "stats" && (<div style={{ fontSize: 12 }}><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}><div style={{ background: "#1a1a2a", padding: "6px 8px", borderRadius: 4 }}><span style={{ color: "#888" }}>THAC0</span> <span style={{ float: "right" }}>{data.thac0}</span></div><div style={{ background: "#1a1a2a", padding: "6px 8px", borderRadius: 4 }}><span style={{ color: "#888" }}>AC</span> <span style={{ float: "right" }}>{data.ac}</span></div><div style={{ background: "#1a1a2a", padding: "6px 8px", borderRadius: 4, gridColumn: "span 2" }}><span style={{ color: "#888" }}>Damage</span> <span style={{ float: "right" }}>{data.damage[0]}-{data.damage[1]}</span></div></div></div>)}
+                {tab === "stats" && (<div style={{ fontSize: 12 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                        <div style={{ background: "#1a1a2a", padding: "6px 8px", borderRadius: 4 }}><span style={{ color: "#888" }}>THAC0</span> <span style={{ float: "right" }}>{data.thac0}</span></div>
+                        <div style={{ background: "#1a1a2a", padding: "6px 8px", borderRadius: 4 }}><span style={{ color: "#888" }}>AC</span> <span style={{ float: "right" }}>{data.ac}</span></div>
+                        <div style={{ background: "#1a1a2a", padding: "6px 8px", borderRadius: 4, gridColumn: "span 2" }}><span style={{ color: "#888" }}>Damage</span> <span style={{ float: "right" }}>{data.damage[0]}-{data.damage[1]}</span></div>
+                    </div>
+                    <div
+                        onClick={() => onToggleAI(unitId)}
+                        style={{ marginTop: 10, background: unit.aiEnabled ? "#2d4a2d" : "#1a1a2a", padding: "8px 10px", borderRadius: 4, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", border: unit.aiEnabled ? "1px solid #4ade80" : "1px solid #333" }}
+                    >
+                        <span style={{ color: unit.aiEnabled ? "#4ade80" : "#888" }}>Tactics</span>
+                        <span style={{ width: 36, height: 18, background: unit.aiEnabled ? "#4ade80" : "#333", borderRadius: 9, position: "relative", transition: "background 0.2s" }}>
+                            <span style={{ position: "absolute", top: 2, left: unit.aiEnabled ? 20 : 2, width: 14, height: 14, background: "#fff", borderRadius: 7, transition: "left 0.2s" }} />
+                        </span>
+                    </div>
+                </div>)}
                 {tab === "skills" && <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{data.skills.map((s: string, i: number) => <div key={i} style={{ background: "#1a1a2a", padding: "8px 10px", borderRadius: 4, fontSize: 12 }}>{s}</div>)}</div>}
                 {tab === "items" && <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{data.items.map((s: string, i: number) => <div key={i} style={{ background: "#1a1a2a", padding: "8px 10px", borderRadius: 4, fontSize: 12, display: "flex", alignItems: "center", gap: 8 }}><span style={{ width: 8, height: 8, background: i === 0 ? "#f59e0b" : "#555", borderRadius: 2 }} />{s}</div>)}</div>}
             </div>
