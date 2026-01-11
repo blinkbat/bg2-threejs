@@ -9,9 +9,22 @@ export interface Unit {
     x: number;
     z: number;
     hp: number;
+    mana?: number;
     team: "player" | "enemy";
     target: number | null;
     aiEnabled: boolean;
+}
+
+export interface Skill {
+    name: string;
+    manaCost: number;
+    cooldown: number;  // ms
+    type: "damage" | "heal" | "buff";
+    targetType: "enemy" | "ally" | "self" | "aoe";
+    range: number;
+    aoeRadius?: number;
+    value: [number, number];  // damage/heal range
+    projectileColor?: string;
 }
 
 export interface UnitData {
@@ -19,11 +32,13 @@ export interface UnitData {
     class: string;
     hp: number;
     maxHp: number;
+    mana?: number;
+    maxMana?: number;
     damage: [number, number];
-    thac0: number;
-    ac: number;
+    accuracy: number;  // hit chance percentage (0-100)
+    armor: number;     // flat damage reduction
     color: string;
-    skills: string[];
+    skills: Skill[];
     items: string[];
     range?: number;
     projectileColor?: string;
@@ -34,8 +49,8 @@ export interface KoboldStats {
     hp: number;
     maxHp: number;
     damage: [number, number];
-    thac0: number;
-    ac: number;
+    accuracy: number;  // hit chance percentage (0-100)
+    armor: number;     // flat damage reduction
     color: string;
     aggroRange: number;
 }

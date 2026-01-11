@@ -1,16 +1,43 @@
-import type { UnitData, KoboldStats, Unit } from "./types";
+import type { UnitData, KoboldStats, Unit, Skill } from "./types";
+
+// =============================================================================
+// SKILLS
+// =============================================================================
+
+export const SKILLS: Record<string, Skill> = {
+    fireball: {
+        name: "Fireball",
+        manaCost: 15,
+        cooldown: 5000,
+        type: "damage",
+        targetType: "aoe",
+        range: 10,
+        aoeRadius: 2.5,
+        value: [8, 14],
+        projectileColor: "#ff4400"
+    },
+    heal: {
+        name: "Heal",
+        manaCost: 10,
+        cooldown: 4000,
+        type: "heal",
+        targetType: "ally",
+        range: 8,
+        value: [8, 12]
+    }
+};
 
 // =============================================================================
 // UNIT DATA - Simple party, no complex D&D logic yet
 // =============================================================================
 
 export const UNIT_DATA: Record<number, UnitData> = {
-    1: { name: "Barbarian", class: "Barbarian", hp: 120, maxHp: 120, damage: [8, 14], thac0: 8, ac: 4, color: "#c0392b", skills: [], items: ["Axe"] },
-    2: { name: "Paladin", class: "Paladin", hp: 100, maxHp: 100, damage: [6, 12], thac0: 10, ac: 2, color: "#f1c40f", skills: [], items: ["Mace"] },
-    3: { name: "Thief", class: "Thief", hp: 60, maxHp: 60, damage: [4, 8], thac0: 12, ac: 6, color: "#8e44ad", skills: [], items: ["Bow"], range: 7, projectileColor: "#a0522d" },
-    4: { name: "Wizard", class: "Wizard", hp: 40, maxHp: 40, damage: [6, 10], thac0: 14, ac: 8, color: "#3498db", skills: [], items: ["Staff"], range: 8, projectileColor: "#ff6600" },
-    5: { name: "Monk", class: "Monk", hp: 80, maxHp: 80, damage: [5, 10], thac0: 10, ac: 5, color: "#27ae60", skills: [], items: ["Fists"] },
-    6: { name: "Cleric", class: "Cleric", hp: 70, maxHp: 70, damage: [4, 8], thac0: 12, ac: 4, color: "#ecf0f1", skills: [], items: ["Staff"], range: 6, projectileColor: "#ffffaa" },
+    1: { name: "Barbarian", class: "Barbarian", hp: 50, maxHp: 50, damage: [3, 6], accuracy: 70, armor: 2, color: "#c0392b", skills: [], items: ["Axe"] },
+    2: { name: "Paladin", class: "Paladin", hp: 45, maxHp: 45, damage: [2, 5], accuracy: 65, armor: 3, color: "#f1c40f", skills: [], items: ["Mace"] },
+    3: { name: "Thief", class: "Thief", hp: 25, maxHp: 25, damage: [2, 4], accuracy: 75, armor: 1, color: "#8e44ad", skills: [], items: ["Bow"], range: 7, projectileColor: "#a0522d" },
+    4: { name: "Wizard", class: "Wizard", hp: 18, maxHp: 18, mana: 50, maxMana: 50, damage: [3, 5], accuracy: 60, armor: 0, color: "#3498db", skills: [SKILLS.fireball], items: ["Staff"], range: 8, projectileColor: "#ff6600" },
+    5: { name: "Monk", class: "Monk", hp: 35, maxHp: 35, damage: [2, 5], accuracy: 70, armor: 1, color: "#27ae60", skills: [], items: ["Fists"] },
+    6: { name: "Cleric", class: "Cleric", hp: 30, maxHp: 30, mana: 40, maxMana: 40, damage: [2, 4], accuracy: 60, armor: 2, color: "#ecf0f1", skills: [SKILLS.heal], items: ["Staff"], range: 6, projectileColor: "#ffffaa" },
 };
 
 export const KOBOLD_STATS: KoboldStats = {
@@ -18,8 +45,8 @@ export const KOBOLD_STATS: KoboldStats = {
     hp: 12,
     maxHp: 12,
     damage: [1, 4],
-    thac0: 20,
-    ac: 7,
+    accuracy: 50,
+    armor: 0,
     color: "#8B4513",
     aggroRange: 6
 };
@@ -47,15 +74,19 @@ const koboldSpawns = [
 // Helper to create initial units
 export function createInitialUnits(): Unit[] {
     return [
-        ...Object.keys(UNIT_DATA).map((id, i) => ({
-            id: Number(id),
-            x: 4.5 + (i % 3) * 2,
-            z: 4.5 + Math.floor(i / 3) * 2,
-            hp: UNIT_DATA[Number(id)].hp,
-            team: "player" as const,
-            target: null,
-            aiEnabled: true
-        })),
+        ...Object.keys(UNIT_DATA).map((id, i) => {
+            const data = UNIT_DATA[Number(id)];
+            return {
+                id: Number(id),
+                x: 4.5 + (i % 3) * 2,
+                z: 4.5 + Math.floor(i / 3) * 2,
+                hp: data.hp,
+                mana: data.mana,
+                team: "player" as const,
+                target: null,
+                aiEnabled: true
+            };
+        }),
         ...koboldSpawns.map((spawn, i) => ({
             id: 100 + i,
             x: spawn.x,
@@ -70,4 +101,4 @@ export function createInitialUnits(): Unit[] {
 
 // Combat helpers
 export const rollDamage = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
-export const rollD20 = () => Math.floor(Math.random() * 20) + 1;
+export const rollHit = (accuracy: number) => Math.random() * 100 < accuracy;

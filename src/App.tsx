@@ -8,12 +8,12 @@ import * as THREE from "three";
 
 // Constants & Types
 import { GRID_SIZE, ATTACK_RANGE, ATTACK_COOLDOWN, MOVE_SPEED, UNIT_RADIUS, PAN_SPEED } from "./constants";
-import type { Unit, UnitData, CombatLogEntry, SelectionBox, DamageText, FogTexture, UnitGroup } from "./types";
+import type { Unit, UnitData, Skill, CombatLogEntry, SelectionBox, DamageText, FogTexture, UnitGroup } from "./types";
 
 // Game Logic
 import { blocked, candlePositions, mergedObstacles, roomFloors } from "./dungeon";
 import { findPath, updateVisibility } from "./pathfinding";
-import { UNIT_DATA, KOBOLD_STATS, createInitialUnits, rollDamage, rollD20 } from "./units";
+import { UNIT_DATA, KOBOLD_STATS, createInitialUnits, rollDamage, rollHit } from "./units";
 
 // UI Components
 import { PartyBar } from "./components/PartyBar";
@@ -56,6 +56,8 @@ export default function App() {
     const unitOriginalColorRef = useRef<Record<number, THREE.Color>>({});
     const moveStartRef = useRef<Record<number, { time: number; x: number; z: number }>>({});
     const projectilesRef = useRef<{ mesh: THREE.Mesh; targetId: number; attackerId: number; speed: number }[]>([]);
+    const rangeIndicatorRef = useRef<THREE.Mesh | null>(null);
+    const aoeIndicatorRef = useRef<THREE.Mesh | null>(null);
 
     // React state
     const [units, setUnits] = useState<Unit[]>(createInitialUnits);
@@ -65,15 +67,19 @@ export default function App() {
     const [combatLog, setCombatLog] = useState<CombatLogEntry[]>([{ text: "Combat begins!", color: "#f59e0b" }]);
     const [paused, setPaused] = useState(false);
     const [hpBarPositions, setHpBarPositions] = useState<{ positions: Record<number, { x: number; y: number; visible: boolean }>; scale: number }>({ positions: {}, scale: 1 });
+    const [skillCooldowns, setSkillCooldowns] = useState<Record<string, number>>({});
+    const [targetingMode, setTargetingMode] = useState<{ casterId: number; skill: Skill } | null>(null);
 
     // Refs for accessing state in callbacks
     const selectedRef = useRef(selectedIds);
     const unitsStateRef = useRef(units);
     const pausedRef = useRef(paused);
+    const targetingModeRef = useRef(targetingMode);
 
     useEffect(() => { selectedRef.current = selectedIds; }, [selectedIds]);
     useEffect(() => { unitsStateRef.current = units; }, [units]);
     useEffect(() => { pausedRef.current = paused; }, [paused]);
+    useEffect(() => { targetingModeRef.current = targetingMode; }, [targetingMode]);
 
     const addLog = (text: string, color?: string) => setCombatLog(prev => [...prev.slice(-50), { text, color }]);
 
@@ -236,6 +242,28 @@ export default function App() {
         scene.add(marker);
         moveMarkerRef.current = marker;
 
+        // Range indicator (shows skill range circle around caster)
+        const rangeIndicator = new THREE.Mesh(
+            new THREE.RingGeometry(0.1, 10, 64),
+            new THREE.MeshBasicMaterial({ color: "#3b82f6", side: THREE.DoubleSide, transparent: true, opacity: 0.2 })
+        );
+        rangeIndicator.rotation.x = -Math.PI / 2;
+        rangeIndicator.position.y = 0.02;
+        rangeIndicator.visible = false;
+        scene.add(rangeIndicator);
+        rangeIndicatorRef.current = rangeIndicator;
+
+        // AOE indicator (shows AOE radius at cursor position)
+        const aoeIndicator = new THREE.Mesh(
+            new THREE.RingGeometry(0.1, 2.5, 32),
+            new THREE.MeshBasicMaterial({ color: "#ff4400", side: THREE.DoubleSide, transparent: true, opacity: 0.3 })
+        );
+        aoeIndicator.rotation.x = -Math.PI / 2;
+        aoeIndicator.position.y = 0.03;
+        aoeIndicator.visible = false;
+        scene.add(aoeIndicator);
+        aoeIndicatorRef.current = aoeIndicator;
+
         // Create unit meshes
         units.forEach(unit => {
             const isPlayer = unit.team === "player";
@@ -340,6 +368,22 @@ export default function App() {
                 const rect = renderer.domElement.getBoundingClientRect();
                 setSelBox({ left: Math.min(boxStart.current.x, boxEnd.current.x) - rect.left, top: Math.min(boxStart.current.y, boxEnd.current.y) - rect.top, width: Math.abs(boxEnd.current.x - boxStart.current.x), height: Math.abs(boxEnd.current.y - boxStart.current.y) });
             }
+
+            // Update AOE indicator position when in targeting mode
+            if (targetingModeRef.current && aoeIndicatorRef.current) {
+                const rect = renderer.domElement.getBoundingClientRect();
+                mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+                mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+                raycaster.setFromCamera(mouse, camera);
+                const intersects = raycaster.intersectObjects(scene.children, true);
+                for (const hit of intersects) {
+                    if (hit.object.name === "ground") {
+                        aoeIndicatorRef.current.position.x = hit.point.x;
+                        aoeIndicatorRef.current.position.z = hit.point.z;
+                        break;
+                    }
+                }
+            }
         };
 
         const onMouseUp = (e: MouseEvent) => {
@@ -393,6 +437,125 @@ export default function App() {
             mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
             mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
             raycaster.setFromCamera(mouse, camera);
+
+            // Handle targeting mode click
+            if (targetingModeRef.current) {
+                const { casterId, skill } = targetingModeRef.current;
+                const caster = unitsStateRef.current.find(u => u.id === casterId);
+                const casterG = unitsRef.current[casterId];
+
+                if (!caster || !casterG || caster.hp <= 0) {
+                    setTargetingMode(null);
+                    if (rangeIndicatorRef.current) rangeIndicatorRef.current.visible = false;
+                    if (aoeIndicatorRef.current) aoeIndicatorRef.current.visible = false;
+                    return;
+                }
+
+                // Find where on the ground we clicked
+                for (const hit of raycaster.intersectObjects(scene.children, true)) {
+                    if (hit.object.name === "ground") {
+                        const targetX = hit.point.x;
+                        const targetZ = hit.point.z;
+                        const dist = Math.hypot(targetX - casterG.position.x, targetZ - casterG.position.z);
+
+                        // Check if in range
+                        if (dist > skill.range) {
+                            addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, "#888");
+                            return;
+                        }
+
+                        // Cast the skill at this location
+                        if (skill.type === "damage" && skill.targetType === "aoe") {
+                            // Deduct mana and set cooldown
+                            setUnits(prev => prev.map(u => u.id === casterId ? { ...u, mana: (u.mana ?? 0) - skill.manaCost } : u));
+                            setSkillCooldowns(prev => ({ ...prev, [`${casterId}-${skill.name}`]: Date.now() + skill.cooldown }));
+
+                            // Create projectile toward target location
+                            const projectile = new THREE.Mesh(
+                                new THREE.SphereGeometry(0.2, 12, 12),
+                                new THREE.MeshBasicMaterial({ color: skill.projectileColor || "#ff4400" })
+                            );
+                            projectile.position.set(casterG.position.x, 0.8, casterG.position.z);
+                            scene.add(projectile);
+
+                            projectilesRef.current.push({
+                                mesh: projectile,
+                                targetId: -1,
+                                attackerId: casterId,
+                                speed: 0.25,
+                                // @ts-expect-error - extending projectile type for AOE
+                                isAoe: true,
+                                aoeRadius: skill.aoeRadius,
+                                damage: skill.value,
+                                targetPos: { x: targetX, z: targetZ }
+                            });
+
+                            addLog(`${UNIT_DATA[casterId].name} casts ${skill.name}!`, "#ff6600");
+                            soundFnsRef.current.playAttack();
+                        } else if (skill.type === "heal" && skill.targetType === "ally") {
+                            // For heal, find closest ally to click position
+                            const allies = unitsStateRef.current.filter(u => u.team === "player" && u.hp > 0);
+                            let closestAllyId: number | null = null;
+                            let closestDist = 2; // Max distance from click to consider
+
+                            allies.forEach(ally => {
+                                const ag = unitsRef.current[ally.id];
+                                if (!ag) return;
+                                const d = Math.hypot(ag.position.x - targetX, ag.position.z - targetZ);
+                                if (d < closestDist) {
+                                    closestDist = d;
+                                    closestAllyId = ally.id;
+                                }
+                            });
+
+                            if (closestAllyId === null) {
+                                addLog(`${UNIT_DATA[casterId].name}: No ally at that location!`, "#888");
+                                return;
+                            }
+
+                            const targetAlly = unitsStateRef.current.find(u => u.id === closestAllyId);
+                            if (targetAlly && targetAlly.hp >= UNIT_DATA[targetAlly.id].maxHp) {
+                                addLog(`${UNIT_DATA[casterId].name}: ${UNIT_DATA[closestAllyId].name} is at full health!`, "#888");
+                                return;
+                            }
+
+                            // Deduct mana and set cooldown
+                            setUnits(prev => prev.map(u => u.id === casterId ? { ...u, mana: (u.mana ?? 0) - skill.manaCost } : u));
+                            setSkillCooldowns(prev => ({ ...prev, [`${casterId}-${skill.name}`]: Date.now() + skill.cooldown }));
+
+                            // Apply heal
+                            const healAmount = rollDamage(skill.value[0], skill.value[1]);
+                            const targetData = UNIT_DATA[closestAllyId];
+                            const healTargetId = closestAllyId;
+                            setUnits(prev => prev.map(u => u.id === healTargetId ? { ...u, hp: Math.min(targetData.maxHp, u.hp + healAmount) } : u));
+
+                            addLog(`${UNIT_DATA[casterId].name} heals ${targetData.name} for ${healAmount}!`, "#22c55e");
+
+                            // Visual effect - green flash
+                            const targetG = unitsRef.current[closestAllyId];
+                            if (targetG) {
+                                const mesh = unitMeshRef.current[closestAllyId];
+                                if (mesh) {
+                                    (mesh.material as THREE.MeshStandardMaterial).color.set("#22ff22");
+                                    setTimeout(() => {
+                                        const orig = unitOriginalColorRef.current[healTargetId];
+                                        if (orig) (mesh.material as THREE.MeshStandardMaterial).color.copy(orig);
+                                    }, 200);
+                                }
+                            }
+                        }
+
+                        // Exit targeting mode
+                        setTargetingMode(null);
+                        if (rangeIndicatorRef.current) rangeIndicatorRef.current.visible = false;
+                        if (aoeIndicatorRef.current) aoeIndicatorRef.current.visible = false;
+                        return;
+                    }
+                }
+                return;
+            }
+
+            // Normal click handling
             for (const h of raycaster.intersectObjects(scene.children, true)) {
                 let o: THREE.Object3D | null = h.object;
                 while (o) {
@@ -419,6 +582,11 @@ export default function App() {
 
         const onKeyDown = (e: KeyboardEvent) => {
             if (e.code === "Space") { e.preventDefault(); pausedRef.current = !pausedRef.current; setPaused(p => !p); }
+            if (e.code === "Escape" && targetingModeRef.current) {
+                setTargetingMode(null);
+                if (rangeIndicatorRef.current) rangeIndicatorRef.current.visible = false;
+                if (aoeIndicatorRef.current) aoeIndicatorRef.current.visible = false;
+            }
             if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyW", "KeyA", "KeyS", "KeyD"].includes(e.code)) {
                 keysPressed.current.add(e.code);
             }
@@ -439,7 +607,15 @@ export default function App() {
         renderer.domElement.addEventListener("mousedown", onMouseDown);
         renderer.domElement.addEventListener("mousemove", onMouseMove);
         renderer.domElement.addEventListener("mouseup", onMouseUp);
-        renderer.domElement.addEventListener("contextmenu", (e) => e.preventDefault());
+        renderer.domElement.addEventListener("contextmenu", (e) => {
+            e.preventDefault();
+            // Cancel targeting mode on right-click
+            if (targetingModeRef.current) {
+                setTargetingMode(null);
+                if (rangeIndicatorRef.current) rangeIndicatorRef.current.visible = false;
+                if (aoeIndicatorRef.current) aoeIndicatorRef.current.visible = false;
+            }
+        });
         renderer.domElement.addEventListener("wheel", onWheel, { passive: false });
         window.addEventListener("keydown", onKeyDown);
         window.addEventListener("keyup", onKeyUp);
@@ -493,6 +669,88 @@ export default function App() {
             // Update projectiles
             const currentUnitsForProjectiles = unitsStateRef.current;
             projectilesRef.current = projectilesRef.current.filter(proj => {
+                // @ts-expect-error - AOE projectile extensions
+                const isAoe = proj.isAoe as boolean | undefined;
+                // @ts-expect-error - AOE projectile extensions
+                const targetPos = proj.targetPos as { x: number; z: number } | undefined;
+
+                // AOE projectile (like Fireball)
+                if (isAoe && targetPos) {
+                    const dx = targetPos.x - proj.mesh.position.x;
+                    const dz = targetPos.z - proj.mesh.position.z;
+                    const dist = Math.hypot(dx, dz);
+
+                    if (dist < 0.3) {
+                        // @ts-expect-error - AOE projectile extensions
+                        const aoeRadius = proj.aoeRadius as number;
+                        // @ts-expect-error - AOE projectile extensions
+                        const damage = proj.damage as [number, number];
+                        const attackerData = UNIT_DATA[proj.attackerId];
+
+                        // Create explosion effect
+                        const explosion = new THREE.Mesh(
+                            new THREE.RingGeometry(0.1, aoeRadius, 32),
+                            new THREE.MeshBasicMaterial({ color: "#ff4400", transparent: true, opacity: 0.6, side: THREE.DoubleSide })
+                        );
+                        explosion.rotation.x = -Math.PI / 2;
+                        explosion.position.set(targetPos.x, 0.1, targetPos.z);
+                        scene.add(explosion);
+                        setTimeout(() => scene.remove(explosion), 300);
+
+                        // Deal damage to all enemies in radius
+                        let hitCount = 0;
+                        currentUnitsForProjectiles.filter(u => u.team === "enemy" && u.hp > 0).forEach(enemy => {
+                            const eg = unitsRef.current[enemy.id];
+                            if (!eg) return;
+                            const enemyDist = Math.hypot(eg.position.x - targetPos.x, eg.position.z - targetPos.z);
+                            if (enemyDist <= aoeRadius) {
+                                const rawDmg = rollDamage(damage[0], damage[1]);
+                                const dmg = Math.max(1, rawDmg - KOBOLD_STATS.armor);
+                                setUnits(prev => prev.map(u => u.id === enemy.id ? { ...u, hp: u.hp - dmg } : u));
+                                hitFlashRef.current[enemy.id] = now;
+                                hitCount++;
+
+                                // Spawn damage number
+                                const dmgCanvas = document.createElement("canvas");
+                                dmgCanvas.width = 64; dmgCanvas.height = 32;
+                                const dctx = dmgCanvas.getContext("2d")!;
+                                dctx.font = "bold 24px monospace";
+                                dctx.fillStyle = "#ff6600";
+                                dctx.textAlign = "center";
+                                dctx.fillText(`-${dmg}`, 32, 24);
+                                const tex = new THREE.CanvasTexture(dmgCanvas);
+                                const sprite = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.4), new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
+                                sprite.position.set(eg.position.x, 1.5, eg.position.z);
+                                scene.add(sprite);
+                                damageTexts.current.push({ mesh: sprite, life: 1000 });
+
+                                const newHp = Math.max(0, enemy.hp - dmg);
+                                if (newHp <= 0) {
+                                    addLog(`${KOBOLD_STATS.name} is defeated!`, "#f59e0b");
+                                    eg.visible = false;
+                                    Object.values(unitsRef.current).forEach((ug: UnitGroup) => {
+                                        if (ug.userData.attackTarget === enemy.id) ug.userData.attackTarget = null;
+                                    });
+                                }
+                            }
+                        });
+
+                        if (hitCount > 0) {
+                            soundFnsRef.current.playHit();
+                            addLog(`${attackerData.name}'s Fireball hits ${hitCount} enemies!`, "#ff6600");
+                        }
+
+                        scene.remove(proj.mesh);
+                        return false;
+                    }
+
+                    // Move projectile
+                    proj.mesh.position.x += (dx / dist) * proj.speed;
+                    proj.mesh.position.z += (dz / dist) * proj.speed;
+                    return true;
+                }
+
+                // Regular projectile (single target)
                 const targetUnit = currentUnitsForProjectiles.find(u => u.id === proj.targetId);
                 const targetG = unitsRef.current[proj.targetId];
                 const attackerUnit = currentUnitsForProjectiles.find(u => u.id === proj.attackerId);
@@ -512,15 +770,14 @@ export default function App() {
                     // Hit! Apply damage
                     const attackerData = UNIT_DATA[proj.attackerId];
                     const targetData = targetUnit.team === "player" ? UNIT_DATA[targetUnit.id] : KOBOLD_STATS;
-                    const roll = rollD20();
-                    const hitNeeded = attackerData.thac0 - targetData.ac;
 
-                    if (roll >= hitNeeded || roll === 20) {
-                        const dmg = rollDamage(attackerData.damage[0], attackerData.damage[1]);
+                    if (rollHit(attackerData.accuracy)) {
+                        const rawDmg = rollDamage(attackerData.damage[0], attackerData.damage[1]);
+                        const dmg = Math.max(1, rawDmg - targetData.armor);
                         setUnits(prev => prev.map(u => u.id === targetUnit.id ? { ...u, hp: u.hp - dmg } : u));
                         hitFlashRef.current[targetUnit.id] = now;
                         soundFnsRef.current.playHit();
-                        addLog(`${attackerData.name} hits ${targetData.name} for ${dmg} damage! (${roll})`, "#4ade80");
+                        addLog(`${attackerData.name} hits ${targetData.name} for ${dmg} damage!`, "#4ade80");
 
                         // Spawn damage number
                         const dmgCanvas = document.createElement("canvas");
@@ -546,7 +803,7 @@ export default function App() {
                         }
                     } else {
                         soundFnsRef.current.playMiss();
-                        addLog(`${attackerData.name} misses ${targetData.name}. (${roll})`, "#888");
+                        addLog(`${attackerData.name} misses ${targetData.name}.`, "#888");
                     }
 
                     scene.remove(proj.mesh);
@@ -688,14 +945,13 @@ export default function App() {
                                     } else {
                                         // Melee attack - instant damage
                                         const targetData = targetU.team === "player" ? UNIT_DATA[targetU.id] : KOBOLD_STATS;
-                                        const roll = rollD20();
-                                        const hitNeeded = data.thac0 - targetData.ac;
-                                        if (roll >= hitNeeded || roll === 20) {
-                                            const dmg = rollDamage(data.damage[0], data.damage[1]);
+                                        if (rollHit(data.accuracy)) {
+                                            const rawDmg = rollDamage(data.damage[0], data.damage[1]);
+                                            const dmg = Math.max(1, rawDmg - targetData.armor);
                                             setUnits(prev => prev.map(u => u.id === targetU.id ? { ...u, hp: u.hp - dmg } : u));
                                             hitFlashRef.current[targetU.id] = now;
                                             soundFnsRef.current.playHit();
-                                            addLog(`${data.name} hits ${targetData.name} for ${dmg} damage! (${roll})`, isPlayer ? "#4ade80" : "#f87171");
+                                            addLog(`${data.name} hits ${targetData.name} for ${dmg} damage!`, isPlayer ? "#4ade80" : "#f87171");
                                             const dmgCanvas = document.createElement("canvas");
                                             dmgCanvas.width = 64; dmgCanvas.height = 32;
                                             const dctx = dmgCanvas.getContext("2d")!;
@@ -716,7 +972,7 @@ export default function App() {
                                             }
                                         } else {
                                             soundFnsRef.current.playMiss();
-                                            addLog(`${data.name} misses ${targetData.name}. (${roll})`, "#888");
+                                            addLog(`${data.name} misses ${targetData.name}.`, "#888");
                                         }
                                     }
                                 }
@@ -857,8 +1113,46 @@ export default function App() {
     const aliveEnemies = units.filter(u => u.team === "enemy" && u.hp > 0).length;
     const alivePlayers = units.filter(u => u.team === "player" && u.hp > 0).length;
 
+    // Skill targeting handler - enters targeting mode
+    const handleCastSkill = (casterId: number, skill: Skill) => {
+        const caster = units.find(u => u.id === casterId);
+        if (!caster || caster.hp <= 0 || (caster.mana ?? 0) < skill.manaCost) return;
+
+        const casterG = unitsRef.current[casterId];
+        if (!casterG) return;
+
+        // Enter targeting mode
+        setTargetingMode({ casterId, skill });
+
+        // Show range indicator around caster
+        if (rangeIndicatorRef.current) {
+            // Update geometry to match skill range
+            rangeIndicatorRef.current.geometry.dispose();
+            rangeIndicatorRef.current.geometry = new THREE.RingGeometry(0.1, skill.range, 64);
+            rangeIndicatorRef.current.position.x = casterG.position.x;
+            rangeIndicatorRef.current.position.z = casterG.position.z;
+            rangeIndicatorRef.current.visible = true;
+        }
+
+        // Show AOE indicator if applicable
+        if (aoeIndicatorRef.current) {
+            if (skill.aoeRadius) {
+                aoeIndicatorRef.current.geometry.dispose();
+                aoeIndicatorRef.current.geometry = new THREE.RingGeometry(0.1, skill.aoeRadius, 32);
+                (aoeIndicatorRef.current.material as THREE.MeshBasicMaterial).color.set(skill.type === "heal" ? "#22c55e" : "#ff4400");
+                aoeIndicatorRef.current.visible = true;
+            } else {
+                // Single target - show small indicator
+                aoeIndicatorRef.current.geometry.dispose();
+                aoeIndicatorRef.current.geometry = new THREE.RingGeometry(0.3, 0.5, 32);
+                (aoeIndicatorRef.current.material as THREE.MeshBasicMaterial).color.set(skill.type === "heal" ? "#22c55e" : "#ff4400");
+                aoeIndicatorRef.current.visible = true;
+            }
+        }
+    };
+
     return (
-        <div style={{ width: "100%", height: "100vh", position: "relative" }}>
+        <div style={{ width: "100%", height: "100vh", position: "relative", cursor: targetingMode ? "crosshair" : "default" }}>
             <div ref={containerRef} style={{ width: "100%", height: "100%" }} />
             {selBox && <div style={{ position: "absolute", left: selBox.left, top: selBox.top, width: selBox.width, height: selBox.height, border: "1px solid #00ff00", backgroundColor: "rgba(0,255,0,0.1)", pointerEvents: "none" }} />}
             {/* DOM-based HP bars */}
@@ -879,7 +1173,7 @@ export default function App() {
             <HUD aliveEnemies={aliveEnemies} alivePlayers={alivePlayers} paused={paused} onTogglePause={() => setPaused(p => !p)} />
             <CombatLog log={combatLog} />
             <PartyBar units={units} selectedIds={selectedIds} onSelect={setSelectedIds} />
-            {showPanel && selectedIds.length === 1 && <UnitPanel unitId={selectedIds[0]} units={units} onClose={() => setShowPanel(false)} onToggleAI={(id) => setUnits(prev => prev.map(u => u.id === id ? { ...u, aiEnabled: !u.aiEnabled } : u))} />}
+            {showPanel && selectedIds.length === 1 && <UnitPanel unitId={selectedIds[0]} units={units} onClose={() => setShowPanel(false)} onToggleAI={(id) => setUnits(prev => prev.map(u => u.id === id ? { ...u, aiEnabled: !u.aiEnabled } : u))} onCastSkill={handleCastSkill} skillCooldowns={skillCooldowns} />}
         </div>
     );
 }
