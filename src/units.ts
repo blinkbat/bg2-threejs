@@ -23,6 +23,26 @@ export const KOBOLD_STATS: KoboldStats = {
     aggroRange: 6
 };
 
+// Kobold spawn locations across the dungeon
+const koboldSpawns = [
+    // Room D - kobold lair (NE) - 4 kobolds
+    { x: 30.5, z: 30.5 }, { x: 32.5, z: 30.5 }, { x: 30.5, z: 32.5 }, { x: 32.5, z: 32.5 },
+    // Room E - central great hall - 3 kobolds
+    { x: 18.5, z: 18.5 }, { x: 20.5, z: 20.5 }, { x: 22.5, z: 18.5 },
+    // Room B - NW - 2 kobolds
+    { x: 4.5, z: 28.5 }, { x: 6.5, z: 28.5 },
+    // Room C - SE - 3 kobolds
+    { x: 31.5, z: 4.5 }, { x: 33.5, z: 4.5 }, { x: 32.5, z: 6.5 },
+    // Room F - S middle - 2 kobolds
+    { x: 17.5, z: 4.5 }, { x: 19.5, z: 4.5 },
+    // Room G - W middle - 2 kobolds
+    { x: 4.5, z: 17.5 }, { x: 4.5, z: 19.5 },
+    // Room H - E middle - 2 kobolds
+    { x: 33.5, z: 17.5 }, { x: 33.5, z: 19.5 },
+    // Room I - N middle - 2 kobolds
+    { x: 17.5, z: 34.5 }, { x: 19.5, z: 34.5 },
+];
+
 // Helper to create initial units
 export function createInitialUnits(): Unit[] {
     return [
@@ -35,10 +55,10 @@ export function createInitialUnits(): Unit[] {
             target: null,
             aiEnabled: true
         })),
-        ...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((_, i) => ({
+        ...koboldSpawns.map((spawn, i) => ({
             id: 100 + i,
-            x: 30.5 + (i % 4) * 2,
-            z: 30.5 + Math.floor(i / 4) * 2,
+            x: spawn.x,
+            z: spawn.z,
             hp: KOBOLD_STATS.maxHp,
             team: "enemy" as const,
             target: null,

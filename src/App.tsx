@@ -8,7 +8,7 @@ import * as THREE from "three";
 
 // Constants & Types
 import { GRID_SIZE, ATTACK_RANGE, ATTACK_COOLDOWN, MOVE_SPEED, UNIT_RADIUS, PAN_SPEED } from "./constants";
-import type { Unit, CombatLogEntry, SelectionBox, HpBar, DamageText, FogTexture, UnitGroup } from "./types";
+import type { Unit, CombatLogEntry, SelectionBox, DamageText, FogTexture, UnitGroup } from "./types";
 
 // Game Logic
 import { blocked, candlePositions, mergedObstacles, roomFloors } from "./dungeon";
@@ -33,7 +33,7 @@ export default function App() {
     const sceneRef = useRef<THREE.Scene | null>(null);
     const unitsRef = useRef<Record<number, UnitGroup>>({});
     const selectRingsRef = useRef<Record<number, THREE.Mesh>>({});
-    const hpBarsRef = useRef<Record<number, HpBar>>({});
+    const maxHpRef = useRef<Record<number, number>>({});
     const moveMarkerRef = useRef<THREE.Mesh | null>(null);
     const pathsRef = useRef<Record<number, { x: number; z: number }[]>>({});
     const fogTextureRef = useRef<FogTexture | null>(null);
@@ -54,6 +54,7 @@ export default function App() {
     const hitFlashRef = useRef<Record<number, number>>({});
     const unitMeshRef = useRef<Record<number, THREE.Mesh>>({});
     const unitOriginalColorRef = useRef<Record<number, THREE.Color>>({});
+    const moveStartRef = useRef<Record<number, { time: number; x: number; z: number }>>({});
 
     // React state
     const [units, setUnits] = useState<Unit[]>(createInitialUnits);
@@ -62,6 +63,7 @@ export default function App() {
     const [showPanel, setShowPanel] = useState(false);
     const [combatLog, setCombatLog] = useState<CombatLogEntry[]>([{ text: "Combat begins!", color: "#f59e0b" }]);
     const [paused, setPaused] = useState(false);
+    const [hpBarPositions, setHpBarPositions] = useState<{ positions: Record<number, { x: number; y: number; visible: boolean }>; scale: number }>({ positions: {}, scale: 1 });
 
     // Refs for accessing state in callbacks
     const selectedRef = useRef(selectedIds);
@@ -162,32 +164,30 @@ export default function App() {
             scene.add(floor);
         });
 
-        // Wall sconces with brighter point lights
+        // Torch lights with candle + flickering flame
+        const flames: THREE.Mesh[] = [];
+        const candleLights: THREE.PointLight[] = [];
         candlePositions.forEach((pos) => {
-            const bracketMat = new THREE.MeshStandardMaterial({ color: "#3a2a1a", metalness: 0.6, roughness: 0.4 });
-            const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.4, 0.1), bracketMat);
-            bracket.position.set(pos.x, 1.8, pos.z);
-            scene.add(bracket);
-
-            const arm = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.3), bracketMat);
-            arm.position.set(pos.x + pos.dx * 0.15, 1.7, pos.z + pos.dz * 0.15);
-            scene.add(arm);
-
-            const candleMat = new THREE.MeshStandardMaterial({ color: "#e8d4a8", emissive: "#8a6a20", emissiveIntensity: 0.5 });
-            const candle = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.25, 8), candleMat);
+            const candle = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.06, 0.08, 0.3, 8),
+                new THREE.MeshStandardMaterial({ color: "#e8d4a8", metalness: 0.1, roughness: 0.9 })
+            );
             candle.position.set(pos.x + pos.dx * 0.3, 1.85, pos.z + pos.dz * 0.3);
             scene.add(candle);
 
-            const flameMat = new THREE.MeshBasicMaterial({ color: "#ffcc44" });
-            const flame = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), flameMat);
-            flame.position.set(pos.x + pos.dx * 0.3, 2.02, pos.z + pos.dz * 0.3);
+            const flame = new THREE.Mesh(
+                new THREE.SphereGeometry(0.08, 8, 8),
+                new THREE.MeshBasicMaterial({ color: "#ffcc44", transparent: true, opacity: 0.85 })
+            );
+            flame.position.set(pos.x + pos.dx * 0.3, 2.05, pos.z + pos.dz * 0.3);
             flame.scale.y = 1.8;
             scene.add(flame);
+            flames.push(flame);
 
-            // Brighter, longer range point light
             const light = new THREE.PointLight("#ffaa44", 5, 18, 1.2);
             light.position.set(pos.x + pos.dx * 1.5, 2.2, pos.z + pos.dz * 1.5);
             scene.add(light);
+            candleLights.push(light);
         });
 
         // Walls - slight sheen
@@ -220,10 +220,11 @@ export default function App() {
 
         const fogMesh = new THREE.Mesh(
             new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE),
-            new THREE.MeshBasicMaterial({ map: fogTexture, transparent: true })
+            new THREE.MeshBasicMaterial({ map: fogTexture, transparent: true, depthWrite: false })
         );
         fogMesh.rotation.x = -Math.PI / 2;
         fogMesh.position.set(GRID_SIZE / 2, 2.6, GRID_SIZE / 2);
+        fogMesh.renderOrder = 999;
         scene.add(fogMesh);
         fogMeshRef.current = fogMesh;
 
@@ -260,14 +261,7 @@ export default function App() {
             sel.visible = false;
             group.add(sel);
             selectRingsRef.current[unit.id] = sel;
-
-            const hpBg = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.1), new THREE.MeshBasicMaterial({ color: "#111" }));
-            hpBg.position.set(0, boxH + 0.3, 0);
-            group.add(hpBg);
-            const hpFill = new THREE.Mesh(new THREE.PlaneGeometry(0.78, 0.08), new THREE.MeshBasicMaterial({ color: isPlayer ? "#22c55e" : "#ef4444" }));
-            hpFill.position.set(0, boxH + 0.3, 0.01);
-            group.add(hpFill);
-            hpBarsRef.current[unit.id] = { bg: hpBg, fill: hpFill, maxHp: data.maxHp };
+            maxHpRef.current[unit.id] = data.maxHp;
 
             group.position.set(unit.x, 0, unit.z);
             group.userData = { unitId: unit.id, targetX: unit.x, targetZ: unit.z, attackTarget: null };
@@ -308,6 +302,10 @@ export default function App() {
             if (!g) return;
             const path = findPath(g.position.x, g.position.z, targetX, targetZ);
             pathsRef.current[unitId] = path ? path.slice(1) : [];
+            // Track move start for timeout detection
+            if (path && path.length > 0) {
+                moveStartRef.current[unitId] = { time: Date.now(), x: g.position.x, z: g.position.z };
+            }
         };
 
         const onMouseDown = (e: MouseEvent) => {
@@ -454,6 +452,16 @@ export default function App() {
             animId = requestAnimationFrame(animate);
             const now = Date.now();
 
+            // Flickering flames and lights
+            flames.forEach((flame, i) => {
+                const flicker = 0.7 + Math.sin(now * 0.015 + i * 2) * 0.15 + Math.random() * 0.15;
+                flame.scale.y = 1.5 + Math.sin(now * 0.02 + i) * 0.3;
+                (flame.material as THREE.MeshBasicMaterial).opacity = flicker;
+                // Flicker the light intensity to match (subtle)
+                const lightFlicker = 5 + Math.sin(now * 0.008 + i * 1.7) * 0.3 + Math.random() * 0.2;
+                candleLights[i].intensity = lightFlicker;
+            });
+
             // Keyboard panning (screen-space)
             let screenX = 0, screenY = 0;
             if (keysPressed.current.has("ArrowUp") || keysPressed.current.has("KeyW")) screenY -= 1;
@@ -470,11 +478,6 @@ export default function App() {
                 updateCamera();
             }
 
-            // Billboard HP bars
-            Object.entries(hpBarsRef.current).forEach(([id, bars]) => {
-                const g = unitsRef.current[Number(id)];
-                if (g && bars.bg && bars.fill) { bars.bg.quaternion.copy(camera.quaternion); bars.fill.quaternion.copy(camera.quaternion); }
-            });
 
             // Floating damage text
             damageTexts.current = damageTexts.current.filter(dt => {
@@ -557,7 +560,10 @@ export default function App() {
                     }
 
                     // Find new target if we should auto-target and have no valid target
-                    if (shouldAutoTarget && !targetStillValid) {
+                    // Players only auto-target when idle (no active move path) - allows repositioning
+                    const hasActivePath = pathsRef.current[unit.id]?.length > 0;
+                    const canAutoTarget = shouldAutoTarget && !targetStillValid && (!isPlayer || !hasActivePath);
+                    if (canAutoTarget) {
                         const aggroRange = isPlayer ? 12 : KOBOLD_STATS.aggroRange;
                         const enemyTeam = isPlayer ? "enemy" : "player";
                         let nearest: number | null = null, nearestDist = aggroRange;
@@ -614,13 +620,6 @@ export default function App() {
                                         scene.add(sprite);
                                         damageTexts.current.push({ mesh: sprite, life: 1000 });
                                         const newHp = Math.max(0, targetU.hp - dmg);
-                                        const hpBar = hpBarsRef.current[targetU.id];
-                                        if (hpBar) {
-                                            const pct = newHp / hpBar.maxHp;
-                                            hpBar.fill.scale.x = Math.max(0.01, pct);
-                                            hpBar.fill.position.x = -0.39 * (1 - pct);
-                                            (hpBar.fill.material as THREE.MeshBasicMaterial).color.setHex(pct > 0.5 ? 0x22c55e : pct > 0.25 ? 0xeab308 : 0xef4444);
-                                        }
                                         if (newHp <= 0) {
                                             addLog(`${targetData.name} is defeated!`, "#f59e0b");
                                             targetG.visible = false;
@@ -647,7 +646,21 @@ export default function App() {
                     if (path && path.length > 0) {
                         targetX = path[0].x;
                         targetZ = path[0].z;
-                        if (Math.hypot(targetX - g.position.x, targetZ - g.position.z) < 0.3) path.shift();
+                        if (Math.hypot(targetX - g.position.x, targetZ - g.position.z) < 0.3) {
+                            path.shift();
+                            // Update move start when making progress
+                            moveStartRef.current[unit.id] = { time: now, x: g.position.x, z: g.position.z };
+                        }
+                        // Timeout: if stuck for 2 seconds without progress, give up
+                        const moveStart = moveStartRef.current[unit.id];
+                        if (moveStart && now - moveStart.time > 2000) {
+                            const movedDist = Math.hypot(g.position.x - moveStart.x, g.position.z - moveStart.z);
+                            if (movedDist < 0.5) {
+                                // Stuck - clear path and become idle
+                                pathsRef.current[unit.id] = [];
+                                delete moveStartRef.current[unit.id];
+                            }
+                        }
                     }
 
                     const dx = targetX - g.position.x;
@@ -699,6 +712,25 @@ export default function App() {
             }
 
             if (moveMarkerRef.current?.visible) moveMarkerRef.current.rotation.z += 0.05;
+
+            // Update HP bar screen positions
+            const rect = renderer.domElement.getBoundingClientRect();
+            const newPositions: Record<number, { x: number; y: number; visible: boolean }> = {};
+            currentUnits.forEach(u => {
+                const g = unitsRef.current[u.id];
+                if (!g) return;
+                const isPlayer = u.team === "player";
+                const boxH = isPlayer ? 1 : 0.6;
+                const worldPos = new THREE.Vector3(g.position.x, boxH + 0.4, g.position.z);
+                worldPos.project(camera);
+                const x = (worldPos.x * 0.5 + 0.5) * rect.width;
+                const y = (-worldPos.y * 0.5 + 0.5) * rect.height;
+                newPositions[u.id] = { x, y, visible: g.visible && u.hp > 0 };
+            });
+            // Scale based on zoom (10 is default zoom, smaller zoom = closer = bigger bars)
+            const scale = 10 / zoomLevel.current;
+            setHpBarPositions({ positions: newPositions, scale });
+
             renderer.render(scene, camera);
         };
         animate();
@@ -739,6 +771,21 @@ export default function App() {
         <div style={{ width: "100%", height: "100vh", position: "relative" }}>
             <div ref={containerRef} style={{ width: "100%", height: "100%" }} />
             {selBox && <div style={{ position: "absolute", left: selBox.left, top: selBox.top, width: selBox.width, height: selBox.height, border: "1px solid #00ff00", backgroundColor: "rgba(0,255,0,0.1)", pointerEvents: "none" }} />}
+            {/* DOM-based HP bars */}
+            {units.map(u => {
+                const pos = hpBarPositions.positions[u.id];
+                if (!pos?.visible) return null;
+                const maxHp = maxHpRef.current[u.id] || 1;
+                const pct = Math.max(0, u.hp / maxHp);
+                const color = pct > 0.5 ? "#22c55e" : pct > 0.25 ? "#eab308" : "#ef4444";
+                const barWidth = 24 * hpBarPositions.scale;
+                const barHeight = 3 * hpBarPositions.scale;
+                return (
+                    <div key={u.id} style={{ position: "absolute", left: pos.x - barWidth / 2, top: pos.y - barHeight / 2, width: barWidth, height: barHeight, backgroundColor: "#111", border: "1px solid #333", pointerEvents: "none" }}>
+                        <div style={{ width: `${pct * 100}%`, height: "100%", backgroundColor: color }} />
+                    </div>
+                );
+            })}
             <HUD aliveEnemies={aliveEnemies} alivePlayers={alivePlayers} paused={paused} onTogglePause={() => setPaused(p => !p)} />
             <CombatLog log={combatLog} />
             <PartyBar units={units} selectedIds={selectedIds} onSelect={setSelectedIds} />
