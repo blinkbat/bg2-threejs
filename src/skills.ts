@@ -138,8 +138,12 @@ export function executeHealSkill(
         if (mesh) {
             (mesh.material as THREE.MeshStandardMaterial).color.set("#22ff22");
             setTimeout(() => {
+                // Guard against mesh being disposed or removed after unmount
+                const currentMesh = unitMeshRef.current[healTargetId];
                 const orig = unitOriginalColorRef.current[healTargetId];
-                if (orig) (mesh.material as THREE.MeshStandardMaterial).color.copy(orig);
+                if (currentMesh && orig && currentMesh.material) {
+                    (currentMesh.material as THREE.MeshStandardMaterial).color.copy(orig);
+                }
             }, 200);
         }
     }

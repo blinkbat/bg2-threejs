@@ -10,6 +10,7 @@ import { findPath, updateVisibility } from "./pathfinding";
 import { UNIT_DATA, KOBOLD_STATS, rollDamage, rollHit } from "./units";
 import { spawnDamageNumber, handleUnitDefeat } from "./combat";
 import { soundFns } from "./sound";
+import { disposeBasicMesh, disposeTexturedMesh } from "./disposal";
 
 // =============================================================================
 // TYPES
@@ -52,12 +53,7 @@ export function updateDamageTexts(
             dt.life -= 16;
             (dt.mesh.material as THREE.MeshBasicMaterial).opacity = dt.life / 1000;
             if (dt.life <= 0) {
-                scene.remove(dt.mesh);
-                // Dispose geometry, material, and texture to prevent memory leak
-                dt.mesh.geometry.dispose();
-                const material = dt.mesh.material as THREE.MeshBasicMaterial;
-                if (material.map) material.map.dispose();
-                material.dispose();
+                disposeTexturedMesh(scene, dt.mesh);
                 return false;
             }
         }
@@ -95,6 +91,10 @@ export function updateHitFlash(
 // PROJECTILE UPDATES
 // =============================================================================
 
+function disposeProjectile(scene: THREE.Scene, proj: Projectile): void {
+    disposeBasicMesh(scene, proj.mesh);
+}
+
 export function updateProjectiles(
     projectilesRef: Projectile[],
     unitsRef: Record<number, UnitGroup>,
@@ -126,7 +126,7 @@ export function updateProjectiles(
                 explosion.rotation.x = -Math.PI / 2;
                 explosion.position.set(targetPos.x, 0.1, targetPos.z);
                 scene.add(explosion);
-                setTimeout(() => scene.remove(explosion), 300);
+                setTimeout(() => disposeBasicMesh(scene, explosion), 300);
                 soundFns.playExplosion();
 
                 // Deal damage to ALL units in radius (friendly fire!)
@@ -159,7 +159,7 @@ export function updateProjectiles(
                     addLog(`${attackerData.name}'s Fireball hits ${hitCount} targets!`, "#ff6600");
                 }
 
-                scene.remove(proj.mesh);
+                disposeProjectile(scene, proj);
                 return false;
             }
 
@@ -176,7 +176,7 @@ export function updateProjectiles(
         const attackerUnit = unitsState.find(u => u.id === proj.attackerId);
 
         if (!targetUnit || !targetG || targetUnit.hp <= 0 || defeatedThisFrame.has(proj.targetId) || !attackerUnit) {
-            scene.remove(proj.mesh);
+            disposeProjectile(scene, proj);
             return false;
         }
 
@@ -208,7 +208,7 @@ export function updateProjectiles(
                 addLog(`${attackerData.name} misses ${targetData.name}.`, "#888");
             }
 
-            scene.remove(proj.mesh);
+            disposeProjectile(scene, proj);
             return false;
         }
 
@@ -305,9 +305,7 @@ export function updateSwingAnimations(
         swing.mesh.position.z = swing.attackerZ + Math.sin(angle) * 0.5;
 
         if (t >= 1) {
-            scene.remove(swing.mesh);
-            swing.mesh.geometry.dispose();
-            (swing.mesh.material as THREE.MeshBasicMaterial).dispose();
+            disposeBasicMesh(scene, swing.mesh);
             return false;
         }
         return true;

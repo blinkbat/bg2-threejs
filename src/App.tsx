@@ -18,6 +18,7 @@ import { soundFns } from "./sound";
 
 // Extracted modules
 import { clearTargetingMode, type SkillExecutionContext } from "./skills";
+import { disposeGeometry } from "./disposal";
 import {
     togglePause,
     executeMove,
@@ -448,6 +449,9 @@ export default function App() {
 
             // Unit AI & movement
             if (!pausedRef.current) {
+                // Process queued actions (skills waiting for cooldown)
+                doProcessQueue();
+
                 currentUnits.forEach(unit => {
                     const g = unitsRef.current[unit.id];
                     if (!g || unit.hp <= 0) return;
@@ -520,19 +524,29 @@ export default function App() {
         setTargetingMode({ casterId, skill });
 
         if (rangeIndicatorRef.current) {
-            rangeIndicatorRef.current.geometry.dispose();
-            rangeIndicatorRef.current.geometry = new THREE.RingGeometry(0.1, skill.range, 64);
+            // Only recreate geometry if radius changed
+            const currentRadius = rangeIndicatorRef.current.userData.radius;
+            if (currentRadius !== skill.range) {
+                disposeGeometry(rangeIndicatorRef.current);
+                rangeIndicatorRef.current.geometry = new THREE.RingGeometry(0.1, skill.range, 64);
+                rangeIndicatorRef.current.userData.radius = skill.range;
+            }
             rangeIndicatorRef.current.position.x = casterG.position.x;
             rangeIndicatorRef.current.position.z = casterG.position.z;
             rangeIndicatorRef.current.visible = true;
         }
 
         if (aoeIndicatorRef.current) {
-            aoeIndicatorRef.current.geometry.dispose();
-            if (skill.aoeRadius) {
-                aoeIndicatorRef.current.geometry = new THREE.RingGeometry(0.1, skill.aoeRadius, 32);
-            } else {
-                aoeIndicatorRef.current.geometry = new THREE.RingGeometry(0.3, 0.5, 32);
+            const targetRadius = skill.aoeRadius || 0.5;
+            const innerRadius = skill.aoeRadius ? 0.1 : 0.3;
+            const currentOuter = aoeIndicatorRef.current.userData.outerRadius;
+            const currentInner = aoeIndicatorRef.current.userData.innerRadius;
+            // Only recreate geometry if radius changed
+            if (currentOuter !== targetRadius || currentInner !== innerRadius) {
+                disposeGeometry(aoeIndicatorRef.current);
+                aoeIndicatorRef.current.geometry = new THREE.RingGeometry(innerRadius, targetRadius, 32);
+                aoeIndicatorRef.current.userData.outerRadius = targetRadius;
+                aoeIndicatorRef.current.userData.innerRadius = innerRadius;
             }
             (aoeIndicatorRef.current.material as THREE.MeshBasicMaterial).color.set(skill.type === "heal" ? "#22c55e" : "#ff4400");
             aoeIndicatorRef.current.visible = true;

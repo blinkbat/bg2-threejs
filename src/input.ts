@@ -5,9 +5,8 @@
 import * as THREE from "three";
 import type { Unit, Skill, UnitGroup, SelectionBox } from "./types";
 import { GRID_SIZE, FORMATION_SPACING } from "./constants";
-import { blocked } from "./dungeon";
 import { findPath } from "./pathfinding";
-import { UNIT_DATA, KOBOLD_STATS } from "./units";
+import { UNIT_DATA } from "./units";
 import { soundFns } from "./sound";
 import { executeSkill, clearTargetingMode, type SkillExecutionContext } from "./skills";
 
@@ -189,7 +188,7 @@ export function getUnitsInBox(
 
 export function processActionQueue(
     actionQueueRef: React.MutableRefObject<QueuedAction[]>,
-    _actionCooldownRef: React.MutableRefObject<Record<number, number>>,
+    actionCooldownRef: React.MutableRefObject<Record<number, number>>,
     unitsRef: Record<number, UnitGroup>,
     pathsRef: Record<number, { x: number; z: number }[]>,
     moveStartRef: Record<number, { time: number; x: number; z: number }>,
@@ -200,16 +199,22 @@ export function processActionQueue(
 ): void {
     if (pausedRef.current) return;
 
+    const now = Date.now();
+    const remaining: QueuedAction[] = [];
     const executedSkills: { unitId: number; skillName: string }[] = [];
 
-    // Execute all queued actions immediately on unpause
-    // Cooldowns were frozen during pause, so queued skills should be ready
     for (const action of actionQueueRef.current) {
         if (action.type === "skill") {
             const caster = skillCtx.unitsStateRef.current.find(u => u.id === action.casterId);
-            // Skip if caster died or ran out of mana during pause
+            // Remove if caster died or ran out of mana
             if (!caster || caster.hp <= 0 || (caster.mana ?? 0) < action.skill.manaCost) {
                 executedSkills.push({ unitId: action.casterId, skillName: action.skill.name });
+                continue;
+            }
+            // Keep in queue if on cooldown - will be processed next frame
+            const cooldownEnd = actionCooldownRef.current[action.casterId] || 0;
+            if (now < cooldownEnd) {
+                remaining.push(action);
                 continue;
             }
             executeSkill(skillCtx, action.casterId, action.skill, action.targetX, action.targetZ);
@@ -221,11 +226,14 @@ export function processActionQueue(
         }
     }
 
-    // Clear the queue
-    actionQueueRef.current = [];
+    // Keep unprocessed actions
+    actionQueueRef.current = remaining;
 
+    // Update UI for executed/removed skills
     if (executedSkills.length > 0) {
-        setQueuedActions([]);
+        setQueuedActions(prev => prev.filter(q =>
+            !executedSkills.some(e => e.unitId === q.unitId && e.skillName === q.skillName)
+        ));
     }
 }
 
@@ -291,7 +299,7 @@ export function handleTargetingClick(
         return true;
     }
 
-    // Only queue when paused - execute immediately otherwise
+    // Queue when paused - execute immediately otherwise
     if (state.pausedRef.current) {
         const alreadyQueued = refs.actionQueueRef.current.some(
             a => a.type === "skill" && a.casterId === casterId && a.skill.name === skill.name
@@ -308,7 +316,7 @@ export function handleTargetingClick(
         return true;
     }
 
-    // Check cooldown when not paused
+    // Check cooldown only when executing immediately (not paused)
     const now = Date.now();
     const cooldownEnd = refs.actionCooldownRef.current[casterId] || 0;
     if (now < cooldownEnd) {

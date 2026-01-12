@@ -149,6 +149,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     rangeIndicator.rotation.x = -Math.PI / 2;
     rangeIndicator.position.y = 0.02;
     rangeIndicator.visible = false;
+    rangeIndicator.userData.radius = 10;
     scene.add(rangeIndicator);
 
     // AOE indicator
@@ -159,6 +160,8 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     aoeIndicator.rotation.x = -Math.PI / 2;
     aoeIndicator.position.y = 0.03;
     aoeIndicator.visible = false;
+    aoeIndicator.userData.innerRadius = 0.1;
+    aoeIndicator.userData.outerRadius = 2.5;
     scene.add(aoeIndicator);
 
     // Create unit meshes
