@@ -3,6 +3,11 @@
 // =============================================================================
 
 let audioCtx: AudioContext | null = null;
+let muted = false;
+
+export const isMuted = () => muted;
+export const setMuted = (value: boolean) => { muted = value; };
+export const toggleMute = () => { muted = !muted; return muted; };
 
 const getAudioCtx = () => {
     if (!audioCtx) audioCtx = new AudioContext();
@@ -12,6 +17,7 @@ const getAudioCtx = () => {
 const rand = (base: number, variance: number) => base * (1 + (Math.random() - 0.5) * variance);
 
 const playTone = (freq: number, duration: number, volume: number, type: OscillatorType, freqEnd?: number, filterFreq?: number) => {
+    if (muted) return;
     const ctx = getAudioCtx();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
@@ -41,6 +47,7 @@ const playTone = (freq: number, duration: number, volume: number, type: Oscillat
 
 // Fireball - whooshing explosion with long decay
 const playFireball = () => {
+    if (muted) return;
     const ctx = getAudioCtx();
 
     // Whoosh layer - rising then falling
@@ -87,6 +94,7 @@ const playFireball = () => {
 
 // Fireball explosion on impact - deep boom with crackle
 const playExplosion = () => {
+    if (muted) return;
     const ctx = getAudioCtx();
 
     // Deep boom - louder and longer
@@ -138,6 +146,7 @@ const playExplosion = () => {
 
 // Heal - chirpy ascending arpeggio
 const playHeal = () => {
+    if (muted) return;
     const ctx = getAudioCtx();
     const notes = [523, 659, 784, 1047]; // C5, E5, G5, C6
 

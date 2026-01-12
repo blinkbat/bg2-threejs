@@ -1,21 +1,69 @@
+import { useState } from "react";
+import { toggleMute, isMuted } from "../sound";
+
 interface HUDProps {
     aliveEnemies: number;
     alivePlayers: number;
     paused: boolean;
     onTogglePause: () => void;
+    onShowHelp: () => void;
 }
 
-export function HUD({ aliveEnemies, alivePlayers, paused, onTogglePause }: HUDProps) {
+export function HUD({ aliveEnemies, alivePlayers, paused, onTogglePause, onShowHelp }: HUDProps) {
+    const [muted, setMuted] = useState(isMuted());
+
+    const handleToggleMute = () => {
+        const newMuted = toggleMute();
+        setMuted(newMuted);
+    };
+
+    const buttonStyle = {
+        padding: "6px 14px",
+        background: "#21262d",
+        border: "1px solid #444",
+        color: "#fff",
+        borderRadius: 4,
+        cursor: "pointer",
+        fontFamily: "monospace",
+        fontSize: 12
+    };
+
     return (
-        <div style={{ position: "absolute", top: 10, left: 10, fontFamily: "monospace", fontSize: 11, color: "#888", background: "rgba(0,0,0,0.6)", padding: "8px 12px", borderRadius: 4 }}>
-            <div>Click enemy to attack • Spacebar to pause</div>
-            <div>Drag to box-select • Right-drag/Arrows to pan • Scroll to zoom</div>
-            <div style={{ marginTop: 6, color: aliveEnemies === 0 ? "#4ade80" : alivePlayers === 0 ? "#f87171" : "#fff" }}>
-                {aliveEnemies === 0 ? "Victory!" : alivePlayers === 0 ? "Defeat!" : `Kobolds: ${aliveEnemies}`}
+        <div style={{
+            position: "absolute",
+            top: 12,
+            left: 12,
+            fontFamily: "monospace",
+            background: "rgba(0,0,0,0.75)",
+            padding: "12px 16px",
+            borderRadius: 6,
+            border: "1px solid #333"
+        }}>
+            <div style={{
+                marginBottom: 10,
+                fontSize: 14,
+                fontWeight: "bold",
+                color: aliveEnemies === 0 ? "#4ade80" : alivePlayers === 0 ? "#f87171" : "#fff"
+            }}>
+                {aliveEnemies === 0 ? "Victory!" : alivePlayers === 0 ? "Defeat!" : `Kobolds remaining: ${aliveEnemies}`}
             </div>
-            <button onClick={onTogglePause} style={{ marginTop: 6, padding: "4px 10px", background: paused ? "#854d0e" : "#21262d", border: "1px solid #333", color: "#fff", borderRadius: 4, cursor: "pointer" }}>
-                {paused ? "▶ Resume" : "⏸ Pause"}
-            </button>
+            <div style={{ display: "flex", gap: 8 }}>
+                <button
+                    onClick={onTogglePause}
+                    style={{ ...buttonStyle, background: paused ? "#854d0e" : "#21262d" }}
+                >
+                    {paused ? "Resume" : "Pause"}
+                </button>
+                <button onClick={onShowHelp} style={buttonStyle}>
+                    Help
+                </button>
+                <button
+                    onClick={handleToggleMute}
+                    style={{ ...buttonStyle, background: muted ? "#7f1d1d" : "#21262d" }}
+                >
+                    {muted ? "Unmute" : "Mute"}
+                </button>
+            </div>
         </div>
     );
 }

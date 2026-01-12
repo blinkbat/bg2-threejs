@@ -44,6 +44,7 @@ import { PartyBar } from "./components/PartyBar";
 import { UnitPanel } from "./components/UnitPanel";
 import { CombatLog } from "./components/CombatLog";
 import { HUD } from "./components/HUD";
+import { HelpModal } from "./components/HelpModal";
 
 // =============================================================================
 // MAIN COMPONENT
@@ -98,6 +99,7 @@ export default function App() {
     const [skillCooldowns, setSkillCooldowns] = useState<Record<string, { end: number; duration: number }>>({});
     const [targetingMode, setTargetingMode] = useState<{ casterId: number; skill: Skill } | null>(null);
     const [queuedActions, setQueuedActions] = useState<{ unitId: number; skillName: string }[]>([]);
+    const [showHelp, setShowHelp] = useState(true);
 
     // Refs for accessing state in callbacks
     const selectedRef = useRef(selectedIds);
@@ -582,7 +584,7 @@ export default function App() {
                     </div>
                 );
             })}
-            <HUD aliveEnemies={aliveEnemies} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} />
+            <HUD aliveEnemies={aliveEnemies} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onShowHelp={() => setShowHelp(true)} />
             <CombatLog log={combatLog} />
             <PartyBar units={units} selectedIds={selectedIds} onSelect={setSelectedIds} />
             {showPanel && selectedIds.length === 1 && <UnitPanel
@@ -595,6 +597,7 @@ export default function App() {
                 paused={paused}
                 queuedSkills={queuedActions.filter(q => q.unitId === selectedIds[0]).map(q => q.skillName)}
             />}
+            {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
         </div>
     );
 }

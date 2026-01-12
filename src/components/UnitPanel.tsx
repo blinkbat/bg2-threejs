@@ -41,10 +41,19 @@ export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, ski
     const hasMana = data.maxMana !== undefined && data.maxMana > 0;
     const manaPct = hasMana ? ((unit.mana ?? 0) / data.maxMana!) * 100 : 0;
 
+    // Darken unit color for header (mix with black)
+    const darkenColor = (hex: string, factor: number = 0.4) => {
+        const r = parseInt(hex.slice(1, 3), 16);
+        const g = parseInt(hex.slice(3, 5), 16);
+        const b = parseInt(hex.slice(5, 7), 16);
+        return `rgb(${Math.floor(r * factor)}, ${Math.floor(g * factor)}, ${Math.floor(b * factor)})`;
+    };
+    const headerColor = darkenColor(data.color);
+
     return (
         <div style={{ position: "absolute", top: 10, right: 10, width: 240, background: "linear-gradient(180deg, #1e1e2e 0%, #12121a 100%)", border: "2px solid #3d3d5c", borderRadius: 8, fontFamily: "monospace", color: "#ddd", overflow: "hidden" }}>
-            <div style={{ background: data.color, padding: "10px 12px", display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ width: 44, height: 44, background: "rgba(0,0,0,0.3)", borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: "bold", fontFamily: "serif" }}>{data.name[0]}</div>
+            <div style={{ background: headerColor, padding: "10px 12px", display: "flex", alignItems: "center", gap: 10, borderBottom: `2px solid ${data.color}` }}>
+                <div style={{ width: 44, height: 44, background: "rgba(0,0,0,0.4)", borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: "bold", fontFamily: "serif", color: data.color }}>{data.name[0]}</div>
                 <div style={{ flex: 1 }}><div style={{ fontWeight: "bold", fontSize: 14 }}>{data.name}</div><div style={{ fontSize: 11, opacity: 0.8 }}>{data.class}</div></div>
                 <div onClick={onClose} style={{ cursor: "pointer", fontSize: 18, opacity: 0.7 }}>×</div>
             </div>
