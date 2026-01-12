@@ -121,3 +121,24 @@ export interface UnitGroup extends THREE.Group {
         attackTarget: number | null;
     };
 }
+
+// Projectile types - basic (single target) vs AOE (area effect)
+export interface BaseProjectile {
+    mesh: THREE.Mesh;
+    attackerId: number;
+    speed: number;
+}
+
+export interface BasicProjectile extends BaseProjectile {
+    type: "basic";
+    targetId: number;
+}
+
+export interface AoeProjectile extends BaseProjectile {
+    type: "aoe";
+    targetPos: { x: number; z: number };
+    aoeRadius: number;
+    damage: [number, number];
+}
+
+export type Projectile = BasicProjectile | AoeProjectile;

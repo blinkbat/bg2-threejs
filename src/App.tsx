@@ -8,7 +8,10 @@ import * as THREE from "three";
 
 // Constants & Types
 import { GRID_SIZE, ATTACK_RANGE, ATTACK_COOLDOWN, MOVE_SPEED, UNIT_RADIUS, PAN_SPEED } from "./constants";
-import type { Unit, UnitData, Skill, CombatLogEntry, SelectionBox, DamageText, UnitGroup, FogTexture } from "./types";
+import type { Unit, UnitData, Skill, CombatLogEntry, SelectionBox, DamageText, UnitGroup, FogTexture, Projectile } from "./types";
+
+// Combat helpers
+import { spawnDamageNumber, handleUnitDefeat } from "./combat";
 
 // Game Logic
 import { blocked } from "./dungeon";
@@ -59,7 +62,7 @@ export default function App() {
     const unitMeshRef = useRef<Record<number, THREE.Mesh>>({});
     const unitOriginalColorRef = useRef<Record<number, THREE.Color>>({});
     const moveStartRef = useRef<Record<number, { time: number; x: number; z: number }>>({});
-    const projectilesRef = useRef<{ mesh: THREE.Mesh; targetId: number; attackerId: number; speed: number }[]>([]);
+    const projectilesRef = useRef<Projectile[]>([]);
     const rangeIndicatorRef = useRef<THREE.Mesh | null>(null);
     const aoeIndicatorRef = useRef<THREE.Mesh | null>(null);
 
@@ -179,13 +182,11 @@ export default function App() {
                 scene.add(projectile);
 
                 projectilesRef.current.push({
+                    type: "aoe",
                     mesh: projectile,
-                    targetId: -1,
                     attackerId: casterId,
                     speed: 0.25,
-                    // @ts-expect-error - extending projectile type for AOE
-                    isAoe: true,
-                    aoeRadius: skill.aoeRadius,
+                    aoeRadius: skill.aoeRadius!,
                     damage: skill.value,
                     targetPos: { x: targetX, z: targetZ }
                 });
@@ -577,22 +578,14 @@ export default function App() {
                 // Skip projectile updates when paused - they freeze in place
             } else {
             projectilesRef.current = projectilesRef.current.filter(proj => {
-                // @ts-expect-error - AOE projectile extensions
-                const isAoe = proj.isAoe as boolean | undefined;
-                // @ts-expect-error - AOE projectile extensions
-                const targetPos = proj.targetPos as { x: number; z: number } | undefined;
-
                 // AOE projectile (like Fireball)
-                if (isAoe && targetPos) {
+                if (proj.type === "aoe") {
+                    const { targetPos, aoeRadius, damage } = proj;
                     const dx = targetPos.x - proj.mesh.position.x;
                     const dz = targetPos.z - proj.mesh.position.z;
                     const dist = Math.hypot(dx, dz);
 
                     if (dist < 0.3) {
-                        // @ts-expect-error - AOE projectile extensions
-                        const aoeRadius = proj.aoeRadius as number;
-                        // @ts-expect-error - AOE projectile extensions
-                        const damage = proj.damage as [number, number];
                         const attackerData = UNIT_DATA[proj.attackerId];
 
                         // Create explosion effect
@@ -621,27 +614,11 @@ export default function App() {
                                 hitFlashRef.current[target.id] = now;
                                 hitCount++;
 
-                                // Spawn damage number
-                                const dmgCanvas = document.createElement("canvas");
-                                dmgCanvas.width = 64; dmgCanvas.height = 32;
-                                const dctx = dmgCanvas.getContext("2d")!;
-                                dctx.font = "bold 24px monospace";
-                                dctx.fillStyle = isPlayer ? "#f87171" : "#ff6600";
-                                dctx.textAlign = "center";
-                                dctx.fillText(`-${dmg}`, 32, 24);
-                                const tex = new THREE.CanvasTexture(dmgCanvas);
-                                const sprite = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.4), new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
-                                sprite.position.set(tg.position.x, 1.5, tg.position.z);
-                                scene.add(sprite);
-                                damageTexts.current.push({ mesh: sprite, life: 1000 });
+                                spawnDamageNumber(scene, tg.position.x, tg.position.z, dmg, isPlayer ? "#f87171" : "#ff6600", damageTexts.current);
 
                                 const newHp = Math.max(0, target.hp - dmg);
                                 if (newHp <= 0) {
-                                    addLog(`${targetData.name} is defeated!`, "#f59e0b");
-                                    tg.visible = false;
-                                    Object.values(unitsRef.current).forEach((ug: UnitGroup) => {
-                                        if (ug.userData.attackTarget === target.id) ug.userData.attackTarget = null;
-                                    });
+                                    handleUnitDefeat(target.id, tg, unitsRef.current, addLog, targetData.name);
                                 }
                             }
                         });
@@ -662,6 +639,7 @@ export default function App() {
                 }
 
                 // Regular projectile (single target)
+                if (proj.type !== "basic") return true; // Should not happen, but type guard
                 const targetUnit = currentUnitsForProjectiles.find(u => u.id === proj.targetId);
                 const targetG = unitsRef.current[proj.targetId];
                 const attackerUnit = currentUnitsForProjectiles.find(u => u.id === proj.attackerId);
@@ -690,27 +668,11 @@ export default function App() {
                         soundFns.playHit();
                         addLog(`${attackerData.name} hits ${targetData.name} for ${dmg} damage!`, "#4ade80");
 
-                        // Spawn damage number
-                        const dmgCanvas = document.createElement("canvas");
-                        dmgCanvas.width = 64; dmgCanvas.height = 32;
-                        const dctx = dmgCanvas.getContext("2d")!;
-                        dctx.font = "bold 24px monospace";
-                        dctx.fillStyle = "#4ade80";
-                        dctx.textAlign = "center";
-                        dctx.fillText(`-${dmg}`, 32, 24);
-                        const tex = new THREE.CanvasTexture(dmgCanvas);
-                        const sprite = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.4), new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
-                        sprite.position.set(targetG.position.x, 1.5, targetG.position.z);
-                        scene.add(sprite);
-                        damageTexts.current.push({ mesh: sprite, life: 1000 });
+                        spawnDamageNumber(scene, targetG.position.x, targetG.position.z, dmg, "#4ade80", damageTexts.current);
 
                         const newHp = Math.max(0, targetUnit.hp - dmg);
                         if (newHp <= 0) {
-                            addLog(`${targetData.name} is defeated!`, "#f59e0b");
-                            targetG.visible = false;
-                            Object.values(unitsRef.current).forEach((ug: UnitGroup) => {
-                                if (ug.userData.attackTarget === targetUnit.id) ug.userData.attackTarget = null;
-                            });
+                            handleUnitDefeat(targetUnit.id, targetG, unitsRef.current, addLog, targetData.name);
                         }
                     } else {
                         soundFns.playMiss();
@@ -863,11 +825,38 @@ export default function App() {
                                         );
                                         projectile.position.set(g.position.x, 0.7, g.position.z);
                                         scene.add(projectile);
-                                        projectilesRef.current.push({ mesh: projectile, targetId: targetU.id, attackerId: unit.id, speed: 0.3 });
+                                        projectilesRef.current.push({ type: "basic", mesh: projectile, targetId: targetU.id, attackerId: unit.id, speed: 0.3 });
                                         soundFns.playAttack();
                                     } else {
                                         // Melee attack - instant damage
                                         const targetData = targetU.team === "player" ? UNIT_DATA[targetU.id] : KOBOLD_STATS;
+
+                                        // Spawn swing indicator (small dot that arcs toward target)
+                                        const swingDot = new THREE.Mesh(
+                                            new THREE.SphereGeometry(0.08, 8, 8),
+                                            new THREE.MeshBasicMaterial({ color: isPlayer ? "#ffffff" : "#ff6666" })
+                                        );
+                                        const startAngle = Math.atan2(targetG.position.z - g.position.z, targetG.position.x - g.position.x) - Math.PI / 3;
+                                        swingDot.position.set(g.position.x + Math.cos(startAngle) * 0.5, 0.7, g.position.z + Math.sin(startAngle) * 0.5);
+                                        scene.add(swingDot);
+
+                                        // Animate the swing
+                                        const swingStart = now;
+                                        const swingDuration = 150;
+                                        const animateSwing = () => {
+                                            const elapsed = Date.now() - swingStart;
+                                            const t = Math.min(1, elapsed / swingDuration);
+                                            const angle = startAngle + (Math.PI * 2 / 3) * t;
+                                            swingDot.position.x = g.position.x + Math.cos(angle) * 0.5;
+                                            swingDot.position.z = g.position.z + Math.sin(angle) * 0.5;
+                                            if (t < 1) {
+                                                requestAnimationFrame(animateSwing);
+                                            } else {
+                                                scene.remove(swingDot);
+                                            }
+                                        };
+                                        requestAnimationFrame(animateSwing);
+
                                         if (rollHit(data.accuracy)) {
                                             const rawDmg = rollDamage(data.damage[0], data.damage[1]);
                                             const dmg = Math.max(1, rawDmg - targetData.armor);
@@ -875,23 +864,11 @@ export default function App() {
                                             hitFlashRef.current[targetU.id] = now;
                                             soundFns.playHit();
                                             addLog(`${data.name} hits ${targetData.name} for ${dmg} damage!`, isPlayer ? "#4ade80" : "#f87171");
-                                            const dmgCanvas = document.createElement("canvas");
-                                            dmgCanvas.width = 64; dmgCanvas.height = 32;
-                                            const dctx = dmgCanvas.getContext("2d")!;
-                                            dctx.font = "bold 24px monospace";
-                                            dctx.fillStyle = isPlayer ? "#4ade80" : "#f87171";
-                                            dctx.textAlign = "center";
-                                            dctx.fillText(`-${dmg}`, 32, 24);
-                                            const tex = new THREE.CanvasTexture(dmgCanvas);
-                                            const sprite = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.4), new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
-                                            sprite.position.set(targetG.position.x, 1.5, targetG.position.z);
-                                            scene.add(sprite);
-                                            damageTexts.current.push({ mesh: sprite, life: 1000 });
+                                            const dmgColor = isPlayer ? "#4ade80" : "#f87171";
+                                            spawnDamageNumber(scene, targetG.position.x, targetG.position.z, dmg, dmgColor, damageTexts.current);
                                             const newHp = Math.max(0, targetU.hp - dmg);
                                             if (newHp <= 0) {
-                                                addLog(`${targetData.name} is defeated!`, "#f59e0b");
-                                                targetG.visible = false;
-                                                Object.values(unitsRef.current).forEach((ug: UnitGroup) => { if (ug.userData.attackTarget === targetU.id) ug.userData.attackTarget = null; });
+                                                handleUnitDefeat(targetU.id, targetG, unitsRef.current, addLog, targetData.name);
                                             }
                                         } else {
                                             soundFns.playMiss();
@@ -1088,7 +1065,7 @@ export default function App() {
 
     return (
         <div style={{ width: "100%", height: "100vh", position: "relative", cursor: targetingMode ? "crosshair" : "default" }}>
-            <div ref={containerRef} style={{ width: "100%", height: "100%" }} />
+            <div ref={containerRef} style={{ width: "100%", height: "100%", filter: paused ? "saturate(0.4) brightness(0.85)" : "none", transition: "filter 0.2s" }} />
             {selBox && <div style={{ position: "absolute", left: selBox.left, top: selBox.top, width: selBox.width, height: selBox.height, border: "1px solid #00ff00", backgroundColor: "rgba(0,255,0,0.1)", pointerEvents: "none" }} />}
             {/* DOM-based HP bars */}
             {units.map(u => {
