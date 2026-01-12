@@ -32,12 +32,12 @@ export const SKILLS: Record<string, Skill> = {
 // =============================================================================
 
 export const UNIT_DATA: Record<number, UnitData> = {
-    1: { name: "Barbarian", class: "Barbarian", hp: 50, maxHp: 50, damage: [3, 6], accuracy: 70, armor: 2, color: "#c0392b", skills: [], items: ["Axe"] },
-    2: { name: "Paladin", class: "Paladin", hp: 45, maxHp: 45, damage: [2, 5], accuracy: 65, armor: 3, color: "#f1c40f", skills: [], items: ["Mace"] },
-    3: { name: "Thief", class: "Thief", hp: 25, maxHp: 25, damage: [2, 4], accuracy: 75, armor: 1, color: "#8e44ad", skills: [], items: ["Bow"], range: 7, projectileColor: "#a0522d" },
-    4: { name: "Wizard", class: "Wizard", hp: 18, maxHp: 18, mana: 50, maxMana: 50, damage: [3, 5], accuracy: 60, armor: 0, color: "#3498db", skills: [SKILLS.fireball], items: ["Staff"], range: 8, projectileColor: "#ff6600" },
-    5: { name: "Monk", class: "Monk", hp: 35, maxHp: 35, damage: [2, 5], accuracy: 70, armor: 1, color: "#27ae60", skills: [], items: ["Fists"] },
-    6: { name: "Cleric", class: "Cleric", hp: 30, maxHp: 30, mana: 40, maxMana: 40, damage: [2, 4], accuracy: 60, armor: 2, color: "#ecf0f1", skills: [SKILLS.heal], items: ["Staff"], range: 6, projectileColor: "#ffffaa" },
+    1: { name: "Barbarian", class: "Barbarian", hp: 50, maxHp: 50, damage: [3, 6], accuracy: 70, armor: 2, color: "#c0392b", skills: [], items: ["Axe"], attackCooldown: 2000 },
+    2: { name: "Paladin", class: "Paladin", hp: 45, maxHp: 45, damage: [2, 5], accuracy: 65, armor: 3, color: "#f1c40f", skills: [], items: ["Mace"], attackCooldown: 2500 },
+    3: { name: "Thief", class: "Thief", hp: 25, maxHp: 25, damage: [2, 4], accuracy: 75, armor: 1, color: "#8e44ad", skills: [], items: ["Bow"], range: 7, projectileColor: "#a0522d", attackCooldown: 1500 },
+    4: { name: "Wizard", class: "Wizard", hp: 18, maxHp: 18, mana: 50, maxMana: 50, damage: [3, 5], accuracy: 60, armor: 0, color: "#3498db", skills: [SKILLS.fireball], items: ["Staff"], range: 8, projectileColor: "#ff6600", attackCooldown: 3000 },
+    5: { name: "Monk", class: "Monk", hp: 35, maxHp: 35, damage: [2, 5], accuracy: 70, armor: 1, color: "#27ae60", skills: [], items: ["Fists"], attackCooldown: 1800 },
+    6: { name: "Cleric", class: "Cleric", hp: 30, maxHp: 30, mana: 40, maxMana: 40, damage: [2, 4], accuracy: 60, armor: 2, color: "#ecf0f1", skills: [SKILLS.heal], items: ["Staff"], range: 6, projectileColor: "#ffffaa", attackCooldown: 2500 },
 };
 
 export const KOBOLD_STATS: KoboldStats = {
@@ -48,7 +48,8 @@ export const KOBOLD_STATS: KoboldStats = {
     accuracy: 50,
     armor: 0,
     color: "#8B4513",
-    aggroRange: 6
+    aggroRange: 6,
+    attackCooldown: 2000
 };
 
 // Kobold spawn locations across the dungeon
@@ -102,3 +103,23 @@ export function createInitialUnits(): Unit[] {
 // Combat helpers
 export const rollDamage = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
 export const rollHit = (accuracy: number) => Math.random() * 100 < accuracy;
+
+// Generate a "basic attack" pseudo-skill for display in UI
+export function getBasicAttackSkill(unitId: number): Skill {
+    const data = UNIT_DATA[unitId];
+    return {
+        name: "Attack",
+        manaCost: 0,
+        cooldown: data.attackCooldown,
+        type: "damage",
+        targetType: "enemy",
+        range: data.range ?? 1.8,
+        value: data.damage,
+    };
+}
+
+// Get all skills for a unit (basic attack + special skills)
+export function getAllSkills(unitId: number): Skill[] {
+    const data = UNIT_DATA[unitId];
+    return [getBasicAttackSkill(unitId), ...data.skills];
+}

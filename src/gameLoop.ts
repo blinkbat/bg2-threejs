@@ -1,0 +1,542 @@
+// =============================================================================
+// GAME LOOP - Animation, projectiles, unit AI, movement
+// =============================================================================
+
+import * as THREE from "three";
+import type { Unit, UnitData, UnitGroup, DamageText, Projectile, FogTexture } from "./types";
+import { GRID_SIZE, ATTACK_RANGE, MOVE_SPEED, UNIT_RADIUS, HIT_DETECTION_RADIUS, FLASH_DURATION } from "./constants";
+import { blocked } from "./dungeon";
+import { findPath, updateVisibility } from "./pathfinding";
+import { UNIT_DATA, KOBOLD_STATS, rollDamage, rollHit } from "./units";
+import { spawnDamageNumber, handleUnitDefeat } from "./combat";
+import { soundFns } from "./sound";
+
+// =============================================================================
+// TYPES
+// =============================================================================
+
+export interface GameLoopRefs {
+    unitsRef: React.RefObject<Record<number, UnitGroup>>;
+    pathsRef: React.MutableRefObject<Record<number, { x: number; z: number }[]>>;
+    visibilityRef: React.MutableRefObject<number[][]>;
+    actionCooldownRef: React.MutableRefObject<Record<number, number>>;
+    damageTexts: React.MutableRefObject<DamageText[]>;
+    hitFlashRef: React.MutableRefObject<Record<number, number>>;
+    unitMeshRef: React.RefObject<Record<number, THREE.Mesh>>;
+    unitOriginalColorRef: React.RefObject<Record<number, THREE.Color>>;
+    moveStartRef: React.MutableRefObject<Record<number, { time: number; x: number; z: number }>>;
+    projectilesRef: React.MutableRefObject<Projectile[]>;
+    fogTextureRef: React.RefObject<FogTexture | null>;
+    moveMarkerRef: React.RefObject<THREE.Mesh | null>;
+}
+
+export interface GameLoopState {
+    unitsStateRef: React.RefObject<Unit[]>;
+    pausedRef: React.MutableRefObject<boolean>;
+}
+
+// =============================================================================
+// DAMAGE TEXT UPDATE
+// =============================================================================
+
+export function updateDamageTexts(
+    damageTexts: DamageText[],
+    camera: THREE.OrthographicCamera,
+    scene: THREE.Scene,
+    paused: boolean
+): DamageText[] {
+    return damageTexts.filter(dt => {
+        dt.mesh.quaternion.copy(camera.quaternion);
+        if (!paused) {
+            dt.mesh.position.y += 0.02;
+            dt.life -= 16;
+            (dt.mesh.material as THREE.MeshBasicMaterial).opacity = dt.life / 1000;
+            if (dt.life <= 0) {
+                scene.remove(dt.mesh);
+                return false;
+            }
+        }
+        return true;
+    });
+}
+
+// =============================================================================
+// HIT FLASH EFFECT
+// =============================================================================
+
+export function updateHitFlash(
+    hitFlashRef: Record<number, number>,
+    unitMeshRef: Record<number, THREE.Mesh>,
+    unitOriginalColorRef: Record<number, THREE.Color>,
+    now: number
+): void {
+    Object.entries(hitFlashRef).forEach(([id, hitTime]) => {
+        const mesh = unitMeshRef[Number(id)];
+        const originalColor = unitOriginalColorRef[Number(id)];
+        if (!mesh || !originalColor) return;
+        const elapsed = now - hitTime;
+        if (elapsed > FLASH_DURATION) {
+            (mesh.material as THREE.MeshStandardMaterial).color.copy(originalColor);
+            delete hitFlashRef[Number(id)];
+        } else {
+            const t = elapsed / FLASH_DURATION;
+            const flashColor = new THREE.Color(1, 1, 1).lerp(originalColor, t);
+            (mesh.material as THREE.MeshStandardMaterial).color.copy(flashColor);
+        }
+    });
+}
+
+// =============================================================================
+// PROJECTILE UPDATES
+// =============================================================================
+
+export function updateProjectiles(
+    projectilesRef: Projectile[],
+    unitsRef: Record<number, UnitGroup>,
+    unitsState: Unit[],
+    scene: THREE.Scene,
+    damageTexts: DamageText[],
+    hitFlashRef: Record<number, number>,
+    setUnits: React.Dispatch<React.SetStateAction<Unit[]>>,
+    addLog: (text: string, color?: string) => void,
+    now: number
+): Projectile[] {
+    return projectilesRef.filter(proj => {
+        // AOE projectile (like Fireball)
+        if (proj.type === "aoe") {
+            const { targetPos, aoeRadius, damage } = proj;
+            const dx = targetPos.x - proj.mesh.position.x;
+            const dz = targetPos.z - proj.mesh.position.z;
+            const dist = Math.hypot(dx, dz);
+
+            if (dist < HIT_DETECTION_RADIUS) {
+                const attackerData = UNIT_DATA[proj.attackerId];
+
+                // Create explosion effect
+                const explosion = new THREE.Mesh(
+                    new THREE.RingGeometry(0.1, aoeRadius, 32),
+                    new THREE.MeshBasicMaterial({ color: "#ff4400", transparent: true, opacity: 0.6, side: THREE.DoubleSide })
+                );
+                explosion.rotation.x = -Math.PI / 2;
+                explosion.position.set(targetPos.x, 0.1, targetPos.z);
+                scene.add(explosion);
+                setTimeout(() => scene.remove(explosion), 300);
+                soundFns.playExplosion();
+
+                // Deal damage to ALL units in radius (friendly fire!)
+                let hitCount = 0;
+                unitsState.filter(u => u.hp > 0).forEach(target => {
+                    const tg = unitsRef[target.id];
+                    if (!tg) return;
+                    const targetDist = Math.hypot(tg.position.x - targetPos.x, tg.position.z - targetPos.z);
+                    if (targetDist <= aoeRadius) {
+                        const isPlayer = target.team === "player";
+                        const targetData = isPlayer ? UNIT_DATA[target.id] : KOBOLD_STATS;
+                        const rawDmg = rollDamage(damage[0], damage[1]);
+                        const dmg = Math.max(1, rawDmg - targetData.armor);
+                        setUnits(prev => prev.map(u => u.id === target.id ? { ...u, hp: u.hp - dmg } : u));
+                        hitFlashRef[target.id] = now;
+                        hitCount++;
+
+                        spawnDamageNumber(scene, tg.position.x, tg.position.z, dmg, isPlayer ? "#f87171" : "#ff6600", damageTexts);
+
+                        const newHp = Math.max(0, target.hp - dmg);
+                        if (newHp <= 0) {
+                            handleUnitDefeat(target.id, tg, unitsRef, addLog, targetData.name);
+                        }
+                    }
+                });
+
+                if (hitCount > 0) {
+                    soundFns.playHit();
+                    addLog(`${attackerData.name}'s Fireball hits ${hitCount} targets!`, "#ff6600");
+                }
+
+                scene.remove(proj.mesh);
+                return false;
+            }
+
+            // Move projectile
+            proj.mesh.position.x += (dx / dist) * proj.speed;
+            proj.mesh.position.z += (dz / dist) * proj.speed;
+            return true;
+        }
+
+        // Regular projectile (single target)
+        if (proj.type !== "basic") return true;
+        const targetUnit = unitsState.find(u => u.id === proj.targetId);
+        const targetG = unitsRef[proj.targetId];
+        const attackerUnit = unitsState.find(u => u.id === proj.attackerId);
+
+        if (!targetUnit || !targetG || targetUnit.hp <= 0 || !attackerUnit) {
+            scene.remove(proj.mesh);
+            return false;
+        }
+
+        const dx = targetG.position.x - proj.mesh.position.x;
+        const dz = targetG.position.z - proj.mesh.position.z;
+        const dist = Math.hypot(dx, dz);
+
+        if (dist < HIT_DETECTION_RADIUS) {
+            const attackerData = UNIT_DATA[proj.attackerId];
+            const targetData = targetUnit.team === "player" ? UNIT_DATA[targetUnit.id] : KOBOLD_STATS;
+
+            if (rollHit(attackerData.accuracy)) {
+                const rawDmg = rollDamage(attackerData.damage[0], attackerData.damage[1]);
+                const dmg = Math.max(1, rawDmg - targetData.armor);
+                setUnits(prev => prev.map(u => u.id === targetUnit.id ? { ...u, hp: u.hp - dmg } : u));
+                hitFlashRef[targetUnit.id] = now;
+                soundFns.playHit();
+                addLog(`${attackerData.name} hits ${targetData.name} for ${dmg} damage!`, "#4ade80");
+
+                spawnDamageNumber(scene, targetG.position.x, targetG.position.z, dmg, "#4ade80", damageTexts);
+
+                const newHp = Math.max(0, targetUnit.hp - dmg);
+                if (newHp <= 0) {
+                    handleUnitDefeat(targetUnit.id, targetG, unitsRef, addLog, targetData.name);
+                }
+            } else {
+                soundFns.playMiss();
+                addLog(`${attackerData.name} misses ${targetData.name}.`, "#888");
+            }
+
+            scene.remove(proj.mesh);
+            return false;
+        }
+
+        proj.mesh.position.x += (dx / dist) * proj.speed;
+        proj.mesh.position.z += (dz / dist) * proj.speed;
+        return true;
+    });
+}
+
+// =============================================================================
+// FOG OF WAR UPDATE
+// =============================================================================
+
+export function updateFogOfWar(
+    visibility: number[][],
+    playerUnits: Unit[],
+    unitsRef: Record<number, UnitGroup>,
+    fogTexture: FogTexture,
+    unitsState: Unit[]
+): void {
+    updateVisibility(visibility, playerUnits, { current: unitsRef });
+
+    const { ctx, texture } = fogTexture;
+    ctx.clearRect(0, 0, GRID_SIZE, GRID_SIZE);
+    for (let x = 0; x < GRID_SIZE; x++) {
+        for (let z = 0; z < GRID_SIZE; z++) {
+            const vis = visibility[x][z];
+            if (vis === 2) continue;
+            ctx.fillStyle = vis === 1 ? "rgba(0,0,0,0.5)" : "rgba(0,0,0,0.95)";
+            ctx.fillRect(x, z, 1, 1);
+        }
+    }
+    texture.needsUpdate = true;
+
+    // Hide enemies in fog
+    unitsState.filter(u => u.team === "enemy").forEach(u => {
+        const g = unitsRef[u.id];
+        if (!g) return;
+        const cx = Math.floor(g.position.x), cz = Math.floor(g.position.z);
+        const vis = visibility[cx]?.[cz] ?? 0;
+        g.visible = u.hp > 0 && vis === 2;
+    });
+}
+
+// =============================================================================
+// MELEE SWING ANIMATION
+// =============================================================================
+
+export function spawnSwingIndicator(
+    scene: THREE.Scene,
+    attackerG: UnitGroup,
+    targetG: UnitGroup,
+    isPlayer: boolean
+): void {
+    const swingDot = new THREE.Mesh(
+        new THREE.SphereGeometry(0.08, 8, 8),
+        new THREE.MeshBasicMaterial({ color: isPlayer ? "#ffffff" : "#ff6666" })
+    );
+    const startAngle = Math.atan2(
+        targetG.position.z - attackerG.position.z,
+        targetG.position.x - attackerG.position.x
+    ) - Math.PI / 3;
+    swingDot.position.set(
+        attackerG.position.x + Math.cos(startAngle) * 0.5,
+        0.7,
+        attackerG.position.z + Math.sin(startAngle) * 0.5
+    );
+    scene.add(swingDot);
+
+    const swingStart = Date.now();
+    const swingDuration = 150;
+    const animateSwing = () => {
+        const elapsed = Date.now() - swingStart;
+        const t = Math.min(1, elapsed / swingDuration);
+        const angle = startAngle + (Math.PI * 2 / 3) * t;
+        swingDot.position.x = attackerG.position.x + Math.cos(angle) * 0.5;
+        swingDot.position.z = attackerG.position.z + Math.sin(angle) * 0.5;
+        if (t < 1) {
+            requestAnimationFrame(animateSwing);
+        } else {
+            scene.remove(swingDot);
+        }
+    };
+    requestAnimationFrame(animateSwing);
+}
+
+// =============================================================================
+// UNIT AI & MOVEMENT
+// =============================================================================
+
+export function updateUnitAI(
+    unit: Unit,
+    g: UnitGroup,
+    unitsRef: Record<number, UnitGroup>,
+    unitsState: Unit[],
+    visibility: number[][],
+    pathsRef: Record<number, { x: number; z: number }[]>,
+    actionCooldownRef: Record<number, number>,
+    hitFlashRef: Record<number, number>,
+    projectilesRef: Projectile[],
+    damageTexts: DamageText[],
+    moveStartRef: Record<number, { time: number; x: number; z: number }>,
+    scene: THREE.Scene,
+    setUnits: React.Dispatch<React.SetStateAction<Unit[]>>,
+    setSkillCooldowns: React.Dispatch<React.SetStateAction<Record<string, { end: number; duration: number }>>>,
+    addLog: (text: string, color?: string) => void,
+    now: number
+): void {
+    const isPlayer = unit.team === "player";
+    const data = isPlayer ? UNIT_DATA[unit.id] : KOBOLD_STATS;
+
+    // AI targeting
+    const shouldAutoTarget = isPlayer ? unit.aiEnabled : true;
+    const currentTarget = g.userData.attackTarget;
+
+    // Check if current target is still valid
+    let targetStillValid = false;
+    if (currentTarget !== null && currentTarget !== undefined) {
+        const targetUnit = unitsState.find(u => u.id === currentTarget);
+        targetStillValid = targetUnit !== undefined && targetUnit.hp > 0;
+        if (!targetStillValid) {
+            g.userData.attackTarget = null;
+        }
+    }
+
+    // Find new target
+    const hasActivePath = pathsRef[unit.id]?.length > 0;
+    const isExecutingMoveCommand = hasActivePath && g.userData.attackTarget === null;
+    const canAutoTarget = shouldAutoTarget && !targetStillValid && !isExecutingMoveCommand;
+
+    if (canAutoTarget) {
+        const aggroRange = isPlayer ? 12 : KOBOLD_STATS.aggroRange;
+        const enemyTeam = isPlayer ? "enemy" : "player";
+        let nearest: number | null = null, nearestDist = aggroRange;
+
+        unitsState.filter(u => u.team === enemyTeam && u.hp > 0).forEach(enemy => {
+            const eg = unitsRef[enemy.id];
+            if (!eg) return;
+            const enemyX = Math.floor(eg.position.x), enemyZ = Math.floor(eg.position.z);
+            const canSee = isPlayer ? (visibility[enemyX]?.[enemyZ] === 2) : true;
+            if (canSee) {
+                const d = Math.hypot(g.position.x - eg.position.x, g.position.z - eg.position.z);
+                if (d < nearestDist) { nearestDist = d; nearest = enemy.id; }
+            }
+        });
+
+        if (nearest !== null) {
+            g.userData.attackTarget = nearest;
+            const targetG = unitsRef[nearest];
+            if (targetG) {
+                const path = findPath(g.position.x, g.position.z, targetG.position.x, targetG.position.z);
+                pathsRef[unit.id] = path ? path.slice(1) : [];
+            } else {
+                pathsRef[unit.id] = [];
+            }
+        }
+    }
+
+    let targetX = g.position.x, targetZ = g.position.z;
+
+    if (g.userData.attackTarget) {
+        const targetG = unitsRef[g.userData.attackTarget];
+        const targetU = unitsState.find(u => u.id === g.userData.attackTarget);
+
+        if (targetG && targetU && targetU.hp > 0) {
+            targetX = targetG.position.x;
+            targetZ = targetG.position.z;
+            const dist = Math.hypot(targetX - g.position.x, targetZ - g.position.z);
+            const isRanged = isPlayer && 'range' in data && data.range !== undefined;
+            const unitRange = isRanged ? (data as UnitData).range! : ATTACK_RANGE;
+
+            if (dist <= unitRange && pathsRef[unit.id]?.length > 0) {
+                pathsRef[unit.id] = [];
+            }
+
+            if (dist <= unitRange) {
+                const cooldownEnd = actionCooldownRef[unit.id] || 0;
+                if (now >= cooldownEnd) {
+                    const attackCooldownEnd = now + data.attackCooldown;
+                    actionCooldownRef[unit.id] = attackCooldownEnd;
+
+                    if (isPlayer) {
+                        const cooldownData = { end: attackCooldownEnd, duration: data.attackCooldown };
+                        const skillCooldownUpdates: Record<string, { end: number; duration: number }> = { [`${unit.id}-Attack`]: cooldownData };
+                        (data as UnitData).skills.forEach(s => { skillCooldownUpdates[`${unit.id}-${s.name}`] = cooldownData; });
+                        setSkillCooldowns(prev => ({ ...prev, ...skillCooldownUpdates }));
+                    }
+
+                    if (isRanged && (data as UnitData).projectileColor) {
+                        const rangedData = data as UnitData;
+                        const projectile = new THREE.Mesh(
+                            new THREE.SphereGeometry(0.1, 8, 8),
+                            new THREE.MeshBasicMaterial({ color: rangedData.projectileColor })
+                        );
+                        projectile.position.set(g.position.x, 0.7, g.position.z);
+                        scene.add(projectile);
+                        projectilesRef.push({ type: "basic", mesh: projectile, targetId: targetU.id, attackerId: unit.id, speed: 0.3 });
+                        soundFns.playAttack();
+                    } else {
+                        // Melee attack
+                        const targetData = targetU.team === "player" ? UNIT_DATA[targetU.id] : KOBOLD_STATS;
+                        spawnSwingIndicator(scene, g, targetG, isPlayer);
+
+                        if (rollHit(data.accuracy)) {
+                            const rawDmg = rollDamage(data.damage[0], data.damage[1]);
+                            const dmg = Math.max(1, rawDmg - targetData.armor);
+                            setUnits(prev => prev.map(u => u.id === targetU.id ? { ...u, hp: u.hp - dmg } : u));
+                            hitFlashRef[targetU.id] = now;
+                            soundFns.playHit();
+                            addLog(`${data.name} hits ${targetData.name} for ${dmg} damage!`, isPlayer ? "#4ade80" : "#f87171");
+                            const dmgColor = isPlayer ? "#4ade80" : "#f87171";
+                            spawnDamageNumber(scene, targetG.position.x, targetG.position.z, dmg, dmgColor, damageTexts);
+
+                            const newHp = Math.max(0, targetU.hp - dmg);
+                            if (newHp <= 0) {
+                                handleUnitDefeat(targetU.id, targetG, unitsRef, addLog, targetData.name);
+                            }
+                        } else {
+                            soundFns.playMiss();
+                            addLog(`${data.name} misses ${targetData.name}.`, "#888");
+                        }
+                    }
+                }
+                return;
+            } else {
+                // Recalculate path if needed
+                const currentPath = pathsRef[unit.id];
+                let needsNewPath = !currentPath?.length;
+                if (!needsNewPath && currentPath && currentPath.length > 0) {
+                    const pathEnd = currentPath[currentPath.length - 1];
+                    const distToPathEnd = Math.hypot(pathEnd.x - targetX, pathEnd.z - targetZ);
+                    needsNewPath = distToPathEnd > 2;
+                }
+                if (needsNewPath) {
+                    const path = findPath(g.position.x, g.position.z, targetX, targetZ);
+                    pathsRef[unit.id] = path ? path.slice(1) : [];
+                }
+            }
+        } else {
+            g.userData.attackTarget = null;
+        }
+    }
+
+    // Path following
+    const path = pathsRef[unit.id];
+    if (path && path.length > 0) {
+        targetX = path[0].x;
+        targetZ = path[0].z;
+        if (Math.hypot(targetX - g.position.x, targetZ - g.position.z) < 0.3) {
+            path.shift();
+            moveStartRef[unit.id] = { time: now, x: g.position.x, z: g.position.z };
+        }
+        // Stuck timeout
+        const moveStart = moveStartRef[unit.id];
+        if (moveStart && now - moveStart.time > 2000) {
+            const movedDist = Math.hypot(g.position.x - moveStart.x, g.position.z - moveStart.z);
+            if (movedDist < 0.5) {
+                pathsRef[unit.id] = [];
+                delete moveStartRef[unit.id];
+            }
+        }
+    }
+
+    // Movement with avoidance
+    const dx = targetX - g.position.x;
+    const dz = targetZ - g.position.z;
+    const distToTarget = Math.hypot(dx, dz);
+
+    if (distToTarget > 0.1) {
+        let desiredX = dx / distToTarget, desiredZ = dz / distToTarget;
+        let avoidX = 0, avoidZ = 0;
+
+        Object.entries(unitsRef).forEach(([otherId, otherG]) => {
+            if (String(unit.id) === otherId) return;
+            const otherU = unitsState.find(u => u.id === Number(otherId));
+            if (!otherU || otherU.hp <= 0) return;
+            const ox = otherG.position.x - g.position.x, oz = otherG.position.z - g.position.z;
+            const oDist = Math.hypot(ox, oz);
+            if (oDist < UNIT_RADIUS * 4 && oDist > 0.01) {
+                const dot = (ox * desiredX + oz * desiredZ) / oDist;
+                if (dot > 0) {
+                    const cross = desiredX * oz - desiredZ * ox;
+                    const perpX = cross > 0 ? -desiredZ : desiredZ;
+                    const perpZ = cross > 0 ? desiredX : -desiredX;
+                    const strength = (UNIT_RADIUS * 4 - oDist) / (UNIT_RADIUS * 4);
+                    avoidX += perpX * strength * 2;
+                    avoidZ += perpZ * strength * 2;
+                }
+                if (oDist < UNIT_RADIUS * 2.2) {
+                    const sepStrength = (UNIT_RADIUS * 2.2 - oDist) / (UNIT_RADIUS * 2);
+                    avoidX -= (ox / oDist) * sepStrength * 3;
+                    avoidZ -= (oz / oDist) * sepStrength * 3;
+                }
+            }
+        });
+
+        let moveX = desiredX + avoidX, moveZ = desiredZ + avoidZ;
+        const moveMag = Math.hypot(moveX, moveZ);
+        if (moveMag > 0.01) {
+            moveX = (moveX / moveMag) * MOVE_SPEED;
+            moveZ = (moveZ / moveMag) * MOVE_SPEED;
+            const newX = g.position.x + moveX, newZ = g.position.z + moveZ;
+            const cellX = Math.floor(newX), cellZ = Math.floor(newZ);
+            if (!blocked[cellX]?.[cellZ]) {
+                g.position.x = Math.max(0.5, Math.min(GRID_SIZE - 0.5, newX));
+                g.position.z = Math.max(0.5, Math.min(GRID_SIZE - 0.5, newZ));
+            }
+        }
+    }
+}
+
+// =============================================================================
+// HP BAR POSITIONS
+// =============================================================================
+
+export function updateHpBarPositions(
+    unitsState: Unit[],
+    unitsRef: Record<number, UnitGroup>,
+    camera: THREE.OrthographicCamera,
+    rendererRect: DOMRect,
+    zoomLevel: number
+): { positions: Record<number, { x: number; y: number; visible: boolean }>; scale: number } {
+    const positions: Record<number, { x: number; y: number; visible: boolean }> = {};
+
+    unitsState.forEach(u => {
+        const g = unitsRef[u.id];
+        if (!g) return;
+        const isPlayer = u.team === "player";
+        const boxH = isPlayer ? 1 : 0.6;
+        const worldPos = new THREE.Vector3(g.position.x, boxH + 0.4, g.position.z);
+        worldPos.project(camera);
+        const x = (worldPos.x * 0.5 + 0.5) * rendererRect.width;
+        const y = (-worldPos.y * 0.5 + 0.5) * rendererRect.height;
+        positions[u.id] = { x, y, visible: g.visible && u.hp > 0 };
+    });
+
+    const scale = 10 / zoomLevel;
+    return { positions, scale };
+}

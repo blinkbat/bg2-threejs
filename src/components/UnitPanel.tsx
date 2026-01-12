@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { Unit, Skill } from "../types";
-import { UNIT_DATA } from "../units";
+import { UNIT_DATA, getAllSkills } from "../units";
 
 interface UnitPanelProps {
     unitId: number;
@@ -8,10 +8,30 @@ interface UnitPanelProps {
     onClose: () => void;
     onToggleAI: (unitId: number) => void;
     onCastSkill?: (unitId: number, skill: Skill) => void;
-    skillCooldowns?: Record<string, number>;
+    skillCooldowns?: Record<string, { end: number; duration: number }>;
+    paused?: boolean;
+    queuedSkills?: string[];  // List of skill names queued for this unit
 }
 
-export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, skillCooldowns = {} }: UnitPanelProps) {
+export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, skillCooldowns = {}, paused = false, queuedSkills = [] }: UnitPanelProps) {
+    // Force re-render every 100ms to update cooldown display (only when not paused)
+    const [, setTick] = useState(0);
+    // Track when pause started for frozen time display
+    const [pauseTime, setPauseTime] = useState<number | null>(paused ? Date.now() : null);
+
+    useEffect(() => {
+        if (paused) {
+            setPauseTime(Date.now());
+            return;
+        }
+        setPauseTime(null);
+        const interval = setInterval(() => setTick(t => t + 1), 100);
+        return () => clearInterval(interval);
+    }, [paused]);
+
+    // Use frozen time when paused, current time when not
+    const displayTime = paused && pauseTime ? pauseTime : Date.now();
+
     const [tab, setTab] = useState("stats");
     const data = UNIT_DATA[unitId];
     const unit = units.find((u: Unit) => u.id === unitId);
@@ -58,53 +78,67 @@ export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, ski
                 </div>)}
                 {tab === "skills" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                        {data.skills.length === 0 ? (
-                            <div style={{ color: "#666", fontSize: 12, textAlign: "center", padding: 20 }}>No skills</div>
-                        ) : data.skills.map((skill: Skill, i: number) => {
+                        {getAllSkills(unitId).map((skill: Skill, i: number) => {
                             const cooldownKey = `${unitId}-${skill.name}`;
-                            const cooldownEnd = skillCooldowns[cooldownKey] || 0;
-                            const now = Date.now();
-                            const onCooldown = cooldownEnd > now;
-                            const cooldownRemaining = onCooldown ? Math.ceil((cooldownEnd - now) / 1000) : 0;
+                            const cooldownData = skillCooldowns[cooldownKey];
+                            const cooldownEnd = cooldownData?.end || 0;
+                            const cooldownDuration = cooldownData?.duration || skill.cooldown;
+                            // Use frozen time when paused so cooldown bar doesn't animate
+                            const onCooldown = cooldownEnd > displayTime;
+                            const cooldownRemaining = onCooldown ? Math.ceil((cooldownEnd - displayTime) / 1000) : 0;
+                            const cooldownPct = onCooldown ? ((cooldownEnd - displayTime) / cooldownDuration) * 100 : 0;
                             const hasManaForSkill = (unit.mana ?? 0) >= skill.manaCost;
-                            const canCast = !onCooldown && hasManaForSkill && unit.hp > 0;
+                            const isQueued = queuedSkills.includes(skill.name);
+                            // Basic attack is display-only (happens via clicking enemies or AI)
+                            const isBasicAttack = skill.name === "Attack";
+                            // Can click if: not basic attack, has mana, alive, not already queued
+                            // When not paused, also check cooldown
+                            const canClick = !isBasicAttack && hasManaForSkill && unit.hp > 0 && !isQueued && (paused || !onCooldown);
                             const skillColor = skill.type === "damage" ? "#ef4444" : skill.type === "heal" ? "#22c55e" : "#3b82f6";
 
                             return (
                                 <div
                                     key={i}
-                                    onClick={() => canCast && onCastSkill?.(unitId, skill)}
+                                    onClick={() => canClick && onCastSkill?.(unitId, skill)}
                                     style={{
-                                        background: canCast ? "#1a1a2a" : "#0d0d15",
+                                        background: isQueued ? "#2a2a1a" : (canClick ? "#1a1a2a" : "#0d0d15"),
                                         padding: "10px 12px",
                                         borderRadius: 4,
                                         fontSize: 12,
-                                        cursor: canCast ? "pointer" : "not-allowed",
-                                        opacity: canCast ? 1 : 0.5,
-                                        border: `1px solid ${canCast ? skillColor : "#333"}`,
+                                        cursor: canClick ? "pointer" : (isBasicAttack ? "default" : "not-allowed"),
+                                        opacity: canClick || isQueued || isBasicAttack ? 1 : 0.5,
+                                        border: isQueued ? "1px solid #f59e0b" : `1px solid ${canClick ? skillColor : (isBasicAttack ? "#555" : "#333")}`,
                                         position: "relative",
                                         overflow: "hidden"
                                     }}
                                 >
-                                    {onCooldown && (
+                                    {onCooldown && !isQueued && (
                                         <div style={{
                                             position: "absolute",
                                             top: 0,
                                             left: 0,
-                                            width: `${((cooldownEnd - now) / skill.cooldown) * 100}%`,
+                                            width: `${cooldownPct}%`,
                                             height: "100%",
                                             background: "rgba(0,0,0,0.5)",
                                             pointerEvents: "none"
                                         }} />
                                     )}
                                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", position: "relative" }}>
-                                        <span style={{ color: skillColor, fontWeight: "bold" }}>{skill.name}</span>
-                                        <span style={{ color: "#3b82f6", fontSize: 10 }}>{skill.manaCost} MP</span>
+                                        <span style={{ color: isQueued ? "#f59e0b" : (isBasicAttack ? "#aaa" : skillColor), fontWeight: "bold" }}>
+                                            {skill.name}
+                                            {isBasicAttack && <span style={{ marginLeft: 6, fontSize: 9, color: "#666" }}>AUTO</span>}
+                                            {isQueued && <span style={{ marginLeft: 6, fontSize: 9, color: "#f59e0b" }}>QUEUED</span>}
+                                        </span>
+                                        {skill.manaCost > 0 && <span style={{ color: "#3b82f6", fontSize: 10 }}>{skill.manaCost} MP</span>}
                                     </div>
                                     <div style={{ fontSize: 10, color: "#888", marginTop: 4, position: "relative" }}>
                                         {skill.type === "damage" ? `${skill.value[0]}-${skill.value[1]} dmg` : `${skill.value[0]}-${skill.value[1]} heal`}
                                         {skill.aoeRadius && <span style={{ marginLeft: 8, color: "#f59e0b" }}>AOE</span>}
-                                        {onCooldown && <span style={{ float: "right", color: "#ef4444" }}>{cooldownRemaining}s</span>}
+                                        {onCooldown && !isQueued && (
+                                            <span style={{ float: "right", color: "#ef4444" }}>
+                                                {cooldownRemaining}s{paused && " (paused)"}
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
                             );

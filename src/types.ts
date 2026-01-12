@@ -42,6 +42,7 @@ export interface UnitData {
     items: string[];
     range?: number;
     projectileColor?: string;
+    attackCooldown: number;  // ms - cooldown for basic attack (also global cooldown)
 }
 
 export interface KoboldStats {
@@ -53,6 +54,7 @@ export interface KoboldStats {
     armor: number;     // flat damage reduction
     color: string;
     aggroRange: number;
+    attackCooldown: number;  // ms - cooldown for basic attack
 }
 
 export interface Room {
