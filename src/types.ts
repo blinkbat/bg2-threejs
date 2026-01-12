@@ -109,6 +109,15 @@ export interface DamageText {
     life: number;
 }
 
+export interface SwingAnimation {
+    mesh: THREE.Mesh;
+    attackerX: number;
+    attackerZ: number;
+    startAngle: number;
+    startTime: number;
+    duration: number;
+}
+
 export interface FogTexture {
     canvas: HTMLCanvasElement;
     ctx: CanvasRenderingContext2D;

@@ -3,7 +3,7 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitData, UnitGroup, DamageText, Projectile, FogTexture } from "./types";
+import type { Unit, UnitData, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation } from "./types";
 import { GRID_SIZE, ATTACK_RANGE, MOVE_SPEED, UNIT_RADIUS, HIT_DETECTION_RADIUS, FLASH_DURATION } from "./constants";
 import { blocked } from "./dungeon";
 import { findPath, updateVisibility } from "./pathfinding";
@@ -53,6 +53,11 @@ export function updateDamageTexts(
             (dt.mesh.material as THREE.MeshBasicMaterial).opacity = dt.life / 1000;
             if (dt.life <= 0) {
                 scene.remove(dt.mesh);
+                // Dispose geometry, material, and texture to prevent memory leak
+                dt.mesh.geometry.dispose();
+                const material = dt.mesh.material as THREE.MeshBasicMaterial;
+                if (material.map) material.map.dispose();
+                material.dispose();
                 return false;
             }
         }
@@ -99,7 +104,8 @@ export function updateProjectiles(
     hitFlashRef: Record<number, number>,
     setUnits: React.Dispatch<React.SetStateAction<Unit[]>>,
     addLog: (text: string, color?: string) => void,
-    now: number
+    now: number,
+    defeatedThisFrame: Set<number>
 ): Projectile[] {
     return projectilesRef.filter(proj => {
         // AOE projectile (like Fireball)
@@ -125,7 +131,7 @@ export function updateProjectiles(
 
                 // Deal damage to ALL units in radius (friendly fire!)
                 let hitCount = 0;
-                unitsState.filter(u => u.hp > 0).forEach(target => {
+                unitsState.filter(u => u.hp > 0 && !defeatedThisFrame.has(u.id)).forEach(target => {
                     const tg = unitsRef[target.id];
                     if (!tg) return;
                     const targetDist = Math.hypot(tg.position.x - targetPos.x, tg.position.z - targetPos.z);
@@ -142,6 +148,7 @@ export function updateProjectiles(
 
                         const newHp = Math.max(0, target.hp - dmg);
                         if (newHp <= 0) {
+                            defeatedThisFrame.add(target.id);
                             handleUnitDefeat(target.id, tg, unitsRef, addLog, targetData.name);
                         }
                     }
@@ -168,7 +175,7 @@ export function updateProjectiles(
         const targetG = unitsRef[proj.targetId];
         const attackerUnit = unitsState.find(u => u.id === proj.attackerId);
 
-        if (!targetUnit || !targetG || targetUnit.hp <= 0 || !attackerUnit) {
+        if (!targetUnit || !targetG || targetUnit.hp <= 0 || defeatedThisFrame.has(proj.targetId) || !attackerUnit) {
             scene.remove(proj.mesh);
             return false;
         }
@@ -193,6 +200,7 @@ export function updateProjectiles(
 
                 const newHp = Math.max(0, targetUnit.hp - dmg);
                 if (newHp <= 0) {
+                    defeatedThisFrame.add(targetUnit.id);
                     handleUnitDefeat(targetUnit.id, targetG, unitsRef, addLog, targetData.name);
                 }
             } else {
@@ -249,11 +257,15 @@ export function updateFogOfWar(
 // MELEE SWING ANIMATION
 // =============================================================================
 
+const SWING_DURATION = 150;
+
 export function spawnSwingIndicator(
     scene: THREE.Scene,
     attackerG: UnitGroup,
     targetG: UnitGroup,
-    isPlayer: boolean
+    isPlayer: boolean,
+    swingAnimations: SwingAnimation[],
+    now: number
 ): void {
     const swingDot = new THREE.Mesh(
         new THREE.SphereGeometry(0.08, 8, 8),
@@ -270,21 +282,36 @@ export function spawnSwingIndicator(
     );
     scene.add(swingDot);
 
-    const swingStart = Date.now();
-    const swingDuration = 150;
-    const animateSwing = () => {
-        const elapsed = Date.now() - swingStart;
-        const t = Math.min(1, elapsed / swingDuration);
-        const angle = startAngle + (Math.PI * 2 / 3) * t;
-        swingDot.position.x = attackerG.position.x + Math.cos(angle) * 0.5;
-        swingDot.position.z = attackerG.position.z + Math.sin(angle) * 0.5;
-        if (t < 1) {
-            requestAnimationFrame(animateSwing);
-        } else {
-            scene.remove(swingDot);
+    swingAnimations.push({
+        mesh: swingDot,
+        attackerX: attackerG.position.x,
+        attackerZ: attackerG.position.z,
+        startAngle,
+        startTime: now,
+        duration: SWING_DURATION
+    });
+}
+
+export function updateSwingAnimations(
+    swingAnimations: SwingAnimation[],
+    scene: THREE.Scene,
+    now: number
+): SwingAnimation[] {
+    return swingAnimations.filter(swing => {
+        const elapsed = now - swing.startTime;
+        const t = Math.min(1, elapsed / swing.duration);
+        const angle = swing.startAngle + (Math.PI * 2 / 3) * t;
+        swing.mesh.position.x = swing.attackerX + Math.cos(angle) * 0.5;
+        swing.mesh.position.z = swing.attackerZ + Math.sin(angle) * 0.5;
+
+        if (t >= 1) {
+            scene.remove(swing.mesh);
+            swing.mesh.geometry.dispose();
+            (swing.mesh.material as THREE.MeshBasicMaterial).dispose();
+            return false;
         }
-    };
-    requestAnimationFrame(animateSwing);
+        return true;
+    });
 }
 
 // =============================================================================
@@ -302,12 +329,14 @@ export function updateUnitAI(
     hitFlashRef: Record<number, number>,
     projectilesRef: Projectile[],
     damageTexts: DamageText[],
+    swingAnimations: SwingAnimation[],
     moveStartRef: Record<number, { time: number; x: number; z: number }>,
     scene: THREE.Scene,
     setUnits: React.Dispatch<React.SetStateAction<Unit[]>>,
     setSkillCooldowns: React.Dispatch<React.SetStateAction<Record<string, { end: number; duration: number }>>>,
     addLog: (text: string, color?: string) => void,
-    now: number
+    now: number,
+    defeatedThisFrame: Set<number>
 ): void {
     const isPlayer = unit.team === "player";
     const data = isPlayer ? UNIT_DATA[unit.id] : KOBOLD_STATS;
@@ -320,7 +349,7 @@ export function updateUnitAI(
     let targetStillValid = false;
     if (currentTarget !== null && currentTarget !== undefined) {
         const targetUnit = unitsState.find(u => u.id === currentTarget);
-        targetStillValid = targetUnit !== undefined && targetUnit.hp > 0;
+        targetStillValid = targetUnit !== undefined && targetUnit.hp > 0 && !defeatedThisFrame.has(currentTarget);
         if (!targetStillValid) {
             g.userData.attackTarget = null;
         }
@@ -402,7 +431,7 @@ export function updateUnitAI(
                     } else {
                         // Melee attack
                         const targetData = targetU.team === "player" ? UNIT_DATA[targetU.id] : KOBOLD_STATS;
-                        spawnSwingIndicator(scene, g, targetG, isPlayer);
+                        spawnSwingIndicator(scene, g, targetG, isPlayer, swingAnimations, now);
 
                         if (rollHit(data.accuracy)) {
                             const rawDmg = rollDamage(data.damage[0], data.damage[1]);
@@ -416,6 +445,7 @@ export function updateUnitAI(
 
                             const newHp = Math.max(0, targetU.hp - dmg);
                             if (newHp <= 0) {
+                                defeatedThisFrame.add(targetU.id);
                                 handleUnitDefeat(targetU.id, targetG, unitsRef, addLog, targetData.name);
                             }
                         } else {

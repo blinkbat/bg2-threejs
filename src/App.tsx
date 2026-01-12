@@ -8,7 +8,7 @@ import * as THREE from "three";
 
 // Constants & Types
 import { GRID_SIZE, PAN_SPEED } from "./constants";
-import type { Unit, Skill, CombatLogEntry, SelectionBox, DamageText, UnitGroup, FogTexture, Projectile } from "./types";
+import type { Unit, Skill, CombatLogEntry, SelectionBox, DamageText, UnitGroup, FogTexture, Projectile, SwingAnimation } from "./types";
 
 // Game Logic
 import { blocked } from "./dungeon";
@@ -34,7 +34,8 @@ import {
     updateProjectiles,
     updateFogOfWar,
     updateUnitAI,
-    updateHpBarPositions
+    updateHpBarPositions,
+    updateSwingAnimations
 } from "./gameLoop";
 
 // UI Components
@@ -77,6 +78,7 @@ export default function App() {
     const unitOriginalColorRef = useRef<Record<number, THREE.Color>>({});
     const moveStartRef = useRef<Record<number, { time: number; x: number; z: number }>>({});
     const projectilesRef = useRef<Projectile[]>([]);
+    const swingAnimationsRef = useRef<SwingAnimation[]>([]);
     const rangeIndicatorRef = useRef<THREE.Mesh | null>(null);
     const aoeIndicatorRef = useRef<THREE.Mesh | null>(null);
 
@@ -414,6 +416,9 @@ export default function App() {
             // Update damage texts
             damageTexts.current = updateDamageTexts(damageTexts.current, camera, scene, pausedRef.current);
 
+            // Track units defeated this frame to prevent duplicate defeat handling
+            const defeatedThisFrame = new Set<number>();
+
             // Update projectiles
             if (!pausedRef.current) {
                 projectilesRef.current = updateProjectiles(
@@ -425,7 +430,8 @@ export default function App() {
                     hitFlashRef.current,
                     setUnits,
                     addLog,
-                    now
+                    now,
+                    defeatedThisFrame
                 );
 
                 // Hit flash effect
@@ -448,10 +454,14 @@ export default function App() {
                     updateUnitAI(
                         unit, g, unitsRef.current, currentUnits, visibilityRef.current,
                         pathsRef.current, actionCooldownRef.current, hitFlashRef.current,
-                        projectilesRef.current, damageTexts.current, moveStartRef.current,
-                        scene, setUnits, setSkillCooldowns, addLog, now
+                        projectilesRef.current, damageTexts.current, swingAnimationsRef.current,
+                        moveStartRef.current, scene, setUnits, setSkillCooldowns, addLog, now,
+                        defeatedThisFrame
                     );
                 });
+
+                // Update swing animations
+                swingAnimationsRef.current = updateSwingAnimations(swingAnimationsRef.current, scene, now);
             }
 
             if (moveMarkerRef.current?.visible) moveMarkerRef.current.rotation.z += 0.05;
