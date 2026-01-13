@@ -24,6 +24,25 @@ export const SKILLS: Record<string, Skill> = {
         targetType: "ally",
         range: 8,
         value: [8, 12]
+    },
+    poisonDagger: {
+        name: "Poison Dagger",
+        manaCost: 8,
+        cooldown: 6000,
+        type: "damage",
+        targetType: "enemy",
+        range: 1.8,  // melee range
+        value: [4, 8],
+        poisonChance: 85  // 85% chance to poison
+    },
+    warcry: {
+        name: "Warcry",
+        manaCost: 10,
+        cooldown: 12000,
+        type: "taunt",
+        targetType: "self",  // centered on caster
+        range: 6,  // taunt radius
+        value: [80, 80]  // 80% chance to taunt each enemy
     }
 };
 
@@ -32,9 +51,9 @@ export const SKILLS: Record<string, Skill> = {
 // =============================================================================
 
 export const UNIT_DATA: Record<number, UnitData> = {
-    1: { name: "Barbarian", class: "Barbarian", hp: 50, maxHp: 50, damage: [3, 6], accuracy: 70, armor: 2, color: "#c0392b", skills: [], items: ["Axe"], attackCooldown: 2000 },
+    1: { name: "Barbarian", class: "Barbarian", hp: 50, maxHp: 50, mana: 25, maxMana: 25, damage: [3, 6], accuracy: 70, armor: 2, color: "#c0392b", skills: [SKILLS.warcry], items: ["Axe"], attackCooldown: 2000 },
     2: { name: "Paladin", class: "Paladin", hp: 45, maxHp: 45, damage: [2, 5], accuracy: 65, armor: 3, color: "#f1c40f", skills: [], items: ["Mace"], attackCooldown: 2500 },
-    3: { name: "Thief", class: "Thief", hp: 25, maxHp: 25, damage: [2, 4], accuracy: 75, armor: 1, color: "#8e44ad", skills: [], items: ["Bow"], range: 7, projectileColor: "#a0522d", attackCooldown: 1500 },
+    3: { name: "Thief", class: "Thief", hp: 25, maxHp: 25, mana: 30, maxMana: 30, damage: [2, 4], accuracy: 75, armor: 1, color: "#8e44ad", skills: [SKILLS.poisonDagger], items: ["Bow"], range: 7, projectileColor: "#a0522d", attackCooldown: 1500 },
     4: { name: "Wizard", class: "Wizard", hp: 18, maxHp: 18, mana: 50, maxMana: 50, damage: [3, 5], accuracy: 60, armor: 0, color: "#3498db", skills: [SKILLS.fireball], items: ["Staff"], range: 8, projectileColor: "#ff6600", attackCooldown: 3000 },
     5: { name: "Monk", class: "Monk", hp: 35, maxHp: 35, damage: [2, 5], accuracy: 70, armor: 1, color: "#27ae60", skills: [], items: ["Fists"], attackCooldown: 1800 },
     6: { name: "Cleric", class: "Cleric", hp: 30, maxHp: 30, mana: 40, maxMana: 40, damage: [2, 4], accuracy: 60, armor: 2, color: "#ecf0f1", skills: [SKILLS.heal], items: ["Staff"], range: 6, projectileColor: "#ffffaa", attackCooldown: 2500 },

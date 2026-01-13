@@ -38,12 +38,13 @@ export interface Skill {
     name: string;
     manaCost: number;
     cooldown: number;  // ms
-    type: "damage" | "heal" | "buff";
+    type: "damage" | "heal" | "buff" | "taunt";
     targetType: "enemy" | "ally" | "self" | "aoe";
     range: number;
     aoeRadius?: number;
-    value: [number, number];  // damage/heal range
+    value: [number, number];  // damage/heal range, or taunt chance for taunt skills
     projectileColor?: string;
+    poisonChance?: number;  // 0-100 percent chance to apply poison on hit
 }
 
 export interface UnitData {

@@ -144,6 +144,71 @@ const playExplosion = () => {
     noise.start();
 };
 
+// Death - crushed/squashed sound with long bitcrush decay
+const playDeath = () => {
+    if (muted) return;
+    const ctx = getAudioCtx();
+
+    // Low crunch - descending tone with longer decay
+    const crunch = ctx.createOscillator();
+    const crunchGain = ctx.createGain();
+    const crunchFilter = ctx.createBiquadFilter();
+    crunch.type = "sawtooth";
+    crunch.frequency.setValueAtTime(180, ctx.currentTime);
+    crunch.frequency.exponentialRampToValueAtTime(25, ctx.currentTime + 0.8);
+    crunchFilter.type = "lowpass";
+    crunchFilter.frequency.setValueAtTime(800, ctx.currentTime);
+    crunchFilter.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.8);
+    crunchGain.gain.setValueAtTime(0.3, ctx.currentTime);
+    crunchGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.0);
+    crunch.connect(crunchFilter);
+    crunchFilter.connect(crunchGain);
+    crunchGain.connect(ctx.destination);
+    crunch.start();
+    crunch.stop(ctx.currentTime + 1.0);
+
+    // Bitcrushed noise - long crackle/crush texture decay
+    const bufferSize = ctx.sampleRate * 1.2;
+    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const output = noiseBuffer.getChannelData(0);
+    // Create bitcrushed effect with sample-and-hold
+    const bitcrushRate = 12; // samples to hold
+    let holdValue = 0;
+    for (let i = 0; i < bufferSize; i++) {
+        if (i % bitcrushRate === 0) {
+            holdValue = (Math.random() * 2 - 1);
+        }
+        output[i] = holdValue * Math.exp(-i / (bufferSize * 0.35));
+    }
+    const noise = ctx.createBufferSource();
+    noise.buffer = noiseBuffer;
+    const noiseGain = ctx.createGain();
+    const noiseFilter = ctx.createBiquadFilter();
+    noiseFilter.type = "bandpass";
+    noiseFilter.frequency.setValueAtTime(500, ctx.currentTime);
+    noiseFilter.frequency.exponentialRampToValueAtTime(150, ctx.currentTime + 1.0);
+    noiseFilter.Q.setValueAtTime(1.5, ctx.currentTime);
+    noiseGain.gain.setValueAtTime(0.3, ctx.currentTime);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
+    noise.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    noise.start();
+
+    // Thud - low impact
+    const thud = ctx.createOscillator();
+    const thudGain = ctx.createGain();
+    thud.type = "sine";
+    thud.frequency.setValueAtTime(80, ctx.currentTime);
+    thud.frequency.exponentialRampToValueAtTime(20, ctx.currentTime + 0.4);
+    thudGain.gain.setValueAtTime(0.4, ctx.currentTime);
+    thudGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+    thud.connect(thudGain);
+    thudGain.connect(ctx.destination);
+    thud.start();
+    thud.stop(ctx.currentTime + 0.5);
+};
+
 // Heal - chirpy ascending arpeggio
 const playHeal = () => {
     if (muted) return;
@@ -178,6 +243,65 @@ const playHeal = () => {
     });
 };
 
+// Warcry - aggressive shout with echo
+const playWarcry = () => {
+    if (muted) return;
+    const ctx = getAudioCtx();
+
+    // Main shout - rising then falling tone
+    const shout = ctx.createOscillator();
+    const shoutGain = ctx.createGain();
+    const shoutFilter = ctx.createBiquadFilter();
+    shout.type = "sawtooth";
+    shout.frequency.setValueAtTime(150, ctx.currentTime);
+    shout.frequency.exponentialRampToValueAtTime(300, ctx.currentTime + 0.15);
+    shout.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.5);
+    shoutFilter.type = "lowpass";
+    shoutFilter.frequency.setValueAtTime(1200, ctx.currentTime);
+    shoutFilter.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 0.5);
+    shoutGain.gain.setValueAtTime(0.35, ctx.currentTime);
+    shoutGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+    shout.connect(shoutFilter);
+    shoutFilter.connect(shoutGain);
+    shoutGain.connect(ctx.destination);
+    shout.start();
+    shout.stop(ctx.currentTime + 0.5);
+
+    // Harmonic layer for aggression
+    const harm = ctx.createOscillator();
+    const harmGain = ctx.createGain();
+    harm.type = "square";
+    harm.frequency.setValueAtTime(200, ctx.currentTime);
+    harm.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 0.1);
+    harm.frequency.exponentialRampToValueAtTime(150, ctx.currentTime + 0.4);
+    harmGain.gain.setValueAtTime(0.15, ctx.currentTime);
+    harmGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+    harm.connect(harmGain);
+    harmGain.connect(ctx.destination);
+    harm.start();
+    harm.stop(ctx.currentTime + 0.4);
+
+    // Echo/reverb effect - delayed quieter repeat
+    setTimeout(() => {
+        if (muted) return;
+        const echo = ctx.createOscillator();
+        const echoGain = ctx.createGain();
+        const echoFilter = ctx.createBiquadFilter();
+        echo.type = "sawtooth";
+        echo.frequency.setValueAtTime(120, ctx.currentTime);
+        echo.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + 0.3);
+        echoFilter.type = "lowpass";
+        echoFilter.frequency.setValueAtTime(600, ctx.currentTime);
+        echoGain.gain.setValueAtTime(0.1, ctx.currentTime);
+        echoGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+        echo.connect(echoFilter);
+        echoFilter.connect(echoGain);
+        echoGain.connect(ctx.destination);
+        echo.start();
+        echo.stop(ctx.currentTime + 0.3);
+    }, 150);
+};
+
 export const soundFns = {
     playMove: () => playTone(800, 0.06, 0.12, "square", undefined, 3000),
     playAttack: () => playTone(440, 0.08, 0.15, "square", 330, 2500),
@@ -186,4 +310,6 @@ export const soundFns = {
     playFireball,
     playExplosion,
     playHeal,
+    playDeath,
+    playWarcry,
 };

@@ -4,6 +4,7 @@
 
 import * as THREE from "three";
 import type { DamageText, UnitGroup } from "./types";
+import { soundFns } from "./sound";
 
 /**
  * Spawn a floating damage number at the given position
@@ -46,6 +47,7 @@ export function handleUnitDefeat(
     targetName: string
 ): void {
     addLog(`${targetName} is defeated!`, "#f59e0b");
+    soundFns.playDeath();
     targetGroup.visible = false;
 
     // Clear attack targets pointing to defeated unit

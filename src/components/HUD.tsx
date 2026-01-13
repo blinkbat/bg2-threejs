@@ -34,10 +34,12 @@ export function HUD({ aliveEnemies, alivePlayers, paused, onTogglePause, onShowH
             top: 12,
             left: 12,
             fontFamily: "monospace",
-            background: "rgba(0,0,0,0.75)",
+            background: "rgba(15,15,25,0.7)",
+            backdropFilter: "blur(10px)",
+            WebkitBackdropFilter: "blur(10px)",
             padding: "12px 16px",
             borderRadius: 6,
-            border: "1px solid #333"
+            border: "1px solid rgba(60,60,90,0.4)"
         }}>
             <div style={{
                 marginBottom: 10,

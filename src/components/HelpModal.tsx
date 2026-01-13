@@ -18,8 +18,10 @@ export function HelpModal({ onClose }: HelpModalProps) {
         >
             <div
                 style={{
-                    background: "linear-gradient(180deg, #1e1e2e 0%, #12121a 100%)",
-                    border: "2px solid #3d3d5c",
+                    background: "linear-gradient(180deg, rgba(30,30,46,0.78) 0%, rgba(18,18,26,0.78) 100%)",
+                    backdropFilter: "blur(12px)",
+                    WebkitBackdropFilter: "blur(12px)",
+                    border: "2px solid rgba(61,61,92,0.5)",
                     borderRadius: 8,
                     padding: 24,
                     maxWidth: 480,

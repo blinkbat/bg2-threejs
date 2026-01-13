@@ -12,12 +12,12 @@ import type { Unit, Skill, CombatLogEntry, SelectionBox, DamageText, UnitGroup, 
 
 // Game Logic
 import { blocked } from "./dungeon";
-import { ENEMY_STATS, createInitialUnits } from "./units";
+import { ENEMY_STATS, UNIT_DATA, createInitialUnits } from "./units";
 import { createScene, updateCamera } from "./scene";
 import { soundFns } from "./sound";
 
 // Extracted modules
-import { clearTargetingMode, type SkillExecutionContext } from "./skills";
+import { clearTargetingMode, executeSkill, type SkillExecutionContext } from "./skills";
 import { disposeGeometry } from "./disposal";
 import {
     togglePause,
@@ -124,6 +124,8 @@ export default function App() {
         unitsRef: unitsRef as React.RefObject<Record<number, UnitGroup>>,
         actionCooldownRef,
         projectilesRef,
+        hitFlashRef,
+        damageTexts,
         unitMeshRef: unitMeshRef as React.RefObject<Record<number, THREE.Mesh>>,
         unitOriginalColorRef: unitOriginalColorRef as React.RefObject<Record<number, THREE.Color>>,
         setUnits,
@@ -540,7 +542,41 @@ export default function App() {
         if (!caster || caster.hp <= 0 || (caster.mana ?? 0) < skill.manaCost) return;
 
         const casterG = unitsRef.current[casterId];
-        if (!casterG) return;
+        if (!casterG || !sceneRef.current) return;
+
+        // Self-targeted skills don't need targeting mode - queue or execute immediately
+        if (skill.targetType === "self") {
+            const skillCtx = getSkillContext(sceneRef.current);
+            const cooldownEnd = actionCooldownRef.current[casterId] || 0;
+
+            if (paused) {
+                // Queue the skill during pause
+                actionQueueRef.current.push({
+                    type: "skill",
+                    casterId,
+                    skill,
+                    targetX: casterG.position.x,
+                    targetZ: casterG.position.z
+                });
+                setQueuedActions(prev => [...prev, { unitId: casterId, skillName: skill.name }]);
+                addLog(`${UNIT_DATA[casterId].name} queues ${skill.name}`, "#888");
+            } else if (Date.now() < cooldownEnd) {
+                // On cooldown and not paused - queue it to execute when ready
+                actionQueueRef.current.push({
+                    type: "skill",
+                    casterId,
+                    skill,
+                    targetX: casterG.position.x,
+                    targetZ: casterG.position.z
+                });
+                setQueuedActions(prev => [...prev, { unitId: casterId, skillName: skill.name }]);
+                addLog(`${UNIT_DATA[casterId].name} queues ${skill.name} (on cooldown)`, "#888");
+            } else {
+                // Ready to cast now
+                executeSkill(skillCtx, casterId, skill, casterG.position.x, casterG.position.z);
+            }
+            return;
+        }
 
         setTargetingMode({ casterId, skill });
 
