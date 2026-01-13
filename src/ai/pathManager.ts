@@ -6,9 +6,8 @@ import {
     STUCK_REALLY_STUCK_MS, STUCK_REALLY_STUCK_DIST, STUCK_MS, STUCK_DIST,
     STUCK_RECOVERY_COOLDOWN, PATH_WAYPOINT_REACH_DIST, PATH_MAX_DEVIATION,
     UNREACHABLE_COOLDOWN, TARGET_SCAN_INTERVAL
-} from "./constants";
+} from "../core/constants";
 import { findPath } from "./pathfinding";
-import type { Unit, UnitGroup } from "./types";
 
 // =============================================================================
 // PATH STATE - Module-level state for path management

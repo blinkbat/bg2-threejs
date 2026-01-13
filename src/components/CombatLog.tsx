@@ -1,5 +1,5 @@
 import { useRef, useEffect } from "react";
-import type { CombatLogEntry } from "../types";
+import type { CombatLogEntry } from "../core/types";
 
 interface CombatLogProps {
     log: CombatLogEntry[];

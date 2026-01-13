@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { toggleMute, isMuted } from "../sound";
+import { toggleMute, isMuted } from "../audio/sound";
 
 interface HUDProps {
     aliveEnemies: number;

@@ -7,18 +7,18 @@ import { useState, useRef, useEffect } from "react";
 import * as THREE from "three";
 
 // Constants & Types
-import { GRID_SIZE, PAN_SPEED } from "./constants";
-import type { Unit, Skill, CombatLogEntry, SelectionBox, DamageText, UnitGroup, FogTexture, Projectile, SwingAnimation } from "./types";
+import { GRID_SIZE, PAN_SPEED } from "./core/constants";
+import type { Unit, Skill, CombatLogEntry, SelectionBox, DamageText, UnitGroup, FogTexture, Projectile, SwingAnimation } from "./core/types";
 
 // Game Logic
-import { blocked } from "./dungeon";
-import { ENEMY_STATS, UNIT_DATA, createInitialUnits } from "./units";
-import { createScene, updateCamera } from "./scene";
-import { soundFns } from "./sound";
+import { blocked } from "./game/dungeon";
+import { ENEMY_STATS, UNIT_DATA, createInitialUnits } from "./game/units";
+import { createScene, updateCamera } from "./rendering/scene";
+import { soundFns } from "./audio/sound";
 
 // Extracted modules
-import { clearTargetingMode, executeSkill, type SkillExecutionContext } from "./skills";
-import { disposeGeometry } from "./disposal";
+import { clearTargetingMode, executeSkill, type SkillExecutionContext } from "./combat/skills";
+import { disposeGeometry } from "./rendering/disposal";
 import {
     togglePause,
     executeMove,

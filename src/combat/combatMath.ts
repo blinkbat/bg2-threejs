@@ -2,8 +2,8 @@
 // COMBAT MATH - Unified damage calculation and combat utilities
 // =============================================================================
 
-import type { Unit, UnitData, EnemyStats, StatusEffect } from "./types";
-import { POISON_DURATION, POISON_TICK_INTERVAL, POISON_DAMAGE_PER_TICK, COLORS } from "./constants";
+import type { Unit, UnitData, EnemyStats, StatusEffect } from "../core/types";
+import { POISON_DURATION, POISON_TICK_INTERVAL, POISON_DAMAGE_PER_TICK, COLORS } from "../core/constants";
 
 // Roll random damage in a range (inclusive)
 export const rollDamage = (min: number, max: number): number =>

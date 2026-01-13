@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
-import type { Unit, Skill, StatusEffect } from "../types";
-import { UNIT_DATA, getAllSkills } from "../units";
-import { getHpPercentage, getHpColor, getMana } from "../combatMath";
-import { COLORS } from "../constants";
+import type { Unit, Skill, StatusEffect } from "../core/types";
+import { UNIT_DATA, getAllSkills } from "../game/units";
+import { getHpPercentage, getHpColor, getMana } from "../combat/combatMath";
+import { COLORS } from "../core/constants";
 
 interface UnitPanelProps {
     unitId: number;

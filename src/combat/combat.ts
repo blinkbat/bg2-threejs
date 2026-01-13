@@ -3,10 +3,10 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { DamageText, UnitGroup } from "./types";
-import { soundFns } from "./sound";
-import { cleanupUnitState } from "./pathManager";
-import { cleanupEnemySkillCooldown } from "./enemyState";
+import type { DamageText, UnitGroup } from "../core/types";
+import { soundFns } from "../audio/sound";
+import { cleanupUnitState } from "../ai/pathManager";
+import { cleanupEnemySkillCooldown } from "../game/enemyState";
 
 /**
  * Spawn a floating damage number at the given position

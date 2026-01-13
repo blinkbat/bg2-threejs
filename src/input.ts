@@ -3,13 +3,13 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, Skill, UnitGroup, SelectionBox } from "./types";
-import { GRID_SIZE, FORMATION_SPACING } from "./constants";
-import { getUnitRadius, isInRange } from "./range";
-import { findPath } from "./pathfinding";
-import { UNIT_DATA } from "./units";
-import { soundFns } from "./sound";
-import { executeSkill, clearTargetingMode, type SkillExecutionContext } from "./skills";
+import type { Unit, Skill, UnitGroup, SelectionBox } from "./core/types";
+import { GRID_SIZE, FORMATION_SPACING } from "./core/constants";
+import { getUnitRadius, isInRange } from "./rendering/range";
+import { findPath } from "./ai/pathfinding";
+import { UNIT_DATA } from "./game/units";
+import { soundFns } from "./audio/sound";
+import { executeSkill, clearTargetingMode, type SkillExecutionContext } from "./combat/skills";
 
 // =============================================================================
 // TYPES

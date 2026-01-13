@@ -1,7 +1,7 @@
-import { GRID_SIZE, VISION_RADIUS, PATH_RECURSION_LIMIT, ASTAR_BLOCKED_TARGET_SEARCH, ASTAR_DIAGONAL_COST } from "./constants";
-import { blocked } from "./dungeon";
-import { isWithinGrid } from "./geometry";
-import type { PathNode, Unit, UnitGroup } from "./types";
+import { GRID_SIZE, VISION_RADIUS, PATH_RECURSION_LIMIT, ASTAR_BLOCKED_TARGET_SEARCH, ASTAR_DIAGONAL_COST } from "../core/constants";
+import { blocked } from "../game/dungeon";
+import { isWithinGrid } from "../game/geometry";
+import type { PathNode, Unit, UnitGroup } from "../core/types";
 
 // =============================================================================
 // GRID HELPERS

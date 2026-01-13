@@ -1,6 +1,6 @@
-import type { Unit, Skill } from "../types";
-import { UNIT_DATA } from "../units";
-import { getHpPercentage, getHpColor } from "../combatMath";
+import type { Unit, Skill } from "../core/types";
+import { UNIT_DATA } from "../game/units";
+import { getHpPercentage, getHpColor } from "../combat/combatMath";
 
 interface PartyBarProps {
     units: Unit[];

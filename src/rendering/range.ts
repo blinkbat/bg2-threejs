@@ -2,9 +2,9 @@
 // RANGE & HITBOX UTILITIES
 // =============================================================================
 
-import type { Unit, UnitData, EnemyStats, UnitGroup } from "./types";
-import { DEFAULT_UNIT_RADIUS } from "./constants";
-import { UNIT_DATA, ENEMY_STATS } from "./units";
+import type { Unit, UnitGroup } from "../core/types";
+import { DEFAULT_UNIT_RADIUS } from "../core/constants";
+import { UNIT_DATA, ENEMY_STATS } from "../game/units";
 
 /**
  * Get the hitbox radius for a unit based on its size property.

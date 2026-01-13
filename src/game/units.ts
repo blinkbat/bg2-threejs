@@ -1,4 +1,4 @@
-import type { UnitData, EnemyStats, EnemyType, Unit, Skill } from "./types";
+import type { UnitData, EnemyStats, EnemyType, Unit, Skill } from "../core/types";
 
 // =============================================================================
 // SKILLS

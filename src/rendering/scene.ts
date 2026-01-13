@@ -3,10 +3,10 @@
 // =============================================================================
 
 import * as THREE from "three";
-import { GRID_SIZE } from "./constants";
-import { candlePositions, mergedObstacles, roomFloors } from "./dungeon";
-import { getUnitStats } from "./units";
-import type { Unit, UnitGroup, FogTexture } from "./types";
+import { GRID_SIZE } from "../core/constants";
+import { candlePositions, mergedObstacles, roomFloors } from "../game/dungeon";
+import { getUnitStats } from "../game/units";
+import type { Unit, UnitGroup, FogTexture } from "../core/types";
 
 export interface SceneRefs {
     scene: THREE.Scene;

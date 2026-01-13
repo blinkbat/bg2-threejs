@@ -7,17 +7,17 @@ import {
     AVOIDANCE_RANGE_MULTIPLIER, AVOIDANCE_OVERLAP_STRENGTH,
     AVOIDANCE_STEER_THRESHOLD, AVOIDANCE_STEER_STRENGTH,
     MOVEMENT_MIN_DIST, MOVEMENT_MIN_MAGNITUDE
-} from "./constants";
-import { blocked } from "./dungeon";
+} from "../core/constants";
+import { blocked } from "../game/dungeon";
 import { findPath } from "./pathfinding";
 import {
     canScanForTargets, recordTargetScan, getBlockedTargets,
     recentlyGaveUp, checkPathNeedsRecalc, createPathToTarget,
     hasReachedWaypoint, checkIfStuck, handleGiveUp
 } from "./pathManager";
-import { getUnitRadius } from "./range";
-import { clampToGrid } from "./geometry";
-import type { Unit, UnitGroup } from "./types";
+import { getUnitRadius } from "../rendering/range";
+import { clampToGrid } from "../game/geometry";
+import type { Unit, UnitGroup } from "../core/types";
 
 // =============================================================================
 // TARGETING PHASE

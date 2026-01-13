@@ -3,14 +3,14 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, Skill, UnitGroup, Projectile, StatusEffect } from "./types";
+import type { Unit, Skill, UnitGroup, Projectile, StatusEffect } from "../core/types";
 import {
     POISON_DURATION, POISON_TICK_INTERVAL, POISON_DAMAGE_PER_TICK, COLORS
-} from "./constants";
-import { UNIT_DATA, getUnitStats } from "./units";
+} from "../core/constants";
+import { UNIT_DATA, getUnitStats } from "../game/units";
 import { rollDamage, rollHit } from "./combatMath";
-import { getUnitRadius, isInRange } from "./range";
-import { soundFns } from "./sound";
+import { getUnitRadius, isInRange } from "../rendering/range";
+import { soundFns } from "../audio/sound";
 import { spawnDamageNumber, handleUnitDefeat } from "./combat";
 
 export interface SkillExecutionContext {

@@ -1,5 +1,5 @@
-import { GRID_SIZE } from "./constants";
-import type { Room, CandlePosition, MergedObstacle } from "./types";
+import { GRID_SIZE } from "../core/constants";
+import type { Room, CandlePosition, MergedObstacle } from "../core/types";
 
 // =============================================================================
 // DUNGEON GENERATION - carve rooms/hallways from solid, then merge walls

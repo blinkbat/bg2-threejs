@@ -2,7 +2,7 @@
 // GEOMETRY UTILITIES - Common spatial calculations
 // =============================================================================
 
-import { GRID_SIZE } from "./constants";
+import { GRID_SIZE } from "../core/constants";
 
 /**
  * Calculate distance between two points.

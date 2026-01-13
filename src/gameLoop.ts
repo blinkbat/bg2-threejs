@@ -3,25 +3,25 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitData, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation, StatusEffect, EnemyStats, EnemySkill } from "./types";
+import type { Unit, UnitData, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation, StatusEffect, EnemyStats, EnemySkill } from "./core/types";
 import {
     GRID_SIZE, ATTACK_RANGE, HIT_DETECTION_RADIUS, FLASH_DURATION,
     POISON_DURATION, POISON_TICK_INTERVAL, POISON_DAMAGE_PER_TICK,
     SWING_DURATION, COLORS, SKILL_SINGLE_TARGET_CHANCE
-} from "./constants";
-import { getUnitRadius, isInRange } from "./range";
-import { updateVisibility } from "./pathfinding";
-import { recentlyGaveUp, checkPathNeedsRecalc, createPathToTarget } from "./pathManager";
+} from "./core/constants";
+import { getUnitRadius, isInRange } from "./rendering/range";
+import { updateVisibility } from "./ai/pathfinding";
+import { recentlyGaveUp, checkPathNeedsRecalc, createPathToTarget } from "./ai/pathManager";
 import {
     runTargetingPhase, runPathFollowingPhase, runMovementPhase,
     type TargetingContext, type PathContext, type MovementContext
-} from "./unitAI";
-import { getUnitStats } from "./units";
-import { rollDamage, rollHit } from "./combatMath";
-import { spawnDamageNumber, handleUnitDefeat } from "./combat";
-import { soundFns } from "./sound";
-import { disposeBasicMesh, disposeTexturedMesh } from "./disposal";
-import { getEnemySkillCooldown, setEnemySkillCooldown } from "./enemyState";
+} from "./ai/unitAI";
+import { getUnitStats } from "./game/units";
+import { rollDamage, rollHit } from "./combat/combatMath";
+import { spawnDamageNumber, handleUnitDefeat } from "./combat/combat";
+import { soundFns } from "./audio/sound";
+import { disposeBasicMesh, disposeTexturedMesh } from "./rendering/disposal";
+import { getEnemySkillCooldown, setEnemySkillCooldown } from "./game/enemyState";
 
 // =============================================================================
 // TYPES
