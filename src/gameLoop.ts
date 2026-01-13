@@ -3,7 +3,7 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitData, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation } from "./types";
+import type { Unit, UnitData, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation, StatusEffect, EnemyStats } from "./types";
 import { GRID_SIZE, ATTACK_RANGE, MOVE_SPEED, UNIT_RADIUS, HIT_DETECTION_RADIUS, FLASH_DURATION } from "./constants";
 import { blocked } from "./dungeon";
 import { findPath, updateVisibility } from "./pathfinding";
@@ -69,6 +69,7 @@ export function updateHitFlash(
     hitFlashRef: Record<number, number>,
     unitMeshRef: Record<number, THREE.Mesh>,
     unitOriginalColorRef: Record<number, THREE.Color>,
+    unitsState: Unit[],
     now: number
 ): void {
     Object.entries(hitFlashRef).forEach(([id, hitTime]) => {
@@ -76,14 +77,168 @@ export function updateHitFlash(
         const originalColor = unitOriginalColorRef[Number(id)];
         if (!mesh || !originalColor) return;
         const elapsed = now - hitTime;
+
+        // Get the target color (original or poison-tinted)
+        const unit = unitsState.find(u => u.id === Number(id));
+        const isPoisoned = unit?.statusEffects?.some(e => e.type === "poison");
+        const targetColor = isPoisoned
+            ? new THREE.Color(originalColor).lerp(new THREE.Color("#4a7c4a"), 0.4)
+            : originalColor;
+
         if (elapsed > FLASH_DURATION) {
-            (mesh.material as THREE.MeshStandardMaterial).color.copy(originalColor);
+            (mesh.material as THREE.MeshStandardMaterial).color.copy(targetColor);
             delete hitFlashRef[Number(id)];
         } else {
             const t = elapsed / FLASH_DURATION;
-            const flashColor = new THREE.Color(1, 1, 1).lerp(originalColor, t);
+            const flashColor = new THREE.Color(1, 1, 1).lerp(targetColor, t);
             (mesh.material as THREE.MeshStandardMaterial).color.copy(flashColor);
         }
+    });
+}
+
+export function updatePoisonVisuals(
+    unitsState: Unit[],
+    unitMeshRef: Record<number, THREE.Mesh>,
+    unitOriginalColorRef: Record<number, THREE.Color>,
+    hitFlashRef: Record<number, number>
+): void {
+    unitsState.forEach(unit => {
+        const mesh = unitMeshRef[unit.id];
+        const originalColor = unitOriginalColorRef[unit.id];
+        if (!mesh || !originalColor) return;
+
+        // Skip if currently flashing (hit flash will handle the color)
+        if (hitFlashRef[unit.id] !== undefined) return;
+
+        const isPoisoned = unit.statusEffects?.some(e => e.type === "poison");
+
+        if (isPoisoned) {
+            // Apply green poison tint
+            const poisonColor = new THREE.Color(originalColor).lerp(new THREE.Color("#4a7c4a"), 0.4);
+            (mesh.material as THREE.MeshStandardMaterial).color.copy(poisonColor);
+        } else {
+            // Restore original color
+            (mesh.material as THREE.MeshStandardMaterial).color.copy(originalColor);
+        }
+    });
+}
+
+// =============================================================================
+// STATUS EFFECT HELPERS
+// =============================================================================
+
+const POISON_DURATION = 8000;      // 8 seconds
+const POISON_TICK_INTERVAL = 1000; // tick every 1 second
+const POISON_DAMAGE_PER_TICK = 2;  // 2 damage per tick
+
+function tryApplyPoison(
+    attackerData: EnemyStats,
+    targetUnit: Unit,
+    attackerId: number,
+    setUnits: React.Dispatch<React.SetStateAction<Unit[]>>,
+    addLog: (text: string, color?: string) => void,
+    targetName: string,
+    now: number
+): void {
+    if (!('poisonChance' in attackerData) || !attackerData.poisonChance) return;
+
+    // Roll for poison
+    if (Math.random() * 100 >= attackerData.poisonChance) return;
+
+    // Check if already poisoned - refresh duration if so
+    setUnits(prev => prev.map(u => {
+        if (u.id !== targetUnit.id) return u;
+
+        const existingEffects = u.statusEffects || [];
+        const existingPoison = existingEffects.find(e => e.type === "poison");
+
+        if (existingPoison) {
+            // Refresh duration
+            return {
+                ...u,
+                statusEffects: existingEffects.map(e =>
+                    e.type === "poison"
+                        ? { ...e, duration: POISON_DURATION, lastTick: now }
+                        : e
+                )
+            };
+        }
+
+        // Apply new poison
+        const newPoison: StatusEffect = {
+            type: "poison",
+            duration: POISON_DURATION,
+            tickInterval: POISON_TICK_INTERVAL,
+            lastTick: now,
+            damagePerTick: POISON_DAMAGE_PER_TICK,
+            sourceId: attackerId
+        };
+
+        return {
+            ...u,
+            statusEffects: [...existingEffects, newPoison]
+        };
+    }));
+
+    addLog(`${targetName} is poisoned!`, "#7cba7c");
+}
+
+export function processStatusEffects(
+    unitsState: Unit[],
+    unitsRef: Record<number, UnitGroup>,
+    scene: THREE.Scene,
+    damageTexts: DamageText[],
+    hitFlashRef: Record<number, number>,
+    setUnits: React.Dispatch<React.SetStateAction<Unit[]>>,
+    addLog: (text: string, color?: string) => void,
+    now: number,
+    defeatedThisFrame: Set<number>
+): void {
+    unitsState.forEach(unit => {
+        if (unit.hp <= 0 || defeatedThisFrame.has(unit.id)) return;
+        if (!unit.statusEffects || unit.statusEffects.length === 0) return;
+
+        const unitG = unitsRef[unit.id];
+        if (!unitG) return;
+
+        const data = getUnitStats(unit);
+
+        unit.statusEffects.forEach(effect => {
+            if (effect.type === "poison") {
+                // Check if it's time for a tick
+                if (now - effect.lastTick >= effect.tickInterval) {
+                    // Deal poison damage
+                    const dmg = effect.damagePerTick;
+                    setUnits(prev => prev.map(u => {
+                        if (u.id !== unit.id) return u;
+
+                        const newHp = Math.max(0, u.hp - dmg);
+                        const updatedEffects = (u.statusEffects || []).map(e => {
+                            if (e.type === "poison") {
+                                const newDuration = e.duration - effect.tickInterval;
+                                return { ...e, duration: newDuration, lastTick: now };
+                            }
+                            return e;
+                        }).filter(e => e.duration > 0);
+
+                        return {
+                            ...u,
+                            hp: newHp,
+                            statusEffects: updatedEffects.length > 0 ? updatedEffects : undefined
+                        };
+                    }));
+
+                    hitFlashRef[unit.id] = now;
+                    spawnDamageNumber(scene, unitG.position.x, unitG.position.z, dmg, "#7cba7c", damageTexts);
+
+                    const newHp = Math.max(0, unit.hp - dmg);
+                    if (newHp <= 0) {
+                        defeatedThisFrame.add(unit.id);
+                        handleUnitDefeat(unit.id, unitG, unitsRef, addLog, data.name);
+                    }
+                }
+            }
+        });
     });
 }
 
@@ -198,6 +353,11 @@ export function updateProjectiles(
                 addLog(`${attackerData.name} hits ${targetData.name} for ${dmg} damage!`, logColor);
 
                 spawnDamageNumber(scene, targetG.position.x, targetG.position.z, dmg, logColor, damageTexts);
+
+                // Try to apply poison if attacker is enemy with poisonChance
+                if (attackerUnit.team === "enemy") {
+                    tryApplyPoison(attackerData as EnemyStats, targetUnit, attackerUnit.id, setUnits, addLog, targetData.name, now);
+                }
 
                 const newHp = Math.max(0, targetUnit.hp - dmg);
                 if (newHp <= 0) {

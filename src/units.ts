@@ -64,7 +64,8 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         aggroRange: 8,
         attackCooldown: 2500,
         range: 6,
-        projectileColor: "#8B4513"
+        projectileColor: "#8B4513",
+        poisonChance: 35  // 35% chance to poison on hit
     },
     ogre: {
         name: "Ogre",

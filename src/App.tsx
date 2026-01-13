@@ -36,7 +36,9 @@ import {
     updateFogOfWar,
     updateUnitAI,
     updateHpBarPositions,
-    updateSwingAnimations
+    updateSwingAnimations,
+    processStatusEffects,
+    updatePoisonVisuals
 } from "./gameLoop";
 
 // UI Components
@@ -438,8 +440,24 @@ export default function App() {
                     defeatedThisFrame
                 );
 
+                // Process status effects (poison ticks, etc.)
+                processStatusEffects(
+                    unitsStateRef.current,
+                    unitsRef.current,
+                    scene,
+                    damageTexts.current,
+                    hitFlashRef.current,
+                    setUnits,
+                    addLog,
+                    now,
+                    defeatedThisFrame
+                );
+
                 // Hit flash effect
-                updateHitFlash(hitFlashRef.current, unitMeshRef.current, unitOriginalColorRef.current, now);
+                updateHitFlash(hitFlashRef.current, unitMeshRef.current, unitOriginalColorRef.current, unitsStateRef.current, now);
+
+                // Update poison visuals (green tint for poisoned units)
+                updatePoisonVisuals(unitsStateRef.current, unitMeshRef.current, unitOriginalColorRef.current, hitFlashRef.current);
             }
 
             const currentUnits = unitsStateRef.current;

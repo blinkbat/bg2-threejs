@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import type { Unit, Skill } from "../types";
+import type { Unit, Skill, StatusEffect } from "../types";
 import { UNIT_DATA, getAllSkills } from "../units";
 
 interface UnitPanelProps {
@@ -32,7 +32,7 @@ export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, ski
     // Use frozen time when paused, current time when not
     const displayTime = paused && pauseTime ? pauseTime : Date.now();
 
-    const [tab, setTab] = useState("stats");
+    const [tab, setTab] = useState("status");
     const data = UNIT_DATA[unitId];
     const unit = units.find((u: Unit) => u.id === unitId);
     if (!data || !unit) return null;
@@ -66,15 +66,36 @@ export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, ski
                 </>)}
             </div>
             <div style={{ display: "flex", borderBottom: "1px solid #333" }}>
-                {["stats", "skills", "items"].map(t => (<div key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: "8px 0", textAlign: "center", fontSize: 11, textTransform: "uppercase", cursor: "pointer", background: tab === t ? "#2a2a3e" : "transparent", borderBottom: tab === t ? "2px solid #58a6ff" : "2px solid transparent", color: tab === t ? "#fff" : "#888" }}>{t}</div>))}
+                {["status", "skills", "items"].map(t => (<div key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: "8px 0", textAlign: "center", fontSize: 11, textTransform: "uppercase", cursor: "pointer", background: tab === t ? "#2a2a3e" : "transparent", borderBottom: tab === t ? "2px solid #58a6ff" : "2px solid transparent", color: tab === t ? "#fff" : "#888" }}>{t}</div>))}
             </div>
             <div style={{ padding: 12, minHeight: 140 }}>
-                {tab === "stats" && (<div style={{ fontSize: 12 }}>
+                {tab === "status" && (<div style={{ fontSize: 12 }}>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                         <div style={{ background: "#1a1a2a", padding: "6px 8px", borderRadius: 4 }}><span style={{ color: "#888" }}>Accuracy</span> <span style={{ float: "right" }}>{data.accuracy}%</span></div>
                         <div style={{ background: "#1a1a2a", padding: "6px 8px", borderRadius: 4 }}><span style={{ color: "#888" }}>Armor</span> <span style={{ float: "right" }}>{data.armor}</span></div>
                         <div style={{ background: "#1a1a2a", padding: "6px 8px", borderRadius: 4, gridColumn: "span 2" }}><span style={{ color: "#888" }}>Damage</span> <span style={{ float: "right" }}>{data.damage[0]}-{data.damage[1]}</span></div>
                     </div>
+                    {/* Status Effects */}
+                    {unit.statusEffects && unit.statusEffects.length > 0 && (
+                        <div style={{ marginTop: 10 }}>
+                            <div style={{ fontSize: 10, color: "#888", marginBottom: 6, textTransform: "uppercase" }}>Effects</div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                {unit.statusEffects.map((effect: StatusEffect, i: number) => {
+                                    const remainingSec = Math.ceil(effect.duration / 1000);
+                                    const effectColors: Record<string, { bg: string; border: string; text: string }> = {
+                                        poison: { bg: "#1a2a1a", border: "#4a7c4a", text: "#7cba7c" }
+                                    };
+                                    const colors = effectColors[effect.type] || { bg: "#1a1a2a", border: "#444", text: "#888" };
+                                    return (
+                                        <div key={i} style={{ background: colors.bg, border: `1px solid ${colors.border}`, padding: "6px 8px", borderRadius: 4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                            <span style={{ color: colors.text, textTransform: "capitalize" }}>{effect.type}</span>
+                                            <span style={{ color: "#888", fontSize: 10 }}>{remainingSec}s</span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
                     <div
                         onClick={() => onToggleAI(unitId)}
                         style={{ marginTop: 10, background: unit.aiEnabled ? "#2d4a2d" : "#1a1a2a", padding: "8px 10px", borderRadius: 4, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", border: unit.aiEnabled ? "1px solid #4ade80" : "1px solid #333" }}

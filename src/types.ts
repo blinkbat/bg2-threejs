@@ -6,6 +6,21 @@ import * as THREE from "three";
 
 export type EnemyType = "kobold" | "kobold_archer" | "ogre";
 
+// =============================================================================
+// STATUS EFFECTS
+// =============================================================================
+
+export type StatusEffectType = "poison";
+
+export interface StatusEffect {
+    type: StatusEffectType;
+    duration: number;      // remaining duration in ms
+    tickInterval: number;  // ms between damage ticks
+    lastTick: number;      // timestamp of last tick
+    damagePerTick: number; // damage dealt each tick
+    sourceId: number;      // who applied the effect
+}
+
 export interface Unit {
     id: number;
     x: number;
@@ -16,6 +31,7 @@ export interface Unit {
     enemyType?: EnemyType;  // Only set for enemies
     target: number | null;
     aiEnabled: boolean;
+    statusEffects?: StatusEffect[];  // Active status effects
 }
 
 export interface Skill {
@@ -63,6 +79,8 @@ export interface EnemyStats {
     projectileColor?: string;
     // Optional for large enemies
     size?: number;
+    // Optional status effect on hit
+    poisonChance?: number;  // 0-100 percent chance to apply poison
 }
 
 export interface Room {
