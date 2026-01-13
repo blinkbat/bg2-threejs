@@ -3,7 +3,7 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitData, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation, StatusEffect, EnemyStats } from "./types";
+import type { Unit, UnitData, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation, StatusEffect, EnemyStats, EnemySkill } from "./types";
 import { GRID_SIZE, ATTACK_RANGE, MOVE_SPEED, UNIT_RADIUS, HIT_DETECTION_RADIUS, FLASH_DURATION } from "./constants";
 import { blocked } from "./dungeon";
 import { findPath, updateVisibility } from "./pathfinding";
@@ -30,6 +30,9 @@ export interface GameLoopRefs {
     fogTextureRef: React.RefObject<FogTexture | null>;
     moveMarkerRef: React.RefObject<THREE.Mesh | null>;
 }
+
+// Enemy skill cooldowns - tracked separately from basic attack
+const enemySkillCooldowns: Record<number, number> = {};
 
 export interface GameLoopState {
     unitsStateRef: React.RefObject<Unit[]>;
@@ -415,6 +418,116 @@ export function updateFogOfWar(
 }
 
 // =============================================================================
+// ENEMY SKILL EXECUTION
+// =============================================================================
+
+function executeEnemySwipe(
+    _unit: Unit,
+    g: UnitGroup,
+    skill: EnemySkill,
+    enemyData: EnemyStats,
+    unitsRef: Record<number, UnitGroup>,
+    unitsState: Unit[],
+    scene: THREE.Scene,
+    damageTexts: DamageText[],
+    hitFlashRef: Record<number, number>,
+    setUnits: React.Dispatch<React.SetStateAction<Unit[]>>,
+    addLog: (text: string, color?: string) => void,
+    now: number,
+    defeatedThisFrame: Set<number>
+): boolean {
+    // Find up to maxTargets player units within range
+    const targets: { unit: Unit; group: UnitGroup; dist: number }[] = [];
+
+    unitsState.filter(u => u.team === "player" && u.hp > 0 && !defeatedThisFrame.has(u.id)).forEach(target => {
+        const tg = unitsRef[target.id];
+        if (!tg) return;
+        const dist = Math.hypot(tg.position.x - g.position.x, tg.position.z - g.position.z);
+        if (dist <= skill.range) {
+            targets.push({ unit: target, group: tg, dist });
+        }
+    });
+
+    // Need at least 1 target
+    if (targets.length === 0) return false;
+
+    // Sort by distance and take up to maxTargets
+    targets.sort((a, b) => a.dist - b.dist);
+    const hitTargets = targets.slice(0, skill.maxTargets);
+
+    // Visual effect - wide arc swipe
+    const swipeArc = new THREE.Mesh(
+        new THREE.RingGeometry(0.3, skill.range, 32, 1, -Math.PI / 2, Math.PI),
+        new THREE.MeshBasicMaterial({ color: "#ff4444", transparent: true, opacity: 0.6, side: THREE.DoubleSide })
+    );
+    swipeArc.rotation.x = -Math.PI / 2;
+    swipeArc.position.set(g.position.x, 0.2, g.position.z);
+
+    // Rotate arc to face the primary target
+    if (hitTargets.length > 0) {
+        const angle = Math.atan2(
+            hitTargets[0].group.position.z - g.position.z,
+            hitTargets[0].group.position.x - g.position.x
+        );
+        swipeArc.rotation.z = angle;
+    }
+    scene.add(swipeArc);
+
+    // Animate the swipe
+    const startTime = now;
+    const animateDuration = 300;
+    const animateSwipe = () => {
+        const elapsed = Date.now() - startTime;
+        const t = Math.min(1, elapsed / animateDuration);
+        (swipeArc.material as THREE.MeshBasicMaterial).opacity = 0.6 * (1 - t);
+        swipeArc.scale.set(1 + t * 0.3, 1 + t * 0.3, 1);
+
+        if (t < 1) {
+            requestAnimationFrame(animateSwipe);
+        } else {
+            scene.remove(swipeArc);
+            swipeArc.geometry.dispose();
+            (swipeArc.material as THREE.MeshBasicMaterial).dispose();
+        }
+    };
+    requestAnimationFrame(animateSwipe);
+
+    // Play sound
+    soundFns.playHit();
+
+    // Deal damage to all targets
+    let hitCount = 0;
+    hitTargets.forEach(({ unit: target, group: tg }) => {
+        const targetData = getUnitStats(target);
+
+        if (rollHit(enemyData.accuracy)) {
+            const rawDmg = rollDamage(skill.damage[0], skill.damage[1]);
+            const dmg = Math.max(1, rawDmg - targetData.armor);
+
+            setUnits(prev => prev.map(u => u.id === target.id ? { ...u, hp: u.hp - dmg } : u));
+            hitFlashRef[target.id] = now;
+            hitCount++;
+
+            spawnDamageNumber(scene, tg.position.x, tg.position.z, dmg, "#ff4444", damageTexts);
+
+            const newHp = Math.max(0, target.hp - dmg);
+            if (newHp <= 0) {
+                defeatedThisFrame.add(target.id);
+                handleUnitDefeat(target.id, tg, unitsRef, addLog, targetData.name);
+            }
+        }
+    });
+
+    if (hitCount > 0) {
+        addLog(`${enemyData.name}'s ${skill.name} hits ${hitCount} target${hitCount > 1 ? 's' : ''}!`, "#ff4444");
+    } else {
+        addLog(`${enemyData.name}'s ${skill.name} misses!`, "#888");
+    }
+
+    return true;
+}
+
+// =============================================================================
 // MELEE SWING ANIMATION
 // =============================================================================
 
@@ -567,6 +680,38 @@ export function updateUnitAI(
             if (dist <= unitRange) {
                 const cooldownEnd = actionCooldownRef[unit.id] || 0;
                 if (now >= cooldownEnd) {
+                    // Check if enemy has a skill and it's ready
+                    if (!isPlayer && 'skill' in data && data.skill) {
+                        const skill = data.skill;
+                        const skillCooldownEnd = enemySkillCooldowns[unit.id] || 0;
+
+                        // Use skill if: cooldown ready AND targets in range
+                        if (now >= skillCooldownEnd && dist <= skill.range) {
+                            // Count potential targets
+                            const potentialTargets = unitsState.filter(u =>
+                                u.team === "player" && u.hp > 0 && !defeatedThisFrame.has(u.id)
+                            ).filter(u => {
+                                const tg = unitsRef[u.id];
+                                if (!tg) return false;
+                                return Math.hypot(tg.position.x - g.position.x, tg.position.z - g.position.z) <= skill.range;
+                            });
+
+                            // Use skill if there are 2+ targets, or randomly with 1 target
+                            if (potentialTargets.length >= 2 || (potentialTargets.length === 1 && Math.random() < 0.3)) {
+                                const executed = executeEnemySwipe(
+                                    unit, g, skill, data as EnemyStats,
+                                    unitsRef, unitsState, scene, damageTexts,
+                                    hitFlashRef, setUnits, addLog, now, defeatedThisFrame
+                                );
+                                if (executed) {
+                                    enemySkillCooldowns[unit.id] = now + skill.cooldown;
+                                    actionCooldownRef[unit.id] = now + data.attackCooldown;
+                                    return;
+                                }
+                            }
+                        }
+                    }
+
                     const attackCooldownEnd = now + data.attackCooldown;
                     actionCooldownRef[unit.id] = attackCooldownEnd;
 

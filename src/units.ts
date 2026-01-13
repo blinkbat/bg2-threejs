@@ -96,7 +96,14 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         color: "#556B2F",
         aggroRange: 8,
         attackCooldown: 3000,
-        size: 2.0
+        size: 2.0,
+        skill: {
+            name: "Swipe",
+            cooldown: 10000,  // 10 seconds
+            damage: [8, 14],
+            maxTargets: 3,
+            range: 2.5
+        }
     }
 };
 

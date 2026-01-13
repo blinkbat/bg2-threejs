@@ -65,6 +65,14 @@ export interface UnitData {
     attackCooldown: number;  // ms - cooldown for basic attack (also global cooldown)
 }
 
+export interface EnemySkill {
+    name: string;
+    cooldown: number;      // ms
+    damage: [number, number];
+    maxTargets: number;    // how many units it can hit
+    range: number;         // activation range
+}
+
 export interface EnemyStats {
     name: string;
     hp: number;
@@ -82,6 +90,8 @@ export interface EnemyStats {
     size?: number;
     // Optional status effect on hit
     poisonChance?: number;  // 0-100 percent chance to apply poison
+    // Optional special skill
+    skill?: EnemySkill;
 }
 
 export interface Room {
