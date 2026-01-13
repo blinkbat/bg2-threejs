@@ -106,13 +106,13 @@ export function executeHealSkill(
     });
 
     if (closestAllyId === null) {
-        addLog(`${UNIT_DATA[casterId].name}: No ally at that location!`, "COLORS.logNeutral");
+        addLog(`${UNIT_DATA[casterId].name}: No ally at that location!`, COLORS.logNeutral);
         return false;
     }
 
     const targetAlly = unitsStateRef.current.find(u => u.id === closestAllyId);
     if (targetAlly && targetAlly.hp >= UNIT_DATA[targetAlly.id].maxHp) {
-        addLog(`${UNIT_DATA[casterId].name}: ${UNIT_DATA[closestAllyId].name} is at full health!`, "COLORS.logNeutral");
+        addLog(`${UNIT_DATA[casterId].name}: ${UNIT_DATA[closestAllyId].name} is at full health!`, COLORS.logNeutral);
         return false;
     }
 
@@ -187,7 +187,7 @@ export function executeMeleeSkill(
     });
 
     if (closestEnemyId === null) {
-        addLog(`${UNIT_DATA[casterId].name}: No enemy at that location!`, "COLORS.logNeutral");
+        addLog(`${UNIT_DATA[casterId].name}: No enemy at that location!`, COLORS.logNeutral);
         return false;
     }
 
@@ -200,7 +200,7 @@ export function executeMeleeSkill(
     // Check if in melee range (hitbox-aware)
     const targetRadius = getUnitRadius(targetEnemy);
     if (!isInRange(casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, targetRadius, skill.range + 0.5)) {
-        addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, "COLORS.logNeutral");
+        addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, COLORS.logNeutral);
         return false;
     }
 
@@ -280,7 +280,7 @@ export function executeMeleeSkill(
         }
     } else {
         soundFns.playMiss();
-        addLog(`${casterData.name}'s ${skill.name} misses ${targetData.name}.`, "COLORS.logNeutral");
+        addLog(`${casterData.name}'s ${skill.name} misses ${targetData.name}.`, COLORS.logNeutral);
     }
 
     return true;
@@ -373,7 +373,7 @@ export function executeTauntSkill(
     if (tauntedCount > 0) {
         addLog(`${casterData.name}'s ${skill.name} taunts ${tauntedCount} enemies!`, "#c0392b");
     } else {
-        addLog(`${casterData.name}'s ${skill.name} echoes... but no enemies are affected.`, "COLORS.logNeutral");
+        addLog(`${casterData.name}'s ${skill.name} echoes... but no enemies are affected.`, COLORS.logNeutral);
     }
 
     return true;
@@ -394,7 +394,7 @@ export function executeSkill(
 
     if (!caster || !casterG || caster.hp <= 0) return false;
     if ((caster.mana ?? 0) < skill.manaCost) {
-        ctx.addLog(`${UNIT_DATA[casterId].name}: Not enough mana!`, "COLORS.logNeutral");
+        ctx.addLog(`${UNIT_DATA[casterId].name}: Not enough mana!`, COLORS.logNeutral);
         return false;
     }
 

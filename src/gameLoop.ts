@@ -5,18 +5,23 @@
 import * as THREE from "three";
 import type { Unit, UnitData, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation, StatusEffect, EnemyStats, EnemySkill } from "./types";
 import {
-    GRID_SIZE, ATTACK_RANGE, MOVE_SPEED, HIT_DETECTION_RADIUS, FLASH_DURATION,
+    GRID_SIZE, ATTACK_RANGE, HIT_DETECTION_RADIUS, FLASH_DURATION,
     POISON_DURATION, POISON_TICK_INTERVAL, POISON_DAMAGE_PER_TICK,
-    SWING_DURATION, TARGET_SCAN_INTERVAL, UNREACHABLE_COOLDOWN, COLORS
+    SWING_DURATION, COLORS, SKILL_SINGLE_TARGET_CHANCE
 } from "./constants";
 import { getUnitRadius, isInRange } from "./range";
-import { blocked } from "./dungeon";
-import { findPath, updateVisibility } from "./pathfinding";
+import { updateVisibility } from "./pathfinding";
+import { recentlyGaveUp, checkPathNeedsRecalc, createPathToTarget } from "./pathManager";
+import {
+    runTargetingPhase, runPathFollowingPhase, runMovementPhase,
+    type TargetingContext, type PathContext, type MovementContext
+} from "./unitAI";
 import { getUnitStats } from "./units";
 import { rollDamage, rollHit } from "./combatMath";
 import { spawnDamageNumber, handleUnitDefeat } from "./combat";
 import { soundFns } from "./sound";
 import { disposeBasicMesh, disposeTexturedMesh } from "./disposal";
+import { getEnemySkillCooldown, setEnemySkillCooldown } from "./enemyState";
 
 // =============================================================================
 // TYPES
@@ -36,18 +41,6 @@ export interface GameLoopRefs {
     fogTextureRef: React.RefObject<FogTexture | null>;
     moveMarkerRef: React.RefObject<THREE.Mesh | null>;
 }
-
-// Enemy skill cooldowns - tracked separately from basic attack
-const enemySkillCooldowns: Record<number, number> = {};
-
-// Track when units gave up on a path to prevent immediate retry
-const gaveUpUntil: Record<number, number> = {};
-
-// Throttle target acquisition - don't scan for targets every frame
-const lastTargetScan: Record<number, number> = {};
-
-// Track targets that enemies couldn't reach (to avoid repeatedly targeting them)
-const unreachableTargets: Record<number, { targetId: number; until: number }[]> = {};
 
 export interface GameLoopState {
     unitsStateRef: React.RefObject<Unit[]>;
@@ -388,7 +381,7 @@ export function updateProjectiles(
                 }
             } else {
                 soundFns.playMiss();
-                addLog(`${attackerData.name} misses ${targetData.name}.`, "COLORS.logNeutral");
+                addLog(`${attackerData.name} misses ${targetData.name}.`, COLORS.logNeutral);
             }
 
             disposeProjectile(scene, proj);
@@ -542,7 +535,7 @@ function executeEnemySwipe(
     if (hitCount > 0) {
         addLog(`${enemyData.name}'s ${skill.name} hits ${hitCount} target${hitCount > 1 ? 's' : ''}!`, "#ff4444");
     } else {
-        addLog(`${enemyData.name}'s ${skill.name} misses!`, "COLORS.logNeutral");
+        addLog(`${enemyData.name}'s ${skill.name} misses!`, COLORS.logNeutral);
     }
 
     return true;
@@ -632,70 +625,13 @@ export function updateUnitAI(
     const isPlayer = unit.team === "player";
     const data = getUnitStats(unit);
 
-    // AI targeting
-    const shouldAutoTarget = isPlayer ? unit.aiEnabled : true;
-    const currentTarget = g.userData.attackTarget;
-
-    // Check if current target is still valid
-    let targetStillValid = false;
-    if (currentTarget !== null && currentTarget !== undefined) {
-        const targetUnit = unitsState.find(u => u.id === currentTarget);
-        targetStillValid = targetUnit !== undefined && targetUnit.hp > 0 && !defeatedThisFrame.has(currentTarget);
-        if (!targetStillValid) {
-            g.userData.attackTarget = null;
-        }
-    }
-
-    // Find new target (throttled to avoid scanning every frame)
-    const hasActivePath = pathsRef[unit.id]?.length > 0;
-    const isExecutingMoveCommand = hasActivePath && g.userData.attackTarget === null;
-    const canAutoTarget = shouldAutoTarget && !targetStillValid && !isExecutingMoveCommand;
-    const lastScan = lastTargetScan[unit.id] || 0;
-    const canScanForTargets = now - lastScan >= TARGET_SCAN_INTERVAL;
-
-    if (canAutoTarget && canScanForTargets) {
-        lastTargetScan[unit.id] = now;
-        const aggroRange = isPlayer ? 12 : (data as { aggroRange: number }).aggroRange;
-        const enemyTeam = isPlayer ? "enemy" : "player";
-        let nearest: number | null = null, nearestDist = aggroRange;
-
-        // For enemies, get list of targets they recently couldn't reach
-        const blockedTargets = !isPlayer && unreachableTargets[unit.id]
-            ? unreachableTargets[unit.id].filter(e => e.until > now).map(e => e.targetId)
-            : [];
-
-        unitsState.filter(u => u.team === enemyTeam && u.hp > 0).forEach(enemy => {
-            // Skip targets that this enemy recently couldn't reach
-            if (blockedTargets.includes(enemy.id)) return;
-
-            const eg = unitsRef[enemy.id];
-            if (!eg) return;
-            const enemyX = Math.floor(eg.position.x), enemyZ = Math.floor(eg.position.z);
-            const canSee = isPlayer ? (visibility[enemyX]?.[enemyZ] === 2) : true;
-            if (canSee) {
-                const d = Math.hypot(g.position.x - eg.position.x, g.position.z - eg.position.z);
-                if (d < nearestDist) { nearestDist = d; nearest = enemy.id; }
-            }
-        });
-
-        if (nearest !== null) {
-            // Don't start new path if we recently gave up (prevents jitter)
-            const recentlyGaveUp = gaveUpUntil[unit.id] && now < gaveUpUntil[unit.id];
-            if (!recentlyGaveUp) {
-                g.userData.attackTarget = nearest;
-                const targetG = unitsRef[nearest];
-                if (targetG) {
-                    const path = findPath(g.position.x, g.position.z, targetG.position.x, targetG.position.z);
-                    pathsRef[unit.id] = path ? path.slice(1) : [];
-                    if (path && path.length > 0) {
-                        moveStartRef[unit.id] = { time: now, x: g.position.x, z: g.position.z };
-                    }
-                } else {
-                    pathsRef[unit.id] = [];
-                }
-            }
-        }
-    }
+    // Phase 1: Targeting - find and validate targets
+    const aggroRange = isPlayer ? 12 : (data as { aggroRange: number }).aggroRange;
+    const targetingCtx: TargetingContext = {
+        unit, g, unitsRef, unitsState, visibility, pathsRef, moveStartRef,
+        now, defeatedThisFrame, aggroRange
+    };
+    runTargetingPhase(targetingCtx);
 
     let targetX = g.position.x, targetZ = g.position.z;
 
@@ -723,7 +659,7 @@ export function updateUnitAI(
                     // Check if enemy has a skill and it's ready
                     if (!isPlayer && 'skill' in data && data.skill) {
                         const skill = data.skill;
-                        const skillCooldownEnd = enemySkillCooldowns[unit.id] || 0;
+                        const skillCooldownEnd = getEnemySkillCooldown(unit.id);
 
                         // Use skill if: cooldown ready AND targets in range (hitbox-aware)
                         const inSkillRange = isInRange(g.position.x, g.position.z, targetX, targetZ, targetRadius, skill.range);
@@ -739,14 +675,14 @@ export function updateUnitAI(
                             });
 
                             // Use skill if there are 2+ targets, or randomly with 1 target
-                            if (potentialTargets.length >= 2 || (potentialTargets.length === 1 && Math.random() < 0.3)) {
+                            if (potentialTargets.length >= 2 || (potentialTargets.length === 1 && Math.random() < SKILL_SINGLE_TARGET_CHANCE)) {
                                 const executed = executeEnemySwipe(
                                     unit, g, skill, data as EnemyStats,
                                     unitsRef, unitsState, scene, damageTexts,
                                     hitFlashRef, setUnits, addLog, now, defeatedThisFrame
                                 );
                                 if (executed) {
-                                    enemySkillCooldowns[unit.id] = now + skill.cooldown;
+                                    setEnemySkillCooldown(unit.id, now + skill.cooldown);
                                     actionCooldownRef[unit.id] = now + data.attackCooldown;
                                     return;
                                 }
@@ -804,19 +740,12 @@ export function updateUnitAI(
                 return;
             } else {
                 // Recalculate path if needed (but not if we recently gave up)
-                const recentlyGaveUp = gaveUpUntil[unit.id] && now < gaveUpUntil[unit.id];
-                if (!recentlyGaveUp) {
-                    const currentPath = pathsRef[unit.id];
-                    let needsNewPath = !currentPath?.length;
-                    if (!needsNewPath && currentPath && currentPath.length > 0) {
-                        const pathEnd = currentPath[currentPath.length - 1];
-                        const distToPathEnd = Math.hypot(pathEnd.x - targetX, pathEnd.z - targetZ);
-                        needsNewPath = distToPathEnd > 2;
-                    }
+                if (!recentlyGaveUp(unit.id, now)) {
+                    const { needsNewPath } = checkPathNeedsRecalc(pathsRef[unit.id], targetX, targetZ, g.position.x, g.position.z);
                     if (needsNewPath) {
-                        const path = findPath(g.position.x, g.position.z, targetX, targetZ);
-                        pathsRef[unit.id] = path ? path.slice(1) : [];
-                        if (path && path.length > 0) {
+                        const result = createPathToTarget(g.position.x, g.position.z, targetX, targetZ);
+                        pathsRef[unit.id] = result.path;
+                        if (result.success) {
                             moveStartRef[unit.id] = { time: now, x: g.position.x, z: g.position.z };
                         }
                     }
@@ -827,107 +756,15 @@ export function updateUnitAI(
         }
     }
 
-    // Path following
-    const path = pathsRef[unit.id];
-    if (path && path.length > 0) {
-        targetX = path[0].x;
-        targetZ = path[0].z;
-        if (Math.hypot(targetX - g.position.x, targetZ - g.position.z) < 0.3) {
-            path.shift();
-            moveStartRef[unit.id] = { time: now, x: g.position.x, z: g.position.z };
-        }
-        // Stuck timeout - give up if barely moving
-        const moveStart = moveStartRef[unit.id];
-        if (moveStart) {
-            const timeSinceStart = now - moveStart.time;
-            const movedDist = Math.hypot(g.position.x - moveStart.x, g.position.z - moveStart.z);
-            // Give up faster if really stuck (moved less than 0.2 in 1 second)
-            const isReallyStuck = timeSinceStart > 1000 && movedDist < 0.2;
-            const isStuck = timeSinceStart > 2000 && movedDist < 0.5;
-            if (isReallyStuck || isStuck) {
-                pathsRef[unit.id] = [];
-                delete moveStartRef[unit.id];
-                // Prevent immediate path recalculation - wait 1.5 seconds before retrying
-                gaveUpUntil[unit.id] = now + 1500;
+    // Phase 3: Path following - advance waypoints and handle stuck detection
+    const pathCtx: PathContext = { unit, g, pathsRef, moveStartRef, now, isPlayer };
+    const pathResult = runPathFollowingPhase(pathCtx);
+    targetX = pathResult.targetX;
+    targetZ = pathResult.targetZ;
 
-                // For enemies: clear current target and mark it as unreachable so they find a closer one
-                if (!isPlayer && g.userData.attackTarget !== null) {
-                    const failedTargetId = g.userData.attackTarget;
-                    g.userData.attackTarget = null;
-                    // Mark this target as unreachable for a while
-                    if (!unreachableTargets[unit.id]) {
-                        unreachableTargets[unit.id] = [];
-                    }
-                    // Clean up expired entries and add new one
-                    unreachableTargets[unit.id] = unreachableTargets[unit.id]
-                        .filter(entry => entry.until > now);
-                    unreachableTargets[unit.id].push({
-                        targetId: failedTargetId,
-                        until: now + UNREACHABLE_COOLDOWN
-                    });
-                    // Allow immediate target re-scan to find closer target
-                    lastTargetScan[unit.id] = 0;
-                }
-            }
-        }
-    }
-
-    // Movement with avoidance
-    const dx = targetX - g.position.x;
-    const dz = targetZ - g.position.z;
-    const distToTarget = Math.hypot(dx, dz);
-
-    if (distToTarget > 0.1) {
-        let desiredX = dx / distToTarget, desiredZ = dz / distToTarget;
-        let avoidX = 0, avoidZ = 0;
-
-        const myRadius = getUnitRadius(unit);
-        Object.entries(unitsRef).forEach(([otherId, otherG]) => {
-            if (String(unit.id) === otherId) return;
-            const otherU = unitsState.find(u => u.id === Number(otherId));
-            if (!otherU || otherU.hp <= 0) return;
-            const otherRadius = getUnitRadius(otherU);
-            const combinedRadius = myRadius + otherRadius;
-            const ox = otherG.position.x - g.position.x, oz = otherG.position.z - g.position.z;
-            const oDist = Math.hypot(ox, oz);
-
-            if (oDist < combinedRadius * 1.5 && oDist > 0.01) {
-                // Check if this unit is roughly in our path (dot product > 0 means ahead of us)
-                const dot = (ox * desiredX + oz * desiredZ) / oDist;
-
-                // Hard separation when overlapping - push directly away
-                if (oDist < combinedRadius) {
-                    const sepStrength = (combinedRadius - oDist) / combinedRadius;
-                    avoidX -= (ox / oDist) * sepStrength * 2;
-                    avoidZ -= (oz / oDist) * sepStrength * 2;
-                }
-                // Steering when unit is ahead and close - use unit ID to pick consistent side
-                else if (dot > 0.3) {
-                    const steerStrength = (combinedRadius * 1.5 - oDist) / (combinedRadius * 0.5);
-                    // Use XOR of unit IDs to determine which unit steers which way
-                    // This prevents both units from steering the same direction
-                    const steerRight = (unit.id ^ Number(otherId)) % 2 === 0;
-                    const perpX = steerRight ? -desiredZ : desiredZ;
-                    const perpZ = steerRight ? desiredX : -desiredX;
-                    avoidX += perpX * steerStrength * 0.5;
-                    avoidZ += perpZ * steerStrength * 0.5;
-                }
-            }
-        });
-
-        let moveX = desiredX + avoidX, moveZ = desiredZ + avoidZ;
-        const moveMag = Math.hypot(moveX, moveZ);
-        if (moveMag > 0.01) {
-            moveX = (moveX / moveMag) * MOVE_SPEED;
-            moveZ = (moveZ / moveMag) * MOVE_SPEED;
-            const newX = g.position.x + moveX, newZ = g.position.z + moveZ;
-            const cellX = Math.floor(newX), cellZ = Math.floor(newZ);
-            if (!blocked[cellX]?.[cellZ]) {
-                g.position.x = Math.max(0.5, Math.min(GRID_SIZE - 0.5, newX));
-                g.position.z = Math.max(0.5, Math.min(GRID_SIZE - 0.5, newZ));
-            }
-        }
-    }
+    // Phase 4: Movement - move toward target with avoidance and wall sliding
+    const movementCtx: MovementContext = { unit, g, unitsRef, unitsState, targetX, targetZ };
+    runMovementPhase(movementCtx);
 }
 
 // =============================================================================

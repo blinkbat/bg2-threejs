@@ -5,6 +5,8 @@
 import * as THREE from "three";
 import type { DamageText, UnitGroup } from "./types";
 import { soundFns } from "./sound";
+import { cleanupUnitState } from "./pathManager";
+import { cleanupEnemySkillCooldown } from "./enemyState";
 
 /**
  * Spawn a floating damage number at the given position
@@ -56,4 +58,8 @@ export function handleUnitDefeat(
             ug.userData.attackTarget = null;
         }
     });
+
+    // Clean up state for defeated unit
+    cleanupUnitState(targetId);
+    cleanupEnemySkillCooldown(targetId);
 }
