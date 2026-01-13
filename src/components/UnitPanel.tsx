@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import type { Unit, Skill, StatusEffect } from "../types";
 import { UNIT_DATA, getAllSkills } from "../units";
+import { getHpPercentage, getHpColor, getMana } from "../combatMath";
+import { COLORS } from "../constants";
 
 interface UnitPanelProps {
     unitId: number;
@@ -36,10 +38,10 @@ export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, ski
     const data = UNIT_DATA[unitId];
     const unit = units.find((u: Unit) => u.id === unitId);
     if (!data || !unit) return null;
-    const hpPct = (unit.hp / data.maxHp) * 100;
-    const hpColor = hpPct > 50 ? "#22c55e" : hpPct > 25 ? "#eab308" : "#ef4444";
+    const hpPct = getHpPercentage(unit.hp, data.maxHp);
+    const hpColor = getHpColor(hpPct);
     const hasMana = data.maxMana !== undefined && data.maxMana > 0;
-    const manaPct = hasMana ? ((unit.mana ?? 0) / data.maxMana!) * 100 : 0;
+    const manaPct = hasMana ? getHpPercentage(getMana(unit), data.maxMana!) : 0;
 
     // Darken unit color for header (mix with black)
     const darkenColor = (hex: string, factor: number = 0.4) => {
@@ -82,10 +84,10 @@ export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, ski
                             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                                 {unit.statusEffects.map((effect: StatusEffect, i: number) => {
                                     const remainingSec = Math.ceil(effect.duration / 1000);
-                                    const effectColors: Record<string, { bg: string; border: string; text: string }> = {
-                                        poison: { bg: "#1a2a1a", border: "#4a7c4a", text: "#7cba7c" }
+                                    const effectColorMap: Record<string, { bg: string; border: string; text: string }> = {
+                                        poison: { bg: COLORS.poisonBg, border: COLORS.poison, text: COLORS.poisonText }
                                     };
-                                    const colors = effectColors[effect.type] || { bg: "#1a1a2a", border: "#444", text: "#888" };
+                                    const colors = effectColorMap[effect.type] || { bg: "#1a1a2a", border: "#444", text: COLORS.logNeutral };
                                     return (
                                         <div key={i} style={{ background: colors.bg, border: `1px solid ${colors.border}`, padding: "8px 10px", borderRadius: 4, display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13 }}>
                                             <span style={{ color: colors.text, textTransform: "capitalize" }}>{effect.type}</span>
@@ -163,7 +165,7 @@ export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, ski
                                     </div>
                                     <div style={{ fontSize: 11, color: "#888", marginTop: 5, position: "relative" }}>
                                         {skill.type === "taunt" ? `${skill.value[0]}% taunt chance` : skill.type === "damage" ? `${skill.value[0]}-${skill.value[1]} dmg` : `${skill.value[0]}-${skill.value[1]} heal`}
-                                        {skill.poisonChance && <span style={{ marginLeft: 8, color: "#7cba7c" }}>{skill.poisonChance}% poison</span>}
+                                        {skill.poisonChance && <span style={{ marginLeft: 8, color: COLORS.poisonText }}>{skill.poisonChance}% poison</span>}
                                         {skill.aoeRadius && <span style={{ marginLeft: 8, color: "#f59e0b" }}>AOE</span>}
                                         {onCooldown && !isQueued && (
                                             <span style={{ float: "right", color: "#ef4444" }}>

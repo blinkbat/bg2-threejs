@@ -4,11 +4,16 @@
 
 import * as THREE from "three";
 import type { Unit, UnitData, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation, StatusEffect, EnemyStats, EnemySkill } from "./types";
-import { GRID_SIZE, ATTACK_RANGE, MOVE_SPEED, HIT_DETECTION_RADIUS, FLASH_DURATION } from "./constants";
+import {
+    GRID_SIZE, ATTACK_RANGE, MOVE_SPEED, HIT_DETECTION_RADIUS, FLASH_DURATION,
+    POISON_DURATION, POISON_TICK_INTERVAL, POISON_DAMAGE_PER_TICK,
+    SWING_DURATION, TARGET_SCAN_INTERVAL, UNREACHABLE_COOLDOWN, COLORS
+} from "./constants";
 import { getUnitRadius, isInRange } from "./range";
 import { blocked } from "./dungeon";
 import { findPath, updateVisibility } from "./pathfinding";
-import { getUnitStats, rollDamage, rollHit } from "./units";
+import { getUnitStats } from "./units";
+import { rollDamage, rollHit } from "./combatMath";
 import { spawnDamageNumber, handleUnitDefeat } from "./combat";
 import { soundFns } from "./sound";
 import { disposeBasicMesh, disposeTexturedMesh } from "./disposal";
@@ -40,11 +45,9 @@ const gaveUpUntil: Record<number, number> = {};
 
 // Throttle target acquisition - don't scan for targets every frame
 const lastTargetScan: Record<number, number> = {};
-const TARGET_SCAN_INTERVAL = 500; // ms between target scans
 
 // Track targets that enemies couldn't reach (to avoid repeatedly targeting them)
 const unreachableTargets: Record<number, { targetId: number; until: number }[]> = {};
-const UNREACHABLE_COOLDOWN = 5000; // Don't retry unreachable target for 5 seconds
 
 export interface GameLoopState {
     unitsStateRef: React.RefObject<Unit[]>;
@@ -97,7 +100,7 @@ export function updateHitFlash(
         const unit = unitsState.find(u => u.id === Number(id));
         const isPoisoned = unit?.statusEffects?.some(e => e.type === "poison");
         const targetColor = isPoisoned
-            ? new THREE.Color(originalColor).lerp(new THREE.Color("#4a7c4a"), 0.4)
+            ? new THREE.Color(originalColor).lerp(new THREE.Color(COLORS.poison), 0.4)
             : originalColor;
 
         if (elapsed > FLASH_DURATION) {
@@ -129,7 +132,7 @@ export function updatePoisonVisuals(
 
         if (isPoisoned) {
             // Apply green poison tint
-            const poisonColor = new THREE.Color(originalColor).lerp(new THREE.Color("#4a7c4a"), 0.4);
+            const poisonColor = new THREE.Color(originalColor).lerp(new THREE.Color(COLORS.poison), 0.4);
             (mesh.material as THREE.MeshStandardMaterial).color.copy(poisonColor);
         } else {
             // Restore original color
@@ -141,10 +144,6 @@ export function updatePoisonVisuals(
 // =============================================================================
 // STATUS EFFECT HELPERS
 // =============================================================================
-
-const POISON_DURATION = 8000;      // 8 seconds
-const POISON_TICK_INTERVAL = 1000; // tick every 1 second
-const POISON_DAMAGE_PER_TICK = 2;  // 2 damage per tick
 
 /**
  * Check if poison should be applied and return whether it will be applied.
@@ -239,7 +238,7 @@ export function processStatusEffects(
                     }));
 
                     hitFlashRef[unit.id] = now;
-                    spawnDamageNumber(scene, unitG.position.x, unitG.position.z, dmg, "#7cba7c", damageTexts);
+                    spawnDamageNumber(scene, unitG.position.x, unitG.position.z, dmg, COLORS.poisonText, damageTexts);
 
                     if (newHp <= 0) {
                         defeatedThisFrame.add(unit.id);
@@ -311,7 +310,7 @@ export function updateProjectiles(
                         hitFlashRef[target.id] = now;
                         hitCount++;
 
-                        spawnDamageNumber(scene, tg.position.x, tg.position.z, dmg, target.team === "player" ? "#f87171" : "#ff6600", damageTexts);
+                        spawnDamageNumber(scene, tg.position.x, tg.position.z, dmg, target.team === "player" ? COLORS.damageEnemy : COLORS.damageNeutral, damageTexts);
 
                         if (newHp <= 0) {
                             defeatedThisFrame.add(target.id);
@@ -322,7 +321,7 @@ export function updateProjectiles(
 
                 if (hitCount > 0) {
                     soundFns.playHit();
-                    addLog(`${attackerData?.name ?? "Unknown"}'s Fireball hits ${hitCount} targets!`, "#ff6600");
+                    addLog(`${attackerData?.name ?? "Unknown"}'s Fireball hits ${hitCount} targets!`, COLORS.damageNeutral);
                 }
 
                 disposeProjectile(scene, proj);
@@ -353,7 +352,7 @@ export function updateProjectiles(
         if (dist < HIT_DETECTION_RADIUS) {
             const attackerData = getUnitStats(attackerUnit);
             const targetData = getUnitStats(targetUnit);
-            const logColor = attackerUnit.team === "player" ? "#4ade80" : "#f87171";
+            const logColor = attackerUnit.team === "player" ? COLORS.damagePlayer : COLORS.damageEnemy;
 
             if (rollHit(attackerData.accuracy)) {
                 const rawDmg = rollDamage(attackerData.damage[0], attackerData.damage[1]);
@@ -380,7 +379,7 @@ export function updateProjectiles(
                 spawnDamageNumber(scene, targetG.position.x, targetG.position.z, dmg, logColor, damageTexts);
 
                 if (applyPoison) {
-                    addLog(`${targetData.name} is poisoned!`, "#7cba7c");
+                    addLog(`${targetData.name} is poisoned!`, COLORS.poisonText);
                 }
 
                 if (newHp <= 0) {
@@ -389,7 +388,7 @@ export function updateProjectiles(
                 }
             } else {
                 soundFns.playMiss();
-                addLog(`${attackerData.name} misses ${targetData.name}.`, "#888");
+                addLog(`${attackerData.name} misses ${targetData.name}.`, "COLORS.logNeutral");
             }
 
             disposeProjectile(scene, proj);
@@ -543,7 +542,7 @@ function executeEnemySwipe(
     if (hitCount > 0) {
         addLog(`${enemyData.name}'s ${skill.name} hits ${hitCount} target${hitCount > 1 ? 's' : ''}!`, "#ff4444");
     } else {
-        addLog(`${enemyData.name}'s ${skill.name} misses!`, "#888");
+        addLog(`${enemyData.name}'s ${skill.name} misses!`, "COLORS.logNeutral");
     }
 
     return true;
@@ -552,8 +551,6 @@ function executeEnemySwipe(
 // =============================================================================
 // MELEE SWING ANIMATION
 // =============================================================================
-
-const SWING_DURATION = 150;
 
 export function spawnSwingIndicator(
     scene: THREE.Scene,
@@ -790,7 +787,7 @@ export function updateUnitAI(
                             setUnits(prev => prev.map(u => u.id === targetU.id ? { ...u, hp: newHp } : u));
                             hitFlashRef[targetU.id] = now;
                             soundFns.playHit();
-                            const dmgColor = isPlayer ? "#4ade80" : "#f87171";
+                            const dmgColor = isPlayer ? COLORS.damagePlayer : COLORS.damageEnemy;
                             addLog(`${data.name} hits ${targetData.name} for ${dmg} damage!`, dmgColor);
                             spawnDamageNumber(scene, targetG.position.x, targetG.position.z, dmg, dmgColor, damageTexts);
 
@@ -800,7 +797,7 @@ export function updateUnitAI(
                             }
                         } else {
                             soundFns.playMiss();
-                            addLog(`${data.name} misses ${targetData.name}.`, "#888");
+                            addLog(`${data.name} misses ${targetData.name}.`, COLORS.logNeutral);
                         }
                     }
                 }

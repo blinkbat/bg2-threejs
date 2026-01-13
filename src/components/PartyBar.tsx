@@ -1,5 +1,6 @@
 import type { Unit, Skill } from "../types";
 import { UNIT_DATA } from "../units";
+import { getHpPercentage, getHpColor } from "../combatMath";
 
 interface PartyBarProps {
     units: Unit[];
@@ -16,8 +17,8 @@ export function PartyBar({ units, selectedIds, onSelect, targetingMode, onTarget
                 const data = UNIT_DATA[unit.id];
                 if (!data) return null;
                 const isSelected = selectedIds.includes(unit.id);
-                const hpPct = (unit.hp / data.maxHp) * 100;
-                const hpColor = hpPct > 50 ? "#22c55e" : hpPct > 25 ? "#eab308" : "#ef4444";
+                const hpPct = getHpPercentage(unit.hp, data.maxHp);
+                const hpColor = getHpColor(hpPct);
 
                 // Determine if this unit is a valid target for the current skill
                 const isValidTarget = targetingMode && targetingMode.skill.targetType === "ally" && unit.hp > 0;

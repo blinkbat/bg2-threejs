@@ -203,10 +203,6 @@ export function createInitialUnits(): Unit[] {
     ];
 }
 
-// Combat helpers
-export const rollDamage = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
-export const rollHit = (accuracy: number) => Math.random() * 100 < accuracy;
-
 // Generate a "basic attack" pseudo-skill for display in UI
 export function getBasicAttackSkill(unitId: number): Skill {
     const data = UNIT_DATA[unitId];

@@ -4,7 +4,11 @@
 
 import * as THREE from "three";
 import type { Unit, Skill, UnitGroup, Projectile, StatusEffect } from "./types";
-import { UNIT_DATA, rollDamage, rollHit, getUnitStats } from "./units";
+import {
+    POISON_DURATION, POISON_TICK_INTERVAL, POISON_DAMAGE_PER_TICK, COLORS
+} from "./constants";
+import { UNIT_DATA, getUnitStats } from "./units";
+import { rollDamage, rollHit } from "./combatMath";
 import { getUnitRadius, isInRange } from "./range";
 import { soundFns } from "./sound";
 import { spawnDamageNumber, handleUnitDefeat } from "./combat";
@@ -70,7 +74,7 @@ export function executeAoeSkill(
         targetPos: { x: targetX, z: targetZ }
     });
 
-    addLog(`${UNIT_DATA[casterId].name} casts ${skill.name}!`, "#ff6600");
+    addLog(`${UNIT_DATA[casterId].name} casts ${skill.name}!`, COLORS.damageNeutral);
     soundFns.playFireball();
 }
 
@@ -102,13 +106,13 @@ export function executeHealSkill(
     });
 
     if (closestAllyId === null) {
-        addLog(`${UNIT_DATA[casterId].name}: No ally at that location!`, "#888");
+        addLog(`${UNIT_DATA[casterId].name}: No ally at that location!`, "COLORS.logNeutral");
         return false;
     }
 
     const targetAlly = unitsStateRef.current.find(u => u.id === closestAllyId);
     if (targetAlly && targetAlly.hp >= UNIT_DATA[targetAlly.id].maxHp) {
-        addLog(`${UNIT_DATA[casterId].name}: ${UNIT_DATA[closestAllyId].name} is at full health!`, "#888");
+        addLog(`${UNIT_DATA[casterId].name}: ${UNIT_DATA[closestAllyId].name} is at full health!`, "COLORS.logNeutral");
         return false;
     }
 
@@ -132,7 +136,7 @@ export function executeHealSkill(
     const healTargetId = closestAllyId;
     setUnits(prev => prev.map(u => u.id === healTargetId ? { ...u, hp: Math.min(targetData.maxHp, u.hp + healAmount) } : u));
 
-    addLog(`${UNIT_DATA[casterId].name} heals ${targetData.name} for ${healAmount}!`, "#22c55e");
+    addLog(`${UNIT_DATA[casterId].name} heals ${targetData.name} for ${healAmount}!`, COLORS.hpHigh);
     soundFns.playHeal();
 
     // Visual effect - green flash
@@ -154,11 +158,6 @@ export function executeHealSkill(
 
     return true;
 }
-
-// Poison constants (must match gameLoop.ts)
-const POISON_DURATION = 8000;
-const POISON_TICK_INTERVAL = 1000;
-const POISON_DAMAGE_PER_TICK = 2;
 
 /**
  * Execute a melee single-target enemy skill (like Poison Dagger)
@@ -188,7 +187,7 @@ export function executeMeleeSkill(
     });
 
     if (closestEnemyId === null) {
-        addLog(`${UNIT_DATA[casterId].name}: No enemy at that location!`, "#888");
+        addLog(`${UNIT_DATA[casterId].name}: No enemy at that location!`, "COLORS.logNeutral");
         return false;
     }
 
@@ -201,7 +200,7 @@ export function executeMeleeSkill(
     // Check if in melee range (hitbox-aware)
     const targetRadius = getUnitRadius(targetEnemy);
     if (!isInRange(casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, targetRadius, skill.range + 0.5)) {
-        addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, "#888");
+        addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, "COLORS.logNeutral");
         return false;
     }
 
@@ -268,11 +267,11 @@ export function executeMeleeSkill(
 
         hitFlashRef.current[closestEnemyId] = now;
         soundFns.playHit();
-        addLog(`${casterData.name}'s ${skill.name} hits ${targetData.name} for ${dmg} damage!`, "#4ade80");
-        spawnDamageNumber(scene, targetG.position.x, targetG.position.z, dmg, "#4ade80", damageTexts.current);
+        addLog(`${casterData.name}'s ${skill.name} hits ${targetData.name} for ${dmg} damage!`, COLORS.damagePlayer);
+        spawnDamageNumber(scene, targetG.position.x, targetG.position.z, dmg, COLORS.damagePlayer, damageTexts.current);
 
         if (applyPoison) {
-            addLog(`${targetData.name} is poisoned!`, "#7cba7c");
+            addLog(`${targetData.name} is poisoned!`, COLORS.poisonText);
         }
 
         // Check for defeat
@@ -281,7 +280,7 @@ export function executeMeleeSkill(
         }
     } else {
         soundFns.playMiss();
-        addLog(`${casterData.name}'s ${skill.name} misses ${targetData.name}.`, "#888");
+        addLog(`${casterData.name}'s ${skill.name} misses ${targetData.name}.`, "COLORS.logNeutral");
     }
 
     return true;
@@ -374,7 +373,7 @@ export function executeTauntSkill(
     if (tauntedCount > 0) {
         addLog(`${casterData.name}'s ${skill.name} taunts ${tauntedCount} enemies!`, "#c0392b");
     } else {
-        addLog(`${casterData.name}'s ${skill.name} echoes... but no enemies are affected.`, "#888");
+        addLog(`${casterData.name}'s ${skill.name} echoes... but no enemies are affected.`, "COLORS.logNeutral");
     }
 
     return true;
@@ -395,7 +394,7 @@ export function executeSkill(
 
     if (!caster || !casterG || caster.hp <= 0) return false;
     if ((caster.mana ?? 0) < skill.manaCost) {
-        ctx.addLog(`${UNIT_DATA[casterId].name}: Not enough mana!`, "#888");
+        ctx.addLog(`${UNIT_DATA[casterId].name}: Not enough mana!`, "COLORS.logNeutral");
         return false;
     }
 

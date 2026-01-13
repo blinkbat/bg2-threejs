@@ -53,7 +53,7 @@ import { HelpModal } from "./components/HelpModal";
 // MAIN COMPONENT
 // =============================================================================
 
-function Game({ onRestart, onShowHelp }: { onRestart: () => void; onShowHelp: () => void }) {
+function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () => void; onShowHelp: () => void; onCloseHelp: () => void; helpOpen: boolean }) {
     // Three.js refs
     const containerRef = useRef<HTMLDivElement>(null);
     const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -109,11 +109,15 @@ function Game({ onRestart, onShowHelp }: { onRestart: () => void; onShowHelp: ()
     const pausedRef = useRef(paused);
     const targetingModeRef = useRef(targetingMode);
     const pauseStartTimeRef = useRef<number | null>(Date.now());
+    const showPanelRef = useRef(showPanel);
+    const helpOpenRef = useRef(helpOpen);
 
     useEffect(() => { selectedRef.current = selectedIds; }, [selectedIds]);
     useEffect(() => { unitsStateRef.current = units; }, [units]);
     useEffect(() => { pausedRef.current = paused; }, [paused]);
     useEffect(() => { targetingModeRef.current = targetingMode; }, [targetingMode]);
+    useEffect(() => { showPanelRef.current = showPanel; }, [showPanel]);
+    useEffect(() => { helpOpenRef.current = helpOpen; }, [helpOpen]);
 
     const addLog = (text: string, color?: string) => setCombatLog(prev => [...prev.slice(-50), { text, color }]);
 
@@ -354,8 +358,17 @@ function Game({ onRestart, onShowHelp }: { onRestart: () => void; onShowHelp: ()
                     doProcessQueue
                 );
             }
-            if (e.code === "Escape" && targetingModeRef.current) {
-                clearTargetingMode(setTargetingMode, rangeIndicatorRef, aoeIndicatorRef);
+            if (e.code === "Escape") {
+                // Priority: help modal > unit panel > targeting mode > deselect all
+                if (helpOpenRef.current) {
+                    onCloseHelp();
+                } else if (showPanelRef.current) {
+                    setShowPanel(false);
+                } else if (targetingModeRef.current) {
+                    clearTargetingMode(setTargetingMode, rangeIndicatorRef, aoeIndicatorRef);
+                } else if (selectedRef.current.length > 0) {
+                    setSelectedIds([]);
+                }
             }
             if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyW", "KeyA", "KeyS", "KeyD"].includes(e.code)) {
                 keysPressed.current.add(e.code);
@@ -383,6 +396,9 @@ function Game({ onRestart, onShowHelp }: { onRestart: () => void; onShowHelp: ()
             e.preventDefault();
             if (targetingModeRef.current) {
                 clearTargetingMode(setTargetingMode, rangeIndicatorRef, aoeIndicatorRef);
+            } else {
+                // Right-click deselects all units
+                setSelectedIds([]);
             }
         });
         renderer.domElement.addEventListener("wheel", onWheel, { passive: false });
@@ -687,7 +703,7 @@ export default function App() {
 
     return (
         <>
-            <Game key={gameKey} onRestart={handleRestart} onShowHelp={() => setShowHelp(true)} />
+            <Game key={gameKey} onRestart={handleRestart} onShowHelp={() => setShowHelp(true)} onCloseHelp={() => setShowHelp(false)} helpOpen={showHelp} />
             {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
         </>
     );
