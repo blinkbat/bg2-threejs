@@ -5,7 +5,7 @@
 import * as THREE from "three";
 import { GRID_SIZE } from "./constants";
 import { candlePositions, mergedObstacles, roomFloors } from "./dungeon";
-import { UNIT_DATA, KOBOLD_STATS, KOBOLD_ARCHER_STATS, OGRE_STATS } from "./units";
+import { getUnitStats } from "./units";
 import type { Unit, UnitGroup, FogTexture } from "./types";
 
 export interface SceneRefs {
@@ -173,10 +173,8 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
 
     units.forEach(unit => {
         const isPlayer = unit.team === "player";
-        const isOgre = unit.id === 200;
-        const isArcher = unit.id >= 150 && unit.id < 200;
-        const data = isPlayer ? UNIT_DATA[unit.id] : (isOgre ? OGRE_STATS : (isArcher ? KOBOLD_ARCHER_STATS : KOBOLD_STATS));
-        const size = isOgre ? OGRE_STATS.size : 1;
+        const data = getUnitStats(unit);
+        const size = (!isPlayer && 'size' in data && data.size) ? data.size : 1;
         const group = new THREE.Group();
 
         const baseInner = 0.35 * size;
@@ -189,7 +187,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         base.position.y = 0.02;
         group.add(base);
 
-        const boxH = isPlayer ? 1 : (isOgre ? 1.8 : 0.6);
+        const boxH = isPlayer ? 1 : (size > 1 ? 1.8 : 0.6);
         const boxW = 0.6 * size;
         const boxMat = new THREE.MeshStandardMaterial({ color: data.color, metalness: 0.5, roughness: 0.5 });
         const box = new THREE.Mesh(new THREE.BoxGeometry(boxW, boxH, boxW), boxMat);

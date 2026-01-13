@@ -4,6 +4,8 @@ import * as THREE from "three";
 // TYPE DEFINITIONS
 // =============================================================================
 
+export type EnemyType = "kobold" | "kobold_archer" | "ogre";
+
 export interface Unit {
     id: number;
     x: number;
@@ -11,6 +13,7 @@ export interface Unit {
     hp: number;
     mana?: number;
     team: "player" | "enemy";
+    enemyType?: EnemyType;  // Only set for enemies
     target: number | null;
     aiEnabled: boolean;
 }
@@ -45,19 +48,7 @@ export interface UnitData {
     attackCooldown: number;  // ms - cooldown for basic attack (also global cooldown)
 }
 
-export interface KoboldStats {
-    name: string;
-    hp: number;
-    maxHp: number;
-    damage: [number, number];
-    accuracy: number;  // hit chance percentage (0-100)
-    armor: number;     // flat damage reduction
-    color: string;
-    aggroRange: number;
-    attackCooldown: number;  // ms - cooldown for basic attack
-}
-
-export interface OgreStats {
+export interface EnemyStats {
     name: string;
     hp: number;
     maxHp: number;
@@ -67,7 +58,11 @@ export interface OgreStats {
     color: string;
     aggroRange: number;
     attackCooldown: number;
-    size: number;  // scale multiplier for mesh/hitbox
+    // Optional for ranged enemies
+    range?: number;
+    projectileColor?: string;
+    // Optional for large enemies
+    size?: number;
 }
 
 export interface Room {

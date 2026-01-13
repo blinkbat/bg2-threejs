@@ -1,4 +1,4 @@
-import type { UnitData, KoboldStats, OgreStats, Unit, Skill } from "./types";
+import type { UnitData, EnemyStats, EnemyType, Unit, Skill } from "./types";
 
 // =============================================================================
 // SKILLS
@@ -40,44 +40,53 @@ export const UNIT_DATA: Record<number, UnitData> = {
     6: { name: "Cleric", class: "Cleric", hp: 30, maxHp: 30, mana: 40, maxMana: 40, damage: [2, 4], accuracy: 60, armor: 2, color: "#ecf0f1", skills: [SKILLS.heal], items: ["Staff"], range: 6, projectileColor: "#ffffaa", attackCooldown: 2500 },
 };
 
-export const KOBOLD_STATS: KoboldStats = {
-    name: "Kobold",
-    hp: 12,
-    maxHp: 12,
-    damage: [1, 4],
-    accuracy: 50,
-    armor: 0,
-    color: "#8B4513",
-    aggroRange: 6,
-    attackCooldown: 2000
+// Enemy stats registry - keyed by EnemyType
+export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
+    kobold: {
+        name: "Kobold",
+        hp: 12,
+        maxHp: 12,
+        damage: [1, 4],
+        accuracy: 50,
+        armor: 0,
+        color: "#8B4513",
+        aggroRange: 6,
+        attackCooldown: 2000
+    },
+    kobold_archer: {
+        name: "Kobold Archer",
+        hp: 10,
+        maxHp: 10,
+        damage: [2, 4],
+        accuracy: 55,
+        armor: 0,
+        color: "#6B4423",
+        aggroRange: 8,
+        attackCooldown: 2500,
+        range: 6,
+        projectileColor: "#8B4513"
+    },
+    ogre: {
+        name: "Ogre",
+        hp: 80,
+        maxHp: 80,
+        damage: [6, 12],
+        accuracy: 60,
+        armor: 3,
+        color: "#556B2F",
+        aggroRange: 8,
+        attackCooldown: 3000,
+        size: 2.0
+    }
 };
 
-export const KOBOLD_ARCHER_STATS: KoboldStats & { range: number; projectileColor: string } = {
-    name: "Kobold Archer",
-    hp: 10,
-    maxHp: 10,
-    damage: [2, 4],
-    accuracy: 55,
-    armor: 0,
-    color: "#6B4423",
-    aggroRange: 8,
-    attackCooldown: 2500,
-    range: 6,
-    projectileColor: "#8B4513"
-};
-
-export const OGRE_STATS: OgreStats = {
-    name: "Ogre",
-    hp: 80,
-    maxHp: 80,
-    damage: [6, 12],
-    accuracy: 60,
-    armor: 3,
-    color: "#556B2F",
-    aggroRange: 8,
-    attackCooldown: 3000,
-    size: 2.0
-};
+// Helper to get stats for any unit
+export function getUnitStats(unit: Unit): UnitData | EnemyStats {
+    if (unit.team === "player") {
+        return UNIT_DATA[unit.id];
+    }
+    return ENEMY_STATS[unit.enemyType!];
+}
 
 // Ogre spawn - center of the map (great hall)
 const ogreSpawn = { x: 20.5, z: 20.5 };
@@ -117,6 +126,7 @@ const koboldArcherSpawns = [
 // Helper to create initial units
 export function createInitialUnits(): Unit[] {
     return [
+        // Player units
         ...Object.keys(UNIT_DATA).map((id, i) => {
             const data = UNIT_DATA[Number(id)];
             return {
@@ -130,32 +140,36 @@ export function createInitialUnits(): Unit[] {
                 aiEnabled: true
             };
         }),
+        // Kobolds
         ...koboldSpawns.map((spawn, i) => ({
             id: 100 + i,
             x: spawn.x,
             z: spawn.z,
-            hp: KOBOLD_STATS.maxHp,
+            hp: ENEMY_STATS.kobold.maxHp,
             team: "enemy" as const,
+            enemyType: "kobold" as const,
             target: null,
             aiEnabled: true
         })),
-        // Kobold Archers - IDs 150+
+        // Kobold Archers
         ...koboldArcherSpawns.map((spawn, i) => ({
             id: 150 + i,
             x: spawn.x,
             z: spawn.z,
-            hp: KOBOLD_ARCHER_STATS.maxHp,
+            hp: ENEMY_STATS.kobold_archer.maxHp,
             team: "enemy" as const,
+            enemyType: "kobold_archer" as const,
             target: null,
             aiEnabled: true
         })),
-        // Ogre in center
+        // Ogre
         {
             id: 200,
             x: ogreSpawn.x,
             z: ogreSpawn.z,
-            hp: OGRE_STATS.maxHp,
+            hp: ENEMY_STATS.ogre.maxHp,
             team: "enemy" as const,
+            enemyType: "ogre" as const,
             target: null,
             aiEnabled: true
         },

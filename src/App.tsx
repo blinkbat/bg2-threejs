@@ -12,7 +12,7 @@ import type { Unit, Skill, CombatLogEntry, SelectionBox, DamageText, UnitGroup, 
 
 // Game Logic
 import { blocked } from "./dungeon";
-import { KOBOLD_STATS, KOBOLD_ARCHER_STATS, OGRE_STATS, createInitialUnits } from "./units";
+import { ENEMY_STATS, createInitialUnits } from "./units";
 import { createScene, updateCamera } from "./scene";
 import { soundFns } from "./sound";
 
@@ -324,7 +324,7 @@ export default function App() {
                             const unitIds = [...selectedRef.current];
                             if (pausedRef.current) {
                                 actionQueueRef.current.push({ type: "attack", unitIds, targetId: id });
-                                const enemyName = id === 200 ? OGRE_STATS.name : (id >= 150 && id < 200 ? KOBOLD_ARCHER_STATS.name : KOBOLD_STATS.name);
+                                const enemyName = clickedUnit.enemyType ? ENEMY_STATS[clickedUnit.enemyType].name : "Enemy";
                                 addLog(`Attack queued on ${enemyName}`, "#888");
                             } else {
                                 executeAttack(unitsRef.current, pathsRef.current, setUnits, unitIds, id);
