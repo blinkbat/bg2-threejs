@@ -134,56 +134,49 @@ const POISON_DURATION = 8000;      // 8 seconds
 const POISON_TICK_INTERVAL = 1000; // tick every 1 second
 const POISON_DAMAGE_PER_TICK = 2;  // 2 damage per tick
 
-function tryApplyPoison(
-    attackerData: EnemyStats,
-    targetUnit: Unit,
+/**
+ * Check if poison should be applied and return whether it will be applied.
+ * Does NOT call setUnits - caller should combine with damage update.
+ */
+function shouldApplyPoison(
+    attackerData: EnemyStats
+): boolean {
+    if (!('poisonChance' in attackerData) || !attackerData.poisonChance) return false;
+    return Math.random() * 100 < attackerData.poisonChance;
+}
+
+/**
+ * Apply poison effect to a unit's status effects array.
+ * Returns the updated statusEffects array.
+ */
+function applyPoisonToUnit(
+    existingEffects: StatusEffect[] | undefined,
     attackerId: number,
-    setUnits: React.Dispatch<React.SetStateAction<Unit[]>>,
-    addLog: (text: string, color?: string) => void,
-    targetName: string,
     now: number
-): void {
-    if (!('poisonChance' in attackerData) || !attackerData.poisonChance) return;
+): StatusEffect[] {
+    const effects = existingEffects || [];
+    const existingPoison = effects.find(e => e.type === "poison");
 
-    // Roll for poison
-    if (Math.random() * 100 >= attackerData.poisonChance) return;
+    if (existingPoison) {
+        // Refresh duration
+        return effects.map(e =>
+            e.type === "poison"
+                ? { ...e, duration: POISON_DURATION, lastTick: now }
+                : e
+        );
+    }
 
-    // Check if already poisoned - refresh duration if so
-    setUnits(prev => prev.map(u => {
-        if (u.id !== targetUnit.id) return u;
+    // Apply new poison
+    const newPoison: StatusEffect = {
+        type: "poison",
+        duration: POISON_DURATION,
+        tickInterval: POISON_TICK_INTERVAL,
+        lastTick: now,
+        damagePerTick: POISON_DAMAGE_PER_TICK,
+        sourceId: attackerId
+    };
 
-        const existingEffects = u.statusEffects || [];
-        const existingPoison = existingEffects.find(e => e.type === "poison");
-
-        if (existingPoison) {
-            // Refresh duration
-            return {
-                ...u,
-                statusEffects: existingEffects.map(e =>
-                    e.type === "poison"
-                        ? { ...e, duration: POISON_DURATION, lastTick: now }
-                        : e
-                )
-            };
-        }
-
-        // Apply new poison
-        const newPoison: StatusEffect = {
-            type: "poison",
-            duration: POISON_DURATION,
-            tickInterval: POISON_TICK_INTERVAL,
-            lastTick: now,
-            damagePerTick: POISON_DAMAGE_PER_TICK,
-            sourceId: attackerId
-        };
-
-        return {
-            ...u,
-            statusEffects: [...existingEffects, newPoison]
-        };
-    }));
-
-    addLog(`${targetName} is poisoned!`, "#7cba7c");
+    return [...effects, newPoison];
 }
 
 export function processStatusEffects(
@@ -299,13 +292,15 @@ export function updateProjectiles(
                         const targetData = getUnitStats(target);
                         const rawDmg = rollDamage(damage[0], damage[1]);
                         const dmg = Math.max(1, rawDmg - targetData.armor);
-                        setUnits(prev => prev.map(u => u.id === target.id ? { ...u, hp: u.hp - dmg } : u));
+                        // Calculate newHp BEFORE setUnits to avoid stale state
+                        const newHp = Math.max(0, target.hp - dmg);
+
+                        setUnits(prev => prev.map(u => u.id === target.id ? { ...u, hp: newHp } : u));
                         hitFlashRef[target.id] = now;
                         hitCount++;
 
                         spawnDamageNumber(scene, tg.position.x, tg.position.z, dmg, target.team === "player" ? "#f87171" : "#ff6600", damageTexts);
 
-                        const newHp = Math.max(0, target.hp - dmg);
                         if (newHp <= 0) {
                             defeatedThisFrame.add(target.id);
                             handleUnitDefeat(target.id, tg, unitsRef, addLog, targetData.name);
@@ -351,19 +346,31 @@ export function updateProjectiles(
             if (rollHit(attackerData.accuracy)) {
                 const rawDmg = rollDamage(attackerData.damage[0], attackerData.damage[1]);
                 const dmg = Math.max(1, rawDmg - targetData.armor);
-                setUnits(prev => prev.map(u => u.id === targetUnit.id ? { ...u, hp: u.hp - dmg } : u));
+                // Calculate newHp BEFORE setUnits to avoid stale state
+                const newHp = Math.max(0, targetUnit.hp - dmg);
+
+                // Check poison before setUnits to combine into single state update
+                const applyPoison = attackerUnit.team === "enemy" && shouldApplyPoison(attackerData as EnemyStats);
+
+                // Single setUnits call for both damage and poison
+                setUnits(prev => prev.map(u => {
+                    if (u.id !== targetUnit.id) return u;
+                    let updated = { ...u, hp: newHp };
+                    if (applyPoison) {
+                        updated.statusEffects = applyPoisonToUnit(u.statusEffects, attackerUnit.id, now);
+                    }
+                    return updated;
+                }));
+
                 hitFlashRef[targetUnit.id] = now;
                 soundFns.playHit();
                 addLog(`${attackerData.name} hits ${targetData.name} for ${dmg} damage!`, logColor);
-
                 spawnDamageNumber(scene, targetG.position.x, targetG.position.z, dmg, logColor, damageTexts);
 
-                // Try to apply poison if attacker is enemy with poisonChance
-                if (attackerUnit.team === "enemy") {
-                    tryApplyPoison(attackerData as EnemyStats, targetUnit, attackerUnit.id, setUnits, addLog, targetData.name, now);
+                if (applyPoison) {
+                    addLog(`${targetData.name} is poisoned!`, "#7cba7c");
                 }
 
-                const newHp = Math.max(0, targetUnit.hp - dmg);
                 if (newHp <= 0) {
                     defeatedThisFrame.add(targetUnit.id);
                     handleUnitDefeat(targetUnit.id, targetG, unitsRef, addLog, targetData.name);
@@ -504,14 +511,15 @@ function executeEnemySwipe(
         if (rollHit(enemyData.accuracy)) {
             const rawDmg = rollDamage(skill.damage[0], skill.damage[1]);
             const dmg = Math.max(1, rawDmg - targetData.armor);
+            // Calculate newHp BEFORE setUnits to avoid stale state
+            const newHp = Math.max(0, target.hp - dmg);
 
-            setUnits(prev => prev.map(u => u.id === target.id ? { ...u, hp: u.hp - dmg } : u));
+            setUnits(prev => prev.map(u => u.id === target.id ? { ...u, hp: newHp } : u));
             hitFlashRef[target.id] = now;
             hitCount++;
 
             spawnDamageNumber(scene, tg.position.x, tg.position.z, dmg, "#ff4444", damageTexts);
 
-            const newHp = Math.max(0, target.hp - dmg);
             if (newHp <= 0) {
                 defeatedThisFrame.add(target.id);
                 handleUnitDefeat(target.id, tg, unitsRef, addLog, targetData.name);
@@ -740,14 +748,16 @@ export function updateUnitAI(
                         if (rollHit(data.accuracy)) {
                             const rawDmg = rollDamage(data.damage[0], data.damage[1]);
                             const dmg = Math.max(1, rawDmg - targetData.armor);
-                            setUnits(prev => prev.map(u => u.id === targetU.id ? { ...u, hp: u.hp - dmg } : u));
+                            // Calculate newHp BEFORE setUnits to avoid stale state
+                            const newHp = Math.max(0, targetU.hp - dmg);
+
+                            setUnits(prev => prev.map(u => u.id === targetU.id ? { ...u, hp: newHp } : u));
                             hitFlashRef[targetU.id] = now;
                             soundFns.playHit();
-                            addLog(`${data.name} hits ${targetData.name} for ${dmg} damage!`, isPlayer ? "#4ade80" : "#f87171");
                             const dmgColor = isPlayer ? "#4ade80" : "#f87171";
+                            addLog(`${data.name} hits ${targetData.name} for ${dmg} damage!`, dmgColor);
                             spawnDamageNumber(scene, targetG.position.x, targetG.position.z, dmg, dmgColor, damageTexts);
 
-                            const newHp = Math.max(0, targetU.hp - dmg);
                             if (newHp <= 0) {
                                 defeatedThisFrame.add(targetU.id);
                                 handleUnitDefeat(targetU.id, targetG, unitsRef, addLog, targetData.name);
