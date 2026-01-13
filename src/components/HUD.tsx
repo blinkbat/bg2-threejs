@@ -7,9 +7,10 @@ interface HUDProps {
     paused: boolean;
     onTogglePause: () => void;
     onShowHelp: () => void;
+    onRestart: () => void;
 }
 
-export function HUD({ aliveEnemies, alivePlayers, paused, onTogglePause, onShowHelp }: HUDProps) {
+export function HUD({ aliveEnemies, alivePlayers, paused, onTogglePause, onShowHelp, onRestart }: HUDProps) {
     const [muted, setMuted] = useState(isMuted());
 
     const handleToggleMute = () => {
@@ -47,7 +48,7 @@ export function HUD({ aliveEnemies, alivePlayers, paused, onTogglePause, onShowH
                 fontWeight: "bold",
                 color: aliveEnemies === 0 ? "#4ade80" : alivePlayers === 0 ? "#f87171" : "#fff"
             }}>
-                {aliveEnemies === 0 ? "Victory!" : alivePlayers === 0 ? "Defeat!" : `Kobolds remaining: ${aliveEnemies}`}
+                {aliveEnemies === 0 ? "Victory!" : alivePlayers === 0 ? "Defeat!" : `Foes remaining: ${aliveEnemies}`}
             </div>
             <div style={{ display: "flex", gap: 8 }}>
                 <button
@@ -64,6 +65,12 @@ export function HUD({ aliveEnemies, alivePlayers, paused, onTogglePause, onShowH
                     style={{ ...buttonStyle, background: muted ? "#7f1d1d" : "#21262d" }}
                 >
                     {muted ? "Unmute" : "Mute"}
+                </button>
+                <button
+                    onClick={onRestart}
+                    style={{ ...buttonStyle, background: "#1e3a5f" }}
+                >
+                    Restart
                 </button>
             </div>
         </div>

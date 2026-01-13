@@ -53,7 +53,7 @@ import { HelpModal } from "./components/HelpModal";
 // MAIN COMPONENT
 // =============================================================================
 
-export default function App() {
+function Game({ onRestart, onShowHelp }: { onRestart: () => void; onShowHelp: () => void }) {
     // Three.js refs
     const containerRef = useRef<HTMLDivElement>(null);
     const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -102,8 +102,7 @@ export default function App() {
     const [skillCooldowns, setSkillCooldowns] = useState<Record<string, { end: number; duration: number }>>({});
     const [targetingMode, setTargetingMode] = useState<{ casterId: number; skill: Skill } | null>(null);
     const [queuedActions, setQueuedActions] = useState<{ unitId: number; skillName: string }[]>([]);
-    const [showHelp, setShowHelp] = useState(true);
-
+    
     // Refs for accessing state in callbacks
     const selectedRef = useRef(selectedIds);
     const unitsStateRef = useRef(units);
@@ -640,7 +639,7 @@ export default function App() {
                     </div>
                 );
             })}
-            <HUD aliveEnemies={aliveEnemies} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onShowHelp={() => setShowHelp(true)} />
+            <HUD aliveEnemies={aliveEnemies} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onShowHelp={onShowHelp} onRestart={onRestart} />
             <CombatLog log={combatLog} />
             <PartyBar
                 units={units}
@@ -672,7 +671,24 @@ export default function App() {
                 paused={paused}
                 queuedSkills={queuedActions.filter(q => q.unitId === selectedIds[0]).map(q => q.skillName)}
             />}
-            {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
         </div>
+    );
+}
+
+// Wrapper component that handles restart by remounting Game
+export default function App() {
+    const [gameKey, setGameKey] = useState(0);
+    const [showHelp, setShowHelp] = useState(true); // Show help on initial page load
+
+    const handleRestart = () => {
+        setGameKey(k => k + 1); // Forces Game to remount, resetting all game state
+        // Note: showHelp and mute state are preserved since they live in this wrapper
+    };
+
+    return (
+        <>
+            <Game key={gameKey} onRestart={handleRestart} onShowHelp={() => setShowHelp(true)} />
+            {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
+        </>
     );
 }

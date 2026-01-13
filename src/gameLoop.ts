@@ -41,6 +41,10 @@ const gaveUpUntil: Record<number, number> = {};
 const lastTargetScan: Record<number, number> = {};
 const TARGET_SCAN_INTERVAL = 500; // ms between target scans
 
+// Track targets that enemies couldn't reach (to avoid repeatedly targeting them)
+const unreachableTargets: Record<number, { targetId: number; until: number }[]> = {};
+const UNREACHABLE_COOLDOWN = 5000; // Don't retry unreachable target for 5 seconds
+
 export interface GameLoopState {
     unitsStateRef: React.RefObject<Unit[]>;
     pausedRef: React.MutableRefObject<boolean>;
@@ -656,7 +660,15 @@ export function updateUnitAI(
         const enemyTeam = isPlayer ? "enemy" : "player";
         let nearest: number | null = null, nearestDist = aggroRange;
 
+        // For enemies, get list of targets they recently couldn't reach
+        const blockedTargets = !isPlayer && unreachableTargets[unit.id]
+            ? unreachableTargets[unit.id].filter(e => e.until > now).map(e => e.targetId)
+            : [];
+
         unitsState.filter(u => u.team === enemyTeam && u.hp > 0).forEach(enemy => {
+            // Skip targets that this enemy recently couldn't reach
+            if (blockedTargets.includes(enemy.id)) return;
+
             const eg = unitsRef[enemy.id];
             if (!eg) return;
             const enemyX = Math.floor(eg.position.x), enemyZ = Math.floor(eg.position.z);
@@ -833,6 +845,25 @@ export function updateUnitAI(
                 delete moveStartRef[unit.id];
                 // Prevent immediate path recalculation - wait 1.5 seconds before retrying
                 gaveUpUntil[unit.id] = now + 1500;
+
+                // For enemies: clear current target and mark it as unreachable so they find a closer one
+                if (!isPlayer && g.userData.attackTarget !== null) {
+                    const failedTargetId = g.userData.attackTarget;
+                    g.userData.attackTarget = null;
+                    // Mark this target as unreachable for a while
+                    if (!unreachableTargets[unit.id]) {
+                        unreachableTargets[unit.id] = [];
+                    }
+                    // Clean up expired entries and add new one
+                    unreachableTargets[unit.id] = unreachableTargets[unit.id]
+                        .filter(entry => entry.until > now);
+                    unreachableTargets[unit.id].push({
+                        targetId: failedTargetId,
+                        until: now + UNREACHABLE_COOLDOWN
+                    });
+                    // Allow immediate target re-scan to find closer target
+                    lastTargetScan[unit.id] = 0;
+                }
             }
         }
     }
