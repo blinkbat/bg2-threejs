@@ -212,10 +212,12 @@ export function processStatusEffects(
                 if (now - effect.lastTick >= effect.tickInterval) {
                     // Deal poison damage
                     const dmg = effect.damagePerTick;
+                    // Calculate newHp BEFORE setUnits to avoid race condition
+                    const newHp = Math.max(0, unit.hp - dmg);
+
                     setUnits(prev => prev.map(u => {
                         if (u.id !== unit.id) return u;
 
-                        const newHp = Math.max(0, u.hp - dmg);
                         const updatedEffects = (u.statusEffects || []).map(e => {
                             if (e.type === "poison") {
                                 const newDuration = e.duration - effect.tickInterval;
@@ -234,7 +236,6 @@ export function processStatusEffects(
                     hitFlashRef[unit.id] = now;
                     spawnDamageNumber(scene, unitG.position.x, unitG.position.z, dmg, "#7cba7c", damageTexts);
 
-                    const newHp = Math.max(0, unit.hp - dmg);
                     if (newHp <= 0) {
                         defeatedThisFrame.add(unit.id);
                         handleUnitDefeat(unit.id, unitG, unitsRef, addLog, data.name);

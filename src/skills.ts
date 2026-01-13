@@ -225,54 +225,56 @@ export function executeMeleeSkill(
     if (rollHit(casterData.accuracy)) {
         const rawDmg = rollDamage(skill.value[0], skill.value[1]);
         const dmg = Math.max(1, rawDmg - targetData.armor);
+        const newHp = Math.max(0, targetEnemy.hp - dmg);
 
-        setUnits(prev => prev.map(u => u.id === closestEnemyId ? { ...u, hp: u.hp - dmg } : u));
-        hitFlashRef.current[closestEnemyId] = now;
-        soundFns.playHit();
-        addLog(`${casterData.name}'s ${skill.name} hits ${targetData.name} for ${dmg} damage!`, "#4ade80");
-        spawnDamageNumber(scene, targetG.position.x, targetG.position.z, dmg, "#4ade80", damageTexts.current);
+        // Check if poison should be applied (roll now, apply in single setUnits)
+        const applyPoison = skill.poisonChance && Math.random() * 100 < skill.poisonChance;
 
-        // Try to apply poison if skill has poisonChance
-        if (skill.poisonChance && Math.random() * 100 < skill.poisonChance) {
-            setUnits(prev => prev.map(u => {
-                if (u.id !== closestEnemyId) return u;
+        // Single setUnits call to avoid stale state issues
+        setUnits(prev => prev.map(u => {
+            if (u.id !== closestEnemyId) return u;
 
+            let updatedUnit = { ...u, hp: newHp };
+
+            // Apply poison if rolled successfully
+            if (applyPoison) {
                 const existingEffects = u.statusEffects || [];
                 const existingPoison = existingEffects.find(e => e.type === "poison");
 
                 if (existingPoison) {
                     // Refresh duration
-                    return {
-                        ...u,
-                        statusEffects: existingEffects.map(e =>
-                            e.type === "poison"
-                                ? { ...e, duration: POISON_DURATION, lastTick: now }
-                                : e
-                        )
+                    updatedUnit.statusEffects = existingEffects.map(e =>
+                        e.type === "poison"
+                            ? { ...e, duration: POISON_DURATION, lastTick: now }
+                            : e
+                    );
+                } else {
+                    // Apply new poison
+                    const newPoison: StatusEffect = {
+                        type: "poison",
+                        duration: POISON_DURATION,
+                        tickInterval: POISON_TICK_INTERVAL,
+                        lastTick: now,
+                        damagePerTick: POISON_DAMAGE_PER_TICK,
+                        sourceId: casterId
                     };
+                    updatedUnit.statusEffects = [...existingEffects, newPoison];
                 }
+            }
 
-                // Apply new poison
-                const newPoison: StatusEffect = {
-                    type: "poison",
-                    duration: POISON_DURATION,
-                    tickInterval: POISON_TICK_INTERVAL,
-                    lastTick: now,
-                    damagePerTick: POISON_DAMAGE_PER_TICK,
-                    sourceId: casterId
-                };
+            return updatedUnit;
+        }));
 
-                return {
-                    ...u,
-                    statusEffects: [...existingEffects, newPoison]
-                };
-            }));
+        hitFlashRef.current[closestEnemyId] = now;
+        soundFns.playHit();
+        addLog(`${casterData.name}'s ${skill.name} hits ${targetData.name} for ${dmg} damage!`, "#4ade80");
+        spawnDamageNumber(scene, targetG.position.x, targetG.position.z, dmg, "#4ade80", damageTexts.current);
 
+        if (applyPoison) {
             addLog(`${targetData.name} is poisoned!`, "#7cba7c");
         }
 
         // Check for defeat
-        const newHp = Math.max(0, targetEnemy.hp - dmg);
         if (newHp <= 0) {
             handleUnitDefeat(closestEnemyId, targetG, unitsRef.current, addLog, targetData.name);
         }

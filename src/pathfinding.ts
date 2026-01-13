@@ -57,7 +57,10 @@ export function updateVisibility(
 // A* PATHFINDING
 // =============================================================================
 
-export function findPath(startX: number, startZ: number, endX: number, endZ: number): { x: number; z: number }[] | null {
+export function findPath(startX: number, startZ: number, endX: number, endZ: number, depth: number = 0): { x: number; z: number }[] | null {
+    // Prevent infinite recursion with depth limit
+    if (depth > 3) return null;
+
     const sx = Math.floor(startX), sz = Math.floor(startZ);
     const ex = Math.floor(endX), ez = Math.floor(endZ);
 
@@ -76,7 +79,7 @@ export function findPath(startX: number, startZ: number, endX: number, endZ: num
                 }
             }
         }
-        if (best) return findPath(startX, startZ, best.x + 0.5, best.z + 0.5);
+        if (best) return findPath(startX, startZ, best.x + 0.5, best.z + 0.5, depth + 1);
         return null;
     }
 
