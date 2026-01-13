@@ -34,6 +34,13 @@ export interface GameLoopRefs {
 // Enemy skill cooldowns - tracked separately from basic attack
 const enemySkillCooldowns: Record<number, number> = {};
 
+// Track when units gave up on a path to prevent immediate retry
+const gaveUpUntil: Record<number, number> = {};
+
+// Throttle target acquisition - don't scan for targets every frame
+const lastTargetScan: Record<number, number> = {};
+const TARGET_SCAN_INTERVAL = 500; // ms between target scans
+
 export interface GameLoopState {
     unitsStateRef: React.RefObject<Unit[]>;
     pausedRef: React.MutableRefObject<boolean>;
@@ -636,12 +643,15 @@ export function updateUnitAI(
         }
     }
 
-    // Find new target
+    // Find new target (throttled to avoid scanning every frame)
     const hasActivePath = pathsRef[unit.id]?.length > 0;
     const isExecutingMoveCommand = hasActivePath && g.userData.attackTarget === null;
     const canAutoTarget = shouldAutoTarget && !targetStillValid && !isExecutingMoveCommand;
+    const lastScan = lastTargetScan[unit.id] || 0;
+    const canScanForTargets = now - lastScan >= TARGET_SCAN_INTERVAL;
 
-    if (canAutoTarget) {
+    if (canAutoTarget && canScanForTargets) {
+        lastTargetScan[unit.id] = now;
         const aggroRange = isPlayer ? 12 : (data as { aggroRange: number }).aggroRange;
         const enemyTeam = isPlayer ? "enemy" : "player";
         let nearest: number | null = null, nearestDist = aggroRange;
@@ -658,13 +668,20 @@ export function updateUnitAI(
         });
 
         if (nearest !== null) {
-            g.userData.attackTarget = nearest;
-            const targetG = unitsRef[nearest];
-            if (targetG) {
-                const path = findPath(g.position.x, g.position.z, targetG.position.x, targetG.position.z);
-                pathsRef[unit.id] = path ? path.slice(1) : [];
-            } else {
-                pathsRef[unit.id] = [];
+            // Don't start new path if we recently gave up (prevents jitter)
+            const recentlyGaveUp = gaveUpUntil[unit.id] && now < gaveUpUntil[unit.id];
+            if (!recentlyGaveUp) {
+                g.userData.attackTarget = nearest;
+                const targetG = unitsRef[nearest];
+                if (targetG) {
+                    const path = findPath(g.position.x, g.position.z, targetG.position.x, targetG.position.z);
+                    pathsRef[unit.id] = path ? path.slice(1) : [];
+                    if (path && path.length > 0) {
+                        moveStartRef[unit.id] = { time: now, x: g.position.x, z: g.position.z };
+                    }
+                } else {
+                    pathsRef[unit.id] = [];
+                }
             }
         }
     }
@@ -770,17 +787,23 @@ export function updateUnitAI(
                 }
                 return;
             } else {
-                // Recalculate path if needed
-                const currentPath = pathsRef[unit.id];
-                let needsNewPath = !currentPath?.length;
-                if (!needsNewPath && currentPath && currentPath.length > 0) {
-                    const pathEnd = currentPath[currentPath.length - 1];
-                    const distToPathEnd = Math.hypot(pathEnd.x - targetX, pathEnd.z - targetZ);
-                    needsNewPath = distToPathEnd > 2;
-                }
-                if (needsNewPath) {
-                    const path = findPath(g.position.x, g.position.z, targetX, targetZ);
-                    pathsRef[unit.id] = path ? path.slice(1) : [];
+                // Recalculate path if needed (but not if we recently gave up)
+                const recentlyGaveUp = gaveUpUntil[unit.id] && now < gaveUpUntil[unit.id];
+                if (!recentlyGaveUp) {
+                    const currentPath = pathsRef[unit.id];
+                    let needsNewPath = !currentPath?.length;
+                    if (!needsNewPath && currentPath && currentPath.length > 0) {
+                        const pathEnd = currentPath[currentPath.length - 1];
+                        const distToPathEnd = Math.hypot(pathEnd.x - targetX, pathEnd.z - targetZ);
+                        needsNewPath = distToPathEnd > 2;
+                    }
+                    if (needsNewPath) {
+                        const path = findPath(g.position.x, g.position.z, targetX, targetZ);
+                        pathsRef[unit.id] = path ? path.slice(1) : [];
+                        if (path && path.length > 0) {
+                            moveStartRef[unit.id] = { time: now, x: g.position.x, z: g.position.z };
+                        }
+                    }
                 }
             }
         } else {
@@ -797,13 +820,19 @@ export function updateUnitAI(
             path.shift();
             moveStartRef[unit.id] = { time: now, x: g.position.x, z: g.position.z };
         }
-        // Stuck timeout
+        // Stuck timeout - give up if barely moving
         const moveStart = moveStartRef[unit.id];
-        if (moveStart && now - moveStart.time > 2000) {
+        if (moveStart) {
+            const timeSinceStart = now - moveStart.time;
             const movedDist = Math.hypot(g.position.x - moveStart.x, g.position.z - moveStart.z);
-            if (movedDist < 0.5) {
+            // Give up faster if really stuck (moved less than 0.2 in 1 second)
+            const isReallyStuck = timeSinceStart > 1000 && movedDist < 0.2;
+            const isStuck = timeSinceStart > 2000 && movedDist < 0.5;
+            if (isReallyStuck || isStuck) {
                 pathsRef[unit.id] = [];
                 delete moveStartRef[unit.id];
+                // Prevent immediate path recalculation - wait 1.5 seconds before retrying
+                gaveUpUntil[unit.id] = now + 1500;
             }
         }
     }
