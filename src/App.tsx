@@ -27,6 +27,7 @@ import {
     processActionQueue,
     buildMoveTargets,
     handleTargetingClick,
+    handleTargetingOnUnit,
     type QueuedAction
 } from "./input";
 import {
@@ -641,7 +642,26 @@ export default function App() {
             })}
             <HUD aliveEnemies={aliveEnemies} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onShowHelp={() => setShowHelp(true)} />
             <CombatLog log={combatLog} />
-            <PartyBar units={units} selectedIds={selectedIds} onSelect={setSelectedIds} />
+            <PartyBar
+                units={units}
+                selectedIds={selectedIds}
+                onSelect={setSelectedIds}
+                targetingMode={targetingMode}
+                onTargetUnit={(targetUnitId) => {
+                    if (!targetingMode || !sceneRef.current) return;
+                    const skillCtx = getSkillContext(sceneRef.current);
+                    handleTargetingOnUnit(
+                        targetUnitId,
+                        targetingMode,
+                        { actionCooldownRef, actionQueueRef, rangeIndicatorRef, aoeIndicatorRef },
+                        { unitsStateRef: unitsStateRef as React.RefObject<Unit[]>, pausedRef },
+                        { setTargetingMode, setQueuedActions },
+                        unitsRef.current,
+                        skillCtx,
+                        addLog
+                    );
+                }}
+            />
             {showPanel && selectedIds.length === 1 && <UnitPanel
                 unitId={selectedIds[0]}
                 units={units}

@@ -330,3 +330,93 @@ export function handleTargetingClick(
     clearTargetingMode(setters.setTargetingMode, refs.rangeIndicatorRef, refs.aoeIndicatorRef);
     return true;
 }
+
+/**
+ * Handle targeting a unit directly by ID (e.g., from party bar click)
+ * Used when a unit may be occluded and can't be clicked in the 3D scene
+ */
+export function handleTargetingOnUnit(
+    targetUnitId: number,
+    targetingMode: { casterId: number; skill: Skill },
+    refs: Pick<InputRefs, "actionCooldownRef" | "actionQueueRef" | "rangeIndicatorRef" | "aoeIndicatorRef">,
+    state: Pick<InputState, "unitsStateRef" | "pausedRef">,
+    setters: Pick<InputSetters, "setTargetingMode" | "setQueuedActions">,
+    unitsRef: Record<number, UnitGroup>,
+    skillCtx: SkillExecutionContext,
+    addLog: (text: string, color?: string) => void
+): boolean {
+    const { casterId, skill } = targetingMode;
+    const caster = state.unitsStateRef.current.find(u => u.id === casterId);
+    const casterG = unitsRef[casterId];
+    const targetUnit = state.unitsStateRef.current.find(u => u.id === targetUnitId);
+    const targetG = unitsRef[targetUnitId];
+
+    if (!caster || !casterG || caster.hp <= 0) {
+        clearTargetingMode(setters.setTargetingMode, refs.rangeIndicatorRef, refs.aoeIndicatorRef);
+        return false;
+    }
+
+    if (!targetUnit || !targetG) {
+        addLog(`${UNIT_DATA[casterId].name}: Invalid target!`, "#888");
+        clearTargetingMode(setters.setTargetingMode, refs.rangeIndicatorRef, refs.aoeIndicatorRef);
+        return false;
+    }
+
+    // Validate target type matches skill requirements
+    if (skill.targetType === "ally" && targetUnit.team !== "player") {
+        addLog(`${UNIT_DATA[casterId].name}: Must target an ally!`, "#888");
+        return false;
+    }
+    if (skill.targetType === "enemy" && targetUnit.team !== "enemy") {
+        addLog(`${UNIT_DATA[casterId].name}: Must target an enemy!`, "#888");
+        return false;
+    }
+
+    // Check if target is alive (for heals, allow targeting alive allies; for damage, target must be alive)
+    if (targetUnit.hp <= 0) {
+        addLog(`${UNIT_DATA[casterId].name}: Target is dead!`, "#888");
+        return false;
+    }
+
+    // Use target unit's position
+    const targetX = targetG.position.x;
+    const targetZ = targetG.position.z;
+    const dist = Math.hypot(targetX - casterG.position.x, targetZ - casterG.position.z);
+
+    if (dist > skill.range) {
+        addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, "#888");
+        clearTargetingMode(setters.setTargetingMode, refs.rangeIndicatorRef, refs.aoeIndicatorRef);
+        return true;
+    }
+
+    // Queue when paused - execute immediately otherwise
+    if (state.pausedRef.current) {
+        const alreadyQueued = refs.actionQueueRef.current.some(
+            a => a.type === "skill" && a.casterId === casterId && a.skill.name === skill.name
+        );
+        if (alreadyQueued) {
+            addLog(`${UNIT_DATA[casterId].name}: ${skill.name} already queued!`, "#888");
+            clearTargetingMode(setters.setTargetingMode, refs.rangeIndicatorRef, refs.aoeIndicatorRef);
+            return true;
+        }
+        refs.actionQueueRef.current.push({ type: "skill", casterId, skill, targetX, targetZ });
+        setters.setQueuedActions(prev => [...prev, { unitId: casterId, skillName: skill.name }]);
+        addLog(`${UNIT_DATA[casterId].name} prepares ${skill.name}... (queued)`, "#888");
+        clearTargetingMode(setters.setTargetingMode, refs.rangeIndicatorRef, refs.aoeIndicatorRef);
+        return true;
+    }
+
+    // Check cooldown only when executing immediately (not paused)
+    const now = Date.now();
+    const cooldownEnd = refs.actionCooldownRef.current[casterId] || 0;
+    if (now < cooldownEnd) {
+        const remaining = Math.ceil((cooldownEnd - now) / 1000);
+        addLog(`${UNIT_DATA[casterId].name}: On cooldown (${remaining}s)`, "#888");
+        clearTargetingMode(setters.setTargetingMode, refs.rangeIndicatorRef, refs.aoeIndicatorRef);
+        return true;
+    }
+
+    executeSkill(skillCtx, casterId, skill, targetX, targetZ);
+    clearTargetingMode(setters.setTargetingMode, refs.rangeIndicatorRef, refs.aoeIndicatorRef);
+    return true;
+}
