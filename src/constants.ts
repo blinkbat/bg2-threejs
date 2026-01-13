@@ -2,7 +2,7 @@
 // GAME CONSTANTS
 // =============================================================================
 
-export const GRID_SIZE = 40;
+export const GRID_SIZE = 50;
 export const ATTACK_RANGE = 1.8;
 export const MOVE_SPEED = 0.05;
 export const UNIT_RADIUS = 0.7;
