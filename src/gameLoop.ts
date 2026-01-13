@@ -7,7 +7,14 @@ import type { Unit, UnitData, UnitGroup, DamageText, Projectile, FogTexture, Swi
 import { GRID_SIZE, ATTACK_RANGE, MOVE_SPEED, UNIT_RADIUS, HIT_DETECTION_RADIUS, FLASH_DURATION } from "./constants";
 import { blocked } from "./dungeon";
 import { findPath, updateVisibility } from "./pathfinding";
-import { UNIT_DATA, KOBOLD_STATS, rollDamage, rollHit } from "./units";
+import { UNIT_DATA, KOBOLD_STATS, KOBOLD_ARCHER_STATS, OGRE_STATS, rollDamage, rollHit } from "./units";
+
+// Helper to get enemy stats by ID
+function getEnemyStats(unitId: number) {
+    if (unitId === 200) return OGRE_STATS;
+    if (unitId >= 150 && unitId < 200) return KOBOLD_ARCHER_STATS;
+    return KOBOLD_STATS;
+}
 import { spawnDamageNumber, handleUnitDefeat } from "./combat";
 import { soundFns } from "./sound";
 import { disposeBasicMesh, disposeTexturedMesh } from "./disposal";
@@ -137,7 +144,7 @@ export function updateProjectiles(
                     const targetDist = Math.hypot(tg.position.x - targetPos.x, tg.position.z - targetPos.z);
                     if (targetDist <= aoeRadius) {
                         const isPlayer = target.team === "player";
-                        const targetData = isPlayer ? UNIT_DATA[target.id] : KOBOLD_STATS;
+                        const targetData = isPlayer ? UNIT_DATA[target.id] : getEnemyStats(target.id);
                         const rawDmg = rollDamage(damage[0], damage[1]);
                         const dmg = Math.max(1, rawDmg - targetData.armor);
                         setUnits(prev => prev.map(u => u.id === target.id ? { ...u, hp: u.hp - dmg } : u));
@@ -185,8 +192,10 @@ export function updateProjectiles(
         const dist = Math.hypot(dx, dz);
 
         if (dist < HIT_DETECTION_RADIUS) {
-            const attackerData = UNIT_DATA[proj.attackerId];
-            const targetData = targetUnit.team === "player" ? UNIT_DATA[targetUnit.id] : KOBOLD_STATS;
+            const attackerIsPlayer = attackerUnit.team === "player";
+            const attackerData = attackerIsPlayer ? UNIT_DATA[proj.attackerId] : getEnemyStats(proj.attackerId);
+            const targetData = targetUnit.team === "player" ? UNIT_DATA[targetUnit.id] : getEnemyStats(targetUnit.id);
+            const logColor = attackerIsPlayer ? "#4ade80" : "#f87171";
 
             if (rollHit(attackerData.accuracy)) {
                 const rawDmg = rollDamage(attackerData.damage[0], attackerData.damage[1]);
@@ -194,9 +203,9 @@ export function updateProjectiles(
                 setUnits(prev => prev.map(u => u.id === targetUnit.id ? { ...u, hp: u.hp - dmg } : u));
                 hitFlashRef[targetUnit.id] = now;
                 soundFns.playHit();
-                addLog(`${attackerData.name} hits ${targetData.name} for ${dmg} damage!`, "#4ade80");
+                addLog(`${attackerData.name} hits ${targetData.name} for ${dmg} damage!`, logColor);
 
-                spawnDamageNumber(scene, targetG.position.x, targetG.position.z, dmg, "#4ade80", damageTexts);
+                spawnDamageNumber(scene, targetG.position.x, targetG.position.z, dmg, logColor, damageTexts);
 
                 const newHp = Math.max(0, targetUnit.hp - dmg);
                 if (newHp <= 0) {
@@ -337,7 +346,7 @@ export function updateUnitAI(
     defeatedThisFrame: Set<number>
 ): void {
     const isPlayer = unit.team === "player";
-    const data = isPlayer ? UNIT_DATA[unit.id] : KOBOLD_STATS;
+    const data = isPlayer ? UNIT_DATA[unit.id] : getEnemyStats(unit.id);
 
     // AI targeting
     const shouldAutoTarget = isPlayer ? unit.aiEnabled : true;
@@ -359,7 +368,7 @@ export function updateUnitAI(
     const canAutoTarget = shouldAutoTarget && !targetStillValid && !isExecutingMoveCommand;
 
     if (canAutoTarget) {
-        const aggroRange = isPlayer ? 12 : KOBOLD_STATS.aggroRange;
+        const aggroRange = isPlayer ? 12 : getEnemyStats(unit.id).aggroRange;
         const enemyTeam = isPlayer ? "enemy" : "player";
         let nearest: number | null = null, nearestDist = aggroRange;
 
@@ -396,8 +405,8 @@ export function updateUnitAI(
             targetX = targetG.position.x;
             targetZ = targetG.position.z;
             const dist = Math.hypot(targetX - g.position.x, targetZ - g.position.z);
-            const isRanged = isPlayer && 'range' in data && data.range !== undefined;
-            const unitRange = isRanged ? (data as UnitData).range! : ATTACK_RANGE;
+            const isRanged = 'range' in data && data.range !== undefined;
+            const unitRange = isRanged ? (data as { range: number }).range : ATTACK_RANGE;
 
             if (dist <= unitRange && pathsRef[unit.id]?.length > 0) {
                 pathsRef[unit.id] = [];
@@ -416,11 +425,10 @@ export function updateUnitAI(
                         setSkillCooldowns(prev => ({ ...prev, ...skillCooldownUpdates }));
                     }
 
-                    if (isRanged && (data as UnitData).projectileColor) {
-                        const rangedData = data as UnitData;
+                    if (isRanged && 'projectileColor' in data && data.projectileColor) {
                         const projectile = new THREE.Mesh(
                             new THREE.SphereGeometry(0.1, 8, 8),
-                            new THREE.MeshBasicMaterial({ color: rangedData.projectileColor })
+                            new THREE.MeshBasicMaterial({ color: data.projectileColor as string })
                         );
                         projectile.position.set(g.position.x, 0.7, g.position.z);
                         scene.add(projectile);
@@ -428,7 +436,7 @@ export function updateUnitAI(
                         soundFns.playAttack();
                     } else {
                         // Melee attack
-                        const targetData = targetU.team === "player" ? UNIT_DATA[targetU.id] : KOBOLD_STATS;
+                        const targetData = targetU.team === "player" ? UNIT_DATA[targetU.id] : getEnemyStats(targetU.id);
                         spawnSwingIndicator(scene, g, targetG, isPlayer, swingAnimations, now);
 
                         if (rollHit(data.accuracy)) {
@@ -557,7 +565,8 @@ export function updateHpBarPositions(
         const g = unitsRef[u.id];
         if (!g) return;
         const isPlayer = u.team === "player";
-        const boxH = isPlayer ? 1 : 0.6;
+        const isOgre = u.id === 200;
+        const boxH = isPlayer ? 1 : (isOgre ? 1.8 : 0.6);
         const worldPos = new THREE.Vector3(g.position.x, boxH + 0.4, g.position.z);
         worldPos.project(camera);
         const x = (worldPos.x * 0.5 + 0.5) * rendererRect.width;

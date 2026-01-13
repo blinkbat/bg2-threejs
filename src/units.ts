@@ -1,4 +1,4 @@
-import type { UnitData, KoboldStats, Unit, Skill } from "./types";
+import type { UnitData, KoboldStats, OgreStats, Unit, Skill } from "./types";
 
 // =============================================================================
 // SKILLS
@@ -52,24 +52,66 @@ export const KOBOLD_STATS: KoboldStats = {
     attackCooldown: 2000
 };
 
+export const KOBOLD_ARCHER_STATS: KoboldStats & { range: number; projectileColor: string } = {
+    name: "Kobold Archer",
+    hp: 10,
+    maxHp: 10,
+    damage: [2, 4],
+    accuracy: 55,
+    armor: 0,
+    color: "#6B4423",
+    aggroRange: 8,
+    attackCooldown: 2500,
+    range: 6,
+    projectileColor: "#8B4513"
+};
+
+export const OGRE_STATS: OgreStats = {
+    name: "Ogre",
+    hp: 80,
+    maxHp: 80,
+    damage: [6, 12],
+    accuracy: 60,
+    armor: 3,
+    color: "#556B2F",
+    aggroRange: 8,
+    attackCooldown: 3000,
+    size: 2.0
+};
+
+// Ogre spawn - center of the map (great hall)
+const ogreSpawn = { x: 20.5, z: 20.5 };
+
 // Kobold spawn locations across the dungeon
 const koboldSpawns = [
     // Room D - kobold lair (NE) - 4 kobolds
     { x: 30.5, z: 30.5 }, { x: 32.5, z: 30.5 }, { x: 30.5, z: 32.5 }, { x: 32.5, z: 32.5 },
     // Room E - central great hall - 3 kobolds
-    { x: 18.5, z: 18.5 }, { x: 20.5, z: 20.5 }, { x: 22.5, z: 18.5 },
+    { x: 18.5, z: 18.5 }, { x: 22.5, z: 18.5 }, { x: 22.5, z: 22.5 },
     // Room B - NW - 2 kobolds
     { x: 4.5, z: 28.5 }, { x: 6.5, z: 28.5 },
     // Room C - SE - 3 kobolds
     { x: 31.5, z: 4.5 }, { x: 33.5, z: 4.5 }, { x: 32.5, z: 6.5 },
     // Room F - S middle - 2 kobolds
     { x: 17.5, z: 4.5 }, { x: 19.5, z: 4.5 },
-    // Room G - W middle - 2 kobolds
-    { x: 4.5, z: 17.5 }, { x: 4.5, z: 19.5 },
-    // Room H - E middle - 2 kobolds
-    { x: 33.5, z: 17.5 }, { x: 33.5, z: 19.5 },
+    // Room G - W middle - 1 kobold (archer added separately)
+    { x: 4.5, z: 17.5 },
+    // Room H - E middle - 1 kobold (archer added separately)
+    { x: 33.5, z: 17.5 },
     // Room I - N middle - 2 kobolds
     { x: 17.5, z: 34.5 }, { x: 19.5, z: 34.5 },
+];
+
+// Kobold Archer spawns - in the side rooms
+const koboldArcherSpawns = [
+    // Room G - W middle
+    { x: 4.5, z: 19.5 },
+    // Room H - E middle
+    { x: 33.5, z: 19.5 },
+    // Room B - NW (one archer in back)
+    { x: 4.5, z: 30.5 },
+    // Room C - SE (one archer in back)
+    { x: 34.5, z: 6.5 },
 ];
 
 // Helper to create initial units
@@ -97,6 +139,26 @@ export function createInitialUnits(): Unit[] {
             target: null,
             aiEnabled: true
         })),
+        // Kobold Archers - IDs 150+
+        ...koboldArcherSpawns.map((spawn, i) => ({
+            id: 150 + i,
+            x: spawn.x,
+            z: spawn.z,
+            hp: KOBOLD_ARCHER_STATS.maxHp,
+            team: "enemy" as const,
+            target: null,
+            aiEnabled: true
+        })),
+        // Ogre in center
+        {
+            id: 200,
+            x: ogreSpawn.x,
+            z: ogreSpawn.z,
+            hp: OGRE_STATS.maxHp,
+            team: "enemy" as const,
+            target: null,
+            aiEnabled: true
+        },
     ];
 }
 

@@ -5,7 +5,7 @@
 import * as THREE from "three";
 import { GRID_SIZE } from "./constants";
 import { candlePositions, mergedObstacles, roomFloors } from "./dungeon";
-import { UNIT_DATA, KOBOLD_STATS } from "./units";
+import { UNIT_DATA, KOBOLD_STATS, KOBOLD_ARCHER_STATS, OGRE_STATS } from "./units";
 import type { Unit, UnitGroup, FogTexture } from "./types";
 
 export interface SceneRefs {
@@ -173,28 +173,36 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
 
     units.forEach(unit => {
         const isPlayer = unit.team === "player";
-        const data = isPlayer ? UNIT_DATA[unit.id] : KOBOLD_STATS;
+        const isOgre = unit.id === 200;
+        const isArcher = unit.id >= 150 && unit.id < 200;
+        const data = isPlayer ? UNIT_DATA[unit.id] : (isOgre ? OGRE_STATS : (isArcher ? KOBOLD_ARCHER_STATS : KOBOLD_STATS));
+        const size = isOgre ? OGRE_STATS.size : 1;
         const group = new THREE.Group();
 
+        const baseInner = 0.35 * size;
+        const baseOuter = 0.45 * size;
         const base = new THREE.Mesh(
-            new THREE.RingGeometry(0.35, 0.45, 32),
+            new THREE.RingGeometry(baseInner, baseOuter, 32),
             new THREE.MeshBasicMaterial({ color: isPlayer ? "#444" : "#660000", side: THREE.DoubleSide, transparent: true, opacity: 0.5 })
         );
         base.rotation.x = -Math.PI / 2;
         base.position.y = 0.02;
         group.add(base);
 
-        const boxH = isPlayer ? 1 : 0.6;
+        const boxH = isPlayer ? 1 : (isOgre ? 1.8 : 0.6);
+        const boxW = 0.6 * size;
         const boxMat = new THREE.MeshStandardMaterial({ color: data.color, metalness: 0.5, roughness: 0.5 });
-        const box = new THREE.Mesh(new THREE.BoxGeometry(0.6, boxH, 0.6), boxMat);
+        const box = new THREE.Mesh(new THREE.BoxGeometry(boxW, boxH, boxW), boxMat);
         box.position.y = boxH / 2;
         box.userData.unitId = unit.id;
         group.add(box);
         unitMeshes[unit.id] = box;
         unitOriginalColors[unit.id] = new THREE.Color(data.color);
 
+        const selInner = 0.5 * size;
+        const selOuter = 0.55 * size;
         const sel = new THREE.Mesh(
-            new THREE.RingGeometry(0.5, 0.55, 32),
+            new THREE.RingGeometry(selInner, selOuter, 32),
             new THREE.MeshBasicMaterial({ color: "#00ff00", side: THREE.DoubleSide })
         );
         sel.rotation.x = -Math.PI / 2;

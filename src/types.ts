@@ -57,6 +57,19 @@ export interface KoboldStats {
     attackCooldown: number;  // ms - cooldown for basic attack
 }
 
+export interface OgreStats {
+    name: string;
+    hp: number;
+    maxHp: number;
+    damage: [number, number];
+    accuracy: number;
+    armor: number;
+    color: string;
+    aggroRange: number;
+    attackCooldown: number;
+    size: number;  // scale multiplier for mesh/hitbox
+}
+
 export interface Room {
     x: number;
     z: number;
