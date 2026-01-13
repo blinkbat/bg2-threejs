@@ -4,7 +4,8 @@
 
 import * as THREE from "three";
 import type { Unit, UnitData, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation, StatusEffect, EnemyStats, EnemySkill } from "./types";
-import { GRID_SIZE, ATTACK_RANGE, MOVE_SPEED, UNIT_RADIUS, HIT_DETECTION_RADIUS, FLASH_DURATION } from "./constants";
+import { GRID_SIZE, ATTACK_RANGE, MOVE_SPEED, HIT_DETECTION_RADIUS, FLASH_DURATION } from "./constants";
+import { getUnitRadius, isInRange } from "./range";
 import { blocked } from "./dungeon";
 import { findPath, updateVisibility } from "./pathfinding";
 import { getUnitStats, rollDamage, rollHit } from "./units";
@@ -461,8 +462,9 @@ function executeEnemySwipe(
     unitsState.filter(u => u.team === "player" && u.hp > 0 && !defeatedThisFrame.has(u.id)).forEach(target => {
         const tg = unitsRef[target.id];
         if (!tg) return;
-        const dist = Math.hypot(tg.position.x - g.position.x, tg.position.z - g.position.z);
-        if (dist <= skill.range) {
+        const targetRadius = getUnitRadius(target);
+        if (isInRange(g.position.x, g.position.z, tg.position.x, tg.position.z, targetRadius, skill.range)) {
+            const dist = Math.hypot(tg.position.x - g.position.x, tg.position.z - g.position.z);
             targets.push({ unit: target, group: tg, dist });
         }
     });
@@ -707,15 +709,18 @@ export function updateUnitAI(
         if (targetG && targetU && targetU.hp > 0) {
             targetX = targetG.position.x;
             targetZ = targetG.position.z;
-            const dist = Math.hypot(targetX - g.position.x, targetZ - g.position.z);
             const isRanged = 'range' in data && data.range !== undefined;
             const unitRange = isRanged ? (data as { range: number }).range : ATTACK_RANGE;
 
-            if (dist <= unitRange && pathsRef[unit.id]?.length > 0) {
+            // Use hitbox-aware range: if closest edge of target is in range, we can attack
+            const targetRadius = getUnitRadius(targetU);
+            const inAttackRange = isInRange(g.position.x, g.position.z, targetX, targetZ, targetRadius, unitRange);
+
+            if (inAttackRange && pathsRef[unit.id]?.length > 0) {
                 pathsRef[unit.id] = [];
             }
 
-            if (dist <= unitRange) {
+            if (inAttackRange) {
                 const cooldownEnd = actionCooldownRef[unit.id] || 0;
                 if (now >= cooldownEnd) {
                     // Check if enemy has a skill and it's ready
@@ -723,15 +728,17 @@ export function updateUnitAI(
                         const skill = data.skill;
                         const skillCooldownEnd = enemySkillCooldowns[unit.id] || 0;
 
-                        // Use skill if: cooldown ready AND targets in range
-                        if (now >= skillCooldownEnd && dist <= skill.range) {
-                            // Count potential targets
+                        // Use skill if: cooldown ready AND targets in range (hitbox-aware)
+                        const inSkillRange = isInRange(g.position.x, g.position.z, targetX, targetZ, targetRadius, skill.range);
+                        if (now >= skillCooldownEnd && inSkillRange) {
+                            // Count potential targets (using hitbox-aware range)
                             const potentialTargets = unitsState.filter(u =>
                                 u.team === "player" && u.hp > 0 && !defeatedThisFrame.has(u.id)
                             ).filter(u => {
                                 const tg = unitsRef[u.id];
                                 if (!tg) return false;
-                                return Math.hypot(tg.position.x - g.position.x, tg.position.z - g.position.z) <= skill.range;
+                                const uRadius = getUnitRadius(u);
+                                return isInRange(g.position.x, g.position.z, tg.position.x, tg.position.z, uRadius, skill.range);
                             });
 
                             // Use skill if there are 2+ targets, or randomly with 1 target
@@ -877,26 +884,36 @@ export function updateUnitAI(
         let desiredX = dx / distToTarget, desiredZ = dz / distToTarget;
         let avoidX = 0, avoidZ = 0;
 
+        const myRadius = getUnitRadius(unit);
         Object.entries(unitsRef).forEach(([otherId, otherG]) => {
             if (String(unit.id) === otherId) return;
             const otherU = unitsState.find(u => u.id === Number(otherId));
             if (!otherU || otherU.hp <= 0) return;
+            const otherRadius = getUnitRadius(otherU);
+            const combinedRadius = myRadius + otherRadius;
             const ox = otherG.position.x - g.position.x, oz = otherG.position.z - g.position.z;
             const oDist = Math.hypot(ox, oz);
-            if (oDist < UNIT_RADIUS * 4 && oDist > 0.01) {
+
+            if (oDist < combinedRadius * 1.5 && oDist > 0.01) {
+                // Check if this unit is roughly in our path (dot product > 0 means ahead of us)
                 const dot = (ox * desiredX + oz * desiredZ) / oDist;
-                if (dot > 0) {
-                    const cross = desiredX * oz - desiredZ * ox;
-                    const perpX = cross > 0 ? -desiredZ : desiredZ;
-                    const perpZ = cross > 0 ? desiredX : -desiredX;
-                    const strength = (UNIT_RADIUS * 4 - oDist) / (UNIT_RADIUS * 4);
-                    avoidX += perpX * strength * 2;
-                    avoidZ += perpZ * strength * 2;
+
+                // Hard separation when overlapping - push directly away
+                if (oDist < combinedRadius) {
+                    const sepStrength = (combinedRadius - oDist) / combinedRadius;
+                    avoidX -= (ox / oDist) * sepStrength * 2;
+                    avoidZ -= (oz / oDist) * sepStrength * 2;
                 }
-                if (oDist < UNIT_RADIUS * 2.2) {
-                    const sepStrength = (UNIT_RADIUS * 2.2 - oDist) / (UNIT_RADIUS * 2);
-                    avoidX -= (ox / oDist) * sepStrength * 3;
-                    avoidZ -= (oz / oDist) * sepStrength * 3;
+                // Steering when unit is ahead and close - use unit ID to pick consistent side
+                else if (dot > 0.3) {
+                    const steerStrength = (combinedRadius * 1.5 - oDist) / (combinedRadius * 0.5);
+                    // Use XOR of unit IDs to determine which unit steers which way
+                    // This prevents both units from steering the same direction
+                    const steerRight = (unit.id ^ Number(otherId)) % 2 === 0;
+                    const perpX = steerRight ? -desiredZ : desiredZ;
+                    const perpZ = steerRight ? desiredX : -desiredX;
+                    avoidX += perpX * steerStrength * 0.5;
+                    avoidZ += perpZ * steerStrength * 0.5;
                 }
             }
         });

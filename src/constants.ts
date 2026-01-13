@@ -5,7 +5,7 @@
 export const GRID_SIZE = 50;
 export const ATTACK_RANGE = 1.8;
 export const MOVE_SPEED = 0.05;
-export const UNIT_RADIUS = 0.7;
+export const DEFAULT_UNIT_RADIUS = 0.7;
 export const VISION_RADIUS = 10;
 export const PAN_SPEED = 0.4;
 

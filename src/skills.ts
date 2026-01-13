@@ -5,6 +5,7 @@
 import * as THREE from "three";
 import type { Unit, Skill, UnitGroup, Projectile, StatusEffect } from "./types";
 import { UNIT_DATA, rollDamage, rollHit, getUnitStats } from "./units";
+import { getUnitRadius, isInRange } from "./range";
 import { soundFns } from "./sound";
 import { spawnDamageNumber, handleUnitDefeat } from "./combat";
 
@@ -197,9 +198,9 @@ export function executeMeleeSkill(
 
     if (!casterG || !targetG || !targetEnemy) return false;
 
-    // Check if in melee range
-    const dist = Math.hypot(casterG.position.x - targetG.position.x, casterG.position.z - targetG.position.z);
-    if (dist > skill.range + 0.5) {
+    // Check if in melee range (hitbox-aware)
+    const targetRadius = getUnitRadius(targetEnemy);
+    if (!isInRange(casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, targetRadius, skill.range + 0.5)) {
         addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, "#888");
         return false;
     }
@@ -324,8 +325,9 @@ export function executeTauntSkill(
         const enemyG = unitsRef.current[enemy.id];
         if (!enemyG) return;
 
-        const dist = Math.hypot(casterG.position.x - enemyG.position.x, casterG.position.z - enemyG.position.z);
-        if (dist <= skill.range) {
+        // Use hitbox-aware range
+        const enemyRadius = getUnitRadius(enemy);
+        if (isInRange(casterG.position.x, casterG.position.z, enemyG.position.x, enemyG.position.z, enemyRadius, skill.range)) {
             // Roll to taunt
             if (Math.random() * 100 < tauntChance) {
                 // Force this enemy to target the caster

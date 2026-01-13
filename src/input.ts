@@ -5,6 +5,7 @@
 import * as THREE from "three";
 import type { Unit, Skill, UnitGroup, SelectionBox } from "./types";
 import { GRID_SIZE, FORMATION_SPACING } from "./constants";
+import { getUnitRadius, isInRange } from "./range";
 import { findPath } from "./pathfinding";
 import { UNIT_DATA } from "./units";
 import { soundFns } from "./sound";
@@ -381,9 +382,10 @@ export function handleTargetingOnUnit(
     // Use target unit's position
     const targetX = targetG.position.x;
     const targetZ = targetG.position.z;
-    const dist = Math.hypot(targetX - casterG.position.x, targetZ - casterG.position.z);
 
-    if (dist > skill.range) {
+    // Range check: if any part of target's hitbox is in range, allow targeting
+    const targetRadius = getUnitRadius(targetUnit);
+    if (!isInRange(casterG.position.x, casterG.position.z, targetX, targetZ, targetRadius, skill.range)) {
         addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, "#888");
         clearTargetingMode(setters.setTargetingMode, refs.rangeIndicatorRef, refs.aoeIndicatorRef);
         return true;

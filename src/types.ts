@@ -63,6 +63,7 @@ export interface UnitData {
     range?: number;
     projectileColor?: string;
     attackCooldown: number;  // ms - cooldown for basic attack (also global cooldown)
+    size?: number;  // hitbox size multiplier (default 1)
 }
 
 export interface EnemySkill {
