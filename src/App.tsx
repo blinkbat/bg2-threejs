@@ -18,17 +18,15 @@ import { soundFns } from "./audio/sound";
 
 // Extracted modules
 import { clearTargetingMode, executeSkill, type SkillExecutionContext } from "./combat/skills";
-import { disposeGeometry } from "./rendering/disposal";
 import {
     togglePause,
-    executeMove,
-    executeAttack,
     getUnitsInBox,
     processActionQueue,
     buildMoveTargets,
     handleTargetingClick,
     handleTargetingOnUnit,
-    type QueuedAction
+    setupTargetingMode,
+    type ActionQueue
 } from "./input";
 import {
     updateDamageTexts,
@@ -71,6 +69,7 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
     const cameraOffset = useRef({ x: 6, z: 6 });
     const zoomLevel = useRef(10);
     const isDragging = useRef(false);
+    const didPan = useRef(false);
     const keysPressed = useRef<Set<string>>(new Set());
     const isBoxSel = useRef(false);
     const boxStart = useRef({ x: 0, y: 0 });
@@ -87,8 +86,8 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
     const rangeIndicatorRef = useRef<THREE.Mesh | null>(null);
     const aoeIndicatorRef = useRef<THREE.Mesh | null>(null);
 
-    // Action queue
-    const actionQueueRef = useRef<QueuedAction[]>([]);
+    // Action queue (per-unit: last action wins)
+    const actionQueueRef = useRef<ActionQueue>({});
     const processActionQueueRef = useRef<() => void>(() => {});
 
     // React state
@@ -191,6 +190,7 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
         const onMouseDown = (e: MouseEvent) => {
             if (e.button === 2) {
                 isDragging.current = true;
+                didPan.current = false;
                 lastMouse.current = { x: e.clientX, y: e.clientY };
             } else if (e.button === 0) {
                 const rect = renderer.domElement.getBoundingClientRect();
@@ -217,6 +217,7 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
         const onMouseMove = (e: MouseEvent) => {
             if (isDragging.current) {
                 const dx = e.clientX - lastMouse.current.x, dy = e.clientY - lastMouse.current.y;
+                if (dx !== 0 || dy !== 0) didPan.current = true;
                 cameraOffset.current.x -= (dx + dy) * 0.03;
                 cameraOffset.current.z -= (dy - dx) * 0.03;
                 cameraOffset.current.x = Math.max(0, Math.min(GRID_SIZE, cameraOffset.current.x));
@@ -277,11 +278,12 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
 
                             const moveTargets = buildMoveTargets(selectedRef.current, unitsStateRef.current, gx, gz);
 
+                            // Queue move for each unit (per-unit queue, last action wins)
+                            moveTargets.forEach(t => {
+                                actionQueueRef.current[t.id] = { type: "move", targetX: t.x, targetZ: t.z };
+                            });
                             if (pausedRef.current) {
-                                actionQueueRef.current.push({ type: "move", unitIds: moveTargets.map(t => t.id), targets: moveTargets });
                                 addLog(`Move queued for ${moveTargets.length} unit(s)`, "#888");
-                            } else {
-                                executeMove(unitsRef.current, pathsRef.current, moveStartRef.current, setUnits, moveTargets);
                             }
                             break;
                         }
@@ -329,13 +331,13 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
                         const id = o.userData.unitId as number;
                         const clickedUnit = unitsStateRef.current.find(u => u.id === id);
                         if (clickedUnit && clickedUnit.team === "enemy" && clickedUnit.hp > 0 && selectedRef.current.length > 0) {
-                            const unitIds = [...selectedRef.current];
+                            // Queue attack for each selected unit (per-unit queue, last action wins)
+                            selectedRef.current.forEach(uid => {
+                                actionQueueRef.current[uid] = { type: "attack", targetId: id };
+                            });
                             if (pausedRef.current) {
-                                actionQueueRef.current.push({ type: "attack", unitIds, targetId: id });
                                 const enemyName = clickedUnit.enemyType ? ENEMY_STATS[clickedUnit.enemyType].name : "Enemy";
                                 addLog(`Attack queued on ${enemyName}`, "#888");
-                            } else {
-                                executeAttack(unitsRef.current, pathsRef.current, setUnits, unitIds, id);
                             }
                             return;
                         } else if (clickedUnit && clickedUnit.team === "player") {
@@ -394,6 +396,8 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
         renderer.domElement.addEventListener("mouseup", onMouseUp);
         renderer.domElement.addEventListener("contextmenu", (e) => {
             e.preventDefault();
+            // Don't deselect if we were panning
+            if (didPan.current) return;
             if (targetingModeRef.current) {
                 clearTargetingMode(setTargetingMode, rangeIndicatorRef, aoeIndicatorRef);
             } else {
@@ -509,6 +513,15 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
 
             if (moveMarkerRef.current?.visible) moveMarkerRef.current.rotation.z += 0.05;
 
+            // Update range indicator to follow caster during targeting mode
+            if (targetingModeRef.current && rangeIndicatorRef.current?.visible) {
+                const casterG = unitsRef.current[targetingModeRef.current.casterId];
+                if (casterG) {
+                    rangeIndicatorRef.current.position.x = casterG.position.x;
+                    rangeIndicatorRef.current.position.z = casterG.position.z;
+                }
+            }
+
             // HP bar positions
             const rect = renderer.domElement.getBoundingClientRect();
             setHpBarPositions(updateHpBarPositions(currentUnits, unitsRef.current, camera, rect, zoomLevel.current));
@@ -565,28 +578,21 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
             const skillCtx = getSkillContext(sceneRef.current);
             const cooldownEnd = actionCooldownRef.current[casterId] || 0;
 
-            if (paused) {
-                // Queue the skill during pause
-                actionQueueRef.current.push({
+            if (paused || Date.now() < cooldownEnd) {
+                // Queue the skill (per-unit queue, last action wins)
+                actionQueueRef.current[casterId] = {
                     type: "skill",
-                    casterId,
                     skill,
                     targetX: casterG.position.x,
                     targetZ: casterG.position.z
-                });
-                setQueuedActions(prev => [...prev, { unitId: casterId, skillName: skill.name }]);
-                addLog(`${UNIT_DATA[casterId].name} queues ${skill.name}`, "#888");
-            } else if (Date.now() < cooldownEnd) {
-                // On cooldown and not paused - queue it to execute when ready
-                actionQueueRef.current.push({
-                    type: "skill",
-                    casterId,
-                    skill,
-                    targetX: casterG.position.x,
-                    targetZ: casterG.position.z
-                });
-                setQueuedActions(prev => [...prev, { unitId: casterId, skillName: skill.name }]);
-                addLog(`${UNIT_DATA[casterId].name} queues ${skill.name} (on cooldown)`, "#888");
+                };
+                // Update UI state (replace any existing queued action for this unit)
+                setQueuedActions(prev => [
+                    ...prev.filter(q => q.unitId !== casterId),
+                    { unitId: casterId, skillName: skill.name }
+                ]);
+                const reason = paused ? "queued" : "on cooldown";
+                addLog(`${UNIT_DATA[casterId].name} queues ${skill.name} (${reason})`, "#888");
             } else {
                 // Ready to cast now
                 executeSkill(skillCtx, casterId, skill, casterG.position.x, casterG.position.z);
@@ -594,36 +600,7 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
             return;
         }
 
-        setTargetingMode({ casterId, skill });
-
-        if (rangeIndicatorRef.current) {
-            // Only recreate geometry if radius changed
-            const currentRadius = rangeIndicatorRef.current.userData.radius;
-            if (currentRadius !== skill.range) {
-                disposeGeometry(rangeIndicatorRef.current);
-                rangeIndicatorRef.current.geometry = new THREE.RingGeometry(0.1, skill.range, 64);
-                rangeIndicatorRef.current.userData.radius = skill.range;
-            }
-            rangeIndicatorRef.current.position.x = casterG.position.x;
-            rangeIndicatorRef.current.position.z = casterG.position.z;
-            rangeIndicatorRef.current.visible = true;
-        }
-
-        if (aoeIndicatorRef.current) {
-            const targetRadius = skill.aoeRadius || 0.5;
-            const innerRadius = skill.aoeRadius ? 0.1 : 0.3;
-            const currentOuter = aoeIndicatorRef.current.userData.outerRadius;
-            const currentInner = aoeIndicatorRef.current.userData.innerRadius;
-            // Only recreate geometry if radius changed
-            if (currentOuter !== targetRadius || currentInner !== innerRadius) {
-                disposeGeometry(aoeIndicatorRef.current);
-                aoeIndicatorRef.current.geometry = new THREE.RingGeometry(innerRadius, targetRadius, 32);
-                aoeIndicatorRef.current.userData.outerRadius = targetRadius;
-                aoeIndicatorRef.current.userData.innerRadius = innerRadius;
-            }
-            (aoeIndicatorRef.current.material as THREE.MeshBasicMaterial).color.set(skill.type === "heal" ? "#22c55e" : "#ff4400");
-            aoeIndicatorRef.current.visible = true;
-        }
+        setupTargetingMode(casterId, skill, casterG, rangeIndicatorRef, aoeIndicatorRef, setTargetingMode);
     };
 
     // Toggle pause handler for HUD button

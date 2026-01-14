@@ -54,8 +54,9 @@ export function validateCurrentTarget(
 
 /**
  * Find the nearest valid enemy target within aggro range.
+ * If alerted is true, ignores aggro range and searches entire map.
  */
-export function findNearestTarget(ctx: TargetingContext): number | null {
+export function findNearestTarget(ctx: TargetingContext, alerted: boolean = false): number | null {
     const { unit, g, unitsRef, unitsState, visibility, now, defeatedThisFrame, aggroRange } = ctx;
     const isPlayer = unit.team === "player";
     const enemyTeam = isPlayer ? "enemy" : "player";
@@ -64,7 +65,8 @@ export function findNearestTarget(ctx: TargetingContext): number | null {
     const blockedTargets = !isPlayer ? getBlockedTargets(unit.id, now) : [];
 
     let nearest: number | null = null;
-    let nearestDist = aggroRange;
+    // Alerted enemies search the whole map, otherwise use aggro range
+    let nearestDist = alerted ? Infinity : aggroRange;
 
     for (const enemy of unitsState) {
         if (enemy.team !== enemyTeam || enemy.hp <= 0) continue;
@@ -119,6 +121,9 @@ export function runTargetingPhase(ctx: TargetingContext): void {
     const isPlayer = unit.team === "player";
     const shouldAutoTarget = isPlayer ? unit.aiEnabled : true;
 
+    // Check if enemy is alerted (was hit by a player)
+    const isAlerted = !isPlayer && g.userData.alerted === true;
+
     // Check if current target is still valid
     const { valid: targetStillValid } = validateCurrentTarget(
         g.userData.attackTarget,
@@ -128,6 +133,17 @@ export function runTargetingPhase(ctx: TargetingContext): void {
 
     if (!targetStillValid) {
         g.userData.attackTarget = null;
+    }
+
+    // Alerted enemies immediately search for nearest target, ignoring normal constraints
+    if (isAlerted && !targetStillValid) {
+        const nearest = findNearestTarget(ctx, true);
+        if (nearest !== null) {
+            acquireTarget(ctx, nearest);
+        }
+        // Clear alerted flag once they've acquired a target (or tried to)
+        g.userData.alerted = false;
+        return;
     }
 
     // Determine if we should look for a new target

@@ -10,7 +10,7 @@ export type EnemyType = "kobold" | "kobold_archer" | "ogre";
 // STATUS EFFECTS
 // =============================================================================
 
-export type StatusEffectType = "poison";
+export type StatusEffectType = "poison" | "regen";
 
 export interface StatusEffect {
     type: StatusEffectType;
@@ -93,6 +93,10 @@ export interface EnemyStats {
     poisonChance?: number;  // 0-100 percent chance to apply poison
     // Optional special skill
     skill?: EnemySkill;
+    // Optional kiting behavior for ranged enemies
+    kiteDistance?: number;   // Distance to retreat when player gets too close
+    kiteCooldown?: number;   // Minimum ms between kite attempts
+    kiteTrigger?: number;    // Distance at which kiting triggers (melee range)
 }
 
 export interface Room {
@@ -168,6 +172,7 @@ export interface UnitGroup extends THREE.Group {
         targetX: number;
         targetZ: number;
         attackTarget: number | null;
+        alerted?: boolean;  // Set when enemy is hit - makes them seek nearest player
     };
 }
 

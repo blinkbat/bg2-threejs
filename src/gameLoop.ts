@@ -21,7 +21,8 @@ import { rollDamage, rollHit } from "./combat/combatMath";
 import { spawnDamageNumber, handleUnitDefeat } from "./combat/combat";
 import { soundFns } from "./audio/sound";
 import { disposeBasicMesh, disposeTexturedMesh } from "./rendering/disposal";
-import { getEnemySkillCooldown, setEnemySkillCooldown } from "./game/enemyState";
+import { getEnemySkillCooldown, setEnemySkillCooldown, getEnemyKiteCooldown, setEnemyKiteCooldown } from "./game/enemyState";
+import { blocked } from "./game/dungeon";
 
 // =============================================================================
 // TYPES
@@ -132,6 +133,28 @@ export function updatePoisonVisuals(
             (mesh.material as THREE.MeshStandardMaterial).color.copy(originalColor);
         }
     });
+}
+
+// =============================================================================
+// AGGRO ON HIT
+// =============================================================================
+
+/**
+ * When an enemy is hit by a player, alert them so they seek the nearest player.
+ */
+function aggroOnHit(
+    targetUnit: Unit,
+    _attackerId: number,
+    unitsRef: Record<number, UnitGroup>
+): void {
+    // Only enemies aggro when hit by players
+    if (targetUnit.team !== "enemy") return;
+
+    const targetG = unitsRef[targetUnit.id];
+    if (!targetG) return;
+
+    // Alert the enemy - they'll find the nearest player on their next targeting phase
+    targetG.userData.alerted = true;
 }
 
 // =============================================================================
@@ -303,6 +326,11 @@ export function updateProjectiles(
                         hitFlashRef[target.id] = now;
                         hitCount++;
 
+                        // Aggro enemies hit by player AOE
+                        if (attackerUnit?.team === "player") {
+                            aggroOnHit(target, proj.attackerId, unitsRef);
+                        }
+
                         spawnDamageNumber(scene, tg.position.x, tg.position.z, dmg, target.team === "player" ? COLORS.damageEnemy : COLORS.damageNeutral, damageTexts);
 
                         if (newHp <= 0) {
@@ -346,6 +374,11 @@ export function updateProjectiles(
             const attackerData = getUnitStats(attackerUnit);
             const targetData = getUnitStats(targetUnit);
             const logColor = attackerUnit.team === "player" ? COLORS.damagePlayer : COLORS.damageEnemy;
+
+            // Aggro enemies targeted by player projectiles (even on miss - arrow flew by their head!)
+            if (attackerUnit.team === "player") {
+                aggroOnHit(targetUnit, proj.attackerId, unitsRef);
+            }
 
             if (rollHit(attackerData.accuracy)) {
                 const rawDmg = rollDamage(attackerData.damage[0], attackerData.damage[1]);
@@ -633,6 +666,54 @@ export function updateUnitAI(
     };
     runTargetingPhase(targetingCtx);
 
+    // Phase 1.5: Kiting - ranged enemies retreat when players get too close
+    if (!isPlayer && 'kiteTrigger' in data && data.kiteTrigger) {
+        const kiteCooldownEnd = getEnemyKiteCooldown(unit.id);
+        if (now >= kiteCooldownEnd) {
+            // Find nearest player unit
+            let nearestPlayerDist = Infinity;
+            let nearestPlayerG: UnitGroup | null = null;
+            for (const player of unitsState) {
+                if (player.team !== "player" || player.hp <= 0) continue;
+                const pg = unitsRef[player.id];
+                if (!pg) continue;
+                const dist = Math.hypot(pg.position.x - g.position.x, pg.position.z - g.position.z);
+                if (dist < nearestPlayerDist) {
+                    nearestPlayerDist = dist;
+                    nearestPlayerG = pg;
+                }
+            }
+
+            // If player is within kite trigger range, retreat
+            if (nearestPlayerG && nearestPlayerDist < data.kiteTrigger) {
+                const kiteDistance = data.kiteDistance || 3;
+                const kiteCooldown = data.kiteCooldown || 4000;
+
+                // Calculate retreat direction (away from the player)
+                const dx = g.position.x - nearestPlayerG.position.x;
+                const dz = g.position.z - nearestPlayerG.position.z;
+                const dist = Math.hypot(dx, dz);
+                if (dist > 0.1) {
+                    const retreatX = g.position.x + (dx / dist) * kiteDistance;
+                    const retreatZ = g.position.z + (dz / dist) * kiteDistance;
+
+                    // Clamp to grid bounds and check if destination is walkable
+                    const clampedX = Math.max(0.5, Math.min(GRID_SIZE - 0.5, retreatX));
+                    const clampedZ = Math.max(0.5, Math.min(GRID_SIZE - 0.5, retreatZ));
+                    const cellX = Math.floor(clampedX);
+                    const cellZ = Math.floor(clampedZ);
+
+                    if (!blocked[cellX]?.[cellZ]) {
+                        // Clear current target temporarily and set kite path
+                        pathsRef[unit.id] = [{ x: clampedX, z: clampedZ }];
+                        moveStartRef[unit.id] = { time: now, x: g.position.x, z: g.position.z };
+                        setEnemyKiteCooldown(unit.id, now + kiteCooldown);
+                    }
+                }
+            }
+        }
+    }
+
     let targetX = g.position.x, targetZ = g.position.z;
 
     if (g.userData.attackTarget) {
@@ -726,6 +807,11 @@ export function updateUnitAI(
                             const dmgColor = isPlayer ? COLORS.damagePlayer : COLORS.damageEnemy;
                             addLog(`${data.name} hits ${targetData.name} for ${dmg} damage!`, dmgColor);
                             spawnDamageNumber(scene, targetG.position.x, targetG.position.z, dmg, dmgColor, damageTexts);
+
+                            // Aggro enemies hit by player melee
+                            if (isPlayer) {
+                                aggroOnHit(targetU, unit.id, unitsRef);
+                            }
 
                             if (newHp <= 0) {
                                 defeatedThisFrame.add(targetU.id);

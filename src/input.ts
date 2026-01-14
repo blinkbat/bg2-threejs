@@ -10,6 +10,7 @@ import { findPath } from "./ai/pathfinding";
 import { UNIT_DATA } from "./game/units";
 import { soundFns } from "./audio/sound";
 import { executeSkill, clearTargetingMode, type SkillExecutionContext } from "./combat/skills";
+import { disposeGeometry } from "./rendering/disposal";
 
 // =============================================================================
 // TYPES
@@ -28,7 +29,7 @@ export interface InputRefs {
     rangeIndicatorRef: React.RefObject<THREE.Mesh | null>;
     aoeIndicatorRef: React.RefObject<THREE.Mesh | null>;
     actionCooldownRef: React.MutableRefObject<Record<number, number>>;
-    actionQueueRef: React.MutableRefObject<QueuedAction[]>;
+    actionQueueRef: React.MutableRefObject<ActionQueue>;
     pathsRef: React.MutableRefObject<Record<number, { x: number; z: number }[]>>;
     moveStartRef: React.MutableRefObject<Record<number, { time: number; x: number; z: number }>>;
     pauseStartTimeRef: React.MutableRefObject<number | null>;
@@ -51,10 +52,14 @@ export interface InputSetters {
     setQueuedActions: React.Dispatch<React.SetStateAction<{ unitId: number; skillName: string }[]>>;
 }
 
+// Per-unit queued action - only ONE action per unit at a time (last one wins)
 export type QueuedAction =
-    | { type: "skill"; casterId: number; skill: Skill; targetX: number; targetZ: number }
-    | { type: "move"; unitIds: number[]; targets: { id: number; x: number; z: number }[] }
-    | { type: "attack"; unitIds: number[]; targetId: number };
+    | { type: "skill"; skill: Skill; targetX: number; targetZ: number }
+    | { type: "move"; targetX: number; targetZ: number }
+    | { type: "attack"; targetId: number };
+
+// Map from unitId to their queued action
+export type ActionQueue = Record<number, QueuedAction>;
 
 // =============================================================================
 // PAUSE HANDLING
@@ -188,7 +193,7 @@ export function getUnitsInBox(
 // =============================================================================
 
 export function processActionQueue(
-    actionQueueRef: React.MutableRefObject<QueuedAction[]>,
+    actionQueueRef: React.MutableRefObject<ActionQueue>,
     actionCooldownRef: React.MutableRefObject<Record<number, number>>,
     unitsRef: Record<number, UnitGroup>,
     pathsRef: Record<number, { x: number; z: number }[]>,
@@ -201,40 +206,45 @@ export function processActionQueue(
     if (pausedRef.current) return;
 
     const now = Date.now();
-    const remaining: QueuedAction[] = [];
-    const executedSkills: { unitId: number; skillName: string }[] = [];
+    const executedUnits: number[] = [];
 
-    for (const action of actionQueueRef.current) {
+    // Process each unit's queued action
+    for (const [unitIdStr, action] of Object.entries(actionQueueRef.current)) {
+        const unitId = Number(unitIdStr);
+
         if (action.type === "skill") {
-            const caster = skillCtx.unitsStateRef.current.find(u => u.id === action.casterId);
+            const caster = skillCtx.unitsStateRef.current.find(u => u.id === unitId);
             // Remove if caster died or ran out of mana
             if (!caster || caster.hp <= 0 || (caster.mana ?? 0) < action.skill.manaCost) {
-                executedSkills.push({ unitId: action.casterId, skillName: action.skill.name });
+                executedUnits.push(unitId);
                 continue;
             }
             // Keep in queue if on cooldown - will be processed next frame
-            const cooldownEnd = actionCooldownRef.current[action.casterId] || 0;
+            const cooldownEnd = actionCooldownRef.current[unitId] || 0;
             if (now < cooldownEnd) {
-                remaining.push(action);
-                continue;
+                continue; // Don't remove, will try again next frame
             }
-            executeSkill(skillCtx, action.casterId, action.skill, action.targetX, action.targetZ);
-            executedSkills.push({ unitId: action.casterId, skillName: action.skill.name });
+            executeSkill(skillCtx, unitId, action.skill, action.targetX, action.targetZ);
+            executedUnits.push(unitId);
         } else if (action.type === "attack") {
-            executeAttack(unitsRef, pathsRef, setUnits, action.unitIds, action.targetId);
+            // Attack can execute immediately (no cooldown check needed here - combat handles it)
+            executeAttack(unitsRef, pathsRef, setUnits, [unitId], action.targetId);
+            executedUnits.push(unitId);
         } else if (action.type === "move") {
-            executeMove(unitsRef, pathsRef, moveStartRef, setUnits, action.targets);
+            // Move can execute immediately
+            executeMove(unitsRef, pathsRef, moveStartRef, setUnits, [{ id: unitId, x: action.targetX, z: action.targetZ }]);
+            executedUnits.push(unitId);
         }
     }
 
-    // Keep unprocessed actions
-    actionQueueRef.current = remaining;
+    // Remove executed actions from queue
+    for (const unitId of executedUnits) {
+        delete actionQueueRef.current[unitId];
+    }
 
     // Update UI for executed/removed skills
-    if (executedSkills.length > 0) {
-        setQueuedActions(prev => prev.filter(q =>
-            !executedSkills.some(e => e.unitId === q.unitId && e.skillName === q.skillName)
-        ));
+    if (executedUnits.length > 0) {
+        setQueuedActions(prev => prev.filter(q => !executedUnits.includes(q.unitId)));
     }
 }
 
@@ -264,6 +274,51 @@ export function buildMoveTargets(
     });
 
     return moveTargets;
+}
+
+// =============================================================================
+// SKILL QUEUE/EXECUTE HELPER
+// =============================================================================
+
+/**
+ * Queue a skill for a unit. New actions replace old ones (last action wins).
+ * If not paused and not on cooldown, executes immediately instead.
+ * Returns true if the skill was queued or executed.
+ */
+function queueOrExecuteSkill(
+    casterId: number,
+    skill: Skill,
+    targetX: number,
+    targetZ: number,
+    refs: Pick<InputRefs, "actionCooldownRef" | "actionQueueRef" | "rangeIndicatorRef" | "aoeIndicatorRef">,
+    state: Pick<InputState, "pausedRef">,
+    setters: Pick<InputSetters, "setTargetingMode" | "setQueuedActions">,
+    skillCtx: SkillExecutionContext,
+    addLog: (text: string, color?: string) => void
+): boolean {
+    // Check cooldown
+    const now = Date.now();
+    const cooldownEnd = refs.actionCooldownRef.current[casterId] || 0;
+    const onCooldown = now < cooldownEnd;
+
+    // Queue when paused OR on cooldown - execute immediately otherwise
+    if (state.pausedRef.current || onCooldown) {
+        // Per-unit queue: new action replaces any previous action for this unit
+        refs.actionQueueRef.current[casterId] = { type: "skill", skill, targetX, targetZ };
+        // Update UI state (replace any existing queued action for this unit)
+        setters.setQueuedActions(prev => [
+            ...prev.filter(q => q.unitId !== casterId),
+            { unitId: casterId, skillName: skill.name }
+        ]);
+        const reason = state.pausedRef.current ? "queued" : "on cooldown";
+        addLog(`${UNIT_DATA[casterId].name} prepares ${skill.name}... (${reason})`, "#888");
+        clearTargetingMode(setters.setTargetingMode, refs.rangeIndicatorRef, refs.aoeIndicatorRef);
+        return true;
+    }
+
+    executeSkill(skillCtx, casterId, skill, targetX, targetZ);
+    clearTargetingMode(setters.setTargetingMode, refs.rangeIndicatorRef, refs.aoeIndicatorRef);
+    return true;
 }
 
 // =============================================================================
@@ -300,36 +355,7 @@ export function handleTargetingClick(
         return true;
     }
 
-    // Queue when paused - execute immediately otherwise
-    if (state.pausedRef.current) {
-        const alreadyQueued = refs.actionQueueRef.current.some(
-            a => a.type === "skill" && a.casterId === casterId && a.skill.name === skill.name
-        );
-        if (alreadyQueued) {
-            addLog(`${UNIT_DATA[casterId].name}: ${skill.name} already queued!`, "#888");
-            clearTargetingMode(setters.setTargetingMode, refs.rangeIndicatorRef, refs.aoeIndicatorRef);
-            return true;
-        }
-        refs.actionQueueRef.current.push({ type: "skill", casterId, skill, targetX, targetZ });
-        setters.setQueuedActions(prev => [...prev, { unitId: casterId, skillName: skill.name }]);
-        addLog(`${UNIT_DATA[casterId].name} prepares ${skill.name}... (queued)`, "#888");
-        clearTargetingMode(setters.setTargetingMode, refs.rangeIndicatorRef, refs.aoeIndicatorRef);
-        return true;
-    }
-
-    // Check cooldown only when executing immediately (not paused)
-    const now = Date.now();
-    const cooldownEnd = refs.actionCooldownRef.current[casterId] || 0;
-    if (now < cooldownEnd) {
-        const remaining = Math.ceil((cooldownEnd - now) / 1000);
-        addLog(`${UNIT_DATA[casterId].name}: On cooldown (${remaining}s)`, "#888");
-        clearTargetingMode(setters.setTargetingMode, refs.rangeIndicatorRef, refs.aoeIndicatorRef);
-        return true;
-    }
-
-    executeSkill(skillCtx, casterId, skill, targetX, targetZ);
-    clearTargetingMode(setters.setTargetingMode, refs.rangeIndicatorRef, refs.aoeIndicatorRef);
-    return true;
+    return queueOrExecuteSkill(casterId, skill, targetX, targetZ, refs, state, setters, skillCtx, addLog);
 }
 
 /**
@@ -391,34 +417,53 @@ export function handleTargetingOnUnit(
         return true;
     }
 
-    // Queue when paused - execute immediately otherwise
-    if (state.pausedRef.current) {
-        const alreadyQueued = refs.actionQueueRef.current.some(
-            a => a.type === "skill" && a.casterId === casterId && a.skill.name === skill.name
-        );
-        if (alreadyQueued) {
-            addLog(`${UNIT_DATA[casterId].name}: ${skill.name} already queued!`, "#888");
-            clearTargetingMode(setters.setTargetingMode, refs.rangeIndicatorRef, refs.aoeIndicatorRef);
-            return true;
+    return queueOrExecuteSkill(casterId, skill, targetX, targetZ, refs, state, setters, skillCtx, addLog);
+}
+
+// =============================================================================
+// TARGETING MODE SETUP
+// =============================================================================
+
+/**
+ * Set up targeting mode for a skill - shows range indicator and AOE indicator.
+ * Consolidates the targeting setup logic to avoid duplication.
+ */
+export function setupTargetingMode(
+    casterId: number,
+    skill: Skill,
+    casterG: UnitGroup,
+    rangeIndicatorRef: React.RefObject<THREE.Mesh | null>,
+    aoeIndicatorRef: React.RefObject<THREE.Mesh | null>,
+    setTargetingMode: React.Dispatch<React.SetStateAction<{ casterId: number; skill: Skill } | null>>
+): void {
+    setTargetingMode({ casterId, skill });
+
+    if (rangeIndicatorRef.current) {
+        // Only recreate geometry if radius changed
+        const currentRadius = rangeIndicatorRef.current.userData.radius;
+        if (currentRadius !== skill.range) {
+            disposeGeometry(rangeIndicatorRef.current);
+            rangeIndicatorRef.current.geometry = new THREE.RingGeometry(0.1, skill.range, 64);
+            rangeIndicatorRef.current.userData.radius = skill.range;
         }
-        refs.actionQueueRef.current.push({ type: "skill", casterId, skill, targetX, targetZ });
-        setters.setQueuedActions(prev => [...prev, { unitId: casterId, skillName: skill.name }]);
-        addLog(`${UNIT_DATA[casterId].name} prepares ${skill.name}... (queued)`, "#888");
-        clearTargetingMode(setters.setTargetingMode, refs.rangeIndicatorRef, refs.aoeIndicatorRef);
-        return true;
+        rangeIndicatorRef.current.position.x = casterG.position.x;
+        rangeIndicatorRef.current.position.z = casterG.position.z;
+        rangeIndicatorRef.current.visible = true;
     }
 
-    // Check cooldown only when executing immediately (not paused)
-    const now = Date.now();
-    const cooldownEnd = refs.actionCooldownRef.current[casterId] || 0;
-    if (now < cooldownEnd) {
-        const remaining = Math.ceil((cooldownEnd - now) / 1000);
-        addLog(`${UNIT_DATA[casterId].name}: On cooldown (${remaining}s)`, "#888");
-        clearTargetingMode(setters.setTargetingMode, refs.rangeIndicatorRef, refs.aoeIndicatorRef);
-        return true;
+    if (aoeIndicatorRef.current) {
+        const targetRadius = skill.aoeRadius || 0.5;
+        const innerRadius = skill.aoeRadius ? 0.1 : 0.3;
+        const currentOuter = aoeIndicatorRef.current.userData.outerRadius;
+        const currentInner = aoeIndicatorRef.current.userData.innerRadius;
+        // Only recreate geometry if radius changed
+        if (currentOuter !== targetRadius || currentInner !== innerRadius) {
+            disposeGeometry(aoeIndicatorRef.current);
+            aoeIndicatorRef.current.geometry = new THREE.RingGeometry(innerRadius, targetRadius, 32);
+            aoeIndicatorRef.current.userData.outerRadius = targetRadius;
+            aoeIndicatorRef.current.userData.innerRadius = innerRadius;
+        }
+        (aoeIndicatorRef.current.material as THREE.MeshBasicMaterial).color.set(skill.type === "heal" ? "#22c55e" : "#ff4400");
+        aoeIndicatorRef.current.visible = true;
     }
-
-    executeSkill(skillCtx, casterId, skill, targetX, targetZ);
-    clearTargetingMode(setters.setTargetingMode, refs.rangeIndicatorRef, refs.aoeIndicatorRef);
-    return true;
 }

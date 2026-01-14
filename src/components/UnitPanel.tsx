@@ -123,9 +123,9 @@ export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, ski
                             const isQueued = queuedSkills.includes(skill.name);
                             // Basic attack is display-only (happens via clicking enemies or AI)
                             const isBasicAttack = skill.name === "Attack";
-                            // Can click if: not basic attack, has mana, alive, not already queued
-                            // When not paused, also check cooldown
-                            const canClick = !isBasicAttack && hasManaForSkill && unit.hp > 0 && !isQueued && (paused || !onCooldown);
+                            // Can click if: not basic attack, has mana, alive
+                            // Can queue at any time (paused or not, on cooldown or not)
+                            const canClick = !isBasicAttack && hasManaForSkill && unit.hp > 0;
                             const skillColor = skill.type === "damage" ? "#ef4444" : skill.type === "heal" ? "#22c55e" : "#3b82f6";
 
                             return (

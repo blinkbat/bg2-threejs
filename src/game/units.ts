@@ -84,7 +84,11 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         attackCooldown: 2500,
         range: 6,
         projectileColor: "#8B4513",
-        poisonChance: 35  // 35% chance to poison on hit
+        poisonChance: 35,  // 35% chance to poison on hit
+        // Kiting behavior - retreat when players get close
+        kiteTrigger: 2.5,    // Start kiting when player within this range
+        kiteDistance: 3,     // How far to retreat
+        kiteCooldown: 4000   // Can only kite every 4 seconds
     },
     ogre: {
         name: "Ogre",
