@@ -344,6 +344,41 @@ export function handleTargetingClick(
         return true;
     }
 
+    // Check if we clicked on a unit
+    let obj: THREE.Object3D | null = hit.object;
+    while (obj) {
+        if (obj.userData.unitId !== undefined) {
+            const targetId = obj.userData.unitId as number;
+            const targetUnit = state.unitsStateRef.current.find(u => u.id === targetId);
+            const targetG = unitsRef[targetId];
+
+            if (targetUnit && targetG && targetUnit.hp > 0) {
+                // Validate target type
+                if (skill.targetType === "ally" && targetUnit.team !== "player") {
+                    addLog(`${UNIT_DATA[casterId].name}: Must target an ally!`, "#888");
+                    return true;
+                }
+                if (skill.targetType === "enemy" && targetUnit.team !== "enemy") {
+                    addLog(`${UNIT_DATA[casterId].name}: Must target an enemy!`, "#888");
+                    return true;
+                }
+
+                // Range check using unit's hitbox - if any part is in range, it's valid
+                const targetRadius = getUnitRadius(targetUnit);
+                if (!isInRange(casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, targetRadius, skill.range)) {
+                    addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, "#888");
+                    return true;
+                }
+
+                // Use target's center position for the skill
+                return queueOrExecuteSkill(casterId, skill, targetG.position.x, targetG.position.z, refs, state, setters, skillCtx, addLog);
+            }
+            return true; // Clicked a dead/invalid unit, consume the click
+        }
+        obj = obj.parent;
+    }
+
+    // Clicked on ground (for AOE skills)
     if (hit.object.name !== "ground") return false;
 
     const targetX = hit.point.x;
