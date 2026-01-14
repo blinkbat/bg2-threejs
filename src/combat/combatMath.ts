@@ -111,3 +111,57 @@ export function getMana(unit: Unit): number {
 export function hasEnoughMana(unit: Unit, manaCost: number): boolean {
     return getMana(unit) >= manaCost;
 }
+
+// =============================================================================
+// COMBAT LOG MESSAGES - Centralized for consistency
+// =============================================================================
+
+/** "{unit}'s {skill} hits {target} for {dmg} damage!" */
+export function logHit(attackerName: string, skillName: string, targetName: string, damage: number): string {
+    return `${attackerName}'s ${skillName} hits ${targetName} for ${damage} damage!`;
+}
+
+/** "{unit}'s {skill} misses {target}." */
+export function logMiss(attackerName: string, skillName: string, targetName: string): string {
+    return `${attackerName}'s ${skillName} misses ${targetName}.`;
+}
+
+/** "{unit}'s {skill} heals {target} for {amount}!" */
+export function logHeal(casterName: string, skillName: string, targetName: string, amount: number): string {
+    return `${casterName}'s ${skillName} heals ${targetName} for ${amount}!`;
+}
+
+/** "{target} is poisoned!" */
+export function logPoisoned(targetName: string): string {
+    return `${targetName} is poisoned!`;
+}
+
+/** "{target} is defeated!" */
+export function logDefeated(targetName: string): string {
+    return `${targetName} is defeated!`;
+}
+
+/** "{unit} casts {skill}!" */
+export function logCast(casterName: string, skillName: string): string {
+    return `${casterName} casts ${skillName}!`;
+}
+
+/** "{unit}'s {skill} hits {count} target(s)!" */
+export function logAoeHit(casterName: string, skillName: string, hitCount: number): string {
+    return `${casterName}'s ${skillName} hits ${hitCount} target${hitCount !== 1 ? 's' : ''}!`;
+}
+
+/** "{unit}'s {skill} misses!" (for AOE that hits nothing) */
+export function logAoeMiss(casterName: string, skillName: string): string {
+    return `${casterName}'s ${skillName} misses!`;
+}
+
+/** "{unit}'s {skill} taunts {count} enemies!" */
+export function logTaunt(casterName: string, skillName: string, tauntedCount: number): string {
+    return `${casterName}'s ${skillName} taunts ${tauntedCount} enem${tauntedCount !== 1 ? 'ies' : 'y'}!`;
+}
+
+/** "{unit}'s {skill} echoes... but no enemies are affected." */
+export function logTauntMiss(casterName: string, skillName: string): string {
+    return `${casterName}'s ${skillName} echoes... but no enemies are affected.`;
+}

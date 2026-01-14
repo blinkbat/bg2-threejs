@@ -3,12 +3,10 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, Skill, UnitGroup, Projectile, StatusEffect } from "../core/types";
-import {
-    POISON_DURATION, POISON_TICK_INTERVAL, POISON_DAMAGE_PER_TICK, COLORS
-} from "../core/constants";
-import { UNIT_DATA, getUnitStats } from "../game/units";
-import { rollDamage, rollHit } from "./combatMath";
+import type { Unit, Skill, UnitGroup, Projectile } from "../core/types";
+import { COLORS } from "../core/constants";
+import { UNIT_DATA, getUnitStats, getAllSkills } from "../game/units";
+import { rollDamage, rollHit, applyPoison, logHit, logMiss, logHeal, logPoisoned, logCast, logTaunt, logTauntMiss } from "./combatMath";
 import { getUnitRadius, isInRange } from "../rendering/range";
 import { soundFns } from "../audio/sound";
 import { spawnDamageNumber, handleUnitDefeat } from "./combat";
@@ -28,6 +26,65 @@ export interface SkillExecutionContext {
     addLog: (text: string, color?: string) => void;
 }
 
+// =============================================================================
+// HELPERS - Reusable functions to avoid duplication
+// =============================================================================
+
+/** Get all alive units of a specific team */
+function getAliveUnits(units: Unit[], team: "player" | "enemy"): Unit[] {
+    return units.filter(u => u.team === team && u.hp > 0);
+}
+
+/** Find the closest unit to a target position (within maxDist) */
+function findClosestUnit(
+    units: Unit[],
+    unitsRef: Record<number, UnitGroup>,
+    targetX: number,
+    targetZ: number,
+    maxDist: number = 2
+): { unit: Unit; group: UnitGroup } | null {
+    let closest: { unit: Unit; group: UnitGroup } | null = null;
+    let closestDist = maxDist;
+
+    for (const unit of units) {
+        const g = unitsRef[unit.id];
+        if (!g) continue;
+        const d = Math.hypot(g.position.x - targetX, g.position.z - targetZ);
+        if (d < closestDist) {
+            closestDist = d;
+            closest = { unit, group: g };
+        }
+    }
+    return closest;
+}
+
+/**
+ * Consume skill resources: set global cooldown for ALL skills and deduct mana.
+ * Call this at the START of every skill execution (after validation, before effects).
+ */
+function consumeSkill(ctx: SkillExecutionContext, casterId: number, skill: Skill): void {
+    const { actionCooldownRef, setSkillCooldowns, setUnits } = ctx;
+    const now = Date.now();
+    const cooldownEnd = now + skill.cooldown;
+    const cooldownData = { end: cooldownEnd, duration: skill.cooldown };
+
+    // Set internal cooldown ref
+    actionCooldownRef.current[casterId] = cooldownEnd;
+
+    // Set UI cooldown for ALL skills of this unit
+    const allSkills = getAllSkills(casterId);
+    setSkillCooldowns(prev => {
+        const updated = { ...prev };
+        allSkills.forEach(s => {
+            updated[`${casterId}-${s.name}`] = cooldownData;
+        });
+        return updated;
+    });
+
+    // Deduct mana
+    setUnits(prev => prev.map(u => u.id === casterId ? { ...u, mana: (u.mana ?? 0) - skill.manaCost } : u));
+}
+
 /**
  * Execute an AOE damage skill (like Fireball)
  */
@@ -38,23 +95,11 @@ export function executeAoeSkill(
     targetX: number,
     targetZ: number
 ): void {
-    const { scene, unitsRef, actionCooldownRef, projectilesRef, setUnits, setSkillCooldowns, addLog } = ctx;
+    const { scene, unitsRef, projectilesRef, addLog } = ctx;
     const casterG = unitsRef.current[casterId];
     if (!casterG) return;
 
-    const now = Date.now();
-
-    // Set global cooldown and skill-specific cooldown
-    actionCooldownRef.current[casterId] = now + skill.cooldown;
-
-    // Deduct mana and set cooldown for UI
-    setUnits(prev => prev.map(u => u.id === casterId ? { ...u, mana: (u.mana ?? 0) - skill.manaCost } : u));
-    const cooldownData = { end: now + skill.cooldown, duration: skill.cooldown };
-    setSkillCooldowns(prev => ({
-        ...prev,
-        [`${casterId}-${skill.name}`]: cooldownData,
-        [`${casterId}-Attack`]: cooldownData
-    }));
+    consumeSkill(ctx, casterId, skill);
 
     // Create projectile toward target location
     const projectile = new THREE.Mesh(
@@ -74,7 +119,7 @@ export function executeAoeSkill(
         targetPos: { x: targetX, z: targetZ }
     });
 
-    addLog(`${UNIT_DATA[casterId].name} casts ${skill.name}!`, COLORS.damageNeutral);
+    addLog(logCast(UNIT_DATA[casterId].name, skill.name), COLORS.damageNeutral);
     soundFns.playFireball();
 }
 
@@ -88,72 +133,46 @@ export function executeHealSkill(
     targetX: number,
     targetZ: number
 ): boolean {
-    const { unitsStateRef, unitsRef, actionCooldownRef, unitMeshRef, unitOriginalColorRef, setUnits, setSkillCooldowns, addLog } = ctx;
+    const { unitsStateRef, unitsRef, unitMeshRef, unitOriginalColorRef, setUnits, addLog } = ctx;
 
     // Find closest ally to target position
-    const allies = unitsStateRef.current.filter(u => u.team === "player" && u.hp > 0);
-    let closestAllyId: number | null = null;
-    let closestDist = 2;
+    const allies = getAliveUnits(unitsStateRef.current, "player");
+    const closest = findClosestUnit(allies, unitsRef.current, targetX, targetZ);
 
-    allies.forEach(ally => {
-        const ag = unitsRef.current[ally.id];
-        if (!ag) return;
-        const d = Math.hypot(ag.position.x - targetX, ag.position.z - targetZ);
-        if (d < closestDist) {
-            closestDist = d;
-            closestAllyId = ally.id;
-        }
-    });
-
-    if (closestAllyId === null) {
+    if (!closest) {
         addLog(`${UNIT_DATA[casterId].name}: No ally at that location!`, COLORS.logNeutral);
         return false;
     }
 
-    const targetAlly = unitsStateRef.current.find(u => u.id === closestAllyId);
-    if (targetAlly && targetAlly.hp >= UNIT_DATA[targetAlly.id].maxHp) {
-        addLog(`${UNIT_DATA[casterId].name}: ${UNIT_DATA[closestAllyId].name} is at full health!`, COLORS.logNeutral);
+    const { unit: targetAlly, group: targetG } = closest;
+    if (targetAlly.hp >= UNIT_DATA[targetAlly.id].maxHp) {
+        addLog(`${UNIT_DATA[casterId].name}: ${UNIT_DATA[targetAlly.id].name} is at full health!`, COLORS.logNeutral);
         return false;
     }
 
-    const now = Date.now();
-
-    // Set global cooldown and skill-specific cooldown
-    actionCooldownRef.current[casterId] = now + skill.cooldown;
-
-    // Deduct mana and set cooldown for UI
-    setUnits(prev => prev.map(u => u.id === casterId ? { ...u, mana: (u.mana ?? 0) - skill.manaCost } : u));
-    const cooldownData = { end: now + skill.cooldown, duration: skill.cooldown };
-    setSkillCooldowns(prev => ({
-        ...prev,
-        [`${casterId}-${skill.name}`]: cooldownData,
-        [`${casterId}-Attack`]: cooldownData
-    }));
+    consumeSkill(ctx, casterId, skill);
 
     // Apply heal
     const healAmount = rollDamage(skill.value[0], skill.value[1]);
-    const targetData = UNIT_DATA[closestAllyId];
-    const healTargetId = closestAllyId;
+    const targetData = UNIT_DATA[targetAlly.id];
+    const healTargetId = targetAlly.id;
     setUnits(prev => prev.map(u => u.id === healTargetId ? { ...u, hp: Math.min(targetData.maxHp, u.hp + healAmount) } : u));
 
-    addLog(`${UNIT_DATA[casterId].name} heals ${targetData.name} for ${healAmount}!`, COLORS.hpHigh);
+    addLog(logHeal(UNIT_DATA[casterId].name, skill.name, targetData.name, healAmount), COLORS.hpHigh);
     soundFns.playHeal();
 
     // Visual effect - green flash
-    const targetG = unitsRef.current[closestAllyId];
-    if (targetG) {
-        const mesh = unitMeshRef.current[closestAllyId];
-        if (mesh) {
-            (mesh.material as THREE.MeshStandardMaterial).color.set("#22ff22");
-            setTimeout(() => {
-                // Guard against mesh being disposed or removed after unmount
-                const currentMesh = unitMeshRef.current[healTargetId];
-                const orig = unitOriginalColorRef.current[healTargetId];
-                if (currentMesh && orig && currentMesh.material) {
-                    (currentMesh.material as THREE.MeshStandardMaterial).color.copy(orig);
-                }
-            }, 200);
-        }
+    const mesh = unitMeshRef.current[healTargetId];
+    if (targetG && mesh) {
+        (mesh.material as THREE.MeshStandardMaterial).color.set("#22ff22");
+        setTimeout(() => {
+            // Guard against mesh being disposed or removed after unmount
+            const currentMesh = unitMeshRef.current[healTargetId];
+            const orig = unitOriginalColorRef.current[healTargetId];
+            if (currentMesh && orig && currentMesh.material) {
+                (currentMesh.material as THREE.MeshStandardMaterial).color.copy(orig);
+            }
+        }, 200);
     }
 
     return true;
@@ -169,33 +188,21 @@ export function executeMeleeSkill(
     targetX: number,
     targetZ: number
 ): boolean {
-    const { scene, unitsStateRef, unitsRef, actionCooldownRef, hitFlashRef, damageTexts, setUnits, setSkillCooldowns, addLog } = ctx;
+    const { scene, unitsStateRef, unitsRef, hitFlashRef, damageTexts, setUnits, addLog } = ctx;
 
     // Find closest enemy to target position
-    const enemies = unitsStateRef.current.filter(u => u.team === "enemy" && u.hp > 0);
-    let closestEnemyId: number | null = null;
-    let closestDist = 2;
+    const enemies = getAliveUnits(unitsStateRef.current, "enemy");
+    const closest = findClosestUnit(enemies, unitsRef.current, targetX, targetZ);
 
-    enemies.forEach(enemy => {
-        const eg = unitsRef.current[enemy.id];
-        if (!eg) return;
-        const d = Math.hypot(eg.position.x - targetX, eg.position.z - targetZ);
-        if (d < closestDist) {
-            closestDist = d;
-            closestEnemyId = enemy.id;
-        }
-    });
-
-    if (closestEnemyId === null) {
+    if (!closest) {
         addLog(`${UNIT_DATA[casterId].name}: No enemy at that location!`, COLORS.logNeutral);
         return false;
     }
 
+    const { unit: targetEnemy, group: targetG } = closest;
     const casterG = unitsRef.current[casterId];
-    const targetG = unitsRef.current[closestEnemyId];
-    const targetEnemy = unitsStateRef.current.find(u => u.id === closestEnemyId);
 
-    if (!casterG || !targetG || !targetEnemy) return false;
+    if (!casterG) return false;
 
     // Check if in melee range (hitbox-aware)
     const targetRadius = getUnitRadius(targetEnemy);
@@ -205,21 +212,11 @@ export function executeMeleeSkill(
     }
 
     const now = Date.now();
-
-    // Set global cooldown and skill-specific cooldown
-    actionCooldownRef.current[casterId] = now + skill.cooldown;
-
-    // Deduct mana and set cooldown for UI
-    setUnits(prev => prev.map(u => u.id === casterId ? { ...u, mana: (u.mana ?? 0) - skill.manaCost } : u));
-    const cooldownData = { end: now + skill.cooldown, duration: skill.cooldown };
-    setSkillCooldowns(prev => ({
-        ...prev,
-        [`${casterId}-${skill.name}`]: cooldownData,
-        [`${casterId}-Attack`]: cooldownData
-    }));
+    consumeSkill(ctx, casterId, skill);
 
     const casterData = UNIT_DATA[casterId];
     const targetData = getUnitStats(targetEnemy);
+    const targetId = targetEnemy.id;
 
     // Roll to hit
     if (rollHit(casterData.accuracy)) {
@@ -228,59 +225,34 @@ export function executeMeleeSkill(
         const newHp = Math.max(0, targetEnemy.hp - dmg);
 
         // Check if poison should be applied (roll now, apply in single setUnits)
-        const applyPoison = skill.poisonChance && Math.random() * 100 < skill.poisonChance;
+        const shouldPoison = skill.poisonChance && Math.random() * 100 < skill.poisonChance;
 
         // Single setUnits call to avoid stale state issues
         setUnits(prev => prev.map(u => {
-            if (u.id !== closestEnemyId) return u;
-
+            if (u.id !== targetId) return u;
             let updatedUnit = { ...u, hp: newHp };
-
-            // Apply poison if rolled successfully
-            if (applyPoison) {
-                const existingEffects = u.statusEffects || [];
-                const existingPoison = existingEffects.find(e => e.type === "poison");
-
-                if (existingPoison) {
-                    // Refresh duration
-                    updatedUnit.statusEffects = existingEffects.map(e =>
-                        e.type === "poison"
-                            ? { ...e, duration: POISON_DURATION, lastTick: now }
-                            : e
-                    );
-                } else {
-                    // Apply new poison
-                    const newPoison: StatusEffect = {
-                        type: "poison",
-                        duration: POISON_DURATION,
-                        tickInterval: POISON_TICK_INTERVAL,
-                        lastTick: now,
-                        damagePerTick: POISON_DAMAGE_PER_TICK,
-                        sourceId: casterId
-                    };
-                    updatedUnit.statusEffects = [...existingEffects, newPoison];
-                }
+            if (shouldPoison) {
+                updatedUnit = applyPoison(updatedUnit, casterId, now);
             }
-
             return updatedUnit;
         }));
 
-        hitFlashRef.current[closestEnemyId] = now;
+        hitFlashRef.current[targetId] = now;
         soundFns.playHit();
-        addLog(`${casterData.name}'s ${skill.name} hits ${targetData.name} for ${dmg} damage!`, COLORS.damagePlayer);
+        addLog(logHit(casterData.name, skill.name, targetData.name, dmg), COLORS.damagePlayer);
         spawnDamageNumber(scene, targetG.position.x, targetG.position.z, dmg, COLORS.damagePlayer, damageTexts.current);
 
-        if (applyPoison) {
-            addLog(`${targetData.name} is poisoned!`, COLORS.poisonText);
+        if (shouldPoison) {
+            addLog(logPoisoned(targetData.name), COLORS.poisonText);
         }
 
         // Check for defeat
         if (newHp <= 0) {
-            handleUnitDefeat(closestEnemyId, targetG, unitsRef.current, addLog, targetData.name);
+            handleUnitDefeat(targetId, targetG, unitsRef.current, addLog, targetData.name);
         }
     } else {
         soundFns.playMiss();
-        addLog(`${casterData.name}'s ${skill.name} misses ${targetData.name}.`, COLORS.logNeutral);
+        addLog(logMiss(casterData.name, skill.name, targetData.name), COLORS.logNeutral);
     }
 
     return true;
@@ -294,30 +266,18 @@ export function executeTauntSkill(
     casterId: number,
     skill: Skill
 ): boolean {
-    const { scene, unitsStateRef, unitsRef, actionCooldownRef, setUnits, setSkillCooldowns, addLog } = ctx;
+    const { scene, unitsStateRef, unitsRef, addLog } = ctx;
 
     const casterG = unitsRef.current[casterId];
     if (!casterG) return false;
 
-    const now = Date.now();
-
-    // Set global cooldown and skill-specific cooldown
-    actionCooldownRef.current[casterId] = now + skill.cooldown;
-
-    // Deduct mana and set cooldown for UI
-    setUnits(prev => prev.map(u => u.id === casterId ? { ...u, mana: (u.mana ?? 0) - skill.manaCost } : u));
-    const cooldownData = { end: now + skill.cooldown, duration: skill.cooldown };
-    setSkillCooldowns(prev => ({
-        ...prev,
-        [`${casterId}-${skill.name}`]: cooldownData,
-        [`${casterId}-Attack`]: cooldownData
-    }));
+    consumeSkill(ctx, casterId, skill);
 
     const casterData = UNIT_DATA[casterId];
     const tauntChance = skill.value[0];  // Use first value as taunt chance percentage
 
     // Find all enemies within range
-    const enemies = unitsStateRef.current.filter(u => u.team === "enemy" && u.hp > 0);
+    const enemies = getAliveUnits(unitsStateRef.current, "enemy");
     let tauntedCount = 0;
 
     enemies.forEach(enemy => {
@@ -371,10 +331,69 @@ export function executeTauntSkill(
     requestAnimationFrame(animateRing);
 
     if (tauntedCount > 0) {
-        addLog(`${casterData.name}'s ${skill.name} taunts ${tauntedCount} enemies!`, "#c0392b");
+        addLog(logTaunt(casterData.name, skill.name, tauntedCount), "#c0392b");
     } else {
-        addLog(`${casterData.name}'s ${skill.name} echoes... but no enemies are affected.`, COLORS.logNeutral);
+        addLog(logTauntMiss(casterData.name, skill.name), COLORS.logNeutral);
     }
+
+    return true;
+}
+
+/**
+ * Execute a ranged single-target damage skill (basic attack for ranged units)
+ */
+export function executeRangedSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill,
+    targetX: number,
+    targetZ: number
+): boolean {
+    const { scene, unitsStateRef, unitsRef, projectilesRef, addLog } = ctx;
+
+    // Find closest enemy to target position
+    const enemies = getAliveUnits(unitsStateRef.current, "enemy");
+    const closest = findClosestUnit(enemies, unitsRef.current, targetX, targetZ);
+
+    if (!closest) {
+        addLog(`${UNIT_DATA[casterId].name}: No enemy at that location!`, COLORS.logNeutral);
+        return false;
+    }
+
+    const { unit: targetEnemy, group: targetG } = closest;
+    const casterG = unitsRef.current[casterId];
+
+    if (!casterG) return false;
+
+    // Check if in range (hitbox-aware)
+    const targetRadius = getUnitRadius(targetEnemy);
+    if (!isInRange(casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, targetRadius, skill.range + 0.5)) {
+        addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, COLORS.logNeutral);
+        return false;
+    }
+
+    consumeSkill(ctx, casterId, skill);
+
+    const casterData = UNIT_DATA[casterId];
+
+    // Create projectile toward target
+    const projectile = new THREE.Mesh(
+        new THREE.SphereGeometry(0.15, 8, 8),
+        new THREE.MeshBasicMaterial({ color: casterData.projectileColor || "#a0522d" })
+    );
+    projectile.position.set(casterG.position.x, 0.6, casterG.position.z);
+    scene.add(projectile);
+
+    projectilesRef.current.push({
+        type: "basic",
+        mesh: projectile,
+        attackerId: casterId,
+        targetId: targetEnemy.id,
+        speed: 0.3
+    });
+
+    addLog(`${casterData.name} shoots at ${getUnitStats(targetEnemy).name}!`, COLORS.damageNeutral);
+    soundFns.playAttack();
 
     return true;
 }
@@ -404,6 +423,15 @@ export function executeSkill(
     } else if (skill.type === "heal" && skill.targetType === "ally") {
         return executeHealSkill(ctx, casterId, skill, targetX, targetZ);
     } else if (skill.type === "damage" && skill.targetType === "enemy") {
+        // Check if this is a ranged skill (basic attack for ranged units)
+        // Melee range is typically <= 2, ranged is > 2
+        const casterData = UNIT_DATA[casterId];
+        const isRanged = casterData.range && casterData.range > 2;
+
+        // For basic attacks (name === "Attack"), use ranged if unit has range
+        if (skill.name === "Attack" && isRanged) {
+            return executeRangedSkill(ctx, casterId, skill, targetX, targetZ);
+        }
         return executeMeleeSkill(ctx, casterId, skill, targetX, targetZ);
     } else if (skill.type === "taunt" && skill.targetType === "self") {
         return executeTauntSkill(ctx, casterId, skill);

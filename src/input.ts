@@ -53,10 +53,10 @@ export interface InputSetters {
 }
 
 // Per-unit queued action - only ONE action per unit at a time (last one wins)
+// Note: attacks are just skills now - no separate "attack" type
 export type QueuedAction =
     | { type: "skill"; skill: Skill; targetX: number; targetZ: number }
-    | { type: "move"; targetX: number; targetZ: number }
-    | { type: "attack"; targetId: number };
+    | { type: "move"; targetX: number; targetZ: number };
 
 // Map from unitId to their queued action
 export type ActionQueue = Record<number, QueuedAction>;
@@ -226,10 +226,6 @@ export function processActionQueue(
             }
             executeSkill(skillCtx, unitId, action.skill, action.targetX, action.targetZ);
             executedUnits.push(unitId);
-        } else if (action.type === "attack") {
-            // Attack can execute immediately (no cooldown check needed here - combat handles it)
-            executeAttack(unitsRef, pathsRef, setUnits, [unitId], action.targetId);
-            executedUnits.push(unitId);
         } else if (action.type === "move") {
             // Move can execute immediately
             executeMove(unitsRef, pathsRef, moveStartRef, setUnits, [{ id: unitId, x: action.targetX, z: action.targetZ }]);
@@ -277,6 +273,33 @@ export function buildMoveTargets(
 }
 
 // =============================================================================
+// TARGET VALIDATION
+// =============================================================================
+
+/**
+ * Validate that a target is valid for a skill.
+ * Returns an error message if invalid, or null if valid.
+ */
+export function validateSkillTarget(
+    skill: Skill,
+    targetUnit: Unit,
+    casterName: string
+): string | null {
+    // Check target type (ally vs enemy)
+    if (skill.targetType === "ally" && targetUnit.team !== "player") {
+        return `${casterName}: Must target an ally!`;
+    }
+    if (skill.targetType === "enemy" && targetUnit.team !== "enemy") {
+        return `${casterName}: Must target an enemy!`;
+    }
+    // Check if target is alive
+    if (targetUnit.hp <= 0) {
+        return `${casterName}: Target is dead!`;
+    }
+    return null;
+}
+
+// =============================================================================
 // SKILL QUEUE/EXECUTE HELPER
 // =============================================================================
 
@@ -285,7 +308,7 @@ export function buildMoveTargets(
  * If not paused and not on cooldown, executes immediately instead.
  * Returns true if the skill was queued or executed.
  */
-function queueOrExecuteSkill(
+export function queueOrExecuteSkill(
     casterId: number,
     skill: Skill,
     targetX: number,
@@ -352,14 +375,11 @@ export function handleTargetingClick(
             const targetUnit = state.unitsStateRef.current.find(u => u.id === targetId);
             const targetG = unitsRef[targetId];
 
-            if (targetUnit && targetG && targetUnit.hp > 0) {
-                // Validate target type
-                if (skill.targetType === "ally" && targetUnit.team !== "player") {
-                    addLog(`${UNIT_DATA[casterId].name}: Must target an ally!`, "#888");
-                    return true;
-                }
-                if (skill.targetType === "enemy" && targetUnit.team !== "enemy") {
-                    addLog(`${UNIT_DATA[casterId].name}: Must target an enemy!`, "#888");
+            if (targetUnit && targetG) {
+                // Validate target type and alive status
+                const validationError = validateSkillTarget(skill, targetUnit, UNIT_DATA[casterId].name);
+                if (validationError) {
+                    addLog(validationError, "#888");
                     return true;
                 }
 
@@ -424,19 +444,10 @@ export function handleTargetingOnUnit(
         return false;
     }
 
-    // Validate target type matches skill requirements
-    if (skill.targetType === "ally" && targetUnit.team !== "player") {
-        addLog(`${UNIT_DATA[casterId].name}: Must target an ally!`, "#888");
-        return false;
-    }
-    if (skill.targetType === "enemy" && targetUnit.team !== "enemy") {
-        addLog(`${UNIT_DATA[casterId].name}: Must target an enemy!`, "#888");
-        return false;
-    }
-
-    // Check if target is alive (for heals, allow targeting alive allies; for damage, target must be alive)
-    if (targetUnit.hp <= 0) {
-        addLog(`${UNIT_DATA[casterId].name}: Target is dead!`, "#888");
+    // Validate target type and alive status
+    const validationError = validateSkillTarget(skill, targetUnit, UNIT_DATA[casterId].name);
+    if (validationError) {
+        addLog(validationError, "#888");
         return false;
     }
 

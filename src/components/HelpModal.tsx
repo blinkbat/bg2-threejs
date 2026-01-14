@@ -4,35 +4,11 @@ interface HelpModalProps {
 
 export function HelpModal({ onClose }: HelpModalProps) {
     return (
-        <div
-            style={{
-                position: "fixed",
-                inset: 0,
-                background: "rgba(0,0,0,0.8)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                zIndex: 1000
-            }}
-            onClick={onClose}
-        >
-            <div
-                style={{
-                    background: "linear-gradient(180deg, rgba(30,30,46,0.78) 0%, rgba(18,18,26,0.78) 100%)",
-                    backdropFilter: "blur(12px)",
-                    WebkitBackdropFilter: "blur(12px)",
-                    border: "2px solid rgba(61,61,92,0.5)",
-                    borderRadius: 8,
-                    padding: 24,
-                    maxWidth: 480,
-                    fontFamily: "monospace",
-                    color: "#ddd"
-                }}
-                onClick={e => e.stopPropagation()}
-            >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                    <h2 style={{ margin: 0, fontSize: 18, color: "#fff" }}>Controls</h2>
-                    <div onClick={onClose} style={{ cursor: "pointer", fontSize: 20, opacity: 0.7 }}>×</div>
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal-content" onClick={e => e.stopPropagation()}>
+                <div className="help-header">
+                    <h2 className="help-title">Controls</h2>
+                    <div className="close-btn" onClick={onClose}>×</div>
                 </div>
 
                 <Section title="Camera">
@@ -56,30 +32,8 @@ export function HelpModal({ onClose }: HelpModalProps) {
                     <Item keys="Escape / Right-click" desc="Cancel targeting" />
                 </Section>
 
-                <div style={{ marginTop: 16, padding: 12, background: "#1a1a2a", borderRadius: 4, fontSize: 12 }}>
-                    <div style={{ color: "#f59e0b", marginBottom: 8, fontWeight: "bold" }}>Tips</div>
-                    <ul style={{ margin: 0, paddingLeft: 16, lineHeight: 1.6, color: "#aaa" }}>
-                        <li>Pause to queue actions - they execute on unpause</li>
-                        <li>Skills share a cooldown with basic attacks</li>
-                        <li>Toggle <span style={{ color: "#4ade80" }}>Tactics</span> to enable/disable auto-attack</li>
-                        <li>Fireball has friendly fire - aim carefully!</li>
-                    </ul>
-                </div>
-
-                <div style={{ marginTop: 16, textAlign: "center" }}>
-                    <button
-                        onClick={onClose}
-                        style={{
-                            background: "#3b82f6",
-                            border: "none",
-                            borderRadius: 4,
-                            padding: "8px 24px",
-                            color: "#fff",
-                            fontFamily: "monospace",
-                            fontSize: 12,
-                            cursor: "pointer"
-                        }}
-                    >
+                <div className="help-footer">
+                    <button className="btn btn-primary mono" onClick={onClose}>
                         Got it
                     </button>
                 </div>
@@ -90,18 +44,18 @@ export function HelpModal({ onClose }: HelpModalProps) {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
     return (
-        <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 12, color: "#888", marginBottom: 8, textTransform: "uppercase" }}>{title}</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{children}</div>
+        <div className="help-section">
+            <div className="help-section-title">{title}</div>
+            <div className="help-items">{children}</div>
         </div>
     );
 }
 
 function Item({ keys, desc }: { keys: string; desc: string }) {
     return (
-        <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 13 }}>
-            <span style={{ background: "#2a2a3e", padding: "4px 8px", borderRadius: 4, color: "#fff", minWidth: 140 }}>{keys}</span>
-            <span style={{ color: "#aaa" }}>{desc}</span>
+        <div className="help-item">
+            <span className="help-key">{keys}</span>
+            <span className="help-desc">{desc}</span>
         </div>
     );
 }

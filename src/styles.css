@@ -1,0 +1,780 @@
+/* =============================================================================
+   GAME UI STYLES
+   ============================================================================= */
+
+/* -----------------------------------------------------------------------------
+   BASE & RESET
+   ----------------------------------------------------------------------------- */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body, #root {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+/* -----------------------------------------------------------------------------
+   COMMON UTILITIES
+   ----------------------------------------------------------------------------- */
+.mono {
+    font-family: monospace;
+}
+
+.serif {
+    font-family: serif;
+}
+
+.text-muted {
+    color: #888;
+}
+
+.text-light {
+    color: #aaa;
+}
+
+.text-white {
+    color: #fff;
+}
+
+.text-center {
+    text-align: center;
+}
+
+.uppercase {
+    text-transform: uppercase;
+}
+
+.capitalize {
+    text-transform: capitalize;
+}
+
+.bold {
+    font-weight: bold;
+}
+
+.pointer {
+    cursor: pointer;
+}
+
+.not-allowed {
+    cursor: not-allowed;
+}
+
+.crosshair {
+    cursor: crosshair;
+}
+
+.relative {
+    position: relative;
+}
+
+.absolute {
+    position: absolute;
+}
+
+.fixed {
+    position: fixed;
+}
+
+.flex {
+    display: flex;
+}
+
+.flex-col {
+    flex-direction: column;
+}
+
+.flex-1 {
+    flex: 1;
+}
+
+.items-center {
+    align-items: center;
+}
+
+.justify-center {
+    justify-content: center;
+}
+
+.justify-between {
+    justify-content: space-between;
+}
+
+.gap-6 {
+    gap: 6px;
+}
+
+.gap-8 {
+    gap: 8px;
+}
+
+.gap-10 {
+    gap: 10px;
+}
+
+.gap-12 {
+    gap: 12px;
+}
+
+.float-right {
+    float: right;
+}
+
+.overflow-hidden {
+    overflow: hidden;
+}
+
+/* -----------------------------------------------------------------------------
+   GLASS PANEL (shared background for modals/panels)
+   ----------------------------------------------------------------------------- */
+.glass-panel {
+    background: linear-gradient(180deg, rgba(30,30,46,0.72) 0%, rgba(18,18,26,0.72) 100%);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 2px solid rgba(61,61,92,0.5);
+    border-radius: 8px;
+    font-family: monospace;
+    color: #ddd;
+}
+
+.glass-panel-light {
+    background: rgba(15,15,25,0.7);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(60,60,90,0.4);
+    border-radius: 6px;
+}
+
+/* Modal overlay */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background: linear-gradient(180deg, rgba(30,30,46,0.78) 0%, rgba(18,18,26,0.78) 100%);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 2px solid rgba(61,61,92,0.5);
+    border-radius: 8px;
+    padding: 24px;
+    max-width: 480px;
+    font-family: monospace;
+    color: #ddd;
+}
+
+/* -----------------------------------------------------------------------------
+   CLOSE BUTTON
+   ----------------------------------------------------------------------------- */
+.close-btn {
+    cursor: pointer;
+    font-size: 20px;
+    opacity: 0.7;
+}
+
+.close-btn:hover {
+    opacity: 1;
+}
+
+/* -----------------------------------------------------------------------------
+   CARD / BOX STYLES
+   ----------------------------------------------------------------------------- */
+.card {
+    background: #1a1a2a;
+    padding: 8px 10px;
+    border-radius: 4px;
+}
+
+.card-dark {
+    background: #0d0d15;
+}
+
+.card-queued {
+    background: #2a2a1a;
+}
+
+.card-item {
+    background: #1a1a2a;
+    padding: 10px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* -----------------------------------------------------------------------------
+   STAT GRID
+   ----------------------------------------------------------------------------- */
+.stat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.stat-grid .span-2 {
+    grid-column: span 2;
+}
+
+/* -----------------------------------------------------------------------------
+   PROGRESS BARS (HP/Mana)
+   ----------------------------------------------------------------------------- */
+.progress-bar {
+    height: 12px;
+    background: #111;
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+.progress-bar-sm {
+    height: 6px;
+    background: #111;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+}
+
+.progress-fill-mana {
+    background: #3b82f6;
+}
+
+/* -----------------------------------------------------------------------------
+   TABS
+   ----------------------------------------------------------------------------- */
+.tab-container {
+    display: flex;
+    border-bottom: 1px solid #333;
+}
+
+.tab {
+    flex: 1;
+    padding: 10px 0;
+    text-align: center;
+    font-size: 12px;
+    text-transform: uppercase;
+    cursor: pointer;
+    background: transparent;
+    border-bottom: 2px solid transparent;
+    color: #888;
+    transition: color 0.15s, background 0.15s;
+}
+
+.tab.active {
+    background: #2a2a3e;
+    border-bottom-color: #58a6ff;
+    color: #fff;
+}
+
+/* -----------------------------------------------------------------------------
+   TOGGLE SWITCH
+   ----------------------------------------------------------------------------- */
+.toggle-row {
+    margin-top: 24px;
+    background: #1a1a2a;
+    padding: 10px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border: 1px solid #333;
+    font-size: 13px;
+}
+
+.toggle-row.active {
+    background: #2d4a2d;
+    border-color: #4ade80;
+}
+
+.toggle-track {
+    width: 40px;
+    height: 20px;
+    background: #333;
+    border-radius: 10px;
+    position: relative;
+    transition: background 0.2s;
+}
+
+.toggle-track.active {
+    background: #4ade80;
+}
+
+.toggle-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    background: #fff;
+    border-radius: 8px;
+    transition: left 0.2s;
+}
+
+.toggle-thumb.active {
+    left: 22px;
+}
+
+/* -----------------------------------------------------------------------------
+   SKILL CARD
+   ----------------------------------------------------------------------------- */
+.skill-card {
+    background: #1a1a2a;
+    padding: 12px 14px;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    border: 1px solid #333;
+}
+
+.skill-card.disabled {
+    background: #0d0d15;
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.skill-card.queued {
+    background: #2a2a1a;
+    border-color: #f59e0b;
+}
+
+.skill-cooldown-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    pointer-events: none;
+}
+
+.skill-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: relative;
+}
+
+.skill-details {
+    font-size: 11px;
+    color: #888;
+    margin-top: 5px;
+    position: relative;
+}
+
+.skill-tag {
+    margin-left: 6px;
+    font-size: 10px;
+    color: #888;
+}
+
+.skill-tag-queued {
+    color: #f59e0b;
+}
+
+.skill-tag-range {
+    margin-left: 8px;
+    color: #58a6ff;
+}
+
+.skill-tag-poison {
+    margin-left: 8px;
+}
+
+.skill-tag-aoe {
+    margin-left: 8px;
+    color: #f59e0b;
+}
+
+/* Skill type colors */
+.skill-damage {
+    color: #ef4444;
+}
+
+.skill-heal {
+    color: #22c55e;
+}
+
+.skill-taunt {
+    color: #c0392b;
+}
+
+.skill-buff {
+    color: #3b82f6;
+}
+
+.skill-queued-color {
+    color: #f59e0b;
+}
+
+/* Cooldown text */
+.cooldown-text {
+    float: right;
+    color: #ef4444;
+}
+
+/* Mana cost */
+.mana-cost {
+    color: #3b82f6;
+    font-size: 12px;
+}
+
+/* -----------------------------------------------------------------------------
+   STATUS EFFECTS
+   ----------------------------------------------------------------------------- */
+.effects-section {
+    margin-top: 12px;
+}
+
+.effects-label {
+    font-size: 11px;
+    color: #888;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+}
+
+.effect-card {
+    background: #1a1a2a;
+    border: 1px solid #444;
+    padding: 8px 10px;
+    border-radius: 4px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+}
+
+.effect-duration {
+    color: #888;
+    font-size: 12px;
+}
+
+/* -----------------------------------------------------------------------------
+   BUTTONS
+   ----------------------------------------------------------------------------- */
+.btn {
+    padding: 6px 14px;
+    background: #21262d;
+    border: 1px solid #444;
+    color: #fff;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: monospace;
+    font-size: 12px;
+    transition: background 0.15s;
+}
+
+.btn:hover {
+    background: #30363d;
+}
+
+.btn-primary {
+    background: #3b82f6;
+    border: none;
+    padding: 8px 24px;
+}
+
+.btn-primary:hover {
+    background: #2563eb;
+}
+
+.btn-pause {
+    background: #21262d;
+}
+
+.btn-pause.active {
+    background: #854d0e;
+}
+
+.btn-mute {
+    background: #21262d;
+}
+
+.btn-mute.active {
+    background: #7f1d1d;
+}
+
+.btn-restart {
+    background: #1e3a5f;
+}
+
+/* -----------------------------------------------------------------------------
+   UNIT PANEL
+   ----------------------------------------------------------------------------- */
+.unit-panel {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 280px;
+    overflow: hidden;
+}
+
+.unit-panel-header {
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.unit-avatar {
+    width: 52px;
+    height: 52px;
+    background: rgba(0,0,0,0.4);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    font-weight: bold;
+    font-family: serif;
+}
+
+.unit-info {
+    flex: 1;
+}
+
+.unit-name {
+    font-weight: bold;
+    font-size: 16px;
+}
+
+.unit-class {
+    font-size: 13px;
+    opacity: 0.8;
+}
+
+.unit-bars {
+    padding: 10px 14px;
+    border-bottom: 1px solid #333;
+}
+
+.bar-label {
+    font-size: 13px;
+    margin-bottom: 4px;
+}
+
+.bar-label-mana {
+    margin-top: 8px;
+}
+
+.unit-content {
+    padding: 14px;
+    min-height: 160px;
+}
+
+/* -----------------------------------------------------------------------------
+   PARTY BAR
+   ----------------------------------------------------------------------------- */
+.party-bar {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 8px;
+    display: flex;
+    gap: 6px;
+}
+
+.party-portrait {
+    width: 64px;
+    cursor: pointer;
+    border: 2px solid #333;
+    border-radius: 6px;
+    padding: 5px;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.party-portrait.selected {
+    background: rgba(0,255,0,0.15);
+    border-color: #00ff00;
+}
+
+.party-portrait.valid-target {
+    background: rgba(34,197,94,0.2);
+    border-color: #22c55e;
+}
+
+.party-portrait.dead {
+    opacity: 0.4;
+}
+
+.party-portrait.targeting {
+    cursor: crosshair;
+}
+
+.portrait-icon {
+    width: 100%;
+    height: 52px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+    font-weight: bold;
+    color: #fff;
+    text-shadow: 1px 1px 2px #000;
+    font-family: serif;
+}
+
+.portrait-hp {
+    margin-top: 4px;
+}
+
+.portrait-name {
+    font-size: 10px;
+    color: #aaa;
+    text-align: center;
+    margin-top: 2px;
+    font-family: monospace;
+}
+
+/* -----------------------------------------------------------------------------
+   HUD
+   ----------------------------------------------------------------------------- */
+.hud {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    font-family: monospace;
+    padding: 12px 16px;
+}
+
+.hud-status {
+    margin-bottom: 10px;
+    font-size: 14px;
+    font-weight: bold;
+    color: #fff;
+}
+
+.hud-status.victory {
+    color: #4ade80;
+}
+
+.hud-status.defeat {
+    color: #f87171;
+}
+
+.hud-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+/* -----------------------------------------------------------------------------
+   COMBAT LOG
+   ----------------------------------------------------------------------------- */
+.combat-log {
+    position: absolute;
+    bottom: 110px;
+    left: 10px;
+    width: 340px;
+    max-height: 260px;
+    padding: 10px;
+    font-family: monospace;
+    font-size: 13px;
+    color: #ccc;
+    overflow-y: auto;
+}
+
+.combat-log::-webkit-scrollbar {
+    width: 6px;
+}
+
+.combat-log::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.combat-log::-webkit-scrollbar-thumb {
+    background: #444;
+    border-radius: 3px;
+}
+
+.combat-log::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+.log-entry {
+    margin-bottom: 4px;
+}
+
+/* -----------------------------------------------------------------------------
+   HELP MODAL
+   ----------------------------------------------------------------------------- */
+.help-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.help-title {
+    margin: 0;
+    font-size: 18px;
+    color: #fff;
+}
+
+.help-section {
+    margin-bottom: 16px;
+}
+
+.help-section-title {
+    font-size: 12px;
+    color: #888;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+}
+
+.help-items {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.help-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+}
+
+.help-key {
+    background: #2a2a3e;
+    padding: 4px 8px;
+    border-radius: 4px;
+    color: #fff;
+    min-width: 140px;
+}
+
+.help-desc {
+    color: #aaa;
+}
+
+.help-footer {
+    margin-top: 16px;
+    text-align: center;
+}
+
+/* -----------------------------------------------------------------------------
+   ITEM DOT
+   ----------------------------------------------------------------------------- */
+.item-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    background: #555;
+}
+
+.item-dot.equipped {
+    background: #f59e0b;
+}

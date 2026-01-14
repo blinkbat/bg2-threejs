@@ -3,7 +3,7 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitData, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation, StatusEffect, EnemyStats, EnemySkill } from "./core/types";
+import type { Unit, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation, StatusEffect, EnemyStats, EnemySkill } from "./core/types";
 import {
     GRID_SIZE, ATTACK_RANGE, HIT_DETECTION_RADIUS, FLASH_DURATION,
     POISON_DURATION, POISON_TICK_INTERVAL, POISON_DAMAGE_PER_TICK,
@@ -16,8 +16,9 @@ import {
     runTargetingPhase, runPathFollowingPhase, runMovementPhase,
     type TargetingContext, type PathContext, type MovementContext
 } from "./ai/unitAI";
-import { getUnitStats } from "./game/units";
-import { rollDamage, rollHit } from "./combat/combatMath";
+import { getUnitStats, getBasicAttackSkill } from "./game/units";
+import type { ActionQueue } from "./input";
+import { rollDamage, rollHit, logHit, logMiss, logPoisoned, logAoeHit, logAoeMiss } from "./combat/combatMath";
 import { spawnDamageNumber, handleUnitDefeat } from "./combat/combat";
 import { soundFns } from "./audio/sound";
 import { disposeBasicMesh, disposeTexturedMesh } from "./rendering/disposal";
@@ -342,7 +343,7 @@ export function updateProjectiles(
 
                 if (hitCount > 0) {
                     soundFns.playHit();
-                    addLog(`${attackerData?.name ?? "Unknown"}'s Fireball hits ${hitCount} targets!`, COLORS.damageNeutral);
+                    addLog(logAoeHit(attackerData?.name ?? "Unknown", "Fireball", hitCount), COLORS.damageNeutral);
                 }
 
                 disposeProjectile(scene, proj);
@@ -401,11 +402,11 @@ export function updateProjectiles(
 
                 hitFlashRef[targetUnit.id] = now;
                 soundFns.playHit();
-                addLog(`${attackerData.name} hits ${targetData.name} for ${dmg} damage!`, logColor);
+                addLog(logHit(attackerData.name, "Attack", targetData.name, dmg), logColor);
                 spawnDamageNumber(scene, targetG.position.x, targetG.position.z, dmg, logColor, damageTexts);
 
                 if (applyPoison) {
-                    addLog(`${targetData.name} is poisoned!`, COLORS.poisonText);
+                    addLog(logPoisoned(targetData.name), COLORS.poisonText);
                 }
 
                 if (newHp <= 0) {
@@ -414,7 +415,7 @@ export function updateProjectiles(
                 }
             } else {
                 soundFns.playMiss();
-                addLog(`${attackerData.name} misses ${targetData.name}.`, COLORS.logNeutral);
+                addLog(logMiss(attackerData.name, "Attack", targetData.name), COLORS.logNeutral);
             }
 
             disposeProjectile(scene, proj);
@@ -566,9 +567,9 @@ function executeEnemySwipe(
     });
 
     if (hitCount > 0) {
-        addLog(`${enemyData.name}'s ${skill.name} hits ${hitCount} target${hitCount > 1 ? 's' : ''}!`, "#ff4444");
+        addLog(logAoeHit(enemyData.name, skill.name, hitCount), "#ff4444");
     } else {
-        addLog(`${enemyData.name}'s ${skill.name} misses!`, COLORS.logNeutral);
+        addLog(logAoeMiss(enemyData.name, skill.name), COLORS.logNeutral);
     }
 
     return true;
@@ -650,10 +651,12 @@ export function updateUnitAI(
     moveStartRef: Record<number, { time: number; x: number; z: number }>,
     scene: THREE.Scene,
     setUnits: React.Dispatch<React.SetStateAction<Unit[]>>,
-    setSkillCooldowns: React.Dispatch<React.SetStateAction<Record<string, { end: number; duration: number }>>>,
     addLog: (text: string, color?: string) => void,
     now: number,
-    defeatedThisFrame: Set<number>
+    defeatedThisFrame: Set<number>,
+    // For player AI auto-queueing attacks
+    actionQueueRef?: ActionQueue,
+    setQueuedActions?: React.Dispatch<React.SetStateAction<{ unitId: number; skillName: string }[]>>
 ): void {
     const isPlayer = unit.team === "player";
     const data = getUnitStats(unit);
@@ -771,15 +774,32 @@ export function updateUnitAI(
                         }
                     }
 
+                    // Player units: queue attack skill (processed by action queue)
+                    // AI enabled = auto-queue attacks, AI disabled = only manual attacks (already in queue)
+                    if (isPlayer) {
+                        if (unit.aiEnabled && actionQueueRef && setQueuedActions) {
+                            // Auto-queue if not already queued
+                            if (!actionQueueRef[unit.id]) {
+                                const basicAttack = getBasicAttackSkill(unit.id);
+                                actionQueueRef[unit.id] = {
+                                    type: "skill",
+                                    skill: basicAttack,
+                                    targetX: targetG.position.x,
+                                    targetZ: targetG.position.z
+                                };
+                                setQueuedActions(prev => [
+                                    ...prev.filter(q => q.unitId !== unit.id),
+                                    { unitId: unit.id, skillName: basicAttack.name }
+                                ]);
+                            }
+                        }
+                        // Player attacks always go through skill queue - don't execute directly
+                        return;
+                    }
+
+                    // Enemy units: execute attack directly (they don't use player skill queue)
                     const attackCooldownEnd = now + data.attackCooldown;
                     actionCooldownRef[unit.id] = attackCooldownEnd;
-
-                    if (isPlayer) {
-                        const cooldownData = { end: attackCooldownEnd, duration: data.attackCooldown };
-                        const skillCooldownUpdates: Record<string, { end: number; duration: number }> = { [`${unit.id}-Attack`]: cooldownData };
-                        (data as UnitData).skills.forEach(s => { skillCooldownUpdates[`${unit.id}-${s.name}`] = cooldownData; });
-                        setSkillCooldowns(prev => ({ ...prev, ...skillCooldownUpdates }));
-                    }
 
                     if (isRanged && 'projectileColor' in data && data.projectileColor) {
                         const projectile = new THREE.Mesh(
@@ -793,25 +813,18 @@ export function updateUnitAI(
                     } else {
                         // Melee attack
                         const targetData = getUnitStats(targetU);
-                        spawnSwingIndicator(scene, g, targetG, isPlayer, swingAnimations, now);
+                        spawnSwingIndicator(scene, g, targetG, false, swingAnimations, now);
 
                         if (rollHit(data.accuracy)) {
                             const rawDmg = rollDamage(data.damage[0], data.damage[1]);
                             const dmg = Math.max(1, rawDmg - targetData.armor);
-                            // Calculate newHp BEFORE setUnits to avoid stale state
                             const newHp = Math.max(0, targetU.hp - dmg);
 
                             setUnits(prev => prev.map(u => u.id === targetU.id ? { ...u, hp: newHp } : u));
                             hitFlashRef[targetU.id] = now;
                             soundFns.playHit();
-                            const dmgColor = isPlayer ? COLORS.damagePlayer : COLORS.damageEnemy;
-                            addLog(`${data.name} hits ${targetData.name} for ${dmg} damage!`, dmgColor);
-                            spawnDamageNumber(scene, targetG.position.x, targetG.position.z, dmg, dmgColor, damageTexts);
-
-                            // Aggro enemies hit by player melee
-                            if (isPlayer) {
-                                aggroOnHit(targetU, unit.id, unitsRef);
-                            }
+                            addLog(logHit(data.name, "Attack", targetData.name, dmg), COLORS.damageEnemy);
+                            spawnDamageNumber(scene, targetG.position.x, targetG.position.z, dmg, COLORS.damageEnemy, damageTexts);
 
                             if (newHp <= 0) {
                                 defeatedThisFrame.add(targetU.id);
@@ -819,7 +832,7 @@ export function updateUnitAI(
                             }
                         } else {
                             soundFns.playMiss();
-                            addLog(`${data.name} misses ${targetData.name}.`, COLORS.logNeutral);
+                            addLog(logMiss(data.name, "Attack", targetData.name), COLORS.logNeutral);
                         }
                     }
                 }

@@ -12,7 +12,7 @@ import type { Unit, Skill, CombatLogEntry, SelectionBox, DamageText, UnitGroup, 
 
 // Game Logic
 import { blocked } from "./game/dungeon";
-import { ENEMY_STATS, UNIT_DATA, createInitialUnits } from "./game/units";
+import { UNIT_DATA, createInitialUnits, getBasicAttackSkill } from "./game/units";
 import { createScene, updateCamera } from "./rendering/scene";
 import { soundFns } from "./audio/sound";
 
@@ -26,6 +26,7 @@ import {
     handleTargetingClick,
     handleTargetingOnUnit,
     setupTargetingMode,
+    queueOrExecuteSkill,
     type ActionQueue
 } from "./input";
 import {
@@ -283,7 +284,7 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
                                 actionQueueRef.current[t.id] = { type: "move", targetX: t.x, targetZ: t.z };
                             });
                             if (pausedRef.current) {
-                                addLog(`Move queued for ${moveTargets.length} unit(s)`, "#888");
+                                addLog(`Move queued for ${moveTargets.length} unit${moveTargets.length !== 1 ? "s" : ""}.`, "#888");
                             }
                             break;
                         }
@@ -331,14 +332,40 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
                         const id = o.userData.unitId as number;
                         const clickedUnit = unitsStateRef.current.find(u => u.id === id);
                         if (clickedUnit && clickedUnit.team === "enemy" && clickedUnit.hp > 0 && selectedRef.current.length > 0) {
-                            // Queue attack for each selected unit (per-unit queue, last action wins)
+                            // Set attack target and queue attack skill for all selected units
+                            const targetId = clickedUnit.id;
+                            const targetG = unitsRef.current[targetId];
+
                             selectedRef.current.forEach(uid => {
-                                actionQueueRef.current[uid] = { type: "attack", targetId: id };
+                                const casterG = unitsRef.current[uid];
+                                if (casterG) {
+                                    // Set persistent attack target (unit will keep attacking this enemy)
+                                    casterG.userData.attackTarget = targetId;
+                                    pathsRef.current[uid] = [];
+
+                                    // Queue attack skill (works when paused or on cooldown)
+                                    if (targetG) {
+                                        const basicAttack = getBasicAttackSkill(uid);
+                                        queueOrExecuteSkill(
+                                            uid,
+                                            basicAttack,
+                                            targetG.position.x,
+                                            targetG.position.z,
+                                            { actionCooldownRef, actionQueueRef, rangeIndicatorRef, aoeIndicatorRef },
+                                            { pausedRef },
+                                            { setTargetingMode, setQueuedActions },
+                                            skillCtx,
+                                            addLog
+                                        );
+                                    }
+                                }
                             });
-                            if (pausedRef.current) {
-                                const enemyName = clickedUnit.enemyType ? ENEMY_STATS[clickedUnit.enemyType].name : "Enemy";
-                                addLog(`Attack queued on ${enemyName}`, "#888");
-                            }
+
+                            // Update unit state to reflect targeting
+                            setUnits(prev => prev.map(u =>
+                                selectedRef.current.includes(u.id) ? { ...u, target: targetId } : u
+                            ));
+                            soundFns.playAttack();
                             return;
                         } else if (clickedUnit && clickedUnit.team === "player") {
                             setSelectedIds(e.shiftKey ? prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id] : [id]);
@@ -361,13 +388,13 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
                 );
             }
             if (e.code === "Escape") {
-                // Priority: help modal > unit panel > targeting mode > deselect all
-                if (helpOpenRef.current) {
+                // Priority: targeting mode > help modal > unit panel > deselect all
+                if (targetingModeRef.current) {
+                    clearTargetingMode(setTargetingMode, rangeIndicatorRef, aoeIndicatorRef);
+                } else if (helpOpenRef.current) {
                     onCloseHelp();
                 } else if (showPanelRef.current) {
                     setShowPanel(false);
-                } else if (targetingModeRef.current) {
-                    clearTargetingMode(setTargetingMode, rangeIndicatorRef, aoeIndicatorRef);
                 } else if (selectedRef.current.length > 0) {
                     setSelectedIds([]);
                 }
@@ -502,8 +529,9 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
                         unit, g, unitsRef.current, currentUnits, visibilityRef.current,
                         pathsRef.current, actionCooldownRef.current, hitFlashRef.current,
                         projectilesRef.current, damageTexts.current, swingAnimationsRef.current,
-                        moveStartRef.current, scene, setUnits, setSkillCooldowns, addLog, now,
-                        defeatedThisFrame
+                        moveStartRef.current, scene, setUnits, addLog, now,
+                        defeatedThisFrame,
+                        actionQueueRef.current, setQueuedActions
                     );
                 });
 

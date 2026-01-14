@@ -7,6 +7,7 @@ import type { DamageText, UnitGroup } from "../core/types";
 import { soundFns } from "../audio/sound";
 import { cleanupUnitState } from "../ai/pathManager";
 import { cleanupEnemySkillCooldown } from "../game/enemyState";
+import { logDefeated } from "./combatMath";
 
 /**
  * Spawn a floating damage number at the given position
@@ -48,7 +49,7 @@ export function handleUnitDefeat(
     addLog: (text: string, color?: string) => void,
     targetName: string
 ): void {
-    addLog(`${targetName} is defeated!`, "#f59e0b");
+    addLog(logDefeated(targetName), "#f59e0b");
     soundFns.playDeath();
     targetGroup.visible = false;
 
