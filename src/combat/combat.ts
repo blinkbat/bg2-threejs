@@ -9,7 +9,7 @@ import { getUnitRadius, isInRange } from "../rendering/range";
 import { soundFns } from "../audio/sound";
 import { cleanupUnitState } from "../ai/pathManager";
 import { cleanupEnemySkillCooldown } from "../game/enemyState";
-import { logDefeated, applyPoison } from "./combatMath";
+import { logDefeated, applyPoison, hasShieldedEffect } from "./combatMath";
 
 // =============================================================================
 // PROJECTILE CREATION
@@ -172,7 +172,8 @@ export function applyDamageToUnit(
     setUnits(prev => prev.map(u => {
         if (u.id !== targetId) return u;
         let updated = { ...u, hp: newHp };
-        if (poison) {
+        // Shielded units are immune to poison
+        if (poison && !hasShieldedEffect(u)) {
             updated = applyPoison(updated, poison.sourceId, now);
         }
         return updated;

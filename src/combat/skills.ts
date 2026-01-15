@@ -3,10 +3,10 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, Skill, UnitGroup, Projectile } from "../core/types";
+import type { Unit, Skill, UnitGroup, Projectile, StatusEffect } from "../core/types";
 import { COLORS } from "../core/constants";
 import { UNIT_DATA, getUnitStats, getAllSkills } from "../game/units";
-import { rollDamage, rollChance, calculateDamage, rollHit, logHit, logMiss, logHeal, logPoisoned, logCast, logTaunt, logTauntMiss } from "./combatMath";
+import { rollDamage, rollChance, calculateDamage, rollHit, getEffectiveArmor, hasShieldedEffect, logHit, logMiss, logHeal, logPoisoned, logCast, logTaunt, logTauntMiss, logBuff } from "./combatMath";
 import { getUnitRadius, isInRange } from "../rendering/range";
 import { soundFns } from "../audio/sound";
 import { createProjectile, getProjectileSpeed, applyDamageToUnit, animateExpandingMesh, type DamageContext } from "./combat";
@@ -74,12 +74,18 @@ function findClosestTargetByTeam(
 /**
  * Consume skill resources: set global cooldown for ALL skills and deduct mana.
  * Call this at the START of every skill execution (after validation, before effects).
+ * If the caster has shielded effect, cooldowns are doubled.
  */
 function consumeSkill(ctx: SkillExecutionContext, casterId: number, skill: Skill): void {
-    const { actionCooldownRef, setSkillCooldowns, setUnits } = ctx;
+    const { unitsStateRef, actionCooldownRef, setSkillCooldowns, setUnits } = ctx;
     const now = Date.now();
-    const cooldownEnd = now + skill.cooldown;
-    const cooldownData = { end: cooldownEnd, duration: skill.cooldown };
+
+    // Check if caster is shielded - doubles cooldowns
+    const caster = unitsStateRef.current.find(u => u.id === casterId);
+    const cooldownMultiplier = caster && hasShieldedEffect(caster) ? 2 : 1;
+
+    const effectiveCooldown = skill.cooldown * cooldownMultiplier;
+    const cooldownEnd = now + effectiveCooldown;
 
     // Set internal cooldown ref
     actionCooldownRef.current[casterId] = cooldownEnd;
@@ -89,7 +95,8 @@ function consumeSkill(ctx: SkillExecutionContext, casterId: number, skill: Skill
     setSkillCooldowns(prev => {
         const updated = { ...prev };
         allSkills.forEach(s => {
-            updated[`${casterId}-${s.name}`] = cooldownData;
+            const sCooldown = s.cooldown * cooldownMultiplier;
+            updated[`${casterId}-${s.name}`] = { end: now + sCooldown, duration: sCooldown };
         });
         return updated;
     });
@@ -219,7 +226,7 @@ export function executeMeleeSkill(
 
     // Roll to hit
     if (rollHit(casterData.accuracy)) {
-        const dmg = calculateDamage(skill.value[0], skill.value[1], targetData.armor);
+        const dmg = calculateDamage(skill.value[0], skill.value[1], getEffectiveArmor(targetEnemy, targetData.armor));
         const willPoison = skill.poisonChance ? rollChance(skill.poisonChance) : false;
 
         const dmgCtx: DamageContext = {
@@ -301,6 +308,151 @@ export function executeTauntSkill(
         addLog(logTaunt(casterData.name, skill.name, tauntedCount), "#c0392b");
     } else {
         addLog(logTauntMiss(casterData.name, skill.name), COLORS.logNeutral);
+    }
+
+    return true;
+}
+
+/**
+ * Execute a self-buff skill (like Raise Shield)
+ */
+export function executeBuffSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill
+): boolean {
+    const { scene, unitsRef, setUnits, addLog } = ctx;
+
+    const casterG = unitsRef.current[casterId];
+    if (!casterG) return false;
+
+    consumeSkill(ctx, casterId, skill);
+
+    const casterData = UNIT_DATA[casterId];
+    const duration = skill.value[0];  // Duration in ms
+    const now = Date.now();
+
+    // Apply the buff as a status effect
+    setUnits(prev => prev.map(u => {
+        if (u.id !== casterId) return u;
+
+        const existingEffects = u.statusEffects || [];
+        // Remove existing shielded effect if any (refresh)
+        const filteredEffects = existingEffects.filter(e => e.type !== "shielded");
+
+        const shieldedEffect: StatusEffect = {
+            type: "shielded",
+            duration,
+            tickInterval: duration,  // No ticking needed
+            lastTick: now,
+            damagePerTick: 0,
+            sourceId: casterId
+        };
+
+        return {
+            ...u,
+            statusEffects: [...filteredEffects, shieldedEffect]
+        };
+    }));
+
+    // Play sound and log
+    soundFns.playHeal();  // Reuse heal sound for buff activation
+    addLog(logBuff(casterData.name, skill.name), "#f1c40f");
+
+    // Visual effect - golden glow ring
+    const ring = new THREE.Mesh(
+        new THREE.RingGeometry(0.3, 0.5, 32),
+        new THREE.MeshBasicMaterial({ color: "#f1c40f", transparent: true, opacity: 0.8, side: THREE.DoubleSide })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(casterG.position.x, 0.1, casterG.position.z);
+    scene.add(ring);
+
+    animateExpandingMesh(scene, ring, { maxScale: 1.5, baseRadius: 0.4, duration: 300 });
+
+    return true;
+}
+
+/**
+ * Execute a flurry skill (multiple rapid hits on nearby enemies)
+ */
+export function executeFlurrySkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill
+): boolean {
+    const { scene, unitsStateRef, unitsRef, setUnits, addLog, hitFlashRef, damageTexts } = ctx;
+
+    const casterG = unitsRef.current[casterId];
+    if (!casterG) return false;
+
+    consumeSkill(ctx, casterId, skill);
+
+    const casterData = UNIT_DATA[casterId];
+    const hitCount = skill.hitCount ?? 5;
+    const now = Date.now();
+
+    // Find all enemies within range
+    const enemies = getAliveUnits(unitsStateRef.current, "enemy");
+    const enemiesInRange: { unit: Unit; group: UnitGroup }[] = [];
+
+    enemies.forEach(enemy => {
+        const enemyG = unitsRef.current[enemy.id];
+        if (!enemyG) return;
+
+        const enemyRadius = getUnitRadius(enemy);
+        if (isInRange(casterG.position.x, casterG.position.z, enemyG.position.x, enemyG.position.z, enemyRadius, skill.range)) {
+            enemiesInRange.push({ unit: enemy, group: enemyG });
+        }
+    });
+
+    if (enemiesInRange.length === 0) {
+        addLog(`${casterData.name}: No enemies in range!`, COLORS.logNeutral);
+        return true; // Still consumed mana/cooldown
+    }
+
+    // Distribute hits across enemies (round-robin)
+    let totalHits = 0;
+    let totalDamage = 0;
+
+    for (let i = 0; i < hitCount; i++) {
+        const targetIdx = i % enemiesInRange.length;
+        const { unit: target, group: targetG } = enemiesInRange[targetIdx];
+        const targetData = getUnitStats(target);
+
+        if (rollHit(casterData.accuracy)) {
+            const dmg = calculateDamage(skill.value[0], skill.value[1], getEffectiveArmor(target, targetData.armor));
+
+            const dmgCtx: DamageContext = {
+                scene, damageTexts: damageTexts.current, hitFlashRef: hitFlashRef.current,
+                unitsRef: unitsRef.current, setUnits, addLog, now
+            };
+            applyDamageToUnit(dmgCtx, target.id, targetG, target.hp, dmg, targetData.name, {
+                color: COLORS.damagePlayer
+            });
+
+            totalHits++;
+            totalDamage += dmg;
+        }
+    }
+
+    soundFns.playAttack();
+
+    // Visual effect - rapid green pulses
+    const ring = new THREE.Mesh(
+        new THREE.RingGeometry(0.3, 0.5, 32),
+        new THREE.MeshBasicMaterial({ color: "#27ae60", transparent: true, opacity: 0.8, side: THREE.DoubleSide })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(casterG.position.x, 0.1, casterG.position.z);
+    scene.add(ring);
+
+    animateExpandingMesh(scene, ring, { maxScale: skill.range, baseRadius: 0.4, duration: 200 });
+
+    if (totalHits > 0) {
+        addLog(`${casterData.name}'s ${skill.name} lands ${totalHits} hits for ${totalDamage} total damage!`, COLORS.damagePlayer);
+    } else {
+        addLog(`${casterData.name}'s ${skill.name} misses all targets!`, COLORS.logNeutral);
     }
 
     return true;
@@ -396,6 +548,10 @@ export function executeSkill(
         return executeMeleeSkill(ctx, casterId, skill, targetX, targetZ);
     } else if (skill.type === "taunt" && skill.targetType === "self") {
         return executeTauntSkill(ctx, casterId, skill);
+    } else if (skill.type === "buff" && skill.targetType === "self") {
+        return executeBuffSkill(ctx, casterId, skill);
+    } else if (skill.type === "flurry" && skill.targetType === "self") {
+        return executeFlurrySkill(ctx, casterId, skill);
     }
 
     return false;

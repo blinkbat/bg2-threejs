@@ -77,6 +77,9 @@ export const COLORS = {
     poison: "#4a7c4a",
     poisonText: "#7cba7c",
     poisonBg: "#1a2a1a",
+    shielded: "#d4a017",
+    shieldedText: "#f1c40f",
+    shieldedBg: "#2a2510",
 
     // HP bar colors
     hpHigh: "#22c55e",          // > 50%

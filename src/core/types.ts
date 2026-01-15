@@ -10,7 +10,7 @@ export type EnemyType = "kobold" | "kobold_archer" | "ogre";
 // STATUS EFFECTS
 // =============================================================================
 
-export type StatusEffectType = "poison" | "regen";
+export type StatusEffectType = "poison" | "regen" | "shielded";
 
 export interface StatusEffect {
     type: StatusEffectType;
@@ -36,15 +36,18 @@ export interface Unit {
 
 export interface Skill {
     name: string;
+    description?: string;  // Short description for tooltip
+    flavor?: string;       // Flavor text for tooltip
     manaCost: number;
     cooldown: number;  // ms
-    type: "damage" | "heal" | "buff" | "taunt";
+    type: "damage" | "heal" | "buff" | "taunt" | "flurry";
     targetType: "enemy" | "ally" | "self" | "aoe";
     range: number;
     aoeRadius?: number;
     value: [number, number];  // damage/heal range, or taunt chance for taunt skills
     projectileColor?: string;
     poisonChance?: number;  // 0-100 percent chance to apply poison on hit
+    hitCount?: number;  // Number of hits for flurry-type skills
 }
 
 export interface UnitData {

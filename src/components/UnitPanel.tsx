@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
+import Tippy from "@tippyjs/react";
 import type { Unit, Skill, StatusEffect } from "../core/types";
 import { UNIT_DATA, getAllSkills } from "../game/units";
-import { getHpPercentage, getHpColor, getMana } from "../combat/combatMath";
+import { getHpPercentage, getHpColor, getMana, hasShieldedEffect, getEffectiveArmor } from "../combat/combatMath";
 import { COLORS } from "../core/constants";
 
 interface UnitPanelProps {
@@ -106,6 +107,9 @@ export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, ski
 }
 
 function StatusTab({ unit, data, onToggleAI, unitId }: { unit: Unit; data: typeof UNIT_DATA[number]; onToggleAI: (id: number) => void; unitId: number }) {
+    const isShielded = hasShieldedEffect(unit);
+    const effectiveArmor = getEffectiveArmor(unit, data.armor);
+
     return (
         <div style={{ fontSize: 13 }}>
             <div className="stat-grid">
@@ -115,7 +119,10 @@ function StatusTab({ unit, data, onToggleAI, unitId }: { unit: Unit; data: typeo
                 </div>
                 <div className="card">
                     <span className="text-muted">Armor</span>
-                    <span className="float-right">{data.armor}</span>
+                    <span className="float-right" style={isShielded ? { color: COLORS.shieldedText } : undefined}>
+                        {effectiveArmor}
+                        {isShielded && <span style={{ fontSize: 10, marginLeft: 4 }}>(×2)</span>}
+                    </span>
                 </div>
                 <div className="card span-2">
                     <span className="text-muted">Damage</span>
@@ -130,7 +137,8 @@ function StatusTab({ unit, data, onToggleAI, unitId }: { unit: Unit; data: typeo
                         {unit.statusEffects.map((effect: StatusEffect, i: number) => {
                             const remainingSec = Math.ceil(effect.duration / 1000);
                             const effectColorMap: Record<string, { bg: string; border: string; text: string }> = {
-                                poison: { bg: COLORS.poisonBg, border: COLORS.poison, text: COLORS.poisonText }
+                                poison: { bg: COLORS.poisonBg, border: COLORS.poison, text: COLORS.poisonText },
+                                shielded: { bg: COLORS.shieldedBg, border: COLORS.shielded, text: COLORS.shieldedText }
                             };
                             const colors = effectColorMap[effect.type] || { bg: "#1a1a2a", border: "#444", text: COLORS.logNeutral };
                             return (
@@ -161,6 +169,78 @@ function StatusTab({ unit, data, onToggleAI, unitId }: { unit: Unit; data: typeo
     );
 }
 
+function SkillTooltip({ skill, isShielded }: { skill: Skill; isShielded: boolean }) {
+    const isRanged = skill.range > 2;
+    const baseCooldown = skill.cooldown / 1000;
+    const effectiveCooldown = isShielded ? baseCooldown * 2 : baseCooldown;
+
+    // Build tooltip lines
+    const lines: { label: string; value: string; color?: string }[] = [];
+
+    // Damage/heal/effect value
+    if (skill.type === "damage") {
+        lines.push({ label: "Damage", value: `${skill.value[0]}-${skill.value[1]}` });
+    } else if (skill.type === "heal") {
+        lines.push({ label: "Heal", value: `${skill.value[0]}-${skill.value[1]}`, color: COLORS.hpHigh });
+    } else if (skill.type === "taunt") {
+        lines.push({ label: "Taunt chance", value: `${skill.value[0]}%` });
+    } else if (skill.type === "buff") {
+        const durationSec = Math.round(skill.value[0] / 1000);
+        lines.push({ label: "Duration", value: `${durationSec}s`, color: COLORS.shieldedText });
+        lines.push({ label: "Effect", value: "×2 armor, ×2 cooldowns", color: COLORS.shieldedText });
+        lines.push({ label: "Bonus", value: "Poison immune", color: COLORS.poisonText });
+    } else if (skill.type === "flurry") {
+        lines.push({ label: "Damage", value: `${skill.value[0]}-${skill.value[1]} × ${skill.hitCount ?? 5}` });
+        lines.push({ label: "Targets", value: `Up to ${skill.hitCount ?? 5} nearby` });
+    }
+
+    // Range
+    if (skill.range > 0) {
+        lines.push({ label: isRanged ? "Range" : "Melee", value: isRanged ? `${skill.range}` : "1.8" });
+    }
+
+    // AOE
+    if (skill.aoeRadius) {
+        lines.push({ label: "AOE radius", value: `${skill.aoeRadius}`, color: "#ff6600" });
+    }
+
+    // Poison chance
+    if (skill.poisonChance) {
+        lines.push({ label: "Poison chance", value: `${skill.poisonChance}%`, color: COLORS.poisonText });
+    }
+
+    // Mana cost
+    if (skill.manaCost > 0) {
+        lines.push({ label: "Mana", value: `${skill.manaCost}`, color: COLORS.mana });
+    }
+
+    // Cooldown
+    lines.push({
+        label: "Cooldown",
+        value: isShielded ? `${effectiveCooldown}s (×2)` : `${baseCooldown}s`,
+        color: isShielded ? COLORS.shieldedText : undefined
+    });
+
+    return (
+        <div className="skill-tooltip">
+            {skill.description && (
+                <div className="skill-tooltip-desc">{skill.description}</div>
+            )}
+            {lines.map((line, i) => (
+                <div key={i} className="skill-tooltip-row">
+                    <span className="skill-tooltip-label">{line.label}</span>
+                    <span className="skill-tooltip-value" style={line.color ? { color: line.color } : undefined}>
+                        {line.value}
+                    </span>
+                </div>
+            ))}
+            {skill.flavor && (
+                <div className="skill-tooltip-flavor">{skill.flavor}</div>
+            )}
+        </div>
+    );
+}
+
 function SkillsTab({
     unitId, unit, skillCooldowns, displayTime, paused, queuedSkills, onCastSkill
 }: {
@@ -172,6 +252,8 @@ function SkillsTab({
     queuedSkills: string[];
     onCastSkill?: (unitId: number, skill: Skill) => void;
 }) {
+    const isShielded = hasShieldedEffect(unit);
+
     return (
         <div className="flex flex-col gap-8">
             {getAllSkills(unitId).map((skill: Skill, i: number) => {
@@ -190,49 +272,50 @@ function SkillsTab({
 
                 const skillColorClass = skill.type === "damage" ? "skill-damage" :
                     skill.type === "heal" ? "skill-heal" :
-                    skill.type === "taunt" ? "skill-taunt" : "skill-buff";
+                    skill.type === "taunt" ? "skill-taunt" :
+                    skill.type === "flurry" ? "skill-flurry" : "skill-buff";
                 const skillBorderColor = skill.type === "damage" ? "#ef4444" :
                     skill.type === "heal" ? "#22c55e" :
-                    skill.type === "taunt" ? "#c0392b" : "#3b82f6";
+                    skill.type === "taunt" ? "#c0392b" :
+                    skill.type === "flurry" ? "#27ae60" : "#f1c40f";
 
                 const cardClass = `skill-card ${!canClick && !isQueued ? "disabled" : ""} ${isQueued ? "queued" : ""}`;
 
                 return (
-                    <div
+                    <Tippy
                         key={i}
-                        className={cardClass}
-                        onClick={() => canClick && onCastSkill?.(unitId, skill)}
-                        style={{
-                            borderColor: isQueued ? undefined : (canClick ? skillBorderColor : "#333"),
-                            opacity: canClick || isQueued ? 1 : 0.5
-                        }}
+                        content={<SkillTooltip skill={skill} isShielded={isShielded} />}
+                        placement="left"
+                        delay={[200, 0]}
+                        arrow={true}
                     >
-                        {onCooldown && !isQueued && (
-                            <div className="skill-cooldown-overlay" style={{ width: `${cooldownPct}%` }} />
-                        )}
-                        <div className="skill-header">
-                            <span className={`bold ${isQueued ? "skill-queued-color" : skillColorClass}`}>
-                                {skill.name}
-                                {isBasicAttack && isRanged && <span className="skill-tag">RANGED</span>}
-                                {isBasicAttack && !isRanged && <span className="skill-tag">MELEE</span>}
-                                {isQueued && <span className="skill-tag skill-tag-queued">QUEUED</span>}
-                            </span>
-                            {skill.manaCost > 0 && <span className="mana-cost">{skill.manaCost} MP</span>}
-                        </div>
-                        <div className="skill-details">
-                            {skill.type === "taunt" ? `${skill.value[0]}% taunt chance` :
-                             skill.type === "damage" ? `${skill.value[0]}-${skill.value[1]} dmg` :
-                             `${skill.value[0]}-${skill.value[1]} heal`}
-                            {isRanged && <span className="skill-tag-range">range {skill.range}</span>}
-                            {skill.poisonChance && <span className="skill-tag-poison" style={{ color: COLORS.poisonText }}>{skill.poisonChance}% poison</span>}
-                            {skill.aoeRadius && <span className="skill-tag-aoe">AOE r{skill.aoeRadius}</span>}
+                        <div
+                            className={cardClass}
+                            onClick={() => canClick && onCastSkill?.(unitId, skill)}
+                            style={{
+                                borderColor: isQueued ? undefined : (canClick ? skillBorderColor : "#333"),
+                                opacity: canClick || isQueued ? 1 : 0.5
+                            }}
+                        >
                             {onCooldown && !isQueued && (
-                                <span className="cooldown-text">
-                                    {cooldownRemaining}s{paused && " (paused)"}
+                                <div className="skill-cooldown-overlay" style={{ width: `${cooldownPct}%` }} />
+                            )}
+                            <div className="skill-header">
+                                <span className={`bold ${isQueued ? "skill-queued-color" : skillColorClass}`}>
+                                    {skill.name}
+                                    {isBasicAttack && isRanged && <span className="skill-tag">RANGED</span>}
+                                    {isBasicAttack && !isRanged && <span className="skill-tag">MELEE</span>}
+                                    {isQueued && <span className="skill-tag skill-tag-queued">QUEUED</span>}
                                 </span>
+                                {skill.manaCost > 0 && <span className="mana-cost">{skill.manaCost} MP</span>}
+                            </div>
+                            {onCooldown && !isQueued && (
+                                <div className="skill-cooldown-text">
+                                    {cooldownRemaining}s{paused && " (paused)"}{isShielded && " (×2)"}
+                                </div>
                             )}
                         </div>
-                    </div>
+                    </Tippy>
                 );
             })}
         </div>

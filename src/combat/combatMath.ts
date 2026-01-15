@@ -130,6 +130,20 @@ export function hasPoisonEffect(unit: Unit): boolean {
 }
 
 /**
+ * Check if a unit currently has the shielded status effect.
+ */
+export function hasShieldedEffect(unit: Unit): boolean {
+    return unit.statusEffects?.some(e => e.type === "shielded") ?? false;
+}
+
+/**
+ * Get effective armor for a unit, applying shielded buff (doubles armor).
+ */
+export function getEffectiveArmor(unit: Unit, baseArmor: number): number {
+    return hasShieldedEffect(unit) ? baseArmor * 2 : baseArmor;
+}
+
+/**
  * Get HP percentage for a unit.
  */
 export function getHpPercentage(hp: number, maxHp: number): number {
@@ -211,4 +225,9 @@ export function logTaunt(casterName: string, skillName: string, tauntedCount: nu
 /** "{unit}'s {skill} echoes... but no enemies are affected." */
 export function logTauntMiss(casterName: string, skillName: string): string {
     return `${casterName}'s ${skillName} echoes... but no enemies are affected.`;
+}
+
+/** "{unit} activates {skill}!" */
+export function logBuff(casterName: string, skillName: string): string {
+    return `${casterName} activates ${skillName}!`;
 }

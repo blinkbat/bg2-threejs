@@ -17,7 +17,7 @@ import {
 } from "./ai/unitAI";
 import { getUnitStats, getBasicAttackSkill } from "./game/units";
 import type { ActionQueue } from "./input";
-import { calculateDamage, calculateDistance, getDirectionAndDistance, getGridCell, rollHit, shouldApplyPoison, hasPoisonEffect, logHit, logMiss, logPoisoned, logAoeHit, logAoeMiss, getDamageColor } from "./combat/combatMath";
+import { calculateDamage, calculateDistance, getDirectionAndDistance, getGridCell, rollHit, shouldApplyPoison, hasPoisonEffect, getEffectiveArmor, logHit, logMiss, logPoisoned, logAoeHit, logAoeMiss, getDamageColor } from "./combat/combatMath";
 import { SWIPE_ANIMATE_DURATION } from "./core/constants";
 import { spawnDamageNumber, handleUnitDefeat, createProjectile, getProjectileSpeed, applyDamageToUnit, animateExpandingMesh, getAliveUnitsInRange, type DamageContext } from "./combat/combat";
 import { soundFns } from "./audio/sound";
@@ -217,6 +217,27 @@ export function processStatusEffects(
                         handleUnitDefeat(unit.id, unitG, unitsRef, addLog, data.name);
                     }
                 }
+            } else if (effect.type === "shielded") {
+                // Shielded buff - just decay duration over time (no damage)
+                const elapsed = now - effect.lastTick;
+                if (elapsed > 0) {
+                    setUnits(prev => prev.map(u => {
+                        if (u.id !== unit.id) return u;
+
+                        const updatedEffects = (u.statusEffects || []).map(e => {
+                            if (e.type === "shielded") {
+                                const newDuration = e.duration - elapsed;
+                                return { ...e, duration: newDuration, lastTick: now };
+                            }
+                            return e;
+                        }).filter(e => e.duration > 0);
+
+                        return {
+                            ...u,
+                            statusEffects: updatedEffects.length > 0 ? updatedEffects : undefined
+                        };
+                    }));
+                }
             }
         });
     });
@@ -272,7 +293,7 @@ export function updateProjectiles(
                     const targetDist = calculateDistance(tg.position.x, tg.position.z, targetPos.x, targetPos.z);
                     if (targetDist <= aoeRadius) {
                         const targetData = getUnitStats(target);
-                        const dmg = calculateDamage(damage[0], damage[1], targetData.armor);
+                        const dmg = calculateDamage(damage[0], damage[1], getEffectiveArmor(target, targetData.armor));
 
                         const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
                         applyDamageToUnit(dmgCtx, target.id, tg, target.hp, dmg, targetData.name, { color: getDamageColor(target.team, true) });
@@ -325,7 +346,7 @@ export function updateProjectiles(
             }
 
             if (rollHit(attackerData.accuracy)) {
-                const dmg = calculateDamage(attackerData.damage[0], attackerData.damage[1], targetData.armor);
+                const dmg = calculateDamage(attackerData.damage[0], attackerData.damage[1], getEffectiveArmor(targetUnit, targetData.armor));
                 const willPoison = attackerUnit.team === "enemy" && shouldApplyPoison(attackerData as EnemyStats);
 
                 const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
@@ -454,7 +475,7 @@ function executeEnemySwipe(
         const targetData = getUnitStats(target);
 
         if (rollHit(enemyData.accuracy)) {
-            const dmg = calculateDamage(skill.damage[0], skill.damage[1], targetData.armor);
+            const dmg = calculateDamage(skill.damage[0], skill.damage[1], getEffectiveArmor(target, targetData.armor));
             applyDamageToUnit(dmgCtx, target.id, tg, target.hp, dmg, targetData.name, { color: "#ff4444" });
             hitCount++;
         }
@@ -695,7 +716,7 @@ export function updateUnitAI(
                         spawnSwingIndicator(scene, g, targetG, false, swingAnimations, now);
 
                         if (rollHit(data.accuracy)) {
-                            const dmg = calculateDamage(data.damage[0], data.damage[1], targetData.armor);
+                            const dmg = calculateDamage(data.damage[0], data.damage[1], getEffectiveArmor(targetU, targetData.armor));
                             const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
                             applyDamageToUnit(dmgCtx, targetU.id, targetG, targetU.hp, dmg, targetData.name, { color: COLORS.damageEnemy });
 
