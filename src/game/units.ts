@@ -121,6 +121,25 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         kiteDistance: 3,     // How far to retreat
         kiteCooldown: 4000   // Can only kite every 4 seconds
     },
+    kobold_witch_doctor: {
+        name: "Kobold Witch Doctor",
+        hp: 14,
+        maxHp: 14,
+        damage: [1, 3],
+        accuracy: 50,
+        armor: 0,
+        color: "#4a0080",  // Purple for magical
+        aggroRange: 8,
+        attackCooldown: 3000,
+        range: 5,
+        projectileColor: "#9932CC",  // Dark orchid
+        healSkill: {
+            name: "Dark Mending",
+            cooldown: 8000,  // 8 seconds
+            heal: [4, 8],
+            range: 6  // Range to find hurt allies
+        }
+    },
     ogre: {
         name: "Ogre",
         hp: 80,
@@ -185,6 +204,16 @@ const koboldArcherSpawns = [
     { x: 44.5, z: 6.5 },
 ];
 
+// Kobold Witch Doctor spawns - support units that heal allies
+const witchDoctorSpawns = [
+    // Room D - center (near ogre)
+    { x: 25.5, z: 25.5 },
+    // Room B - NW (supporting kobolds)
+    { x: 6.5, z: 43.5 },
+    // Room C - SE (supporting kobolds)
+    { x: 43.5, z: 6.5 },
+];
+
 // Helper to create initial units
 export function createInitialUnits(): Unit[] {
     return [
@@ -221,6 +250,17 @@ export function createInitialUnits(): Unit[] {
             hp: ENEMY_STATS.kobold_archer.maxHp,
             team: "enemy" as const,
             enemyType: "kobold_archer" as const,
+            target: null,
+            aiEnabled: true
+        })),
+        // Kobold Witch Doctors
+        ...witchDoctorSpawns.map((spawn, i) => ({
+            id: 170 + i,
+            x: spawn.x,
+            z: spawn.z,
+            hp: ENEMY_STATS.kobold_witch_doctor.maxHp,
+            team: "enemy" as const,
+            enemyType: "kobold_witch_doctor" as const,
             target: null,
             aiEnabled: true
         })),

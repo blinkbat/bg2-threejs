@@ -37,6 +37,41 @@ export function resetAllEnemySkillCooldowns(): void {
 }
 
 // =============================================================================
+// HEAL COOLDOWNS
+// =============================================================================
+
+// Enemy heal cooldowns - for support enemies
+const enemyHealCooldowns: Record<number, number> = {};
+
+/**
+ * Get the cooldown end time for an enemy's heal skill.
+ */
+export function getEnemyHealCooldown(unitId: number): number {
+    return enemyHealCooldowns[unitId] || 0;
+}
+
+/**
+ * Set the cooldown end time for an enemy's heal skill.
+ */
+export function setEnemyHealCooldown(unitId: number, cooldownEnd: number): void {
+    enemyHealCooldowns[unitId] = cooldownEnd;
+}
+
+/**
+ * Clean up enemy heal cooldown state for a unit (call on unit death).
+ */
+export function cleanupEnemyHealCooldown(unitId: number): void {
+    delete enemyHealCooldowns[unitId];
+}
+
+/**
+ * Reset all enemy heal cooldowns (for game restart).
+ */
+export function resetAllEnemyHealCooldowns(): void {
+    Object.keys(enemyHealCooldowns).forEach(k => delete enemyHealCooldowns[Number(k)]);
+}
+
+// =============================================================================
 // KITE COOLDOWNS
 // =============================================================================
 

@@ -95,21 +95,41 @@ export function findNearestTarget(ctx: TargetingContext, alerted: boolean = fals
 
 /**
  * Acquire a new target and calculate path to it.
+ * Returns true if path was found or unit is already in range, false if target is unreachable.
  */
-export function acquireTarget(ctx: TargetingContext, targetId: number): void {
+export function acquireTarget(ctx: TargetingContext, targetId: number): boolean {
     const { unit, g, unitsRef, pathsRef, moveStartRef, now } = ctx;
+    const isPlayer = unit.team === "player";
 
     g.userData.attackTarget = targetId;
     const targetG = unitsRef[targetId];
 
     if (targetG) {
+        // Check if already close enough (no path needed)
+        const dist = Math.hypot(g.position.x - targetG.position.x, g.position.z - targetG.position.z);
+        if (dist < 3) {
+            // Already in or near attack range, no path needed
+            pathsRef[unit.id] = [];
+            return true;
+        }
+
         const path = findPath(g.position.x, g.position.z, targetG.position.x, targetG.position.z);
-        pathsRef[unit.id] = path ? path.slice(1) : [];
         if (path && path.length > 0) {
+            pathsRef[unit.id] = path.slice(1);
             moveStartRef[unit.id] = { time: now, x: g.position.x, z: g.position.z };
+            return true;
+        } else {
+            // No path found and not in range - mark as unreachable for enemies
+            pathsRef[unit.id] = [];
+            if (!isPlayer) {
+                handleGiveUp(unit.id, isPlayer, targetId, now);
+                g.userData.attackTarget = null;
+            }
+            return false;
         }
     } else {
         pathsRef[unit.id] = [];
+        return false;
     }
 }
 

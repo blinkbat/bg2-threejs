@@ -177,15 +177,6 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         const size = (!isPlayer && 'size' in data && data.size) ? data.size : 1;
         const group = new THREE.Group();
 
-        const baseInner = 0.35 * size;
-        const baseOuter = 0.45 * size;
-        const base = new THREE.Mesh(
-            new THREE.RingGeometry(baseInner, baseOuter, 32),
-            new THREE.MeshBasicMaterial({ color: isPlayer ? "#444" : "#660000", side: THREE.DoubleSide, transparent: true, opacity: 0.5 })
-        );
-        base.rotation.x = -Math.PI / 2;
-        base.position.y = 0.02;
-        group.add(base);
 
         const boxH = isPlayer ? 1 : (size > 1 ? 1.8 : 0.6);
         const boxW = 0.6 * size;

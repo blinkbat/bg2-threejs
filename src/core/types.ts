@@ -4,7 +4,7 @@ import * as THREE from "three";
 // TYPE DEFINITIONS
 // =============================================================================
 
-export type EnemyType = "kobold" | "kobold_archer" | "ogre";
+export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre";
 
 // =============================================================================
 // STATUS EFFECTS
@@ -77,6 +77,13 @@ export interface EnemySkill {
     range: number;         // activation range
 }
 
+export interface EnemyHealSkill {
+    name: string;
+    cooldown: number;      // ms
+    heal: [number, number];
+    range: number;         // range to find hurt allies
+}
+
 export interface EnemyStats {
     name: string;
     hp: number;
@@ -96,6 +103,8 @@ export interface EnemyStats {
     poisonChance?: number;  // 0-100 percent chance to apply poison
     // Optional special skill
     skill?: EnemySkill;
+    // Optional heal skill for support enemies
+    healSkill?: EnemyHealSkill;
     // Optional kiting behavior for ranged enemies
     kiteDistance?: number;   // Distance to retreat when player gets too close
     kiteCooldown?: number;   // Minimum ms between kite attempts
