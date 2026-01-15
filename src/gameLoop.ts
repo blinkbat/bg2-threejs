@@ -211,6 +211,7 @@ export function processStatusEffects(
 
                     hitFlashRef[unit.id] = now;
                     spawnDamageNumber(scene, unitG.position.x, unitG.position.z, dmg, COLORS.poisonText, damageTexts);
+                    addLog(`${data.name} takes ${dmg} poison damage.`, COLORS.poisonText);
 
                     if (newHp <= 0) {
                         defeatedThisFrame.add(unit.id);
