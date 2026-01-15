@@ -6,10 +6,10 @@ import * as THREE from "three";
 import type { Unit, Skill, UnitGroup, Projectile } from "../core/types";
 import { COLORS } from "../core/constants";
 import { UNIT_DATA, getUnitStats, getAllSkills } from "../game/units";
-import { rollDamage, rollHit, applyPoison, logHit, logMiss, logHeal, logPoisoned, logCast, logTaunt, logTauntMiss } from "./combatMath";
+import { rollDamage, rollChance, calculateDamage, rollHit, logHit, logMiss, logHeal, logPoisoned, logCast, logTaunt, logTauntMiss } from "./combatMath";
 import { getUnitRadius, isInRange } from "../rendering/range";
 import { soundFns } from "../audio/sound";
-import { spawnDamageNumber, handleUnitDefeat } from "./combat";
+import { createProjectile, getProjectileSpeed, applyDamageToUnit, animateExpandingMesh, type DamageContext } from "./combat";
 
 export interface SkillExecutionContext {
     scene: THREE.Scene;
@@ -58,6 +58,19 @@ function findClosestUnit(
     return closest;
 }
 
+/** Find closest unit of a specific team to target position - combines getAliveUnits + findClosestUnit */
+function findClosestTargetByTeam(
+    units: Unit[],
+    unitsRef: Record<number, UnitGroup>,
+    team: "player" | "enemy",
+    targetX: number,
+    targetZ: number,
+    maxDist: number = 2
+): { unit: Unit; group: UnitGroup } | null {
+    const aliveUnits = getAliveUnits(units, team);
+    return findClosestUnit(aliveUnits, unitsRef, targetX, targetZ, maxDist);
+}
+
 /**
  * Consume skill resources: set global cooldown for ALL skills and deduct mana.
  * Call this at the START of every skill execution (after validation, before effects).
@@ -102,18 +115,13 @@ export function executeAoeSkill(
     consumeSkill(ctx, casterId, skill);
 
     // Create projectile toward target location
-    const projectile = new THREE.Mesh(
-        new THREE.SphereGeometry(0.2, 12, 12),
-        new THREE.MeshBasicMaterial({ color: skill.projectileColor || "#ff4400" })
-    );
-    projectile.position.set(casterG.position.x, 0.8, casterG.position.z);
-    scene.add(projectile);
+    const projectile = createProjectile(scene, "aoe", casterG.position.x, casterG.position.z, skill.projectileColor);
 
     projectilesRef.current.push({
         type: "aoe",
         mesh: projectile,
         attackerId: casterId,
-        speed: 0.25,
+        speed: getProjectileSpeed("aoe"),
         aoeRadius: skill.aoeRadius!,
         damage: skill.value,
         targetPos: { x: targetX, z: targetZ }
@@ -133,11 +141,10 @@ export function executeHealSkill(
     targetX: number,
     targetZ: number
 ): boolean {
-    const { unitsStateRef, unitsRef, unitMeshRef, unitOriginalColorRef, setUnits, addLog } = ctx;
+    const { unitsStateRef, unitsRef, unitMeshRef, hitFlashRef, setUnits, addLog } = ctx;
 
     // Find closest ally to target position
-    const allies = getAliveUnits(unitsStateRef.current, "player");
-    const closest = findClosestUnit(allies, unitsRef.current, targetX, targetZ);
+    const closest = findClosestTargetByTeam(unitsStateRef.current, unitsRef.current, "player", targetX, targetZ);
 
     if (!closest) {
         addLog(`${UNIT_DATA[casterId].name}: No ally at that location!`, COLORS.logNeutral);
@@ -161,18 +168,11 @@ export function executeHealSkill(
     addLog(logHeal(UNIT_DATA[casterId].name, skill.name, targetData.name, healAmount), COLORS.hpHigh);
     soundFns.playHeal();
 
-    // Visual effect - green flash
+    // Visual effect - green flash (use hitFlashRef system with green start color)
     const mesh = unitMeshRef.current[healTargetId];
     if (targetG && mesh) {
         (mesh.material as THREE.MeshStandardMaterial).color.set("#22ff22");
-        setTimeout(() => {
-            // Guard against mesh being disposed or removed after unmount
-            const currentMesh = unitMeshRef.current[healTargetId];
-            const orig = unitOriginalColorRef.current[healTargetId];
-            if (currentMesh && orig && currentMesh.material) {
-                (currentMesh.material as THREE.MeshStandardMaterial).color.copy(orig);
-            }
-        }, 200);
+        hitFlashRef.current[healTargetId] = Date.now();
     }
 
     return true;
@@ -191,8 +191,7 @@ export function executeMeleeSkill(
     const { scene, unitsStateRef, unitsRef, hitFlashRef, damageTexts, setUnits, addLog } = ctx;
 
     // Find closest enemy to target position
-    const enemies = getAliveUnits(unitsStateRef.current, "enemy");
-    const closest = findClosestUnit(enemies, unitsRef.current, targetX, targetZ);
+    const closest = findClosestTargetByTeam(unitsStateRef.current, unitsRef.current, "enemy", targetX, targetZ);
 
     if (!closest) {
         addLog(`${UNIT_DATA[casterId].name}: No enemy at that location!`, COLORS.logNeutral);
@@ -220,35 +219,23 @@ export function executeMeleeSkill(
 
     // Roll to hit
     if (rollHit(casterData.accuracy)) {
-        const rawDmg = rollDamage(skill.value[0], skill.value[1]);
-        const dmg = Math.max(1, rawDmg - targetData.armor);
-        const newHp = Math.max(0, targetEnemy.hp - dmg);
+        const dmg = calculateDamage(skill.value[0], skill.value[1], targetData.armor);
+        const willPoison = skill.poisonChance ? rollChance(skill.poisonChance) : false;
 
-        // Check if poison should be applied (roll now, apply in single setUnits)
-        const shouldPoison = skill.poisonChance && Math.random() * 100 < skill.poisonChance;
+        const dmgCtx: DamageContext = {
+            scene, damageTexts: damageTexts.current, hitFlashRef: hitFlashRef.current,
+            unitsRef: unitsRef.current, setUnits, addLog, now
+        };
+        applyDamageToUnit(dmgCtx, targetId, targetG, targetEnemy.hp, dmg, targetData.name, {
+            color: COLORS.damagePlayer,
+            poison: willPoison ? { sourceId: casterId } : undefined
+        });
 
-        // Single setUnits call to avoid stale state issues
-        setUnits(prev => prev.map(u => {
-            if (u.id !== targetId) return u;
-            let updatedUnit = { ...u, hp: newHp };
-            if (shouldPoison) {
-                updatedUnit = applyPoison(updatedUnit, casterId, now);
-            }
-            return updatedUnit;
-        }));
-
-        hitFlashRef.current[targetId] = now;
         soundFns.playHit();
         addLog(logHit(casterData.name, skill.name, targetData.name, dmg), COLORS.damagePlayer);
-        spawnDamageNumber(scene, targetG.position.x, targetG.position.z, dmg, COLORS.damagePlayer, damageTexts.current);
 
-        if (shouldPoison) {
+        if (willPoison) {
             addLog(logPoisoned(targetData.name), COLORS.poisonText);
-        }
-
-        // Check for defeat
-        if (newHp <= 0) {
-            handleUnitDefeat(targetId, targetG, unitsRef.current, addLog, targetData.name);
         }
     } else {
         soundFns.playMiss();
@@ -288,7 +275,7 @@ export function executeTauntSkill(
         const enemyRadius = getUnitRadius(enemy);
         if (isInRange(casterG.position.x, casterG.position.z, enemyG.position.x, enemyG.position.z, enemyRadius, skill.range)) {
             // Roll to taunt
-            if (Math.random() * 100 < tauntChance) {
+            if (rollChance(tauntChance)) {
                 // Force this enemy to target the caster
                 enemyG.userData.attackTarget = casterId;
                 tauntedCount++;
@@ -308,27 +295,7 @@ export function executeTauntSkill(
     ring.position.set(casterG.position.x, 0.1, casterG.position.z);
     scene.add(ring);
 
-    // Animate the ring expanding
-    const startTime = Date.now();
-    const expandDuration = 400;
-    const maxRadius = skill.range;
-
-    const animateRing = () => {
-        const elapsed = Date.now() - startTime;
-        const t = Math.min(1, elapsed / expandDuration);
-        const currentRadius = 0.5 + (maxRadius - 0.5) * t;
-        ring.scale.set(currentRadius / 0.6, currentRadius / 0.6, 1);
-        (ring.material as THREE.MeshBasicMaterial).opacity = 0.8 * (1 - t);
-
-        if (t < 1) {
-            requestAnimationFrame(animateRing);
-        } else {
-            scene.remove(ring);
-            ring.geometry.dispose();
-            (ring.material as THREE.MeshBasicMaterial).dispose();
-        }
-    };
-    requestAnimationFrame(animateRing);
+    animateExpandingMesh(scene, ring, { maxScale: skill.range, baseRadius: 0.6 });
 
     if (tauntedCount > 0) {
         addLog(logTaunt(casterData.name, skill.name, tauntedCount), "#c0392b");
@@ -352,8 +319,7 @@ export function executeRangedSkill(
     const { scene, unitsStateRef, unitsRef, projectilesRef, addLog } = ctx;
 
     // Find closest enemy to target position
-    const enemies = getAliveUnits(unitsStateRef.current, "enemy");
-    const closest = findClosestUnit(enemies, unitsRef.current, targetX, targetZ);
+    const closest = findClosestTargetByTeam(unitsStateRef.current, unitsRef.current, "enemy", targetX, targetZ);
 
     if (!closest) {
         addLog(`${UNIT_DATA[casterId].name}: No enemy at that location!`, COLORS.logNeutral);
@@ -377,19 +343,14 @@ export function executeRangedSkill(
     const casterData = UNIT_DATA[casterId];
 
     // Create projectile toward target
-    const projectile = new THREE.Mesh(
-        new THREE.SphereGeometry(0.15, 8, 8),
-        new THREE.MeshBasicMaterial({ color: casterData.projectileColor || "#a0522d" })
-    );
-    projectile.position.set(casterG.position.x, 0.6, casterG.position.z);
-    scene.add(projectile);
+    const projectile = createProjectile(scene, "ranged", casterG.position.x, casterG.position.z, casterData.projectileColor);
 
     projectilesRef.current.push({
         type: "basic",
         mesh: projectile,
         attackerId: casterId,
         targetId: targetEnemy.id,
-        speed: 0.3
+        speed: getProjectileSpeed("ranged")
     });
 
     addLog(`${casterData.name} shoots at ${getUnitStats(targetEnemy).name}!`, COLORS.damageNeutral);

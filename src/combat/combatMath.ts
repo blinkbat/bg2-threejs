@@ -5,13 +5,51 @@
 import type { Unit, UnitData, EnemyStats, StatusEffect } from "../core/types";
 import { POISON_DURATION, POISON_TICK_INTERVAL, POISON_DAMAGE_PER_TICK, COLORS } from "../core/constants";
 
+// =============================================================================
+// DISTANCE & POSITION UTILITIES
+// =============================================================================
+
+/** Calculate distance between two 2D points (x,z plane) */
+export function calculateDistance(x1: number, z1: number, x2: number, z2: number): number {
+    return Math.hypot(x2 - x1, z2 - z1);
+}
+
+/** Get direction vector and distance between two points. Returns normalized dx/dz and distance. */
+export function getDirectionAndDistance(
+    fromX: number, fromZ: number,
+    toX: number, toZ: number
+): { dx: number; dz: number; dist: number } {
+    const dx = toX - fromX;
+    const dz = toZ - fromZ;
+    const dist = Math.hypot(dx, dz);
+    if (dist < 0.001) return { dx: 0, dz: 0, dist: 0 };
+    return { dx: dx / dist, dz: dz / dist, dist };
+}
+
+// =============================================================================
+// GRID UTILITIES
+// =============================================================================
+
+/** Convert world position to grid cell coordinates */
+export function getGridCell(x: number, z: number): { cellX: number; cellZ: number } {
+    return { cellX: Math.floor(x), cellZ: Math.floor(z) };
+}
+
+// =============================================================================
+// PROBABILITY & DAMAGE CALCULATIONS
+// =============================================================================
+
+/** Roll a percentage chance (0-100). Returns true if roll succeeds. */
+export const rollChance = (percent: number): boolean =>
+    Math.random() * 100 < percent;
+
 // Roll random damage in a range (inclusive)
 export const rollDamage = (min: number, max: number): number =>
     Math.floor(Math.random() * (max - min + 1)) + min;
 
 // Roll hit based on accuracy percentage
 export const rollHit = (accuracy: number): boolean =>
-    Math.random() * 100 < accuracy;
+    rollChance(accuracy);
 
 /**
  * Calculate final damage after armor reduction.
@@ -32,9 +70,11 @@ export function applyArmor(rawDamage: number, armor: number): number {
 
 /**
  * Get damage color based on who is taking damage.
+ * For AOE damage, enemies show neutral (orange) instead of player (green).
  */
-export function getDamageColor(targetTeam: "player" | "enemy"): string {
-    return targetTeam === "player" ? COLORS.damageEnemy : COLORS.damagePlayer;
+export function getDamageColor(targetTeam: "player" | "enemy", isAoe: boolean = false): string {
+    if (targetTeam === "player") return COLORS.damageEnemy;
+    return isAoe ? COLORS.damageNeutral : COLORS.damagePlayer;
 }
 
 /**
@@ -79,7 +119,14 @@ export function shouldApplyPoison(attackerData: UnitData | EnemyStats): boolean 
     if (!('poisonChance' in attackerData) || !attackerData.poisonChance) {
         return false;
     }
-    return Math.random() * 100 < attackerData.poisonChance;
+    return rollChance(attackerData.poisonChance);
+}
+
+/**
+ * Check if a unit currently has the poison status effect.
+ */
+export function hasPoisonEffect(unit: Unit): boolean {
+    return unit.statusEffects?.some(e => e.type === "poison") ?? false;
 }
 
 /**

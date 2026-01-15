@@ -19,10 +19,23 @@ export const FLASH_DURATION = 200;
 export const POISON_DURATION = 8000;       // 8 seconds
 export const POISON_TICK_INTERVAL = 1000;  // tick every 1 second
 export const POISON_DAMAGE_PER_TICK = 2;   // 2 damage per tick
+export const POISON_TINT_STRENGTH = 0.4;   // Color lerp amount for poison visual
+
+// Visual Effects
+export const HEAL_FLASH_DURATION = 200;    // ms for green healing flash
+export const RING_EXPAND_DURATION = 400;   // ms for taunt ring animation
 
 // Animation Durations
 export const SWING_DURATION = 150;
 export const AOE_EXPAND_DURATION = 400;
+export const SWIPE_ANIMATE_DURATION = 300;
+
+// Projectile Configuration
+export const PROJECTILE_CONFIG = {
+    aoe: { radius: 0.2, segments: 12, height: 0.8, speed: 0.25, defaultColor: "#ff4400" },
+    ranged: { radius: 0.15, segments: 8, height: 0.6, speed: 0.3, defaultColor: "#a0522d" },
+    enemy: { radius: 0.1, segments: 8, height: 0.7, speed: 0.3 }
+} as const;
 
 // AI Timing
 export const TARGET_SCAN_INTERVAL = 500;   // ms between target scans

@@ -3,11 +3,10 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation, StatusEffect, EnemyStats, EnemySkill } from "./core/types";
+import type { Unit, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation, EnemyStats, EnemySkill } from "./core/types";
 import {
     GRID_SIZE, ATTACK_RANGE, HIT_DETECTION_RADIUS, FLASH_DURATION,
-    POISON_DURATION, POISON_TICK_INTERVAL, POISON_DAMAGE_PER_TICK,
-    SWING_DURATION, COLORS, SKILL_SINGLE_TARGET_CHANCE
+    SWING_DURATION, COLORS, SKILL_SINGLE_TARGET_CHANCE, POISON_TINT_STRENGTH
 } from "./core/constants";
 import { getUnitRadius, isInRange } from "./rendering/range";
 import { updateVisibility } from "./ai/pathfinding";
@@ -18,8 +17,9 @@ import {
 } from "./ai/unitAI";
 import { getUnitStats, getBasicAttackSkill } from "./game/units";
 import type { ActionQueue } from "./input";
-import { rollDamage, rollHit, logHit, logMiss, logPoisoned, logAoeHit, logAoeMiss } from "./combat/combatMath";
-import { spawnDamageNumber, handleUnitDefeat } from "./combat/combat";
+import { calculateDamage, calculateDistance, getDirectionAndDistance, getGridCell, rollHit, shouldApplyPoison, hasPoisonEffect, logHit, logMiss, logPoisoned, logAoeHit, logAoeMiss, getDamageColor } from "./combat/combatMath";
+import { SWIPE_ANIMATE_DURATION } from "./core/constants";
+import { spawnDamageNumber, handleUnitDefeat, createProjectile, getProjectileSpeed, applyDamageToUnit, animateExpandingMesh, getAliveUnitsInRange, type DamageContext } from "./combat/combat";
 import { soundFns } from "./audio/sound";
 import { disposeBasicMesh, disposeTexturedMesh } from "./rendering/disposal";
 import { getEnemySkillCooldown, setEnemySkillCooldown, getEnemyKiteCooldown, setEnemyKiteCooldown } from "./game/enemyState";
@@ -93,9 +93,9 @@ export function updateHitFlash(
 
         // Get the target color (original or poison-tinted)
         const unit = unitsState.find(u => u.id === Number(id));
-        const isPoisoned = unit?.statusEffects?.some(e => e.type === "poison");
+        const isPoisoned = unit ? hasPoisonEffect(unit) : false;
         const targetColor = isPoisoned
-            ? new THREE.Color(originalColor).lerp(new THREE.Color(COLORS.poison), 0.4)
+            ? new THREE.Color(originalColor).lerp(new THREE.Color(COLORS.poison), POISON_TINT_STRENGTH)
             : originalColor;
 
         if (elapsed > FLASH_DURATION) {
@@ -123,11 +123,11 @@ export function updatePoisonVisuals(
         // Skip if currently flashing (hit flash will handle the color)
         if (hitFlashRef[unit.id] !== undefined) return;
 
-        const isPoisoned = unit.statusEffects?.some(e => e.type === "poison");
+        const isPoisoned = hasPoisonEffect(unit);
 
         if (isPoisoned) {
             // Apply green poison tint
-            const poisonColor = new THREE.Color(originalColor).lerp(new THREE.Color(COLORS.poison), 0.4);
+            const poisonColor = new THREE.Color(originalColor).lerp(new THREE.Color(COLORS.poison), POISON_TINT_STRENGTH);
             (mesh.material as THREE.MeshStandardMaterial).color.copy(poisonColor);
         } else {
             // Restore original color
@@ -159,53 +159,8 @@ function aggroOnHit(
 }
 
 // =============================================================================
-// STATUS EFFECT HELPERS
+// STATUS EFFECT PROCESSING
 // =============================================================================
-
-/**
- * Check if poison should be applied and return whether it will be applied.
- * Does NOT call setUnits - caller should combine with damage update.
- */
-function shouldApplyPoison(
-    attackerData: EnemyStats
-): boolean {
-    if (!('poisonChance' in attackerData) || !attackerData.poisonChance) return false;
-    return Math.random() * 100 < attackerData.poisonChance;
-}
-
-/**
- * Apply poison effect to a unit's status effects array.
- * Returns the updated statusEffects array.
- */
-function applyPoisonToUnit(
-    existingEffects: StatusEffect[] | undefined,
-    attackerId: number,
-    now: number
-): StatusEffect[] {
-    const effects = existingEffects || [];
-    const existingPoison = effects.find(e => e.type === "poison");
-
-    if (existingPoison) {
-        // Refresh duration
-        return effects.map(e =>
-            e.type === "poison"
-                ? { ...e, duration: POISON_DURATION, lastTick: now }
-                : e
-        );
-    }
-
-    // Apply new poison
-    const newPoison: StatusEffect = {
-        type: "poison",
-        duration: POISON_DURATION,
-        tickInterval: POISON_TICK_INTERVAL,
-        lastTick: now,
-        damagePerTick: POISON_DAMAGE_PER_TICK,
-        sourceId: attackerId
-    };
-
-    return [...effects, newPoison];
-}
 
 export function processStatusEffects(
     unitsState: Unit[],
@@ -291,10 +246,9 @@ export function updateProjectiles(
         // AOE projectile (like Fireball)
         if (proj.type === "aoe") {
             const { targetPos, aoeRadius, damage } = proj;
-            const dx = targetPos.x - proj.mesh.position.x;
-            const dz = targetPos.z - proj.mesh.position.z;
-            const dist = Math.hypot(dx, dz);
+            const { dx, dz, dist } = getDirectionAndDistance(proj.mesh.position.x, proj.mesh.position.z, targetPos.x, targetPos.z);
 
+            // Reached target - explode
             if (dist < HIT_DETECTION_RADIUS) {
                 const attackerUnit = unitsState.find(u => u.id === proj.attackerId);
                 const attackerData = attackerUnit ? getUnitStats(attackerUnit) : null;
@@ -315,28 +269,18 @@ export function updateProjectiles(
                 unitsState.filter(u => u.hp > 0 && !defeatedThisFrame.has(u.id)).forEach(target => {
                     const tg = unitsRef[target.id];
                     if (!tg) return;
-                    const targetDist = Math.hypot(tg.position.x - targetPos.x, tg.position.z - targetPos.z);
+                    const targetDist = calculateDistance(tg.position.x, tg.position.z, targetPos.x, targetPos.z);
                     if (targetDist <= aoeRadius) {
                         const targetData = getUnitStats(target);
-                        const rawDmg = rollDamage(damage[0], damage[1]);
-                        const dmg = Math.max(1, rawDmg - targetData.armor);
-                        // Calculate newHp BEFORE setUnits to avoid stale state
-                        const newHp = Math.max(0, target.hp - dmg);
+                        const dmg = calculateDamage(damage[0], damage[1], targetData.armor);
 
-                        setUnits(prev => prev.map(u => u.id === target.id ? { ...u, hp: newHp } : u));
-                        hitFlashRef[target.id] = now;
+                        const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
+                        applyDamageToUnit(dmgCtx, target.id, tg, target.hp, dmg, targetData.name, { color: getDamageColor(target.team, true) });
                         hitCount++;
 
                         // Aggro enemies hit by player AOE
                         if (attackerUnit?.team === "player") {
                             aggroOnHit(target, proj.attackerId, unitsRef);
-                        }
-
-                        spawnDamageNumber(scene, tg.position.x, tg.position.z, dmg, target.team === "player" ? COLORS.damageEnemy : COLORS.damageNeutral, damageTexts);
-
-                        if (newHp <= 0) {
-                            defeatedThisFrame.add(target.id);
-                            handleUnitDefeat(target.id, tg, unitsRef, addLog, targetData.name);
                         }
                     }
                 });
@@ -350,31 +294,30 @@ export function updateProjectiles(
                 return false;
             }
 
-            // Move projectile
-            proj.mesh.position.x += (dx / dist) * proj.speed;
-            proj.mesh.position.z += (dz / dist) * proj.speed;
+            // Move projectile (dx/dz already normalized by getDirectionAndDistance)
+            proj.mesh.position.x += dx * proj.speed;
+            proj.mesh.position.z += dz * proj.speed;
             return true;
         }
 
-        // Regular projectile (single target)
+        // Regular projectile (single target) - validate target exists
         if (proj.type !== "basic") return true;
         const targetUnit = unitsState.find(u => u.id === proj.targetId);
         const targetG = unitsRef[proj.targetId];
         const attackerUnit = unitsState.find(u => u.id === proj.attackerId);
 
+        // Guard clause: dispose if target invalid
         if (!targetUnit || !targetG || targetUnit.hp <= 0 || defeatedThisFrame.has(proj.targetId) || !attackerUnit) {
             disposeProjectile(scene, proj);
             return false;
         }
 
-        const dx = targetG.position.x - proj.mesh.position.x;
-        const dz = targetG.position.z - proj.mesh.position.z;
-        const dist = Math.hypot(dx, dz);
+        const { dx, dz, dist } = getDirectionAndDistance(proj.mesh.position.x, proj.mesh.position.z, targetG.position.x, targetG.position.z);
 
         if (dist < HIT_DETECTION_RADIUS) {
             const attackerData = getUnitStats(attackerUnit);
             const targetData = getUnitStats(targetUnit);
-            const logColor = attackerUnit.team === "player" ? COLORS.damagePlayer : COLORS.damageEnemy;
+            const logColor = getDamageColor(targetUnit.team);
 
             // Aggro enemies targeted by player projectiles (even on miss - arrow flew by their head!)
             if (attackerUnit.team === "player") {
@@ -382,36 +325,20 @@ export function updateProjectiles(
             }
 
             if (rollHit(attackerData.accuracy)) {
-                const rawDmg = rollDamage(attackerData.damage[0], attackerData.damage[1]);
-                const dmg = Math.max(1, rawDmg - targetData.armor);
-                // Calculate newHp BEFORE setUnits to avoid stale state
-                const newHp = Math.max(0, targetUnit.hp - dmg);
+                const dmg = calculateDamage(attackerData.damage[0], attackerData.damage[1], targetData.armor);
+                const willPoison = attackerUnit.team === "enemy" && shouldApplyPoison(attackerData as EnemyStats);
 
-                // Check poison before setUnits to combine into single state update
-                const applyPoison = attackerUnit.team === "enemy" && shouldApplyPoison(attackerData as EnemyStats);
+                const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
+                applyDamageToUnit(dmgCtx, targetUnit.id, targetG, targetUnit.hp, dmg, targetData.name, {
+                    color: logColor,
+                    poison: willPoison ? { sourceId: attackerUnit.id } : undefined
+                });
 
-                // Single setUnits call for both damage and poison
-                setUnits(prev => prev.map(u => {
-                    if (u.id !== targetUnit.id) return u;
-                    let updated = { ...u, hp: newHp };
-                    if (applyPoison) {
-                        updated.statusEffects = applyPoisonToUnit(u.statusEffects, attackerUnit.id, now);
-                    }
-                    return updated;
-                }));
-
-                hitFlashRef[targetUnit.id] = now;
                 soundFns.playHit();
                 addLog(logHit(attackerData.name, "Attack", targetData.name, dmg), logColor);
-                spawnDamageNumber(scene, targetG.position.x, targetG.position.z, dmg, logColor, damageTexts);
 
-                if (applyPoison) {
+                if (willPoison) {
                     addLog(logPoisoned(targetData.name), COLORS.poisonText);
-                }
-
-                if (newHp <= 0) {
-                    defeatedThisFrame.add(targetUnit.id);
-                    handleUnitDefeat(targetUnit.id, targetG, unitsRef, addLog, targetData.name);
                 }
             } else {
                 soundFns.playMiss();
@@ -422,8 +349,9 @@ export function updateProjectiles(
             return false;
         }
 
-        proj.mesh.position.x += (dx / dist) * proj.speed;
-        proj.mesh.position.z += (dz / dist) * proj.speed;
+        // Move projectile (dx/dz already normalized)
+        proj.mesh.position.x += dx * proj.speed;
+        proj.mesh.position.z += dz * proj.speed;
         return true;
     });
 }
@@ -483,19 +411,7 @@ function executeEnemySwipe(
     defeatedThisFrame: Set<number>
 ): boolean {
     // Find up to maxTargets player units within range
-    const targets: { unit: Unit; group: UnitGroup; dist: number }[] = [];
-
-    unitsState.filter(u => u.team === "player" && u.hp > 0 && !defeatedThisFrame.has(u.id)).forEach(target => {
-        const tg = unitsRef[target.id];
-        if (!tg) return;
-        const targetRadius = getUnitRadius(target);
-        if (isInRange(g.position.x, g.position.z, tg.position.x, tg.position.z, targetRadius, skill.range)) {
-            const dist = Math.hypot(tg.position.x - g.position.x, tg.position.z - g.position.z);
-            targets.push({ unit: target, group: tg, dist });
-        }
-    });
-
-    // Need at least 1 target
+    const targets = getAliveUnitsInRange(unitsState, unitsRef, "player", g.position.x, g.position.z, skill.range, defeatedThisFrame);
     if (targets.length === 0) return false;
 
     // Sort by distance and take up to maxTargets
@@ -520,49 +436,27 @@ function executeEnemySwipe(
     }
     scene.add(swipeArc);
 
-    // Animate the swipe
-    const startTime = now;
-    const animateDuration = 300;
-    const animateSwipe = () => {
-        const elapsed = Date.now() - startTime;
-        const t = Math.min(1, elapsed / animateDuration);
-        (swipeArc.material as THREE.MeshBasicMaterial).opacity = 0.6 * (1 - t);
-        swipeArc.scale.set(1 + t * 0.3, 1 + t * 0.3, 1);
-
-        if (t < 1) {
-            requestAnimationFrame(animateSwipe);
-        } else {
-            scene.remove(swipeArc);
-            swipeArc.geometry.dispose();
-            (swipeArc.material as THREE.MeshBasicMaterial).dispose();
-        }
-    };
-    requestAnimationFrame(animateSwipe);
+    // Animate the swipe expanding and fading
+    animateExpandingMesh(scene, swipeArc, {
+        duration: SWIPE_ANIMATE_DURATION,
+        initialOpacity: 0.6,
+        maxScale: 1.3,
+        baseRadius: 1
+    });
 
     // Play sound
     soundFns.playHit();
 
     // Deal damage to all targets
     let hitCount = 0;
+    const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
     hitTargets.forEach(({ unit: target, group: tg }) => {
         const targetData = getUnitStats(target);
 
         if (rollHit(enemyData.accuracy)) {
-            const rawDmg = rollDamage(skill.damage[0], skill.damage[1]);
-            const dmg = Math.max(1, rawDmg - targetData.armor);
-            // Calculate newHp BEFORE setUnits to avoid stale state
-            const newHp = Math.max(0, target.hp - dmg);
-
-            setUnits(prev => prev.map(u => u.id === target.id ? { ...u, hp: newHp } : u));
-            hitFlashRef[target.id] = now;
+            const dmg = calculateDamage(skill.damage[0], skill.damage[1], targetData.armor);
+            applyDamageToUnit(dmgCtx, target.id, tg, target.hp, dmg, targetData.name, { color: "#ff4444" });
             hitCount++;
-
-            spawnDamageNumber(scene, tg.position.x, tg.position.z, dmg, "#ff4444", damageTexts);
-
-            if (newHp <= 0) {
-                defeatedThisFrame.add(target.id);
-                handleUnitDefeat(target.id, tg, unitsRef, addLog, targetData.name);
-            }
         }
     });
 
@@ -693,18 +587,15 @@ export function updateUnitAI(
                 const kiteCooldown = data.kiteCooldown || 4000;
 
                 // Calculate retreat direction (away from the player)
-                const dx = g.position.x - nearestPlayerG.position.x;
-                const dz = g.position.z - nearestPlayerG.position.z;
-                const dist = Math.hypot(dx, dz);
+                const { dx, dz, dist } = getDirectionAndDistance(nearestPlayerG.position.x, nearestPlayerG.position.z, g.position.x, g.position.z);
                 if (dist > 0.1) {
-                    const retreatX = g.position.x + (dx / dist) * kiteDistance;
-                    const retreatZ = g.position.z + (dz / dist) * kiteDistance;
+                    const retreatX = g.position.x + dx * kiteDistance;
+                    const retreatZ = g.position.z + dz * kiteDistance;
 
                     // Clamp to grid bounds and check if destination is walkable
                     const clampedX = Math.max(0.5, Math.min(GRID_SIZE - 0.5, retreatX));
                     const clampedZ = Math.max(0.5, Math.min(GRID_SIZE - 0.5, retreatZ));
-                    const cellX = Math.floor(clampedX);
-                    const cellZ = Math.floor(clampedZ);
+                    const { cellX, cellZ } = getGridCell(clampedX, clampedZ);
 
                     if (!blocked[cellX]?.[cellZ]) {
                         // Clear current target temporarily and set kite path
@@ -749,14 +640,7 @@ export function updateUnitAI(
                         const inSkillRange = isInRange(g.position.x, g.position.z, targetX, targetZ, targetRadius, skill.range);
                         if (now >= skillCooldownEnd && inSkillRange) {
                             // Count potential targets (using hitbox-aware range)
-                            const potentialTargets = unitsState.filter(u =>
-                                u.team === "player" && u.hp > 0 && !defeatedThisFrame.has(u.id)
-                            ).filter(u => {
-                                const tg = unitsRef[u.id];
-                                if (!tg) return false;
-                                const uRadius = getUnitRadius(u);
-                                return isInRange(g.position.x, g.position.z, tg.position.x, tg.position.z, uRadius, skill.range);
-                            });
+                            const potentialTargets = getAliveUnitsInRange(unitsState, unitsRef, "player", g.position.x, g.position.z, skill.range, defeatedThisFrame);
 
                             // Use skill if there are 2+ targets, or randomly with 1 target
                             if (potentialTargets.length >= 2 || (potentialTargets.length === 1 && Math.random() < SKILL_SINGLE_TARGET_CHANCE)) {
@@ -802,13 +686,8 @@ export function updateUnitAI(
                     actionCooldownRef[unit.id] = attackCooldownEnd;
 
                     if (isRanged && 'projectileColor' in data && data.projectileColor) {
-                        const projectile = new THREE.Mesh(
-                            new THREE.SphereGeometry(0.1, 8, 8),
-                            new THREE.MeshBasicMaterial({ color: data.projectileColor as string })
-                        );
-                        projectile.position.set(g.position.x, 0.7, g.position.z);
-                        scene.add(projectile);
-                        projectilesRef.push({ type: "basic", mesh: projectile, targetId: targetU.id, attackerId: unit.id, speed: 0.3 });
+                        const projectile = createProjectile(scene, "enemy", g.position.x, g.position.z, data.projectileColor as string);
+                        projectilesRef.push({ type: "basic", mesh: projectile, targetId: targetU.id, attackerId: unit.id, speed: getProjectileSpeed("enemy") });
                         soundFns.playAttack();
                     } else {
                         // Melee attack
@@ -816,20 +695,12 @@ export function updateUnitAI(
                         spawnSwingIndicator(scene, g, targetG, false, swingAnimations, now);
 
                         if (rollHit(data.accuracy)) {
-                            const rawDmg = rollDamage(data.damage[0], data.damage[1]);
-                            const dmg = Math.max(1, rawDmg - targetData.armor);
-                            const newHp = Math.max(0, targetU.hp - dmg);
+                            const dmg = calculateDamage(data.damage[0], data.damage[1], targetData.armor);
+                            const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
+                            applyDamageToUnit(dmgCtx, targetU.id, targetG, targetU.hp, dmg, targetData.name, { color: COLORS.damageEnemy });
 
-                            setUnits(prev => prev.map(u => u.id === targetU.id ? { ...u, hp: newHp } : u));
-                            hitFlashRef[targetU.id] = now;
                             soundFns.playHit();
                             addLog(logHit(data.name, "Attack", targetData.name, dmg), COLORS.damageEnemy);
-                            spawnDamageNumber(scene, targetG.position.x, targetG.position.z, dmg, COLORS.damageEnemy, damageTexts);
-
-                            if (newHp <= 0) {
-                                defeatedThisFrame.add(targetU.id);
-                                handleUnitDefeat(targetU.id, targetG, unitsRef, addLog, targetData.name);
-                            }
                         } else {
                             soundFns.playMiss();
                             addLog(logMiss(data.name, "Attack", targetData.name), COLORS.logNeutral);
