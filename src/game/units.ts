@@ -166,7 +166,9 @@ export function getUnitStats(unit: Unit): UnitData | EnemyStats {
     if (unit.team === "player") {
         return UNIT_DATA[unit.id];
     }
-    return ENEMY_STATS[unit.enemyType!];
+    // Safely handle missing enemyType - fallback to kobold stats
+    if (!unit.enemyType) return ENEMY_STATS.kobold;
+    return ENEMY_STATS[unit.enemyType];
 }
 
 // Ogre spawn - center of the map (great hall)

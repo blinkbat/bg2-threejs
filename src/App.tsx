@@ -264,7 +264,16 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
                 if (unitId !== undefined) {
                     const unit = unitsStateRef.current.find(u => u.id === unitId);
                     if (unit && unit.team === "enemy" && unit.hp > 0) {
-                        foundEnemy = { id: unitId, x: e.clientX, y: e.clientY };
+                        // Check fog of war - only show tooltip if enemy is visible (visibility === 2)
+                        const g = unitsRef.current[unitId];
+                        if (g) {
+                            const cx = Math.floor(g.position.x);
+                            const cz = Math.floor(g.position.z);
+                            const vis = visibilityRef.current[cx]?.[cz] ?? 0;
+                            if (vis === 2) {
+                                foundEnemy = { id: unitId, x: e.clientX, y: e.clientY };
+                            }
+                        }
                         break;
                     }
                 }
@@ -726,6 +735,7 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
                 skillCooldowns={skillCooldowns}
                 paused={paused}
                 queuedSkills={queuedActions.filter(q => q.unitId === selectedIds[0]).map(q => q.skillName)}
+                unitCooldownEnd={actionCooldownRef.current[selectedIds[0]] || 0}
             />}
         </div>
     );

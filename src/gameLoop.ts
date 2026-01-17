@@ -188,11 +188,15 @@ export function processStatusEffects(
                 if (now - effect.lastTick >= effect.tickInterval) {
                     // Deal poison damage
                     const dmg = effect.damagePerTick;
-                    // Calculate newHp BEFORE setUnits to avoid race condition
-                    const newHp = Math.max(0, unit.hp - dmg);
+                    // Track whether unit was defeated for post-update handling
+                    let wasDefeated = false;
 
                     setUnits(prev => prev.map(u => {
                         if (u.id !== unit.id) return u;
+
+                        // Calculate newHp from current state to avoid race condition
+                        const newHp = Math.max(0, u.hp - dmg);
+                        wasDefeated = newHp <= 0;
 
                         const updatedEffects = (u.statusEffects || []).map(e => {
                             if (e.type === "poison") {
@@ -213,7 +217,7 @@ export function processStatusEffects(
                     spawnDamageNumber(scene, unitG.position.x, unitG.position.z, dmg, COLORS.poisonText, damageTexts);
                     addLog(`${data.name} takes ${dmg} poison damage.`, COLORS.poisonText);
 
-                    if (newHp <= 0) {
+                    if (wasDefeated) {
                         defeatedThisFrame.add(unit.id);
                         handleUnitDefeat(unit.id, unitG, unitsRef, addLog, data.name);
                     }
@@ -382,6 +386,9 @@ export function updateProjectiles(
 // FOG OF WAR UPDATE
 // =============================================================================
 
+// Cache for fog change detection - simple hash of visible cells
+let lastFogHash = 0;
+
 export function updateFogOfWar(
     visibility: number[][],
     playerUnits: Unit[],
@@ -391,19 +398,56 @@ export function updateFogOfWar(
 ): void {
     updateVisibility(visibility, playerUnits, { current: unitsRef });
 
-    const { ctx, texture } = fogTexture;
-    ctx.clearRect(0, 0, GRID_SIZE, GRID_SIZE);
+    // Quick hash to detect visibility changes (sum of visible cell coords)
+    let fogHash = 0;
     for (let x = 0; x < GRID_SIZE; x++) {
         for (let z = 0; z < GRID_SIZE; z++) {
-            const vis = visibility[x][z];
-            if (vis === 2) continue;
-            ctx.fillStyle = vis === 1 ? "rgba(0,0,0,0.5)" : "rgba(0,0,0,0.95)";
-            ctx.fillRect(x, z, 1, 1);
+            if (visibility[x][z] === 2) fogHash += x * 100 + z;
         }
     }
-    texture.needsUpdate = true;
 
-    // Hide enemies in fog
+    // Only redraw fog texture if visibility changed
+    if (fogHash !== lastFogHash) {
+        lastFogHash = fogHash;
+
+        const { ctx, texture } = fogTexture;
+
+        ctx.clearRect(0, 0, GRID_SIZE, GRID_SIZE);
+
+        // Helper: check if cell is adjacent to a visible cell (internal edge)
+        const isInternalEdge = (x: number, z: number): boolean => {
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dz = -1; dz <= 1; dz++) {
+                    const nx = x + dx, nz = z + dz;
+                    if (nx >= 0 && nx < GRID_SIZE && nz >= 0 && nz < GRID_SIZE) {
+                        if (visibility[nx][nz] === 2) return true;
+                    }
+                }
+            }
+            return false;
+        };
+
+        // Draw fog with soft edges only on internal boundaries
+        for (let x = 0; x < GRID_SIZE; x++) {
+            for (let z = 0; z < GRID_SIZE; z++) {
+                const vis = visibility[x][z];
+                if (vis === 2) continue;
+
+                // Use softer opacity near visible areas, full opacity elsewhere
+                const nearVisible = isInternalEdge(x, z);
+                if (vis === 1) {
+                    ctx.fillStyle = nearVisible ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,0.5)";
+                } else {
+                    ctx.fillStyle = nearVisible ? "rgba(0,0,0,0.85)" : "rgba(0,0,0,0.95)";
+                }
+                ctx.fillRect(x, z, 1, 1);
+            }
+        }
+
+        texture.needsUpdate = true;
+    }
+
+    // Hide enemies in fog (always check this)
     unitsState.filter(u => u.team === "enemy").forEach(u => {
         const g = unitsRef[u.id];
         if (!g) return;

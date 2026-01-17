@@ -5,7 +5,7 @@
 import * as THREE from "three";
 import type { Unit, Skill, UnitGroup, Projectile, StatusEffect } from "../core/types";
 import { COLORS } from "../core/constants";
-import { UNIT_DATA, getUnitStats, getAllSkills } from "../game/units";
+import { UNIT_DATA, getUnitStats } from "../game/units";
 import { rollDamage, rollChance, calculateDamage, rollHit, getEffectiveArmor, hasShieldedEffect, logHit, logMiss, logHeal, logPoisoned, logCast, logTaunt, logTauntMiss, logBuff } from "./combatMath";
 import { getUnitRadius, isInRange } from "../rendering/range";
 import { soundFns } from "../audio/sound";
@@ -72,9 +72,12 @@ function findClosestTargetByTeam(
 }
 
 /**
- * Consume skill resources: set global cooldown for ALL skills and deduct mana.
+ * Consume skill resources: set cooldown for the used skill and deduct mana.
  * Call this at the START of every skill execution (after validation, before effects).
  * If the caster has shielded effect, cooldowns are doubled.
+ *
+ * Note: actionCooldownRef tracks when the UNIT can act again (blocks all actions).
+ * skillCooldowns tracks per-skill UI animation (only the used skill shows cooldown bar).
  */
 function consumeSkill(ctx: SkillExecutionContext, casterId: number, skill: Skill): void {
     const { unitsStateRef, actionCooldownRef, setSkillCooldowns, setUnits } = ctx;
@@ -87,19 +90,14 @@ function consumeSkill(ctx: SkillExecutionContext, casterId: number, skill: Skill
     const effectiveCooldown = skill.cooldown * cooldownMultiplier;
     const cooldownEnd = now + effectiveCooldown;
 
-    // Set internal cooldown ref
+    // Set internal cooldown ref (unit-level lock)
     actionCooldownRef.current[casterId] = cooldownEnd;
 
-    // Set UI cooldown for ALL skills of this unit
-    const allSkills = getAllSkills(casterId);
-    setSkillCooldowns(prev => {
-        const updated = { ...prev };
-        allSkills.forEach(s => {
-            const sCooldown = s.cooldown * cooldownMultiplier;
-            updated[`${casterId}-${s.name}`] = { end: now + sCooldown, duration: sCooldown };
-        });
-        return updated;
-    });
+    // Set UI cooldown ONLY for the skill that was used
+    setSkillCooldowns(prev => ({
+        ...prev,
+        [`${casterId}-${skill.name}`]: { end: cooldownEnd, duration: effectiveCooldown }
+    }));
 
     // Deduct mana
     setUnits(prev => prev.map(u => u.id === casterId ? { ...u, mana: (u.mana ?? 0) - skill.manaCost } : u));

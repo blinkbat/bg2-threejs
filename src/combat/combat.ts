@@ -8,7 +8,7 @@ import { PROJECTILE_CONFIG, COLORS, RING_EXPAND_DURATION } from "../core/constan
 import { getUnitRadius, isInRange } from "../rendering/range";
 import { soundFns } from "../audio/sound";
 import { cleanupUnitState } from "../ai/pathManager";
-import { cleanupEnemySkillCooldown } from "../game/enemyState";
+import { cleanupEnemySkillCooldown, cleanupEnemyHealCooldown, cleanupEnemyKiteCooldown } from "../game/enemyState";
 import { logDefeated, applyPoison, hasShieldedEffect } from "./combatMath";
 
 // =============================================================================
@@ -61,12 +61,13 @@ export interface ExpandingMeshConfig {
 /**
  * Animate a mesh expanding and fading out, then dispose it.
  * Used for taunt rings, swipe arcs, etc.
+ * Returns a cancel function to stop the animation early.
  */
 export function animateExpandingMesh(
     scene: THREE.Scene,
     mesh: THREE.Mesh,
     config: ExpandingMeshConfig = {}
-): void {
+): () => void {
     const {
         duration = RING_EXPAND_DURATION,
         initialOpacity = 0.8,
@@ -75,7 +76,24 @@ export function animateExpandingMesh(
     } = config;
 
     const startTime = Date.now();
+    let animationId: number | null = null;
+    let disposed = false;
+
+    const dispose = () => {
+        if (disposed) return;
+        disposed = true;
+        if (animationId !== null) {
+            cancelAnimationFrame(animationId);
+            animationId = null;
+        }
+        scene.remove(mesh);
+        mesh.geometry.dispose();
+        (mesh.material as THREE.MeshBasicMaterial).dispose();
+    };
+
     const animate = () => {
+        if (disposed) return;
+
         const elapsed = Date.now() - startTime;
         const t = Math.min(1, elapsed / duration);
         const currentScale = baseRadius + (maxScale - baseRadius) * t;
@@ -83,14 +101,14 @@ export function animateExpandingMesh(
         (mesh.material as THREE.MeshBasicMaterial).opacity = initialOpacity * (1 - t);
 
         if (t < 1) {
-            requestAnimationFrame(animate);
+            animationId = requestAnimationFrame(animate);
         } else {
-            scene.remove(mesh);
-            mesh.geometry.dispose();
-            (mesh.material as THREE.MeshBasicMaterial).dispose();
+            dispose();
         }
     };
-    requestAnimationFrame(animate);
+    animationId = requestAnimationFrame(animate);
+
+    return dispose;
 }
 
 // =============================================================================
@@ -248,4 +266,6 @@ export function handleUnitDefeat(
     // Clean up state for defeated unit
     cleanupUnitState(targetId);
     cleanupEnemySkillCooldown(targetId);
+    cleanupEnemyHealCooldown(targetId);
+    cleanupEnemyKiteCooldown(targetId);
 }

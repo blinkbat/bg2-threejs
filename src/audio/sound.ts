@@ -282,23 +282,27 @@ const playWarcry = () => {
     harm.stop(ctx.currentTime + 0.4);
 
     // Echo/reverb effect - delayed quieter repeat
+    // Capture current context to validate it hasn't been replaced
+    const currentCtx = ctx;
     setTimeout(() => {
         if (muted) return;
-        const echo = ctx.createOscillator();
-        const echoGain = ctx.createGain();
-        const echoFilter = ctx.createBiquadFilter();
+        // Ensure audio context is still valid and is the same context
+        if (currentCtx.state === "closed" || audioCtx !== currentCtx) return;
+        const echo = currentCtx.createOscillator();
+        const echoGain = currentCtx.createGain();
+        const echoFilter = currentCtx.createBiquadFilter();
         echo.type = "sawtooth";
-        echo.frequency.setValueAtTime(120, ctx.currentTime);
-        echo.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + 0.3);
+        echo.frequency.setValueAtTime(120, currentCtx.currentTime);
+        echo.frequency.exponentialRampToValueAtTime(80, currentCtx.currentTime + 0.3);
         echoFilter.type = "lowpass";
-        echoFilter.frequency.setValueAtTime(600, ctx.currentTime);
-        echoGain.gain.setValueAtTime(0.1, ctx.currentTime);
-        echoGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+        echoFilter.frequency.setValueAtTime(600, currentCtx.currentTime);
+        echoGain.gain.setValueAtTime(0.1, currentCtx.currentTime);
+        echoGain.gain.exponentialRampToValueAtTime(0.001, currentCtx.currentTime + 0.3);
         echo.connect(echoFilter);
         echoFilter.connect(echoGain);
-        echoGain.connect(ctx.destination);
+        echoGain.connect(currentCtx.destination);
         echo.start();
-        echo.stop(ctx.currentTime + 0.3);
+        echo.stop(currentCtx.currentTime + 0.3);
     }, 150);
 };
 

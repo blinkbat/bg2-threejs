@@ -13,7 +13,7 @@ import { findPath } from "./pathfinding";
 import {
     canScanForTargets, recordTargetScan, getBlockedTargets,
     recentlyGaveUp, checkPathNeedsRecalc, createPathToTarget,
-    hasReachedWaypoint, checkIfStuck, handleGiveUp
+    hasReachedWaypoint, checkIfStuck, handleGiveUp, clearJitterTracking
 } from "./pathManager";
 import { getUnitRadius } from "../rendering/range";
 import { clampToGrid } from "../game/geometry";
@@ -117,6 +117,7 @@ export function acquireTarget(ctx: TargetingContext, targetId: number): boolean 
         if (path && path.length > 0) {
             pathsRef[unit.id] = path.slice(1);
             moveStartRef[unit.id] = { time: now, x: g.position.x, z: g.position.z };
+            clearJitterTracking(unit.id);  // Reset jitter detection for new path
             return true;
         } else {
             // No path found and not in range - mark as unreachable for enemies
@@ -219,11 +220,11 @@ export function runPathFollowingPhase(ctx: PathContext): { targetX: number; targ
             moveStartRef[unit.id] = { time: now, x: g.position.x, z: g.position.z };
         }
 
-        // Stuck detection - give up if barely moving
+        // Stuck detection - give up if barely moving or jittering
         const moveStart = moveStartRef[unit.id];
-        const stuckResult = checkIfStuck(g.position.x, g.position.z, moveStart, now);
+        const stuckResult = checkIfStuck(unit.id, g.position.x, g.position.z, moveStart, now);
 
-        if (stuckResult.isReallyStuck || stuckResult.isStuck) {
+        if (stuckResult.isReallyStuck || stuckResult.isStuck || stuckResult.isJittering) {
             pathsRef[unit.id] = [];
             delete moveStartRef[unit.id];
 
@@ -397,6 +398,7 @@ export function recalculatePathIfNeeded(
         pathsRef[unitId] = result.path;
         if (result.success) {
             moveStartRef[unitId] = { time: now, x: g.position.x, z: g.position.z };
+            clearJitterTracking(unitId);  // Reset jitter detection for new path
         }
     }
 }

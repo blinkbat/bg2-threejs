@@ -5,7 +5,7 @@
 import {
     STUCK_REALLY_STUCK_MS, STUCK_REALLY_STUCK_DIST, STUCK_MS, STUCK_DIST,
     STUCK_RECOVERY_COOLDOWN, PATH_WAYPOINT_REACH_DIST, PATH_MAX_DEVIATION,
-    UNREACHABLE_COOLDOWN, TARGET_SCAN_INTERVAL
+    UNREACHABLE_COOLDOWN, TARGET_SCAN_INTERVAL, JITTER_DETECTION_MS, JITTER_DIRECTION_CHANGES
 } from "../core/constants";
 import { findPath } from "./pathfinding";
 
@@ -22,6 +22,17 @@ const lastTargetScan: Record<number, number> = {};
 // Track targets that enemies couldn't reach (to avoid repeatedly targeting them)
 const unreachableTargets: Record<number, { targetId: number; until: number }[]> = {};
 
+// Track jitter detection - stores recent movement directions
+interface JitterState {
+    startTime: number;
+    lastX: number;
+    lastZ: number;
+    lastDirX: number;
+    lastDirZ: number;
+    directionChanges: number;
+}
+const jitterTracking: Record<number, JitterState> = {};
+
 // =============================================================================
 // STUCK DETECTION
 // =============================================================================
@@ -35,19 +46,21 @@ export interface MoveStart {
 export interface StuckResult {
     isStuck: boolean;
     isReallyStuck: boolean;
+    isJittering: boolean;
 }
 
 /**
  * Check if a unit is stuck based on time and distance moved.
  */
 export function checkIfStuck(
+    unitId: number,
     currentX: number,
     currentZ: number,
     moveStart: MoveStart | undefined,
     now: number
 ): StuckResult {
     if (!moveStart) {
-        return { isStuck: false, isReallyStuck: false };
+        return { isStuck: false, isReallyStuck: false, isJittering: false };
     }
 
     const timeSinceStart = now - moveStart.time;
@@ -57,7 +70,77 @@ export function checkIfStuck(
     const isReallyStuck = timeSinceStart > STUCK_REALLY_STUCK_MS && movedDist < STUCK_REALLY_STUCK_DIST;
     const isStuck = timeSinceStart > STUCK_MS && movedDist < STUCK_DIST;
 
-    return { isStuck, isReallyStuck };
+    // Check for jittering (rapid direction changes)
+    const isJittering = checkJitter(unitId, currentX, currentZ, now);
+
+    return { isStuck, isReallyStuck, isJittering };
+}
+
+/**
+ * Track movement direction and detect jittering (rapid oscillation).
+ * Returns true if unit has been jittering for longer than JITTER_DETECTION_MS.
+ */
+function checkJitter(unitId: number, currentX: number, currentZ: number, now: number): boolean {
+    const state = jitterTracking[unitId];
+
+    if (!state) {
+        // Initialize tracking
+        jitterTracking[unitId] = {
+            startTime: now,
+            lastX: currentX,
+            lastZ: currentZ,
+            lastDirX: 0,
+            lastDirZ: 0,
+            directionChanges: 0
+        };
+        return false;
+    }
+
+    // Calculate movement delta
+    const dx = currentX - state.lastX;
+    const dz = currentZ - state.lastZ;
+    const moveDist = Math.hypot(dx, dz);
+
+    // Only track direction if we actually moved
+    if (moveDist > 0.01) {
+        const dirX = dx / moveDist;
+        const dirZ = dz / moveDist;
+
+        // Check if direction reversed (dot product < 0 means opposite direction)
+        if (state.lastDirX !== 0 || state.lastDirZ !== 0) {
+            const dot = dirX * state.lastDirX + dirZ * state.lastDirZ;
+            if (dot < -0.5) {
+                // Direction reversed
+                state.directionChanges++;
+            }
+        }
+
+        state.lastDirX = dirX;
+        state.lastDirZ = dirZ;
+    }
+
+    state.lastX = currentX;
+    state.lastZ = currentZ;
+
+    // Check if jittering: enough direction changes within the time window
+    if (state.directionChanges >= JITTER_DIRECTION_CHANGES) {
+        const elapsed = now - state.startTime;
+        if (elapsed <= JITTER_DETECTION_MS) {
+            return true;
+        }
+        // Reset if time window passed without triggering
+        state.startTime = now;
+        state.directionChanges = 0;
+    }
+
+    return false;
+}
+
+/**
+ * Clear jitter tracking for a unit (call when path changes or unit gives up).
+ */
+export function clearJitterTracking(unitId: number): void {
+    delete jitterTracking[unitId];
 }
 
 /**
@@ -72,6 +155,9 @@ export function handleGiveUp(
 ): { clearedTarget: boolean; failedTargetId: number | null } {
     // Prevent immediate path recalculation
     gaveUpUntil[unitId] = now + STUCK_RECOVERY_COOLDOWN;
+
+    // Clear jitter tracking when giving up
+    clearJitterTracking(unitId);
 
     let clearedTarget = false;
     let failedTargetId: number | null = null;
@@ -230,6 +316,7 @@ export function cleanupUnitState(unitId: number): void {
     delete gaveUpUntil[unitId];
     delete lastTargetScan[unitId];
     delete unreachableTargets[unitId];
+    delete jitterTracking[unitId];
 }
 
 /**
@@ -239,4 +326,5 @@ export function resetAllState(): void {
     Object.keys(gaveUpUntil).forEach(k => delete gaveUpUntil[Number(k)]);
     Object.keys(lastTargetScan).forEach(k => delete lastTargetScan[Number(k)]);
     Object.keys(unreachableTargets).forEach(k => delete unreachableTargets[Number(k)]);
+    Object.keys(jitterTracking).forEach(k => delete jitterTracking[Number(k)]);
 }

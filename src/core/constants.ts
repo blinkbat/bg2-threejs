@@ -48,6 +48,8 @@ export const STUCK_REALLY_STUCK_DIST = 0.2;    // Distance threshold for "really
 export const STUCK_MS = 2000;                  // Time threshold for normal stuck (moved < 0.5 in 2s)
 export const STUCK_DIST = 0.5;                 // Distance threshold for normal stuck
 export const STUCK_RECOVERY_COOLDOWN = 1500;   // ms before retrying path after giving up
+export const JITTER_DETECTION_MS = 300;        // Give up if jittering in place for this long
+export const JITTER_DIRECTION_CHANGES = 3;    // Number of direction reversals to count as jittering
 
 // Pathfinding - Path Following
 export const PATH_WAYPOINT_REACH_DIST = 0.3;   // Distance to waypoint to consider it reached

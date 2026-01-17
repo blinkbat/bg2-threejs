@@ -16,7 +16,9 @@ export function getUnitRadius(unit: Unit): number {
         // Player units use default radius (could add size to UnitData later)
         return DEFAULT_UNIT_RADIUS * (data?.size ?? 1);
     } else {
-        const stats = ENEMY_STATS[unit.enemyType!];
+        // Safely handle missing enemyType or invalid enemy stats
+        if (!unit.enemyType) return DEFAULT_UNIT_RADIUS;
+        const stats = ENEMY_STATS[unit.enemyType];
         return DEFAULT_UNIT_RADIUS * (stats?.size ?? 1);
     }
 }

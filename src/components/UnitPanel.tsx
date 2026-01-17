@@ -14,9 +14,10 @@ interface UnitPanelProps {
     skillCooldowns?: Record<string, { end: number; duration: number }>;
     paused?: boolean;
     queuedSkills?: string[];
+    unitCooldownEnd?: number;  // When the unit can act again (0 = ready)
 }
 
-export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, skillCooldowns = {}, paused = false, queuedSkills = [] }: UnitPanelProps) {
+export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, skillCooldowns = {}, paused = false, queuedSkills = [], unitCooldownEnd = 0 }: UnitPanelProps) {
     const [, setTick] = useState(0);
     const [pauseTime, setPauseTime] = useState<number | null>(paused ? Date.now() : null);
 
@@ -98,6 +99,7 @@ export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, ski
                         paused={paused}
                         queuedSkills={queuedSkills}
                         onCastSkill={onCastSkill}
+                        unitCooldownEnd={unitCooldownEnd}
                     />
                 )}
                 {tab === "items" && <ItemsTab items={data.items} />}
@@ -242,7 +244,7 @@ function SkillTooltip({ skill, isShielded }: { skill: Skill; isShielded: boolean
 }
 
 function SkillsTab({
-    unitId, unit, skillCooldowns, displayTime, paused, queuedSkills, onCastSkill
+    unitId, unit, skillCooldowns, displayTime, paused, queuedSkills, onCastSkill, unitCooldownEnd
 }: {
     unitId: number;
     unit: Unit;
@@ -251,24 +253,31 @@ function SkillsTab({
     paused: boolean;
     queuedSkills: string[];
     onCastSkill?: (unitId: number, skill: Skill) => void;
+    unitCooldownEnd: number;
 }) {
     const isShielded = hasShieldedEffect(unit);
+    // Unit is locked if still on cooldown from last action
+    const unitOnCooldown = unitCooldownEnd > displayTime;
 
     return (
         <div className="flex flex-col gap-8">
             {getAllSkills(unitId).map((skill: Skill, i: number) => {
                 const cooldownKey = `${unitId}-${skill.name}`;
                 const cooldownData = skillCooldowns[cooldownKey];
-                const cooldownEnd = cooldownData?.end || 0;
+                const skillCooldownEnd = cooldownData?.end || 0;
                 const cooldownDuration = cooldownData?.duration || skill.cooldown;
-                const onCooldown = cooldownEnd > displayTime;
-                const cooldownRemaining = onCooldown ? Math.ceil((cooldownEnd - displayTime) / 1000) : 0;
-                const cooldownPct = onCooldown ? ((cooldownEnd - displayTime) / cooldownDuration) * 100 : 0;
+                // This skill has an active cooldown animation
+                const skillOnCooldown = skillCooldownEnd > displayTime;
+                const cooldownRemaining = skillOnCooldown ? Math.ceil((skillCooldownEnd - displayTime) / 1000) : 0;
+                const cooldownPct = skillOnCooldown ? ((skillCooldownEnd - displayTime) / cooldownDuration) * 100 : 0;
                 const hasManaForSkill = (unit.mana ?? 0) >= skill.manaCost;
                 const isQueued = queuedSkills.includes(skill.name);
                 const isBasicAttack = skill.name === "Attack";
                 const isRanged = skill.range > 2;
+                // Can click if has mana and alive (clicking queues the skill)
                 const canClick = hasManaForSkill && unit.hp > 0;
+                // Visual dimming: dim if unit is on cooldown (unless this skill is queued)
+                const isDimmed = unitOnCooldown && !isQueued;
 
                 const skillColorClass = skill.type === "damage" ? "skill-damage" :
                     skill.type === "heal" ? "skill-heal" :
@@ -293,11 +302,11 @@ function SkillsTab({
                             className={cardClass}
                             onClick={() => canClick && onCastSkill?.(unitId, skill)}
                             style={{
-                                borderColor: isQueued ? undefined : (canClick ? skillBorderColor : "#333"),
-                                opacity: canClick || isQueued ? 1 : 0.5
+                                borderColor: isQueued ? undefined : (canClick && !isDimmed ? skillBorderColor : "#333"),
+                                opacity: (!canClick || isDimmed) && !isQueued ? 0.5 : 1
                             }}
                         >
-                            {onCooldown && !isQueued && (
+                            {skillOnCooldown && !isQueued && (
                                 <div className="skill-cooldown-overlay" style={{ width: `${cooldownPct}%` }} />
                             )}
                             <div className="skill-header">
@@ -309,7 +318,7 @@ function SkillsTab({
                                 </span>
                                 {skill.manaCost > 0 && <span className="mana-cost">{skill.manaCost} MP</span>}
                             </div>
-                            {onCooldown && !isQueued && (
+                            {skillOnCooldown && !isQueued && (
                                 <div className="skill-cooldown-text">
                                     {cooldownRemaining}s{paused && " (paused)"}{isShielded && " (×2)"}
                                 </div>
