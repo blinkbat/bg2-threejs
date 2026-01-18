@@ -8,7 +8,7 @@ import { PROJECTILE_CONFIG, COLORS, RING_EXPAND_DURATION } from "../core/constan
 import { getUnitRadius, isInRange } from "../rendering/range";
 import { soundFns } from "../audio/sound";
 import { cleanupUnitState } from "../ai/pathManager";
-import { cleanupEnemySkillCooldown, cleanupEnemyHealCooldown, cleanupEnemyKiteCooldown } from "../game/enemyState";
+import { cleanupEnemyKiteCooldown } from "../game/enemyState";
 import { logDefeated, applyPoison, hasShieldedEffect } from "./combatMath";
 
 // =============================================================================
@@ -265,7 +265,5 @@ export function handleUnitDefeat(
 
     // Clean up state for defeated unit
     cleanupUnitState(targetId);
-    cleanupEnemySkillCooldown(targetId);
-    cleanupEnemyHealCooldown(targetId);
     cleanupEnemyKiteCooldown(targetId);
 }

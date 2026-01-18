@@ -98,7 +98,7 @@ for (let x = 0; x < GRID_SIZE; x++) {
 
 // Room floor colors for rendering
 export const roomFloors = [
-    { x: 1, z: 1, w: 10, h: 10, color: "#1a2a1a" },
+    { x: 1, z: 1, w: 10, h: 10, color: "#1a1a1a" },
     { x: 1, z: 38, w: 10, h: 10, color: "#1a1a2a" },
     { x: 38, z: 1, w: 10, h: 10, color: "#2a1a1a" },
     { x: 38, z: 38, w: 10, h: 10, color: "#2a1a2a" },

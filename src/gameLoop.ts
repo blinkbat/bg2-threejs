@@ -22,7 +22,7 @@ import { SWIPE_ANIMATE_DURATION } from "./core/constants";
 import { spawnDamageNumber, handleUnitDefeat, createProjectile, getProjectileSpeed, applyDamageToUnit, animateExpandingMesh, getAliveUnitsInRange, type DamageContext } from "./combat/combat";
 import { soundFns } from "./audio/sound";
 import { disposeBasicMesh, disposeTexturedMesh } from "./rendering/disposal";
-import { getEnemySkillCooldown, setEnemySkillCooldown, getEnemyHealCooldown, setEnemyHealCooldown, getEnemyKiteCooldown, setEnemyKiteCooldown } from "./game/enemyState";
+import { getEnemyKiteCooldown, setEnemyKiteCooldown } from "./game/enemyState";
 import { blocked } from "./game/dungeon";
 
 // =============================================================================
@@ -279,7 +279,7 @@ export function updateProjectiles(
                 const attackerUnit = unitsState.find(u => u.id === proj.attackerId);
                 const attackerData = attackerUnit ? getUnitStats(attackerUnit) : null;
 
-                // Create explosion effect
+                // Create explosion effect with fade out
                 const explosion = new THREE.Mesh(
                     new THREE.RingGeometry(0.1, aoeRadius, 32),
                     new THREE.MeshBasicMaterial({ color: "#ff4400", transparent: true, opacity: 0.6, side: THREE.DoubleSide })
@@ -287,7 +287,7 @@ export function updateProjectiles(
                 explosion.rotation.x = -Math.PI / 2;
                 explosion.position.set(targetPos.x, 0.1, targetPos.z);
                 scene.add(explosion);
-                setTimeout(() => disposeBasicMesh(scene, explosion), 300);
+                animateExpandingMesh(scene, explosion, { duration: 400, initialOpacity: 0.6, maxScale: aoeRadius * 1.2, baseRadius: aoeRadius });
                 soundFns.playExplosion();
 
                 // Deal damage to ALL units in radius (friendly fire!)
@@ -388,6 +388,13 @@ export function updateProjectiles(
 
 // Cache for fog change detection - simple hash of visible cells
 let lastFogHash = 0;
+
+/**
+ * Reset fog hash cache (call on game restart).
+ */
+export function resetFogCache(): void {
+    lastFogHash = 0;
+}
 
 export function updateFogOfWar(
     visibility: number[][],
@@ -687,6 +694,9 @@ export function updateUnitAI(
     addLog: (text: string, color?: string) => void,
     now: number,
     defeatedThisFrame: Set<number>,
+    // Skill cooldowns - shared by players and enemies
+    skillCooldowns: Record<string, { end: number; duration: number }>,
+    setSkillCooldowns: React.Dispatch<React.SetStateAction<Record<string, { end: number; duration: number }>>>,
     // For player AI auto-queueing attacks
     actionQueueRef?: ActionQueue,
     setQueuedActions?: React.Dispatch<React.SetStateAction<{ unitId: number; skillName: string }[]>>
@@ -749,16 +759,20 @@ export function updateUnitAI(
 
     // Phase 1.6: Enemy heal check - healer enemies try to heal injured allies
     if (!isPlayer && 'healSkill' in data && data.healSkill) {
-        const healCooldownEnd = getEnemyHealCooldown(unit.id);
+        const healSkill = data.healSkill;
+        const healCooldownKey = `${unit.id}-${healSkill.name}`;
+        const healCooldownEnd = skillCooldowns[healCooldownKey]?.end || 0;
         if (now >= healCooldownEnd) {
-            const healSkill = data.healSkill;
             const executed = executeEnemyHeal(
                 unit, g, healSkill, data as EnemyStats,
                 unitsRef, unitsState, scene, damageTexts,
                 setUnits, addLog
             );
             if (executed) {
-                setEnemyHealCooldown(unit.id, now + healSkill.cooldown);
+                setSkillCooldowns(prev => ({
+                    ...prev,
+                    [healCooldownKey]: { end: now + healSkill.cooldown, duration: healSkill.cooldown }
+                }));
                 actionCooldownRef[unit.id] = now + data.attackCooldown;
                 return;
             }
@@ -791,7 +805,8 @@ export function updateUnitAI(
                     // Check if enemy has a skill and it's ready
                     if (!isPlayer && 'skill' in data && data.skill) {
                         const skill = data.skill;
-                        const skillCooldownEnd = getEnemySkillCooldown(unit.id);
+                        const enemySkillKey = `${unit.id}-${skill.name}`;
+                        const skillCooldownEnd = skillCooldowns[enemySkillKey]?.end || 0;
 
                         // Use skill if: cooldown ready AND targets in range (hitbox-aware)
                         const inSkillRange = isInRange(g.position.x, g.position.z, targetX, targetZ, targetRadius, skill.range);
@@ -807,7 +822,10 @@ export function updateUnitAI(
                                     hitFlashRef, setUnits, addLog, now, defeatedThisFrame
                                 );
                                 if (executed) {
-                                    setEnemySkillCooldown(unit.id, now + skill.cooldown);
+                                    setSkillCooldowns(prev => ({
+                                        ...prev,
+                                        [enemySkillKey]: { end: now + skill.cooldown, duration: skill.cooldown }
+                                    }));
                                     actionCooldownRef[unit.id] = now + data.attackCooldown;
                                     return;
                                 }

@@ -34,6 +34,7 @@ import {
     updateHitFlash,
     updateProjectiles,
     updateFogOfWar,
+    resetFogCache,
     updateUnitAI,
     updateHpBarPositions,
     updateSwingAnimations,
@@ -62,6 +63,7 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
     const selectRingsRef = useRef<Record<number, THREE.Mesh>>({});
     const maxHpRef = useRef<Record<number, number>>({});
     const moveMarkerRef = useRef<THREE.Mesh | null>(null);
+    const moveMarkerStartRef = useRef<number>(0);  // Track when marker was shown for fade animation
     const pathsRef = useRef<Record<number, { x: number; z: number }[]>>({});
     const fogTextureRef = useRef<FogTexture | null>(null);
     const visibilityRef = useRef<number[][]>(Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(0)));
@@ -103,6 +105,8 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
     const [targetingMode, setTargetingMode] = useState<{ casterId: number; skill: Skill } | null>(null);
     const [queuedActions, setQueuedActions] = useState<{ unitId: number; skillName: string }[]>([]);
     const [hoveredEnemy, setHoveredEnemy] = useState<{ id: number; x: number; y: number } | null>(null);
+    const [hoveredChest, setHoveredChest] = useState<{ x: number; y: number } | null>(null);
+    const [hoveredPlayer, setHoveredPlayer] = useState<{ id: number; x: number; y: number } | null>(null);
 
     // Refs for accessing state in callbacks
     const selectedRef = useRef(selectedIds);
@@ -112,6 +116,7 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
     const pauseStartTimeRef = useRef<number | null>(Date.now());
     const showPanelRef = useRef(showPanel);
     const helpOpenRef = useRef(helpOpen);
+    const skillCooldownsRef = useRef(skillCooldowns);
 
     useEffect(() => { selectedRef.current = selectedIds; }, [selectedIds]);
     useEffect(() => { unitsStateRef.current = units; }, [units]);
@@ -119,6 +124,7 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
     useEffect(() => { targetingModeRef.current = targetingMode; }, [targetingMode]);
     useEffect(() => { showPanelRef.current = showPanel; }, [showPanel]);
     useEffect(() => { helpOpenRef.current = helpOpen; }, [helpOpen]);
+    useEffect(() => { skillCooldownsRef.current = skillCooldowns; }, [skillCooldowns]);
 
     const addLog = (text: string, color?: string) => setCombatLog(prev => [...prev.slice(-50), { text, color }]);
 
@@ -144,6 +150,9 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
 
     useEffect(() => {
         if (!containerRef.current) return;
+
+        // Reset module-level caches on game restart
+        resetFogCache();
 
         const sceneRefs = createScene(containerRef.current, units);
         const { scene, camera, renderer, flames, candleLights, fogTexture, moveMarker, rangeIndicator, aoeIndicator, unitGroups, selectRings, unitMeshes, unitOriginalColors, maxHp } = sceneRefs;
@@ -259,26 +268,39 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
             raycaster.setFromCamera(mouse, camera);
 
             let foundEnemy: { id: number; x: number; y: number } | null = null;
+            let foundChest: { x: number; y: number } | null = null;
+            let foundPlayer: { id: number; x: number; y: number } | null = null;
             for (const hit of raycaster.intersectObjects(scene.children, true)) {
                 const unitId = hit.object.userData?.unitId;
                 if (unitId !== undefined) {
                     const unit = unitsStateRef.current.find(u => u.id === unitId);
-                    if (unit && unit.team === "enemy" && unit.hp > 0) {
-                        // Check fog of war - only show tooltip if enemy is visible (visibility === 2)
-                        const g = unitsRef.current[unitId];
-                        if (g) {
-                            const cx = Math.floor(g.position.x);
-                            const cz = Math.floor(g.position.z);
-                            const vis = visibilityRef.current[cx]?.[cz] ?? 0;
-                            if (vis === 2) {
-                                foundEnemy = { id: unitId, x: e.clientX, y: e.clientY };
+                    if (unit && unit.hp > 0) {
+                        if (unit.team === "enemy") {
+                            // Check fog of war - only show tooltip if enemy is visible (visibility === 2)
+                            const g = unitsRef.current[unitId];
+                            if (g) {
+                                const cx = Math.floor(g.position.x);
+                                const cz = Math.floor(g.position.z);
+                                const vis = visibilityRef.current[cx]?.[cz] ?? 0;
+                                if (vis === 2) {
+                                    foundEnemy = { id: unitId, x: e.clientX, y: e.clientY };
+                                }
                             }
+                        } else if (unit.team === "player") {
+                            foundPlayer = { id: unitId, x: e.clientX, y: e.clientY };
                         }
                         break;
                     }
                 }
+                // Check for chest hover
+                if (hit.object.name === "chest") {
+                    foundChest = { x: e.clientX, y: e.clientY };
+                    break;
+                }
             }
             setHoveredEnemy(foundEnemy);
+            setHoveredChest(foundChest);
+            setHoveredPlayer(foundPlayer);
         };
 
         const onMouseUp = (e: MouseEvent) => {
@@ -302,7 +324,8 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
                             if (moveMarkerRef.current) {
                                 moveMarkerRef.current.position.set(gx, 0.05, gz);
                                 moveMarkerRef.current.visible = true;
-                                setTimeout(() => { if (moveMarkerRef.current) moveMarkerRef.current.visible = false; }, 500);
+                                (moveMarkerRef.current.material as THREE.MeshBasicMaterial).opacity = 0.8;
+                                moveMarkerStartRef.current = Date.now();
                             }
                             soundFns.playMove();
 
@@ -474,12 +497,12 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
             animId = requestAnimationFrame(animate);
             const now = Date.now();
 
-            // Flickering flames
+            // Flickering flames - slow, intense flicker
             flames.forEach((flame, i) => {
-                const flicker = 0.7 + Math.sin(now * 0.015 + i * 2) * 0.15 + Math.random() * 0.15;
-                flame.scale.y = 1.5 + Math.sin(now * 0.02 + i) * 0.3;
+                const flicker = 0.6 + Math.sin(now * 0.004 + i * 2) * 0.25 + Math.random() * 0.1;
+                flame.scale.y = 1.6 + Math.sin(now * 0.005 + i) * 0.5;
                 (flame.material as THREE.MeshBasicMaterial).opacity = flicker;
-                candleLights[i].intensity = 5 + Math.sin(now * 0.008 + i * 1.7) * 0.3 + Math.random() * 0.2;
+                candleLights[i].intensity = 6 + Math.sin(now * 0.003 + i * 1.7) * 2 + Math.random() * 0.5;
             });
 
             // Keyboard panning
@@ -560,6 +583,7 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
                         projectilesRef.current, damageTexts.current, swingAnimationsRef.current,
                         moveStartRef.current, scene, setUnits, addLog, now,
                         defeatedThisFrame,
+                        skillCooldownsRef.current, setSkillCooldowns,
                         actionQueueRef.current, setQueuedActions
                     );
                 });
@@ -568,7 +592,22 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
                 swingAnimationsRef.current = updateSwingAnimations(swingAnimationsRef.current, scene, now);
             }
 
-            if (moveMarkerRef.current?.visible) moveMarkerRef.current.rotation.z += 0.05;
+            // Animate move marker - rotate and fade out
+            if (moveMarkerRef.current?.visible) {
+                moveMarkerRef.current.rotation.z += 0.05;
+                const markerAge = Date.now() - moveMarkerStartRef.current;
+                const markerDuration = 1000;  // Linger for 1 second
+                if (markerAge >= markerDuration) {
+                    moveMarkerRef.current.visible = false;
+                } else {
+                    // Fade out over the last half of the duration
+                    const fadeStart = markerDuration * 0.5;
+                    if (markerAge > fadeStart) {
+                        const fadeProgress = (markerAge - fadeStart) / (markerDuration - fadeStart);
+                        (moveMarkerRef.current.material as THREE.MeshBasicMaterial).opacity = 0.8 * (1 - fadeProgress);
+                    }
+                }
+            }
 
             // Update range indicator to follow caster during targeting mode
             if (targetingModeRef.current && rangeIndicatorRef.current?.visible) {
@@ -692,7 +731,7 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
             {/* Enemy tooltip on hover */}
             {hoveredEnemy && (() => {
                 const enemy = units.find(u => u.id === hoveredEnemy.id);
-                if (!enemy || !enemy.enemyType) return null;
+                if (!enemy || !enemy.enemyType || enemy.hp <= 0) return null;
                 const stats = ENEMY_STATS[enemy.enemyType];
                 const pct = enemy.hp / stats.maxHp;
                 const status = pct >= 1 ? "Unharmed" : pct > 0.75 ? "Scuffed" : pct > 0.5 ? "Injured" : pct > 0.25 ? "Badly wounded" : "Near death";
@@ -700,6 +739,28 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
                 return (
                     <div className="enemy-tooltip" style={{ left: hoveredEnemy.x + 12, top: hoveredEnemy.y - 10 }}>
                         <div className="enemy-tooltip-name">{stats.name}</div>
+                        <div className="enemy-tooltip-status" style={{ color: statusColor }}>{status}</div>
+                    </div>
+                );
+            })()}
+            {/* Chest tooltip on hover */}
+            {hoveredChest && (
+                <div className="enemy-tooltip" style={{ left: hoveredChest.x + 12, top: hoveredChest.y - 10 }}>
+                    <div className="enemy-tooltip-name">Chest</div>
+                </div>
+            )}
+            {/* Player unit tooltip on hover */}
+            {hoveredPlayer && (() => {
+                const player = units.find(u => u.id === hoveredPlayer.id);
+                if (!player || player.hp <= 0) return null;
+                const data = UNIT_DATA[player.id];
+                if (!data) return null;
+                const pct = player.hp / data.maxHp;
+                const status = pct >= 1 ? "Unharmed" : pct > 0.75 ? "Scuffed" : pct > 0.5 ? "Injured" : pct > 0.25 ? "Badly wounded" : "Near death";
+                const statusColor = pct >= 1 ? "#22c55e" : pct > 0.75 ? "#86efac" : pct > 0.5 ? "#eab308" : pct > 0.25 ? "#f97316" : "#ef4444";
+                return (
+                    <div className="enemy-tooltip" style={{ left: hoveredPlayer.x + 12, top: hoveredPlayer.y - 10 }}>
+                        <div className="enemy-tooltip-name">{data.name}</div>
                         <div className="enemy-tooltip-status" style={{ color: statusColor }}>{status}</div>
                     </div>
                 );
@@ -735,7 +796,7 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
                 skillCooldowns={skillCooldowns}
                 paused={paused}
                 queuedSkills={queuedActions.filter(q => q.unitId === selectedIds[0]).map(q => q.skillName)}
-                unitCooldownEnd={actionCooldownRef.current[selectedIds[0]] || 0}
+                // unitCooldownEnd={actionCooldownRef.current[selectedIds[0]] || 0}
             />}
         </div>
     );

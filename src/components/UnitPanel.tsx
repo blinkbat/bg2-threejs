@@ -14,10 +14,9 @@ interface UnitPanelProps {
     skillCooldowns?: Record<string, { end: number; duration: number }>;
     paused?: boolean;
     queuedSkills?: string[];
-    unitCooldownEnd?: number;  // When the unit can act again (0 = ready)
 }
 
-export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, skillCooldowns = {}, paused = false, queuedSkills = [], unitCooldownEnd = 0 }: UnitPanelProps) {
+export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, skillCooldowns = {}, paused = false, queuedSkills = [] }: UnitPanelProps) {
     const [, setTick] = useState(0);
     const [pauseTime, setPauseTime] = useState<number | null>(paused ? Date.now() : null);
 
@@ -99,7 +98,6 @@ export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, ski
                         paused={paused}
                         queuedSkills={queuedSkills}
                         onCastSkill={onCastSkill}
-                        unitCooldownEnd={unitCooldownEnd}
                     />
                 )}
                 {tab === "items" && <ItemsTab items={data.items} />}
@@ -244,7 +242,7 @@ function SkillTooltip({ skill, isShielded }: { skill: Skill; isShielded: boolean
 }
 
 function SkillsTab({
-    unitId, unit, skillCooldowns, displayTime, paused, queuedSkills, onCastSkill, unitCooldownEnd
+    unitId, unit, skillCooldowns, displayTime, paused, queuedSkills, onCastSkill
 }: {
     unitId: number;
     unit: Unit;
@@ -253,11 +251,8 @@ function SkillsTab({
     paused: boolean;
     queuedSkills: string[];
     onCastSkill?: (unitId: number, skill: Skill) => void;
-    unitCooldownEnd: number;
 }) {
     const isShielded = hasShieldedEffect(unit);
-    // Unit is locked if still on cooldown from last action
-    const unitOnCooldown = unitCooldownEnd > displayTime;
 
     return (
         <div className="flex flex-col gap-8">
@@ -276,8 +271,6 @@ function SkillsTab({
                 const isRanged = skill.range > 2;
                 // Can click if has mana and alive (clicking queues the skill)
                 const canClick = hasManaForSkill && unit.hp > 0;
-                // Visual dimming: dim if unit is on cooldown (unless this skill is queued)
-                const isDimmed = unitOnCooldown && !isQueued;
 
                 const skillColorClass = skill.type === "damage" ? "skill-damage" :
                     skill.type === "heal" ? "skill-heal" :
@@ -302,12 +295,17 @@ function SkillsTab({
                             className={cardClass}
                             onClick={() => canClick && onCastSkill?.(unitId, skill)}
                             style={{
-                                borderColor: isQueued ? undefined : (canClick && !isDimmed ? skillBorderColor : "#333"),
-                                opacity: (!canClick || isDimmed) && !isQueued ? 0.5 : 1
+                                borderColor: isQueued ? undefined : (canClick ? skillBorderColor : "#333")
                             }}
                         >
-                            {skillOnCooldown && !isQueued && (
-                                <div className="skill-cooldown-overlay" style={{ width: `${cooldownPct}%` }} />
+                            {skillOnCooldown && (
+                                <div
+                                    className="skill-cooldown-overlay"
+                                    style={{
+                                        width: `${cooldownPct}%`,
+                                        background: isQueued ? "rgba(245, 158, 11, 0.4)" : "rgba(0,0,0,0.5)"
+                                    }}
+                                />
                             )}
                             <div className="skill-header">
                                 <span className={`bold ${isQueued ? "skill-queued-color" : skillColorClass}`}>
@@ -318,8 +316,8 @@ function SkillsTab({
                                 </span>
                                 {skill.manaCost > 0 && <span className="mana-cost">{skill.manaCost} MP</span>}
                             </div>
-                            {skillOnCooldown && !isQueued && (
-                                <div className="skill-cooldown-text">
+                            {skillOnCooldown && (
+                                <div className="skill-cooldown-text" style={isQueued ? { color: "#f59e0b" } : undefined}>
                                     {cooldownRemaining}s{paused && " (paused)"}{isShielded && " (×2)"}
                                 </div>
                             )}

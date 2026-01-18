@@ -38,30 +38,32 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     renderer.setPixelRatio(window.devicePixelRatio);
     container.appendChild(renderer.domElement);
 
-    // Lighting
-    scene.add(new THREE.AmbientLight(0xffffff, 0.15));
-    const dir = new THREE.DirectionalLight(0xffffff, 0.25);
+    // Lighting - low ambient for darker dungeon feel, let point lights dominate
+    scene.add(new THREE.AmbientLight(0xffffff, 0.08));
+    const dir = new THREE.DirectionalLight(0xffffff, 0.15);
     dir.position.set(10, 20, 10);
     scene.add(dir);
 
-    // Ground
+    // Ground - base layer for non-room areas (corridors, etc)
+    const groundMat = new THREE.MeshStandardMaterial({ color: "#0a0a10", metalness: 0.2, roughness: 0.9 });
     const ground = new THREE.Mesh(
         new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE),
-        new THREE.MeshStandardMaterial({ color: "#12121a", metalness: 0.3, roughness: 0.7 })
+        groundMat
     );
     ground.rotation.x = -Math.PI / 2;
     ground.position.set(GRID_SIZE / 2, 0, GRID_SIZE / 2);
     ground.name = "ground";
     scene.add(ground);
 
-    // Room floors
+    // Room floors - slightly above ground to avoid z-fighting, same material properties
     roomFloors.forEach(r => {
+        const floorMat = new THREE.MeshStandardMaterial({ color: r.color, metalness: 0.2, roughness: 0.9 });
         const floor = new THREE.Mesh(
             new THREE.PlaneGeometry(r.w, r.h),
-            new THREE.MeshStandardMaterial({ color: r.color, metalness: 0.4, roughness: 0.6 })
+            floorMat
         );
         floor.rotation.x = -Math.PI / 2;
-        floor.position.set(r.x + r.w / 2, 0.01, r.z + r.h / 2);
+        floor.position.set(r.x + r.w / 2, 0.001, r.z + r.h / 2);  // Tiny offset instead of polygonOffset
         floor.name = "ground";
         scene.add(floor);
     });
@@ -86,11 +88,42 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         scene.add(flame);
         flames.push(flame);
 
-        const light = new THREE.PointLight("#ffaa44", 5, 18, 1.2);
-        light.position.set(pos.x + pos.dx * 1.5, 2.2, pos.z + pos.dz * 1.5);
+        const light = new THREE.PointLight("#ffaa44", 8, 12, 1.5);
+        light.position.set(pos.x + pos.dx * 0.3, 2.05, pos.z + pos.dz * 0.3);  // Same as flame
         scene.add(light);
         candleLights.push(light);
     });
+
+    // Treasure chest in starting room
+    const chestGroup = new THREE.Group();
+    // Chest body (main box) - dark wood
+    const chestBody = new THREE.Mesh(
+        new THREE.BoxGeometry(0.9, 0.5, 0.6),
+        new THREE.MeshStandardMaterial({ color: "#5c3a21", metalness: 0.2, roughness: 0.8 })
+    );
+    chestBody.position.y = 0.25;
+    chestGroup.add(chestBody);
+    // Chest lid - rounded top effect with slightly lighter wood
+    const chestLid = new THREE.Mesh(
+        new THREE.BoxGeometry(0.95, 0.25, 0.65),
+        new THREE.MeshStandardMaterial({ color: "#6b4423", metalness: 0.2, roughness: 0.7 })
+    );
+    chestLid.position.y = 0.625;
+    chestGroup.add(chestLid);
+    // Gold buckle/clasp on front - highly metallic brass/gold
+    const buckle = new THREE.Mesh(
+        new THREE.BoxGeometry(0.2, 0.2, 0.08),
+        new THREE.MeshStandardMaterial({ color: "#d4af37", emissive: "#8b7500", emissiveIntensity: 0.6, metalness: 1.0, roughness: 0.05 })
+    );
+    buckle.position.set(0, 0.4, 0.32);
+    chestGroup.add(buckle);
+    // Mark all chest parts as "chest" for raycasting
+    chestBody.name = "chest";
+    chestLid.name = "chest";
+    buckle.name = "chest";
+    // Position in starting room (north corner of diamond view)
+    chestGroup.position.set(2.5, 0, 2.5);
+    scene.add(chestGroup);
 
     // Walls
     mergedObstacles.forEach((o, i) => {
@@ -104,11 +137,11 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         scene.add(mesh);
     });
 
-    // Grid lines
-    const gridMat = new THREE.LineBasicMaterial({ color: "#333" });
+    // Grid lines - subtle, above room floors
+    const gridMat = new THREE.LineBasicMaterial({ color: "#444444", transparent: true, opacity: 0.25 });
     for (let i = 0; i <= GRID_SIZE; i++) {
-        scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.01, i), new THREE.Vector3(GRID_SIZE, 0.01, i)]), gridMat));
-        scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(i, 0.01, 0), new THREE.Vector3(i, 0.01, GRID_SIZE)]), gridMat));
+        scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.002, i), new THREE.Vector3(GRID_SIZE, 0.002, i)]), gridMat));
+        scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(i, 0.002, 0), new THREE.Vector3(i, 0.002, GRID_SIZE)]), gridMat));
     }
 
     // Fog of war
@@ -180,13 +213,20 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
 
         const boxH = isPlayer ? 1 : (size > 1 ? 1.8 : 0.6);
         const boxW = 0.6 * size;
-        const boxMat = new THREE.MeshStandardMaterial({ color: data.color, metalness: 0.5, roughness: 0.5 });
+        const boxMat = new THREE.MeshStandardMaterial({ color: data.color, metalness: 0.5, roughness: 0.4 });
         const box = new THREE.Mesh(new THREE.BoxGeometry(boxW, boxH, boxW), boxMat);
         box.position.y = boxH / 2;
         box.userData.unitId = unit.id;
         group.add(box);
         unitMeshes[unit.id] = box;
         unitOriginalColors[unit.id] = new THREE.Color(data.color);
+
+        // Player units get subtle innate light
+        if (isPlayer) {
+            const unitLight = new THREE.PointLight(data.color, 0.15, 2, 2);
+            unitLight.position.y = boxH / 2;
+            group.add(unitLight);
+        }
 
         const selInner = 0.5 * size;
         const selOuter = 0.55 * size;
