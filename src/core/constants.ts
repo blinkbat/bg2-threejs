@@ -61,10 +61,10 @@ export const ASTAR_BLOCKED_TARGET_SEARCH = 2;  // Radius to search for unblocked
 export const ASTAR_DIAGONAL_COST = Math.SQRT2; // Cost for diagonal movement (√2 ≈ 1.414)
 
 // Movement - Unit Avoidance
-export const AVOIDANCE_RANGE_MULTIPLIER = 1.15; // How far to start avoiding (combinedRadius * multiplier) - tighter feel
+export const AVOIDANCE_RANGE_MULTIPLIER = 1.3;  // How far to start avoiding (combinedRadius * multiplier)
 export const AVOIDANCE_OVERLAP_STRENGTH = 3;    // Push strength when overlapping (stronger to prevent clipping)
-export const AVOIDANCE_STEER_THRESHOLD = 0.5;   // Dot product threshold to start steering (higher = only steer when more directly ahead)
-export const AVOIDANCE_STEER_STRENGTH = 0.4;    // Steering force multiplier (gentler steering)
+export const AVOIDANCE_STEER_THRESHOLD = 0.4;   // Dot product threshold to start steering
+export const AVOIDANCE_STEER_STRENGTH = 0.5;    // Steering force multiplier
 export const MOVEMENT_MIN_DIST = 0.1;          // Minimum distance to target before stopping
 export const MOVEMENT_MIN_MAGNITUDE = 0.01;    // Minimum movement vector magnitude
 

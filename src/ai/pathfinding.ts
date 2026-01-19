@@ -4,6 +4,67 @@ import { isWithinGrid } from "../game/geometry";
 import type { PathNode, Unit, UnitGroup } from "../core/types";
 
 // =============================================================================
+// DYNAMIC OBSTACLE MAP - Units treated as soft obstacles with extra cost
+// =============================================================================
+
+// Cost multiplier for cells near other units (makes pathfinder prefer wider berths)
+const UNIT_PROXIMITY_COST = 2;
+// How far from a unit's center to apply extra cost (in cells)
+const UNIT_AVOIDANCE_RADIUS = 1;
+
+// Module-level state for dynamic obstacles (updated each frame before pathfinding)
+let dynamicCostMap: Map<string, number> = new Map();
+
+/**
+ * Update the dynamic obstacle map based on current unit positions.
+ * Call this once per frame before any pathfinding.
+ */
+export function updateDynamicObstacles(
+    units: Unit[],
+    unitsRef: Record<number, UnitGroup>,
+    excludeUnitId?: number
+): void {
+    dynamicCostMap.clear();
+
+    for (const unit of units) {
+        if (unit.hp <= 0) continue;
+        if (unit.id === excludeUnitId) continue;
+
+        const g = unitsRef[unit.id];
+        if (!g) continue;
+
+        const centerX = Math.floor(g.position.x);
+        const centerZ = Math.floor(g.position.z);
+
+        // Add cost to cells near this unit
+        for (let dx = -UNIT_AVOIDANCE_RADIUS; dx <= UNIT_AVOIDANCE_RADIUS; dx++) {
+            for (let dz = -UNIT_AVOIDANCE_RADIUS; dz <= UNIT_AVOIDANCE_RADIUS; dz++) {
+                const x = centerX + dx;
+                const z = centerZ + dz;
+                if (!isWithinGrid(x, z)) continue;
+                if (isBlocked(x, z)) continue; // Don't add cost to walls
+
+                const dist = Math.hypot(dx, dz);
+                if (dist <= UNIT_AVOIDANCE_RADIUS) {
+                    // Higher cost for cells closer to unit center
+                    const cost = UNIT_PROXIMITY_COST * (1 - dist / (UNIT_AVOIDANCE_RADIUS + 1));
+                    const key = `${x},${z}`;
+                    const existing = dynamicCostMap.get(key) || 0;
+                    dynamicCostMap.set(key, Math.max(existing, cost));
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Get the extra traversal cost for a cell due to nearby units.
+ */
+function getDynamicCost(x: number, z: number): number {
+    return dynamicCostMap.get(`${x},${z}`) || 0;
+}
+
+// =============================================================================
 // GRID HELPERS
 // =============================================================================
 
@@ -100,6 +161,7 @@ interface Neighbor {
 /**
  * Get valid neighbors for A* pathfinding.
  * Handles diagonal movement with corner-cutting prevention.
+ * Adds dynamic cost for cells near other units (for wider berth pathfinding).
  */
 function getNeighbors(x: number, z: number, diagonalCost: number): Neighbor[] {
     const neighbors: Neighbor[] = [];
@@ -124,7 +186,9 @@ function getNeighbors(x: number, z: number, diagonalCost: number): Neighbor[] {
     for (const { dx, dz } of cardinals) {
         const nx = x + dx, nz = z + dz;
         if (isPassable(nx, nz)) {
-            neighbors.push({ x: nx, z: nz, cost: 1 });
+            // Base cost + dynamic cost from nearby units
+            const cost = 1 + getDynamicCost(nx, nz);
+            neighbors.push({ x: nx, z: nz, cost });
         }
     }
 
@@ -136,7 +200,9 @@ function getNeighbors(x: number, z: number, diagonalCost: number): Neighbor[] {
         // Block diagonal if either adjacent cardinal is blocked (no corner cutting)
         if (isBlocked(x, nz) || isBlocked(nx, z)) continue;
 
-        neighbors.push({ x: nx, z: nz, cost: diagonalCost });
+        // Base diagonal cost + dynamic cost from nearby units
+        const cost = diagonalCost + getDynamicCost(nx, nz);
+        neighbors.push({ x: nx, z: nz, cost });
     }
 
     return neighbors;

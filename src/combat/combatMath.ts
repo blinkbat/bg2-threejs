@@ -137,6 +137,13 @@ export function hasShieldedEffect(unit: Unit): boolean {
 }
 
 /**
+ * Check if a unit currently has the stunned status effect.
+ */
+export function hasStunnedEffect(unit: Unit): boolean {
+    return unit.statusEffects?.some(e => e.type === "stunned") ?? false;
+}
+
+/**
  * Get effective armor for a unit, applying shielded buff (doubles armor).
  */
 export function getEffectiveArmor(unit: Unit, baseArmor: number): number {
@@ -230,4 +237,9 @@ export function logTauntMiss(casterName: string, skillName: string): string {
 /** "{unit} activates {skill}!" */
 export function logBuff(casterName: string, skillName: string): string {
     return `${casterName} activates ${skillName}!`;
+}
+
+/** "{target} is stunned!" */
+export function logStunned(targetName: string): string {
+    return `${targetName} is stunned!`;
 }

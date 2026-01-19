@@ -17,7 +17,7 @@ import {
 } from "./ai/unitAI";
 import { getUnitStats, getBasicAttackSkill } from "./game/units";
 import type { ActionQueue } from "./input";
-import { calculateDamage, calculateDistance, getDirectionAndDistance, getGridCell, rollHit, shouldApplyPoison, hasPoisonEffect, getEffectiveArmor, logHit, logMiss, logPoisoned, logAoeHit, logAoeMiss, getDamageColor } from "./combat/combatMath";
+import { calculateDamage, calculateDistance, getDirectionAndDistance, getGridCell, rollHit, shouldApplyPoison, hasPoisonEffect, hasStunnedEffect, getEffectiveArmor, logHit, logMiss, logPoisoned, logAoeHit, logAoeMiss, getDamageColor } from "./combat/combatMath";
 import { SWIPE_ANIMATE_DURATION } from "./core/constants";
 import { spawnDamageNumber, handleUnitDefeat, createProjectile, getProjectileSpeed, applyDamageToUnit, animateExpandingMesh, getAliveUnitsInRange, type DamageContext } from "./combat/combat";
 import { soundFns } from "./audio/sound";
@@ -222,15 +222,15 @@ export function processStatusEffects(
                         handleUnitDefeat(unit.id, unitG, unitsRef, addLog, data.name);
                     }
                 }
-            } else if (effect.type === "shielded") {
-                // Shielded buff - just decay duration over time (no damage)
+            } else if (effect.type === "shielded" || effect.type === "stunned") {
+                // Shielded/stunned buff - just decay duration over time (no damage)
                 const elapsed = now - effect.lastTick;
                 if (elapsed > 0) {
                     setUnits(prev => prev.map(u => {
                         if (u.id !== unit.id) return u;
 
                         const updatedEffects = (u.statusEffects || []).map(e => {
-                            if (e.type === "shielded") {
+                            if (e.type === effect.type) {
                                 const newDuration = e.duration - elapsed;
                                 return { ...e, duration: newDuration, lastTick: now };
                             }
@@ -703,6 +703,11 @@ export function updateUnitAI(
 ): void {
     const isPlayer = unit.team === "player";
     const data = getUnitStats(unit);
+
+    // Skip all actions if stunned - unit cannot move or attack
+    if (hasStunnedEffect(unit)) {
+        return;
+    }
 
     // Phase 1: Targeting - find and validate targets
     const aggroRange = isPlayer ? 12 : (data as { aggroRange: number }).aggroRange;

@@ -6,7 +6,7 @@ import * as THREE from "three";
 import type { Unit, Skill, UnitGroup, Projectile, StatusEffect } from "../core/types";
 import { COLORS } from "../core/constants";
 import { UNIT_DATA, getUnitStats } from "../game/units";
-import { rollDamage, rollChance, calculateDamage, rollHit, getEffectiveArmor, hasShieldedEffect, logHit, logMiss, logHeal, logPoisoned, logCast, logTaunt, logTauntMiss, logBuff } from "./combatMath";
+import { rollDamage, rollChance, calculateDamage, rollHit, getEffectiveArmor, hasShieldedEffect, hasStunnedEffect, logHit, logMiss, logHeal, logPoisoned, logCast, logTaunt, logTauntMiss, logBuff, logStunned } from "./combatMath";
 import { getUnitRadius, isInRange } from "../rendering/range";
 import { soundFns } from "../audio/sound";
 import { createProjectile, getProjectileSpeed, applyDamageToUnit, animateExpandingMesh, type DamageContext } from "./combat";
@@ -510,6 +510,103 @@ export function executeRangedSkill(
 }
 
 /**
+ * Execute a debuff skill (like Stunning Blow) - applies a debuff to an enemy
+ */
+export function executeDebuffSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill,
+    targetX: number,
+    targetZ: number
+): boolean {
+    const { unitsStateRef, unitsRef, hitFlashRef, setUnits, addLog } = ctx;
+
+    // Find closest enemy to target position
+    const closest = findClosestTargetByTeam(unitsStateRef.current, unitsRef.current, "enemy", targetX, targetZ);
+
+    if (!closest) {
+        addLog(`${UNIT_DATA[casterId].name}: No enemy at that location!`, COLORS.logNeutral);
+        return false;
+    }
+
+    const { unit: targetEnemy, group: targetG } = closest;
+    const casterG = unitsRef.current[casterId];
+
+    if (!casterG) return false;
+
+    // Check if in melee range (hitbox-aware)
+    const targetRadius = getUnitRadius(targetEnemy);
+    if (!isInRange(casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, targetRadius, skill.range + 0.5)) {
+        addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, COLORS.logNeutral);
+        return false;
+    }
+
+    // Check if target is already stunned
+    if (hasStunnedEffect(targetEnemy)) {
+        addLog(`${UNIT_DATA[casterId].name}: Target is already stunned!`, COLORS.logNeutral);
+        return false;
+    }
+
+    const now = Date.now();
+    consumeSkill(ctx, casterId, skill);
+
+    const casterData = UNIT_DATA[casterId];
+    const targetData = getUnitStats(targetEnemy);
+    const targetId = targetEnemy.id;
+
+    // Roll to hit
+    if (rollHit(casterData.accuracy)) {
+        // Roll for stun chance
+        const stunChance = skill.stunChance ?? 75;
+        if (rollChance(stunChance)) {
+            const stunDuration = skill.value[0];  // Duration in ms
+
+            // Apply stunned effect
+            setUnits(prev => prev.map(u => {
+                if (u.id !== targetId) return u;
+
+                const existingEffects = u.statusEffects || [];
+                // Remove existing stunned effect if any (refresh)
+                const filteredEffects = existingEffects.filter(e => e.type !== "stunned");
+
+                const stunnedEffect: StatusEffect = {
+                    type: "stunned",
+                    duration: stunDuration,
+                    tickInterval: stunDuration,  // No ticking needed
+                    lastTick: now,
+                    damagePerTick: 0,
+                    sourceId: casterId
+                };
+
+                return {
+                    ...u,
+                    statusEffects: [...filteredEffects, stunnedEffect]
+                };
+            }));
+
+            soundFns.playHit();
+            addLog(`${casterData.name}'s ${skill.name} hits ${targetData.name}!`, COLORS.damagePlayer);
+            addLog(logStunned(targetData.name), "#9b59b6");
+
+            // Visual effect - purple flash
+            const mesh = ctx.unitMeshRef.current[targetId];
+            if (targetG && mesh) {
+                (mesh.material as THREE.MeshStandardMaterial).color.set("#9b59b6");
+                hitFlashRef.current[targetId] = now;
+            }
+        } else {
+            soundFns.playHit();
+            addLog(`${casterData.name}'s ${skill.name} hits ${targetData.name}, but they resist the stun!`, COLORS.logNeutral);
+        }
+    } else {
+        soundFns.playMiss();
+        addLog(logMiss(casterData.name, skill.name, targetData.name), COLORS.logNeutral);
+    }
+
+    return true;
+}
+
+/**
  * Execute a skill based on its type
  */
 export function executeSkill(
@@ -550,6 +647,8 @@ export function executeSkill(
         return executeBuffSkill(ctx, casterId, skill);
     } else if (skill.type === "flurry" && skill.targetType === "self") {
         return executeFlurrySkill(ctx, casterId, skill);
+    } else if (skill.type === "debuff" && skill.targetType === "enemy") {
+        return executeDebuffSkill(ctx, casterId, skill, targetX, targetZ);
     }
 
     return false;

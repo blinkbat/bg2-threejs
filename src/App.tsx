@@ -15,6 +15,7 @@ import { blocked } from "./game/dungeon";
 import { UNIT_DATA, ENEMY_STATS, createInitialUnits, getBasicAttackSkill } from "./game/units";
 import { createScene, updateCamera } from "./rendering/scene";
 import { soundFns } from "./audio/sound";
+import { updateDynamicObstacles } from "./ai/pathfinding";
 
 // Extracted modules
 import { clearTargetingMode, executeSkill, type SkillExecutionContext } from "./combat/skills";
@@ -573,6 +574,9 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
             if (!pausedRef.current) {
                 // Process queued actions (skills waiting for cooldown)
                 doProcessQueue();
+
+                // Update dynamic obstacle map for pathfinding (units avoid each other)
+                updateDynamicObstacles(currentUnits, unitsRef.current);
 
                 currentUnits.forEach(unit => {
                     const g = unitsRef.current[unit.id];

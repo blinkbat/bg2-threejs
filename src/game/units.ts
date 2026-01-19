@@ -74,6 +74,18 @@ export const SKILLS: Record<string, Skill> = {
         range: 2.5,  // melee range for targets
         value: [1, 3],  // low damage per hit
         hitCount: 5
+    },
+    stunningBlow: {
+        name: "Stunning Blow",
+        description: "A powerful strike that stuns the target, preventing them from acting for 10 seconds.",
+        flavor: "Seems even the senseless can get the sense beaten out of them.",
+        manaCost: 5,
+        cooldown: 3000,
+        type: "debuff",
+        targetType: "enemy",
+        range: 1.8,  // melee range
+        value: [10000, 10000],  // stun duration in ms (10 seconds)
+        stunChance: 75  // 75% chance to stun
     }
 };
 
@@ -82,7 +94,7 @@ export const SKILLS: Record<string, Skill> = {
 // =============================================================================
 
 export const UNIT_DATA: Record<number, UnitData> = {
-    1: { name: "Barbarian", class: "Barbarian", hp: 50, maxHp: 50, mana: 25, maxMana: 25, damage: [3, 6], accuracy: 70, armor: 2, color: "#c0392b", skills: [SKILLS.warcry], items: ["Axe"], attackCooldown: 2000 },
+    1: { name: "Barbarian", class: "Barbarian", hp: 50, maxHp: 50, mana: 25, maxMana: 25, damage: [3, 6], accuracy: 70, armor: 2, color: "#c0392b", skills: [SKILLS.warcry, SKILLS.stunningBlow], items: ["Axe"], attackCooldown: 2000 },
     2: { name: "Paladin", class: "Paladin", hp: 45, maxHp: 45, mana: 20, maxMana: 20, damage: [2, 5], accuracy: 65, armor: 3, color: "#f1c40f", skills: [SKILLS.raiseShield], items: ["Mace"], attackCooldown: 2500 },
     3: { name: "Thief", class: "Thief", hp: 25, maxHp: 25, mana: 30, maxMana: 30, damage: [2, 4], accuracy: 75, armor: 1, color: "#8e44ad", skills: [SKILLS.poisonDagger], items: ["Bow"], range: 7, projectileColor: "#a0522d", attackCooldown: 1500 },
     4: { name: "Wizard", class: "Wizard", hp: 18, maxHp: 18, mana: 50, maxMana: 50, damage: [3, 5], accuracy: 60, armor: 0, color: "#3498db", skills: [SKILLS.fireball], items: ["Staff"], range: 8, projectileColor: "#ff6600", attackCooldown: 3000 },
