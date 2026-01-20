@@ -896,6 +896,9 @@ html, body, #root {
     font-size: 13px;
     color: #ccc;
     overflow-y: auto;
+    /* Fade to transparent at top */
+    -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0.3) 0%, rgba(0,0,0,1) 40%, rgba(0,0,0,1) 100%);
+    mask-image: linear-gradient(to bottom, rgba(0,0,0,0.3) 0%, rgba(0,0,0,1) 40%, rgba(0,0,0,1) 100%);
 }
 
 .combat-log::-webkit-scrollbar {

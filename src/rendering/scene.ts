@@ -41,24 +41,29 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
 
     const scene = new THREE.Scene();
 
-    // Create sky gradient for outdoor areas, solid color for indoor
+    // Create sky gradient for all areas
+    const canvas = document.createElement("canvas");
+    canvas.width = 2;
+    canvas.height = 256;
+    const ctx = canvas.getContext("2d")!;
+    const gradient = ctx.createLinearGradient(0, 0, 0, 256);
+
     if (area.id === "field") {
-        // Create vertical gradient texture for sky
-        const canvas = document.createElement("canvas");
-        canvas.width = 2;
-        canvas.height = 256;
-        const ctx = canvas.getContext("2d")!;
-        const gradient = ctx.createLinearGradient(0, 0, 0, 256);
-        gradient.addColorStop(0, "#1a3a5c");    // Dark blue at top
-        gradient.addColorStop(0.5, "#4a7a9c");  // Medium blue
-        gradient.addColorStop(1, "#87CEEB");    // Light sky blue at bottom (horizon)
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, 2, 256);
-        const skyTexture = new THREE.CanvasTexture(canvas);
-        scene.background = skyTexture;
+        // Darker blue gradient for outdoor field
+        gradient.addColorStop(0, "#0a1520");    // Very dark blue at top
+        gradient.addColorStop(0.5, "#1a3040");  // Dark blue-gray
+        gradient.addColorStop(1, "#2a4a60");    // Medium dark blue at bottom (horizon)
     } else {
-        scene.background = new THREE.Color(area.backgroundColor);
+        // Dark slate to dark purple for dungeon
+        gradient.addColorStop(0, "#1a1a2e");    // Dark purple at top
+        gradient.addColorStop(0.5, "#16213e");  // Dark slate-purple
+        gradient.addColorStop(1, "#1f2937");    // Dark slate at bottom
     }
+
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 2, 256);
+    const skyTexture = new THREE.CanvasTexture(canvas);
+    scene.background = skyTexture;
 
     const aspect = container.clientWidth / container.clientHeight;
     const camera = new THREE.OrthographicCamera(-15 * aspect, 15 * aspect, 15, -15, 0.1, 1000);
@@ -162,6 +167,9 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     const trunkColors = ["#654321", "#8B4513", "#A0522D", "#5C4033", "#6F4E37"];
     const treeMeshes: THREE.Mesh[] = [];
 
+    // Fog mesh Y position - trees in unexplored cells will be capped below this
+    const FOG_Y = 2.6;
+
     area.trees.forEach((tree, i) => {
         const scale = tree.size;
 
@@ -175,8 +183,11 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         );
         trunk.position.set(tree.x, trunkHeight / 2, tree.z);
         trunk.name = "tree";
-        // Store original color for fog restoration
-        trunk.userData.originalColor = new THREE.Color(trunkColor);
+        // Store full dimensions for fog height capping
+        trunk.userData.fullHeight = trunkHeight;
+        trunk.userData.treeX = tree.x;
+        trunk.userData.treeZ = tree.z;
+        trunk.userData.isTrunk = true;
         scene.add(trunk);
 
         // Foliage - tall pyramidal cone with varied green colors
@@ -187,10 +198,19 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
             new THREE.ConeGeometry(foliageRadius, foliageHeight, 8),
             new THREE.MeshStandardMaterial({ color: foliageColor, metalness: 0.0, roughness: 0.8, transparent: true, opacity: 1 })
         );
-        foliage.position.set(tree.x, trunkHeight + foliageHeight / 2, tree.z);
+        // Store full Y position for restoration
+        const fullFoliageY = trunkHeight + foliageHeight / 2;
+        foliage.position.set(tree.x, fullFoliageY, tree.z);
         foliage.name = "tree";
-        // Store original color for fog restoration
-        foliage.userData.originalColor = new THREE.Color(foliageColor);
+        // Store full dimensions for fog height capping
+        foliage.userData.fullY = fullFoliageY;
+        foliage.userData.fullHeight = foliageHeight;
+        foliage.userData.fullRadius = foliageRadius;
+        foliage.userData.treeX = tree.x;
+        foliage.userData.treeZ = tree.z;
+        foliage.userData.isFoliage = true;
+        foliage.userData.trunkHeight = trunkHeight;
+        foliage.userData.fogY = FOG_Y;
         scene.add(foliage);
 
         // Track both trunk and foliage for transparency updates
@@ -466,37 +486,64 @@ export function updateWallTransparency(
     }
 }
 
-// Color for trees in unexplored fog
-const FOG_BLACK = new THREE.Color(0x000000);
-const FOG_SEEN_DARKEN = 0.3;  // Multiplier for "seen but not visible" areas
-
 /**
- * Update tree colors based on fog of war visibility.
- * Trees in unexplored areas turn black, trees in seen areas are darkened.
+ * Update tree heights based on fog of war visibility.
+ * Trees in unexplored (vis=0) cells are cut below the fog layer.
+ * Trees in seen or visible areas are shown at full height.
  */
 export function updateTreeFogVisibility(
     treeMeshes: THREE.Mesh[],
     visibility: number[][]
 ): void {
-    for (const mesh of treeMeshes) {
-        const mat = mesh.material as THREE.MeshStandardMaterial;
-        const originalColor = mesh.userData.originalColor as THREE.Color | undefined;
-        if (!originalColor) continue;
+    const FOG_Y = 2.6;
+    const MAX_HEIGHT_UNEXPLORED = FOG_Y - 0.1;  // Cap just below fog
 
-        // Get visibility at tree position
-        const tx = Math.floor(mesh.position.x);
-        const tz = Math.floor(mesh.position.z);
+    for (const mesh of treeMeshes) {
+        const tx = Math.floor(mesh.userData.treeX ?? mesh.position.x);
+        const tz = Math.floor(mesh.userData.treeZ ?? mesh.position.z);
         const vis = visibility[tx]?.[tz] ?? 0;
 
-        if (vis === 0) {
-            // Unexplored - turn black
-            mat.color.copy(FOG_BLACK);
-        } else if (vis === 1) {
-            // Seen but not currently visible - darken
-            mat.color.copy(originalColor).multiplyScalar(FOG_SEEN_DARKEN);
-        } else {
-            // Currently visible - restore original color
-            mat.color.copy(originalColor);
+        if (mesh.userData.isTrunk) {
+            const fullHeight = mesh.userData.fullHeight as number;
+            if (vis === 0) {
+                // Unexplored - cap trunk below fog
+                const cappedHeight = Math.min(fullHeight, MAX_HEIGHT_UNEXPLORED);
+                mesh.scale.y = cappedHeight / fullHeight;
+                mesh.position.y = cappedHeight / 2;
+            } else {
+                // Seen or visible - full height
+                mesh.scale.y = 1;
+                mesh.position.y = fullHeight / 2;
+            }
+        } else if (mesh.userData.isFoliage) {
+            const fullY = mesh.userData.fullY as number;
+            const fullHeight = mesh.userData.fullHeight as number;
+            const trunkHeight = mesh.userData.trunkHeight as number;
+
+            if (vis === 0) {
+                // Unexplored - hide foliage if it would stick above fog
+                const foliageBottom = fullY - fullHeight / 2;
+                if (foliageBottom >= MAX_HEIGHT_UNEXPLORED) {
+                    // Foliage entirely above fog - hide it
+                    mesh.visible = false;
+                } else {
+                    // Partially clip foliage
+                    mesh.visible = true;
+                    const availableSpace = MAX_HEIGHT_UNEXPLORED - trunkHeight;
+                    if (availableSpace <= 0) {
+                        mesh.visible = false;
+                    } else {
+                        const scaleFactor = Math.min(1, availableSpace / fullHeight);
+                        mesh.scale.y = scaleFactor;
+                        mesh.position.y = trunkHeight + (fullHeight * scaleFactor) / 2;
+                    }
+                }
+            } else {
+                // Seen or visible - full height
+                mesh.visible = true;
+                mesh.scale.y = 1;
+                mesh.position.y = fullY;
+            }
         }
     }
 }
