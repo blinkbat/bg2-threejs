@@ -119,7 +119,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         name: "Kobold",
         hp: 12,
         maxHp: 12,
-        damage: [1, 4],
+        damage: [1, 5],
         accuracy: 50,
         armor: 0,
         color: "#8B4513",
@@ -130,7 +130,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         name: "Kobold Archer",
         hp: 10,
         maxHp: 10,
-        damage: [2, 4],
+        damage: [3, 7],
         accuracy: 55,
         armor: 0,
         color: "#6B4423",
@@ -159,7 +159,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         healSkill: {
             name: "Dark Mending",
             cooldown: 8000,  // 8 seconds
-            heal: [4, 8],
+            heal: [6, 12],
             range: 6  // Range to find hurt allies
         },
         // Kiting behavior - retreat when players get close
@@ -171,7 +171,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         name: "Ogre",
         hp: 80,
         maxHp: 80,
-        damage: [6, 12],
+        damage: [6, 10],
         accuracy: 60,
         armor: 3,
         color: "#556B2F",
@@ -181,7 +181,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         skill: {
             name: "Swipe",
             cooldown: 10000,  // 10 seconds
-            damage: [8, 14],
+            damage: [9, 16],
             maxTargets: 3,
             range: 2.5
         }
@@ -190,7 +190,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         name: "Brood Mother",
         hp: 45,
         maxHp: 45,
-        damage: [3, 6],
+        damage: [3, 8],
         accuracy: 55,
         armor: 2,
         color: "#4a2c2a",  // Dark brownish-red (spider-like)
@@ -207,8 +207,8 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     broodling: {
         name: "Broodling",
-        hp: 8,
-        maxHp: 8,
+        hp: 5,
+        maxHp: 5,
         damage: [1, 2],  // Low damage
         accuracy: 65,
         armor: 0,
