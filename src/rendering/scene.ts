@@ -4,9 +4,15 @@
 
 import * as THREE from "three";
 import { GRID_SIZE } from "../core/constants";
-import { candlePositions, mergedObstacles, roomFloors } from "../game/dungeon";
+import { getCurrentArea, getComputedAreaData, type AreaTransition } from "../game/areas";
 import { getUnitStats } from "../game/units";
 import type { Unit, UnitGroup, FogTexture } from "../core/types";
+
+export interface DoorMesh extends THREE.Mesh {
+    userData: {
+        transition: AreaTransition;
+    };
+}
 
 export interface SceneRefs {
     scene: THREE.Scene;
@@ -25,11 +31,15 @@ export interface SceneRefs {
     unitOriginalColors: Record<number, THREE.Color>;
     maxHp: Record<number, number>;
     wallMeshes: THREE.Mesh[];
+    doorMeshes: DoorMesh[];
 }
 
 export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs {
+    const area = getCurrentArea();
+    const computed = getComputedAreaData();
+
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color("#0d1117");
+    scene.background = new THREE.Color(area.backgroundColor);
 
     const aspect = container.clientWidth / container.clientHeight;
     const camera = new THREE.OrthographicCamera(-15 * aspect, 15 * aspect, 15, -15, 0.1, 1000);
@@ -39,14 +49,14 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     renderer.setPixelRatio(window.devicePixelRatio);
     container.appendChild(renderer.domElement);
 
-    // Lighting - low ambient for darker dungeon feel, let point lights dominate
-    scene.add(new THREE.AmbientLight(0xffffff, 0.08));
-    const dir = new THREE.DirectionalLight(0xffffff, 0.15);
+    // Lighting - use area settings
+    scene.add(new THREE.AmbientLight(0xffffff, area.ambientLight));
+    const dir = new THREE.DirectionalLight(0xffffff, area.directionalLight);
     dir.position.set(10, 20, 10);
     scene.add(dir);
 
     // Ground - base layer for non-room areas (corridors, etc)
-    const groundMat = new THREE.MeshStandardMaterial({ color: "#0a0a10", metalness: 0.2, roughness: 0.9 });
+    const groundMat = new THREE.MeshStandardMaterial({ color: area.groundColor, metalness: 0.2, roughness: 0.9 });
     const ground = new THREE.Mesh(
         new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE),
         groundMat
@@ -57,7 +67,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     scene.add(ground);
 
     // Room floors - slightly above ground to avoid z-fighting, same material properties
-    roomFloors.forEach(r => {
+    area.roomFloors.forEach(r => {
         const floorMat = new THREE.MeshStandardMaterial({ color: r.color, metalness: 0.2, roughness: 0.9 });
         const floor = new THREE.Mesh(
             new THREE.PlaneGeometry(r.w, r.h),
@@ -69,10 +79,10 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         scene.add(floor);
     });
 
-    // Torches with flames and lights
+    // Torches with flames and lights (only in areas with candles)
     const flames: THREE.Mesh[] = [];
     const candleLights: THREE.PointLight[] = [];
-    candlePositions.forEach((pos) => {
+    computed.candlePositions.forEach((pos) => {
         const candle = new THREE.Mesh(
             new THREE.CylinderGeometry(0.06, 0.08, 0.3, 8),
             new THREE.MeshStandardMaterial({ color: "#e8d4a8", metalness: 0.1, roughness: 0.9 })
@@ -95,40 +105,74 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         candleLights.push(light);
     });
 
-    // Treasure chest in starting room
-    const chestGroup = new THREE.Group();
-    // Chest body (main box) - dark wood
-    const chestBody = new THREE.Mesh(
-        new THREE.BoxGeometry(0.9, 0.5, 0.6),
-        new THREE.MeshStandardMaterial({ color: "#5c3a21", metalness: 0.2, roughness: 0.8 })
-    );
-    chestBody.position.y = 0.25;
-    chestGroup.add(chestBody);
-    // Chest lid - rounded top effect with slightly lighter wood
-    const chestLid = new THREE.Mesh(
-        new THREE.BoxGeometry(0.95, 0.25, 0.65),
-        new THREE.MeshStandardMaterial({ color: "#6b4423", metalness: 0.2, roughness: 0.7 })
-    );
-    chestLid.position.y = 0.625;
-    chestGroup.add(chestLid);
-    // Gold buckle/clasp on front - highly metallic brass/gold
-    const buckle = new THREE.Mesh(
-        new THREE.BoxGeometry(0.2, 0.2, 0.08),
-        new THREE.MeshStandardMaterial({ color: "#d4af37", emissive: "#8b7500", emissiveIntensity: 0.6, metalness: 1.0, roughness: 0.05 })
-    );
-    buckle.position.set(0, 0.4, 0.32);
-    chestGroup.add(buckle);
-    // Mark all chest parts as "chest" for raycasting
-    chestBody.name = "chest";
-    chestLid.name = "chest";
-    buckle.name = "chest";
-    // Position in starting room (north corner of diamond view)
-    chestGroup.position.set(2.5, 0, 2.5);
-    scene.add(chestGroup);
+    // Treasure chests from area data
+    area.chests.forEach(chest => {
+        const chestGroup = new THREE.Group();
+        // Chest body (main box) - dark wood
+        const chestBody = new THREE.Mesh(
+            new THREE.BoxGeometry(0.9, 0.5, 0.6),
+            new THREE.MeshStandardMaterial({ color: "#5c3a21", metalness: 0.2, roughness: 0.8 })
+        );
+        chestBody.position.y = 0.25;
+        chestGroup.add(chestBody);
+        // Chest lid - rounded top effect with slightly lighter wood
+        const chestLid = new THREE.Mesh(
+            new THREE.BoxGeometry(0.95, 0.25, 0.65),
+            new THREE.MeshStandardMaterial({ color: "#6b4423", metalness: 0.2, roughness: 0.7 })
+        );
+        chestLid.position.y = 0.625;
+        chestGroup.add(chestLid);
+        // Gold buckle/clasp on front - highly metallic brass/gold
+        const buckle = new THREE.Mesh(
+            new THREE.BoxGeometry(0.2, 0.2, 0.08),
+            new THREE.MeshStandardMaterial({ color: "#d4af37", emissive: "#8b7500", emissiveIntensity: 0.6, metalness: 1.0, roughness: 0.05 })
+        );
+        buckle.position.set(0, 0.4, 0.32);
+        chestGroup.add(buckle);
+        // Mark all chest parts as "chest" for raycasting
+        chestBody.name = "chest";
+        chestLid.name = "chest";
+        buckle.name = "chest";
+        chestGroup.position.set(chest.x, 0, chest.z);
+        scene.add(chestGroup);
+    });
+
+    // Trees - simple cylinders for trunk + box for foliage
+    area.trees.forEach(tree => {
+        const treeGroup = new THREE.Group();
+        const scale = tree.size;
+
+        // Trunk - brown cylinder
+        const trunkHeight = 1.5 * scale;
+        const trunkRadius = 0.15 * scale;
+        const trunk = new THREE.Mesh(
+            new THREE.CylinderGeometry(trunkRadius, trunkRadius * 1.2, trunkHeight, 8),
+            new THREE.MeshStandardMaterial({ color: "#4a3728", metalness: 0.1, roughness: 0.9 })
+        );
+        trunk.position.y = trunkHeight / 2;
+        treeGroup.add(trunk);
+
+        // Foliage - green box (simple, not fancy)
+        const foliageSize = 1.2 * scale;
+        const foliageHeight = 1.8 * scale;
+        const foliage = new THREE.Mesh(
+            new THREE.BoxGeometry(foliageSize, foliageHeight, foliageSize),
+            new THREE.MeshStandardMaterial({ color: "#2d5a27", metalness: 0.0, roughness: 0.8 })
+        );
+        foliage.position.y = trunkHeight + foliageHeight / 2 - 0.2 * scale;
+        treeGroup.add(foliage);
+
+        // Mark as obstacle for raycasting
+        trunk.name = "obstacle";
+        foliage.name = "obstacle";
+
+        treeGroup.position.set(tree.x, 0, tree.z);
+        scene.add(treeGroup);
+    });
 
     // Walls - with transparent support for unit occlusion
     const wallMeshes: THREE.Mesh[] = [];
-    mergedObstacles.forEach((o, i) => {
+    computed.mergedObstacles.forEach((o, i) => {
         const shade = 0x2d3748 + (i % 3) * 0x050505;
         const mesh = new THREE.Mesh(
             new THREE.BoxGeometry(o.w, 2.5, o.h),
@@ -138,6 +182,50 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         mesh.name = "obstacle";
         scene.add(mesh);
         wallMeshes.push(mesh);
+    });
+
+    // Doors - clickable transitions to other areas
+    const doorMeshes: DoorMesh[] = [];
+    area.transitions.forEach(transition => {
+        // Create a subtle transparent portal
+        // Door dimensions: w is always the wide part (parallel to wall), h is the thin part (perpendicular)
+        // For north/south facing doors: width along X, depth along Z
+        // For east/west facing doors: width along Z, depth along X
+        const isNorthSouth = transition.direction === "north" || transition.direction === "south";
+        const doorWidth = isNorthSouth ? transition.w : transition.h;
+        const doorDepth = isNorthSouth ? transition.h : transition.w;
+
+        // Transparent portal box
+        const doorMat = new THREE.MeshBasicMaterial({
+            color: "#6090c0",
+            transparent: true,
+            opacity: 0.08,
+            side: THREE.DoubleSide
+        });
+
+        const doorMesh = new THREE.Mesh(
+            new THREE.BoxGeometry(doorWidth, 2.2, doorDepth),
+            doorMat
+        );
+
+        doorMesh.position.set(
+            transition.x + transition.w / 2,
+            1.1,
+            transition.z + transition.h / 2
+        );
+        doorMesh.name = "door";
+        doorMesh.userData.transition = transition;
+        scene.add(doorMesh);
+        doorMeshes.push(doorMesh as unknown as DoorMesh);
+
+        // Inner glow light - subtle point light inside the portal
+        const doorLight = new THREE.PointLight("#7ab0e0", 1.2, 6, 2);
+        doorLight.position.set(
+            transition.x + transition.w / 2,
+            1.0,
+            transition.z + transition.h / 2
+        );
+        scene.add(doorLight);
     });
 
     // Grid lines - subtle, above room floors
@@ -266,6 +354,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         unitOriginalColors,
         maxHp,
         wallMeshes,
+        doorMeshes,
     };
 }
 

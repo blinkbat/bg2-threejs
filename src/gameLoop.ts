@@ -10,6 +10,7 @@ import {
 } from "./core/constants";
 import { getUnitRadius, isInRange } from "./rendering/range";
 import { updateVisibility } from "./ai/pathfinding";
+import { getCurrentArea } from "./game/areas";
 import { tryKite, type KiteContext } from "./ai/targeting";
 import {
     runTargetingPhase, runPathFollowingPhase, runMovementPhase, recalculatePathIfNeeded,
@@ -400,8 +401,25 @@ export function updateFogOfWar(
     playerUnits: Unit[],
     unitsRef: Record<number, UnitGroup>,
     fogTexture: FogTexture,
-    unitsState: Unit[]
+    unitsState: Unit[],
+    fogMesh: THREE.Mesh
 ): void {
+    const area = getCurrentArea();
+
+    // If area doesn't have fog of war, clear and hide it
+    if (!area.hasFogOfWar) {
+        fogMesh.visible = false;
+        // Make all enemies visible
+        unitsState.filter(u => u.team === "enemy").forEach(u => {
+            const g = unitsRef[u.id];
+            if (g) g.visible = u.hp > 0;
+        });
+        return;
+    }
+
+    // Ensure fog mesh is visible for areas with fog
+    fogMesh.visible = true;
+
     updateVisibility(visibility, playerUnits, { current: unitsRef });
 
     // Quick hash to detect visibility changes (sum of visible cell coords)

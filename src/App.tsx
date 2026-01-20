@@ -12,8 +12,9 @@ import type { Unit, Skill, CombatLogEntry, SelectionBox, DamageText, UnitGroup, 
 
 // Game Logic
 import { blocked } from "./game/dungeon";
-import { UNIT_DATA, ENEMY_STATS, createInitialUnits, getBasicAttackSkill } from "./game/units";
-import { createScene, updateCamera, updateWallTransparency } from "./rendering/scene";
+import { getCurrentArea, setCurrentArea, type AreaId, type AreaTransition } from "./game/areas";
+import { UNIT_DATA, ENEMY_STATS, getBasicAttackSkill } from "./game/units";
+import { createScene, updateCamera, updateWallTransparency, type DoorMesh } from "./rendering/scene";
 import { soundFns } from "./audio/sound";
 import { updateDynamicObstacles } from "./ai/pathfinding";
 
@@ -54,7 +55,26 @@ import { HelpModal } from "./components/HelpModal";
 // MAIN COMPONENT
 // =============================================================================
 
-function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () => void; onShowHelp: () => void; onCloseHelp: () => void; helpOpen: boolean }) {
+// Persisted player state type (duplicated here for Game props)
+interface PersistedPlayer {
+    id: number;
+    hp: number;
+    mana?: number;
+    statusEffects?: Unit["statusEffects"];
+}
+
+interface GameProps {
+    onRestart: () => void;
+    onAreaTransition: (players: PersistedPlayer[], targetArea: AreaId, spawn: { x: number; z: number }) => void;
+    onShowHelp: () => void;
+    onCloseHelp: () => void;
+    helpOpen: boolean;
+    persistedPlayers: PersistedPlayer[] | null;
+    startingArea: AreaId;
+    spawnPoint: { x: number; z: number } | null;
+}
+
+function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, persistedPlayers, startingArea, spawnPoint }: GameProps) {
     // Three.js refs
     const containerRef = useRef<HTMLDivElement>(null);
     const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -67,10 +87,13 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
     const moveMarkerStartRef = useRef<number>(0);  // Track when marker was shown for fade animation
     const pathsRef = useRef<Record<number, { x: number; z: number }[]>>({});
     const fogTextureRef = useRef<FogTexture | null>(null);
+    const fogMeshRef = useRef<THREE.Mesh | null>(null);
     const visibilityRef = useRef<number[][]>(Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(0)));
 
     // Camera & input refs
-    const cameraOffset = useRef({ x: 6, z: 6 });
+    // Initialize camera centered on spawn point (or default for dungeon start)
+    const initialCamOffset = spawnPoint ? { x: spawnPoint.x, z: spawnPoint.z } : { x: 6, z: 6 };
+    const cameraOffset = useRef(initialCamOffset);
     const zoomLevel = useRef(10);
     const isDragging = useRef(false);
     const didPan = useRef(false);
@@ -90,13 +113,56 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
     const rangeIndicatorRef = useRef<THREE.Mesh | null>(null);
     const aoeIndicatorRef = useRef<THREE.Mesh | null>(null);
     const wallMeshesRef = useRef<THREE.Mesh[]>([]);
+    const doorMeshesRef = useRef<DoorMesh[]>([]);
 
     // Action queue (per-unit: last action wins)
     const actionQueueRef = useRef<ActionQueue>({});
     const processActionQueueRef = useRef<() => void>(() => {});
 
+    // Create initial units based on area and persisted state
+    const createUnitsForArea = (): Unit[] => {
+        const area = getCurrentArea();
+
+        // Create player units - either from persisted state or fresh
+        const playerIds = Object.keys(UNIT_DATA).map(Number);
+        const spawn = spawnPoint || { x: 5.5, z: 5.5 };  // Default spawn in Room A
+
+        const players: Unit[] = playerIds.map((id, i) => {
+            const data = UNIT_DATA[id];
+            const persisted = persistedPlayers?.find(p => p.id === id);
+            return {
+                id,
+                x: spawn.x + (i % 3) * 1.5 - 1.5,
+                z: spawn.z + Math.floor(i / 3) * 1.5,
+                hp: persisted?.hp ?? data.hp,
+                mana: persisted?.mana ?? data.mana,
+                team: "player" as const,
+                target: null,
+                aiEnabled: true,
+                statusEffects: persisted?.statusEffects
+            };
+        });
+
+        // Create enemies from area spawn data (only in dungeon for now)
+        const enemies: Unit[] = area.enemySpawns.map((spawn, i) => {
+            const stats = ENEMY_STATS[spawn.type];
+            return {
+                id: 100 + i,
+                x: spawn.x,
+                z: spawn.z,
+                hp: stats.maxHp,
+                team: "enemy" as const,
+                enemyType: spawn.type,
+                target: null,
+                aiEnabled: true
+            };
+        });
+
+        return [...players, ...enemies];
+    };
+
     // React state
-    const [units, setUnits] = useState<Unit[]>(createInitialUnits);
+    const [units, setUnits] = useState<Unit[]>(createUnitsForArea);
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
     const [selBox, setSelBox] = useState<SelectionBox | null>(null);
     const [showPanel, setShowPanel] = useState(false);
@@ -109,6 +175,9 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
     const [hoveredEnemy, setHoveredEnemy] = useState<{ id: number; x: number; y: number } | null>(null);
     const [hoveredChest, setHoveredChest] = useState<{ x: number; y: number } | null>(null);
     const [hoveredPlayer, setHoveredPlayer] = useState<{ id: number; x: number; y: number } | null>(null);
+    const [hoveredDoor, setHoveredDoor] = useState<{ targetArea: string; x: number; y: number } | null>(null);
+    // Current area comes from prop (set by parent during transitions)
+    const currentArea = startingArea;
 
     // Refs for accessing state in callbacks
     const selectedRef = useRef(selectedIds);
@@ -157,12 +226,13 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
         resetFogCache();
 
         const sceneRefs = createScene(containerRef.current, units);
-        const { scene, camera, renderer, flames, candleLights, fogTexture, moveMarker, rangeIndicator, aoeIndicator, unitGroups, selectRings, unitMeshes, unitOriginalColors, maxHp, wallMeshes } = sceneRefs;
+        const { scene, camera, renderer, flames, candleLights, fogTexture, fogMesh, moveMarker, rangeIndicator, aoeIndicator, unitGroups, selectRings, unitMeshes, unitOriginalColors, maxHp, wallMeshes, doorMeshes } = sceneRefs;
 
         sceneRef.current = scene;
         cameraRef.current = camera;
         rendererRef.current = renderer;
         fogTextureRef.current = fogTexture;
+        fogMeshRef.current = fogMesh;
         moveMarkerRef.current = moveMarker;
         rangeIndicatorRef.current = rangeIndicator;
         aoeIndicatorRef.current = aoeIndicator;
@@ -172,6 +242,7 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
         unitOriginalColorRef.current = unitOriginalColors;
         maxHpRef.current = maxHp;
         wallMeshesRef.current = wallMeshes;
+        doorMeshesRef.current = doorMeshes;
         units.forEach(unit => { pathsRef.current[unit.id] = []; });
 
         const updateCam = () => updateCamera(camera, cameraOffset.current);
@@ -196,6 +267,21 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
             );
         };
         processActionQueueRef.current = doProcessQueue;
+
+        // Area transition handler
+        const handleAreaTransition = (transition: AreaTransition) => {
+            // Extract player states to persist (HP, mana, status effects)
+            const playerUnits = unitsStateRef.current.filter(u => u.team === "player");
+            const persistedState: PersistedPlayer[] = playerUnits.map(u => ({
+                id: u.id,
+                hp: u.hp,
+                mana: u.mana,
+                statusEffects: u.statusEffects
+            }));
+
+            // Trigger area transition via parent - this will remount with new area
+            onAreaTransition(persistedState, transition.targetArea, transition.targetSpawn);
+        };
 
         // =============================================================================
         // INPUT HANDLERS
@@ -300,10 +386,22 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
                     foundChest = { x: e.clientX, y: e.clientY };
                     break;
                 }
+                // Check for door hover
+                if (hit.object.name === "door") {
+                    const transition = hit.object.userData?.transition as AreaTransition | undefined;
+                    if (transition) {
+                        setHoveredDoor({ targetArea: transition.targetArea, x: e.clientX, y: e.clientY });
+                    }
+                    break;
+                }
             }
             setHoveredEnemy(foundEnemy);
             setHoveredChest(foundChest);
             setHoveredPlayer(foundPlayer);
+            // Clear door hover if we didn't find one
+            if (!raycaster.intersectObjects(scene.children, true).some(h => h.object.name === "door")) {
+                setHoveredDoor(null);
+            }
         };
 
         const onMouseUp = (e: MouseEvent) => {
@@ -377,6 +475,35 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
                     )) return;
                 }
                 return;
+            }
+
+            // Check for door click - trigger area transition
+            for (const h of raycaster.intersectObjects(scene.children, true)) {
+                if (h.object.name === "door") {
+                    const transition = h.object.userData?.transition as AreaTransition | undefined;
+                    if (transition) {
+                        // Check if all alive party members are within range of the door
+                        const doorCenterX = transition.x + transition.w / 2;
+                        const doorCenterZ = transition.z + transition.h / 2;
+                        const doorRange = 8;  // Units must be within 8 tiles of door center
+
+                        const alivePlayers = unitsStateRef.current.filter(u => u.team === "player" && u.hp > 0);
+                        const allPlayersInRange = alivePlayers.every(player => {
+                            const playerG = unitsRef.current[player.id];
+                            if (!playerG) return false;
+                            const dx = playerG.position.x - doorCenterX;
+                            const dz = playerG.position.z - doorCenterZ;
+                            return Math.sqrt(dx * dx + dz * dz) <= doorRange;
+                        });
+
+                        if (allPlayersInRange) {
+                            handleAreaTransition(transition);
+                        } else {
+                            addLog("You must gather your party before venturing forth.", "#f59e0b");
+                        }
+                        return;
+                    }
+                }
             }
 
             // Normal click handling
@@ -568,8 +695,8 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
 
             // Fog of war
             const playerUnits = currentUnits.filter(u => u.team === "player" && u.hp > 0);
-            if (fogTextureRef.current) {
-                updateFogOfWar(visibilityRef.current, playerUnits, unitsRef.current, fogTextureRef.current, currentUnits);
+            if (fogTextureRef.current && fogMeshRef.current) {
+                updateFogOfWar(visibilityRef.current, playerUnits, unitsRef.current, fogTextureRef.current, currentUnits, fogMeshRef.current);
             }
 
             // Unit AI & movement
@@ -669,6 +796,7 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
 
     const aliveEnemies = units.filter(u => u.team === "enemy" && u.hp > 0).length;
     const alivePlayers = units.filter(u => u.team === "player" && u.hp > 0).length;
+    const areaHasEnemies = getCurrentArea().enemySpawns.length > 0;
 
     // Skill targeting handler
     const handleCastSkill = (casterId: number, skill: Skill) => {
@@ -774,7 +902,18 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
                     </div>
                 );
             })()}
-            <HUD aliveEnemies={aliveEnemies} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onShowHelp={onShowHelp} onRestart={onRestart} />
+            {/* Door tooltip on hover */}
+            {hoveredDoor && (
+                <div className="enemy-tooltip" style={{ left: hoveredDoor.x + 12, top: hoveredDoor.y - 10 }}>
+                    <div className="enemy-tooltip-name">Door</div>
+                    <div className="enemy-tooltip-status" style={{ color: "#4a90d9" }}>To: {hoveredDoor.targetArea}</div>
+                </div>
+            )}
+            {/* Current area indicator */}
+            <div style={{ position: "absolute", top: 10, left: 10, color: "#fff", fontSize: 12, opacity: 0.7, textTransform: "capitalize" }}>
+                {currentArea}
+            </div>
+            <HUD aliveEnemies={aliveEnemies} alivePlayers={alivePlayers} paused={paused} areaHasEnemies={areaHasEnemies} onTogglePause={handleTogglePause} onShowHelp={onShowHelp} onRestart={onRestart} />
             <CombatLog log={combatLog} />
             <PartyBar
                 units={units}
@@ -815,15 +954,42 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
 export default function App() {
     const [gameKey, setGameKey] = useState(0);
     const [showHelp, setShowHelp] = useState(true); // Show help on initial page load
+    // Persisted player state survives area transitions
+    const [persistedPlayers, setPersistedPlayers] = useState<PersistedPlayer[] | null>(null);
+    const [startingArea, setStartingArea] = useState<AreaId>("dungeon");
+    const [spawnPoint, setSpawnPoint] = useState<{ x: number; z: number } | null>(null);
 
-    const handleRestart = () => {
-        setGameKey(k => k + 1); // Forces Game to remount, resetting all game state
-        // Note: showHelp and mute state are preserved since they live in this wrapper
+    // Full restart (resets player state too)
+    const handleFullRestart = () => {
+        setPersistedPlayers(null);
+        setStartingArea("dungeon");
+        setSpawnPoint(null);
+        setCurrentArea("dungeon");  // Reset area system
+        setGameKey(k => k + 1);
+    };
+
+    // Area transition (preserves player state)
+    const handleAreaTransition = (players: PersistedPlayer[], targetArea: AreaId, spawn: { x: number; z: number }) => {
+        setPersistedPlayers(players);
+        setStartingArea(targetArea);
+        setSpawnPoint(spawn);
+        setCurrentArea(targetArea);
+        setGameKey(k => k + 1);  // Remount with new area
     };
 
     return (
         <>
-            <Game key={gameKey} onRestart={handleRestart} onShowHelp={() => setShowHelp(true)} onCloseHelp={() => setShowHelp(false)} helpOpen={showHelp} />
+            <Game
+                key={gameKey}
+                onRestart={handleFullRestart}
+                onAreaTransition={handleAreaTransition}
+                onShowHelp={() => setShowHelp(true)}
+                onCloseHelp={() => setShowHelp(false)}
+                helpOpen={showHelp}
+                persistedPlayers={persistedPlayers}
+                startingArea={startingArea}
+                spawnPoint={spawnPoint}
+            />
             {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
         </>
     );
