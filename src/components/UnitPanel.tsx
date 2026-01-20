@@ -181,7 +181,13 @@ function SkillTooltip({ skill, isShielded }: { skill: Skill; isShielded: boolean
 
     // Damage/heal/effect value
     if (skill.type === "damage") {
-        lines.push({ label: "Damage", value: `${skill.value[0]}-${skill.value[1]}` });
+        // Magic Missile shows damage per missile and missile count
+        if (skill.hitCount) {
+            lines.push({ label: "Damage", value: `${skill.value[0]}-${skill.value[1]} × ${skill.hitCount}` });
+            lines.push({ label: "Missiles", value: `${skill.hitCount} (up to ${skill.hitCount} targets)`, color: "#9966ff" });
+        } else {
+            lines.push({ label: "Damage", value: `${skill.value[0]}-${skill.value[1]}` });
+        }
     } else if (skill.type === "heal") {
         lines.push({ label: "Heal", value: `${skill.value[0]}-${skill.value[1]}`, color: COLORS.hpHigh });
     } else if (skill.type === "taunt") {
@@ -213,6 +219,10 @@ function SkillTooltip({ skill, isShielded }: { skill: Skill; isShielded: boolean
     // AOE
     if (skill.aoeRadius) {
         lines.push({ label: "AOE radius", value: `${skill.aoeRadius}`, color: "#ff6600" });
+        // Fireball damages all units including allies
+        if (skill.name === "Fireball") {
+            lines.push({ label: "Warning", value: "Friendly fire!", color: "#ff4444" });
+        }
     }
 
     // Poison chance

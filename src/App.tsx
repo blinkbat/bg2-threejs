@@ -12,7 +12,7 @@ import type { Unit, Skill, CombatLogEntry, SelectionBox, DamageText, UnitGroup, 
 
 // Game Logic
 import { blocked } from "./game/dungeon";
-import { getCurrentArea, setCurrentArea, type AreaId, type AreaTransition } from "./game/areas";
+import { getCurrentArea, setCurrentArea, AREAS, type AreaId, type AreaTransition } from "./game/areas";
 import { UNIT_DATA, ENEMY_STATS, getBasicAttackSkill } from "./game/units";
 import { createScene, updateCamera, updateWallTransparency, updateTreeFogVisibility, updateLightLOD, addUnitToScene, type DoorMesh } from "./rendering/scene";
 import { soundFns } from "./audio/sound";
@@ -22,6 +22,8 @@ import { resetAllBroodMotherScreeches } from "./game/enemyState";
 
 // Extracted modules
 import { clearTargetingMode, executeSkill, type SkillExecutionContext } from "./combat/skills";
+import { resetBarks } from "./combat/barks";
+import { initializeUnitIdCounter } from "./gameLoop";
 import {
     togglePause,
     getUnitsInBox,
@@ -120,7 +122,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
 
     // Action queue (per-unit: last action wins)
     const actionQueueRef = useRef<ActionQueue>({});
-    const processActionQueueRef = useRef<() => void>(() => {});
+    const processActionQueueRef = useRef<(defeatedThisFrame: Set<number>) => void>(() => {});
 
     // Create initial units based on area and persisted state
     const createUnitsForArea = (): Unit[] => {
@@ -161,7 +163,10 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
             };
         });
 
-        return [...players, ...enemies];
+        const allUnits = [...players, ...enemies];
+        // Initialize unit ID counter to prevent ID collisions when spawning
+        initializeUnitIdCounter(allUnits);
+        return allUnits;
     };
 
     // React state
@@ -169,7 +174,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
     const [selBox, setSelBox] = useState<SelectionBox | null>(null);
     const [showPanel, setShowPanel] = useState(false);
-    const [combatLog, setCombatLog] = useState<CombatLogEntry[]>([{ text: "Combat begins!", color: "#f59e0b" }]);
+    const [combatLog, setCombatLog] = useState<CombatLogEntry[]>(() => [{ text: `The party enters ${getCurrentArea().name}.`, color: "#f59e0b" }]);
     const [paused, setPaused] = useState(true);
     const [hpBarPositions, setHpBarPositions] = useState<{ positions: Record<number, { x: number; y: number; visible: boolean }>; scale: number }>({ positions: {}, scale: 1 });
     const [skillCooldowns, setSkillCooldowns] = useState<Record<string, { end: number; duration: number }>>({});
@@ -207,7 +212,8 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
     const addLog = (text: string, color?: string) => setCombatLog(prev => [...prev.slice(-50), { text, color }]);
 
     // Skill execution context (passed to skill functions)
-    const getSkillContext = (scene: THREE.Scene): SkillExecutionContext => ({
+    // defeatedThisFrame is optional - if not provided, creates a new Set (for UI-triggered skills outside the game loop)
+    const getSkillContext = (scene: THREE.Scene, defeatedThisFrame?: Set<number>): SkillExecutionContext => ({
         scene,
         unitsStateRef: unitsStateRef as React.RefObject<Unit[]>,
         unitsRef: unitsRef as React.RefObject<Record<number, UnitGroup>>,
@@ -219,7 +225,8 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         unitOriginalColorRef: unitOriginalColorRef as React.RefObject<Record<number, THREE.Color>>,
         setUnits,
         setSkillCooldowns,
-        addLog
+        addLog,
+        defeatedThisFrame: defeatedThisFrame ?? new Set<number>()
     });
 
     // =============================================================================
@@ -232,6 +239,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         // Reset module-level caches on game restart
         resetFogCache();
         resetAllBroodMotherScreeches();
+        resetBarks();
 
         const sceneRefs = createScene(containerRef.current, units);
         const { scene, camera, renderer, flames, candleMeshes, candleLights, fogTexture, fogMesh, moveMarker, rangeIndicator, aoeIndicator, unitGroups, selectRings, unitMeshes, unitOriginalColors, maxHp, wallMeshes, treeMeshes, doorMeshes } = sceneRefs;
@@ -259,10 +267,9 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
 
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
-        const skillCtx = getSkillContext(scene);
-
-        // Process action queue wrapper
-        const doProcessQueue = () => {
+        // Process action queue wrapper - accepts defeatedThisFrame to share with skills
+        const doProcessQueue = (defeatedThisFrame: Set<number>) => {
+            const skillCtx = getSkillContext(scene, defeatedThisFrame);
             processActionQueue(
                 actionQueueRef,
                 actionCooldownRef,
@@ -468,6 +475,9 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
             mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
             mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
             raycaster.setFromCamera(mouse, camera);
+
+            // Create skill context for this click event (not part of game loop frame)
+            const skillCtx = getSkillContext(scene);
 
             // Handle targeting mode
             if (targetingModeRef.current) {
@@ -725,7 +735,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
             // Unit AI & movement
             if (!pausedRef.current) {
                 // Process queued actions (skills waiting for cooldown)
-                doProcessQueue();
+                doProcessQueue(defeatedThisFrame);
 
                 // Check for newly spawned units and add them to the scene
                 currentUnits.forEach(unit => {
@@ -840,9 +850,8 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         setShowPanel(selectedIds.length === 1 && units.find(u => u.id === selectedIds[0])?.team === "player");
     }, [selectedIds, units]);
 
-    const aliveEnemies = units.filter(u => u.team === "enemy" && u.hp > 0).length;
     const alivePlayers = units.filter(u => u.team === "player" && u.hp > 0).length;
-    const areaHasEnemies = getCurrentArea().enemySpawns.length > 0;
+    const areaData = getCurrentArea();
 
     // Skill targeting handler
     const handleCastSkill = (casterId: number, skill: Skill) => {
@@ -952,7 +961,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
             {hoveredDoor && (
                 <div className="enemy-tooltip" style={{ left: hoveredDoor.x + 12, top: hoveredDoor.y - 10 }}>
                     <div className="enemy-tooltip-name">Door</div>
-                    <div className="enemy-tooltip-status" style={{ color: "#4a90d9" }}>To: {hoveredDoor.targetArea}</div>
+                    <div className="enemy-tooltip-status" style={{ color: "#4a90d9" }}>To: {AREAS[hoveredDoor.targetArea as AreaId]?.name ?? hoveredDoor.targetArea}</div>
                 </div>
             )}
             {/* Current area indicator */}
@@ -963,7 +972,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
             <div style={{ position: "absolute", top: 10, right: 10, color: "#888", fontSize: 11, fontFamily: "monospace", opacity: 0.6 }}>
                 {fps} fps
             </div>
-            <HUD aliveEnemies={aliveEnemies} alivePlayers={alivePlayers} paused={paused} areaHasEnemies={areaHasEnemies} onTogglePause={handleTogglePause} onShowHelp={onShowHelp} onRestart={onRestart} />
+            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onShowHelp={onShowHelp} onRestart={onRestart} />
             <CombatLog log={combatLog} />
             <PartyBar
                 units={units}

@@ -49,6 +49,7 @@ export interface TreeLocation {
 export interface AreaData {
     id: AreaId;
     name: string;
+    flavor: string;              // Short atmospheric description
     gridSize: number;
     backgroundColor: string;
     groundColor: string;
@@ -245,7 +246,8 @@ export function computeAreaData(area: AreaData): ComputedAreaData {
 
 export const DUNGEON_AREA: AreaData = {
     id: "dungeon",
-    name: "Dungeon",
+    name: "Kobold Warrens",
+    flavor: "The stench of vermin hangs heavy in the air.",
     gridSize: GRID_SIZE,
     backgroundColor: "#050508",
     groundColor: "#0a0a10",
@@ -345,7 +347,8 @@ export const DUNGEON_AREA: AreaData = {
 
 export const FIELD_AREA: AreaData = {
     id: "forest",
-    name: "Forest",
+    name: "Whispering Woods",
+    flavor: "Something skitters in the shadows between the trees.",
     gridSize: GRID_SIZE,
     backgroundColor: "#87CEEB",  // Sky blue
     groundColor: "#228B22",      // Forest green

@@ -19,7 +19,7 @@ export const SKILLS: Record<string, Skill> = {
         projectileColor: "#ff4400"
     },
     heal: {
-        name: "Heal",
+        name: "Prayer",
         description: "Restore health to an ally.",
         flavor: "Deeper than any salve, purer than any potion.",
         manaCost: 6,
@@ -72,7 +72,7 @@ export const SKILLS: Record<string, Skill> = {
         type: "flurry",
         targetType: "self",  // centered on caster
         range: 2.5,  // melee range for targets
-        value: [1, 3],  // low damage per hit
+        value: [2, 4],  // low damage per hit
         hitCount: 5
     },
     stunningBlow: {
@@ -97,6 +97,20 @@ export const SKILLS: Record<string, Skill> = {
         targetType: "ally",
         range: 8,
         value: [30000, 30000]  // duration in ms (30 seconds)
+    },
+    magicWave: {
+        name: "Magic Wave",
+        description: "Launch 8 arcane missiles that fan out towards a target area.",
+        flavor: "\"Running will only make it worse!\" - Archmage Konen",
+        manaCost: 20,
+        cooldown: 7000,
+        type: "damage",
+        targetType: "aoe",  // Can target any position like fireball
+        range: 10,
+        aoeRadius: 3,  // Visual indicator radius
+        value: [2, 4],  // damage per missile
+        hitCount: 8,  // 8 missiles
+        projectileColor: "#9966ff"  // Purple arcane color
     }
 };
 
@@ -108,7 +122,7 @@ export const UNIT_DATA: Record<number, UnitData> = {
     1: { name: "Barbarian", class: "Barbarian", hp: 50, maxHp: 50, mana: 25, maxMana: 25, damage: [3, 6], accuracy: 70, armor: 2, color: "#c0392b", skills: [SKILLS.warcry, SKILLS.stunningBlow], items: ["Axe"], attackCooldown: 2000 },
     2: { name: "Paladin", class: "Paladin", hp: 45, maxHp: 45, mana: 20, maxMana: 20, damage: [2, 5], accuracy: 65, armor: 3, color: "#f1c40f", skills: [SKILLS.raiseShield], items: ["Mace"], attackCooldown: 2500 },
     3: { name: "Thief", class: "Thief", hp: 25, maxHp: 25, mana: 30, maxMana: 30, damage: [2, 4], accuracy: 75, armor: 1, color: "#8e44ad", skills: [SKILLS.poisonDagger], items: ["Bow"], range: 7, projectileColor: "#a0522d", attackCooldown: 1500 },
-    4: { name: "Wizard", class: "Wizard", hp: 18, maxHp: 18, mana: 50, maxMana: 50, damage: [3, 5], accuracy: 60, armor: 0, color: "#3498db", skills: [SKILLS.fireball], items: ["Staff"], range: 8, projectileColor: "#ff6600", attackCooldown: 3000 },
+    4: { name: "Wizard", class: "Wizard", hp: 18, maxHp: 18, mana: 80, maxMana: 80, damage: [3, 5], accuracy: 60, armor: 0, color: "#3498db", skills: [SKILLS.fireball, SKILLS.magicWave], items: ["Staff"], range: 8, projectileColor: "#ff6600", attackCooldown: 3000 },
     5: { name: "Monk", class: "Monk", hp: 35, maxHp: 35, mana: 30, maxMana: 30, damage: [2, 5], accuracy: 70, armor: 1, color: "#27ae60", skills: [SKILLS.flurryOfFists], items: ["Fists"], attackCooldown: 1800 },
     6: { name: "Cleric", class: "Cleric", hp: 30, maxHp: 30, mana: 60, maxMana: 60, damage: [2, 4], accuracy: 60, armor: 2, color: "#ecf0f1", skills: [SKILLS.heal, SKILLS.cleanse], items: ["Staff"], range: 6, projectileColor: "#ffffaa", attackCooldown: 2500 },
 };

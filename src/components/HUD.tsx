@@ -2,16 +2,16 @@ import { useState } from "react";
 import { toggleMute, isMuted } from "../audio/sound";
 
 interface HUDProps {
-    aliveEnemies: number;
+    areaName: string;
+    areaFlavor: string;
     alivePlayers: number;
     paused: boolean;
-    areaHasEnemies: boolean;  // Whether current area has enemy spawns
     onTogglePause: () => void;
     onShowHelp: () => void;
     onRestart: () => void;
 }
 
-export function HUD({ aliveEnemies, alivePlayers, paused, areaHasEnemies, onTogglePause, onShowHelp, onRestart }: HUDProps) {
+export function HUD({ areaName, areaFlavor, alivePlayers, paused, onTogglePause, onShowHelp, onRestart }: HUDProps) {
     const [muted, setMuted] = useState(isMuted());
 
     const handleToggleMute = () => {
@@ -19,14 +19,15 @@ export function HUD({ aliveEnemies, alivePlayers, paused, areaHasEnemies, onTogg
         setMuted(newMuted);
     };
 
-    // Only show victory if the area has enemies and they're all defeated
-    const isVictory = areaHasEnemies && aliveEnemies === 0;
-    const statusClass = isVictory ? "victory" : alivePlayers === 0 ? "defeat" : "";
+    const isDefeat = alivePlayers === 0;
 
     return (
         <div className="hud glass-panel-light">
-            <div className={`hud-status ${statusClass}`}>
-                {isVictory ? "Victory!" : alivePlayers === 0 ? "Defeat!" : areaHasEnemies ? `Foes remaining: ${aliveEnemies}` : "Exploring..."}
+            <div className="hud-area">
+                <div className={`hud-area-name ${isDefeat ? "defeat" : ""}`}>
+                    {isDefeat ? "Defeat!" : areaName}
+                </div>
+                {!isDefeat && <div className="hud-area-flavor">{areaFlavor}</div>}
             </div>
             <div className="hud-buttons">
                 <button className={`btn btn-pause ${paused ? "active" : ""}`} onClick={onTogglePause}>

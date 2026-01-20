@@ -3,7 +3,7 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation, EnemyStats, EnemySkill, EnemyHealSkill, EnemySpawnSkill } from "./core/types";
+import type { Unit, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation, EnemyStats, EnemySkill, EnemyHealSkill, EnemySpawnSkill, MagicMissileProjectile } from "./core/types";
 import {
     GRID_SIZE, HIT_DETECTION_RADIUS, FLASH_DURATION,
     SWING_DURATION, COLORS, SKILL_SINGLE_TARGET_CHANCE, POISON_TINT_STRENGTH
@@ -24,6 +24,37 @@ import { spawnDamageNumber, handleUnitDefeat, createProjectile, getProjectileSpe
 import { soundFns } from "./audio/sound";
 import { disposeBasicMesh, disposeTexturedMesh } from "./rendering/disposal";
 import { isEnemyKiting, clearEnemyKiting, hasBroodMotherScreeched, markBroodMotherScreeched } from "./game/enemyState";
+
+// =============================================================================
+// MAGIC WAVE VOLLEY TRACKING
+// =============================================================================
+
+// Track hits and damage for each Magic Wave volley
+interface VolleyStats {
+    hits: number;
+    totalDamage: number;
+    missilesResolved: number;
+    totalMissiles: number;
+    attackerName: string;
+}
+const magicWaveVolleys: Map<number, VolleyStats> = new Map();
+
+// =============================================================================
+// UNIT ID COUNTER - Prevents ID collision when spawning units
+// =============================================================================
+
+let nextUnitId = 1000;  // Start high to avoid collision with initial party IDs
+
+/** Get the next unique unit ID for spawning */
+export function getNextUnitId(): number {
+    return nextUnitId++;
+}
+
+/** Initialize the unit ID counter based on existing units (call on game start/restart) */
+export function initializeUnitIdCounter(units: Unit[]): void {
+    const maxId = Math.max(...units.map(u => u.id), 0);
+    nextUnitId = maxId + 1;
+}
 
 // =============================================================================
 // TYPES
@@ -276,6 +307,11 @@ export function updateProjectiles(
     now: number,
     defeatedThisFrame: Set<number>
 ): Projectile[] {
+    // Track HP locally during projectile updates to handle multiple hits in same frame
+    // This prevents stale HP from unitsState causing multiple projectiles to "overkill"
+    const hpTracker: Record<number, number> = {};
+    unitsState.forEach(u => { hpTracker[u.id] = u.hp; });
+
     return projectilesRef.filter(proj => {
         // AOE projectile (like Fireball)
         if (proj.type === "aoe") {
@@ -300,17 +336,25 @@ export function updateProjectiles(
 
                 // Deal damage to ALL units in radius (friendly fire!)
                 let hitCount = 0;
-                unitsState.filter(u => u.hp > 0 && !defeatedThisFrame.has(u.id)).forEach(target => {
+                let totalDamage = 0;
+                // Use hpTracker for real-time HP checks (handles multiple hits in same frame)
+                unitsState.filter(u => (hpTracker[u.id] ?? u.hp) > 0 && !defeatedThisFrame.has(u.id)).forEach(target => {
                     const tg = unitsRef[target.id];
                     if (!tg) return;
                     const targetDist = calculateDistance(tg.position.x, tg.position.z, targetPos.x, targetPos.z);
                     if (targetDist <= aoeRadius) {
                         const targetData = getUnitStats(target);
+                        const currentHp = hpTracker[target.id] ?? target.hp;
                         const dmg = calculateDamage(damage[0], damage[1], getEffectiveArmor(target, targetData.armor));
 
                         const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
-                        applyDamageToUnit(dmgCtx, target.id, tg, target.hp, dmg, targetData.name, { color: getDamageColor(target.team, true) });
+                        applyDamageToUnit(dmgCtx, target.id, tg, currentHp, dmg, targetData.name, {
+                            color: getDamageColor(target.team, true),
+                            attackerName: attackerUnit?.team === "player" ? attackerData?.name : undefined
+                        });
+                        hpTracker[target.id] = Math.max(0, currentHp - dmg);
                         hitCount++;
+                        totalDamage += dmg;
 
                         // Aggro enemies hit by player AOE
                         if (attackerUnit?.team === "player") {
@@ -321,7 +365,7 @@ export function updateProjectiles(
 
                 if (hitCount > 0) {
                     soundFns.playHit();
-                    addLog(logAoeHit(attackerData?.name ?? "Unknown", "Fireball", hitCount), COLORS.damageNeutral);
+                    addLog(logAoeHit(attackerData?.name ?? "Unknown", "Fireball", hitCount, totalDamage), COLORS.damageNeutral);
                 }
 
                 disposeProjectile(scene, proj);
@@ -334,14 +378,155 @@ export function updateProjectiles(
             return true;
         }
 
+        // Magic Wave projectile - zig-zag homing (or position-targeted)
+        if (proj.type === "magic_missile") {
+            const mmProj = proj as MagicMissileProjectile;
+            const attackerUnit = unitsState.find(u => u.id === mmProj.attackerId);
+
+            if (!attackerUnit) {
+                disposeProjectile(scene, proj);
+                return false;
+            }
+
+            // Determine target position - either enemy position or fixed target position
+            let targetX: number, targetZ: number;
+            let targetUnit: Unit | undefined;
+            let targetG: UnitGroup | undefined;
+
+            if (mmProj.targetId === -1 && mmProj.targetPos) {
+                // Position-based targeting (no enemy)
+                targetX = mmProj.targetPos.x;
+                targetZ = mmProj.targetPos.z;
+            } else {
+                // Enemy-based targeting
+                targetUnit = unitsState.find(u => u.id === mmProj.targetId);
+                targetG = unitsRef[mmProj.targetId];
+
+                // Use hpTracker for real-time HP check (handles multiple hits in same frame)
+                const trackedHp = hpTracker[mmProj.targetId] ?? 0;
+                if (!targetUnit || !targetG || trackedHp <= 0 || defeatedThisFrame.has(mmProj.targetId)) {
+                    // Target died or invalid - fizzle out, but still count toward volley
+                    const attackerName = attackerUnit ? getUnitStats(attackerUnit).name : "Unknown";
+                    if (!magicWaveVolleys.has(mmProj.volleyId)) {
+                        magicWaveVolleys.set(mmProj.volleyId, {
+                            hits: 0,
+                            totalDamage: 0,
+                            missilesResolved: 0,
+                            totalMissiles: mmProj.totalMissiles,
+                            attackerName
+                        });
+                    }
+                    const volley = magicWaveVolleys.get(mmProj.volleyId)!;
+                    volley.missilesResolved++;
+
+                    // Log when all missiles in volley have resolved
+                    if (volley.missilesResolved >= volley.totalMissiles) {
+                        if (volley.hits > 0) {
+                            addLog(logAoeHit(volley.attackerName, "Magic Wave", volley.hits, volley.totalDamage), "#9966ff");
+                        } else {
+                            addLog(logAoeMiss(volley.attackerName, "Magic Wave"), COLORS.logNeutral);
+                        }
+                        magicWaveVolleys.delete(mmProj.volleyId);
+                    }
+
+                    disposeProjectile(scene, proj);
+                    return false;
+                }
+
+                targetX = targetG.position.x;
+                targetZ = targetG.position.z;
+            }
+
+            const { dx, dz, dist } = getDirectionAndDistance(proj.mesh.position.x, proj.mesh.position.z, targetX, targetZ);
+
+            // Hit detection
+            if (dist < HIT_DETECTION_RADIUS) {
+                let dmgDealt = 0;
+                if (targetUnit && targetG) {
+                    // Hit an enemy - use tracked HP to handle multiple hits in same frame
+                    const targetData = getUnitStats(targetUnit);
+                    const currentHp = hpTracker[targetUnit.id] ?? targetUnit.hp;
+                    dmgDealt = calculateDamage(mmProj.damage[0], mmProj.damage[1], getEffectiveArmor(targetUnit, targetData.armor));
+
+                    const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
+                    applyDamageToUnit(dmgCtx, targetUnit.id, targetG, currentHp, dmgDealt, targetData.name, {
+                        color: "#9966ff",
+                        attackerName: attackerUnit.team === "player" ? getUnitStats(attackerUnit).name : undefined
+                    });
+
+                    // Update local HP tracker for subsequent projectiles in same frame
+                    hpTracker[targetUnit.id] = Math.max(0, currentHp - dmgDealt);
+
+                    soundFns.playHit();
+                }
+
+                // Track volley stats for aggregated logging (attackerUnit already validated above)
+                const attackerName = getUnitStats(attackerUnit).name;
+
+                if (!magicWaveVolleys.has(mmProj.volleyId)) {
+                    magicWaveVolleys.set(mmProj.volleyId, {
+                        hits: 0,
+                        totalDamage: 0,
+                        missilesResolved: 0,
+                        totalMissiles: mmProj.totalMissiles,
+                        attackerName
+                    });
+                }
+                const volley = magicWaveVolleys.get(mmProj.volleyId)!;
+                volley.missilesResolved++;
+                if (dmgDealt > 0) {
+                    volley.hits++;
+                    volley.totalDamage += dmgDealt;
+                }
+
+                // Log when all missiles in volley have resolved
+                if (volley.missilesResolved >= volley.totalMissiles) {
+                    if (volley.hits > 0) {
+                        addLog(logAoeHit(volley.attackerName, "Magic Wave", volley.hits, volley.totalDamage), "#9966ff");
+                    } else {
+                        addLog(logAoeMiss(volley.attackerName, "Magic Wave"), COLORS.logNeutral);
+                    }
+                    magicWaveVolleys.delete(mmProj.volleyId);
+                }
+
+                disposeProjectile(scene, proj);
+                return false;
+            }
+
+            // Zig-zag movement - oscillate perpendicular to direction of travel
+            const time = now * 0.006 + mmProj.zigzagPhase * Math.PI;
+            const zigzagAmount = Math.sin(time * 4) * 0.6;
+
+            // Perpendicular direction (rotate 90 degrees)
+            const perpX = -dz;
+            const perpZ = dx;
+
+            // Fan-out drift: missiles spread apart more as they travel
+            // Calculate how far the missile has traveled from its start position
+            const travelDist = Math.hypot(
+                proj.mesh.position.x - mmProj.startX,
+                proj.mesh.position.z - mmProj.startZ
+            );
+            // Lateral drift increases with travel distance (fanAngle is -0.5 to 0.5)
+            // Stronger multipliers = more dramatic fan-out
+            const fanDrift = mmProj.fanAngle * travelDist * 0.25;
+
+            // Move forward + lateral zig-zag + fan-out drift
+            proj.mesh.position.x += dx * mmProj.speed + perpX * (zigzagAmount * 0.18 + fanDrift * 0.12);
+            proj.mesh.position.z += dz * mmProj.speed + perpZ * (zigzagAmount * 0.18 + fanDrift * 0.12);
+
+            return true;
+        }
+
         // Regular projectile (single target) - validate target exists
         if (proj.type !== "basic") return true;
         const targetUnit = unitsState.find(u => u.id === proj.targetId);
         const targetG = unitsRef[proj.targetId];
         const attackerUnit = unitsState.find(u => u.id === proj.attackerId);
 
-        // Guard clause: dispose if target invalid
-        if (!targetUnit || !targetG || targetUnit.hp <= 0 || defeatedThisFrame.has(proj.targetId) || !attackerUnit) {
+        // Guard clause: dispose if target invalid - use hpTracker for real-time HP
+        const trackedTargetHp = hpTracker[proj.targetId] ?? 0;
+        if (!targetUnit || !targetG || trackedTargetHp <= 0 || defeatedThisFrame.has(proj.targetId) || !attackerUnit) {
             disposeProjectile(scene, proj);
             return false;
         }
@@ -366,7 +551,8 @@ export function updateProjectiles(
                 const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
                 applyDamageToUnit(dmgCtx, targetUnit.id, targetG, targetUnit.hp, dmg, targetData.name, {
                     color: logColor,
-                    poison: willPoison ? { sourceId: attackerUnit.id, damagePerTick: poisonDmg } : undefined
+                    poison: willPoison ? { sourceId: attackerUnit.id, damagePerTick: poisonDmg } : undefined,
+                    attackerName: attackerUnit.team === "player" ? attackerData.name : undefined
                 });
 
                 soundFns.playHit();
@@ -531,6 +717,7 @@ function executeEnemySwipe(
 
     // Deal damage to all targets
     let hitCount = 0;
+    let totalDamage = 0;
     const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
     hitTargets.forEach(({ unit: target, group: tg }) => {
         const targetData = getUnitStats(target);
@@ -539,11 +726,12 @@ function executeEnemySwipe(
             const dmg = calculateDamage(skill.damage[0], skill.damage[1], getEffectiveArmor(target, targetData.armor));
             applyDamageToUnit(dmgCtx, target.id, tg, target.hp, dmg, targetData.name, { color: "#ff4444" });
             hitCount++;
+            totalDamage += dmg;
         }
     });
 
     if (hitCount > 0) {
-        addLog(logAoeHit(enemyData.name, skill.name, hitCount), "#ff4444");
+        addLog(logAoeHit(enemyData.name, skill.name, hitCount, totalDamage), "#ff4444");
     } else {
         addLog(logAoeMiss(enemyData.name, skill.name), COLORS.logNeutral);
     }
@@ -816,8 +1004,8 @@ export function updateUnitAI(
                 const spawnX = g.position.x + Math.cos(spawnAngle) * spawnSkill.spawnRange;
                 const spawnZ = g.position.z + Math.sin(spawnAngle) * spawnSkill.spawnRange;
 
-                // Create the spawned unit
-                const newId = Math.max(...unitsState.map(u => u.id)) + 1;
+                // Create the spawned unit with unique ID from counter
+                const newId = getNextUnitId();
                 const spawnedUnit: Unit = {
                     id: newId,
                     x: spawnX,

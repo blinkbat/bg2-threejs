@@ -10,6 +10,7 @@ import { soundFns } from "../audio/sound";
 import { cleanupUnitState } from "../ai/movement";
 import { cleanupEnemyKiteCooldown } from "../game/enemyState";
 import { logDefeated, applyPoison, hasShieldedEffect } from "./combatMath";
+import { tryKillBark } from "./barks";
 
 // =============================================================================
 // PROJECTILE CREATION
@@ -56,6 +57,47 @@ export interface ExpandingMeshConfig {
     initialOpacity?: number;
     maxScale?: number;
     baseRadius?: number;
+}
+
+/**
+ * Create and animate an expanding ring visual effect.
+ * Consolidates the common pattern of RingGeometry + MeshBasicMaterial + animateExpandingMesh.
+ */
+export function createAnimatedRing(
+    scene: THREE.Scene,
+    x: number,
+    z: number,
+    color: string,
+    config: {
+        innerRadius?: number;
+        outerRadius?: number;
+        duration?: number;
+        initialOpacity?: number;
+        maxScale: number;
+    }
+): void {
+    const {
+        innerRadius = 0.5,
+        outerRadius = 0.7,
+        duration = RING_EXPAND_DURATION,
+        initialOpacity = 0.8,
+        maxScale
+    } = config;
+
+    const ring = new THREE.Mesh(
+        new THREE.RingGeometry(innerRadius, outerRadius, 32),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: initialOpacity, side: THREE.DoubleSide })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(x, 0.1, z);
+    scene.add(ring);
+
+    animateExpandingMesh(scene, ring, {
+        duration,
+        initialOpacity,
+        maxScale,
+        baseRadius: outerRadius
+    });
 }
 
 /**
@@ -166,6 +208,7 @@ export interface DamageOptions {
     poison?: { sourceId: number; damagePerTick?: number };  // Optional custom poison damage
     color?: string;
     skipDefeatTracking?: boolean;
+    attackerName?: string;  // For bark system - name of the player unit dealing damage
 }
 
 /**
@@ -182,7 +225,7 @@ export function applyDamageToUnit(
     options: DamageOptions = {}
 ): number {
     const { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame } = ctx;
-    const { poison, color = COLORS.damageEnemy, skipDefeatTracking = false } = options;
+    const { poison, color = COLORS.damageEnemy, skipDefeatTracking = false, attackerName } = options;
 
     const newHp = Math.max(0, currentHp - damage);
 
@@ -210,6 +253,10 @@ export function applyDamageToUnit(
             defeatedThisFrame.add(targetId);
         }
         handleUnitDefeat(targetId, targetGroup, unitsRef, addLog, targetName);
+        // Bark on kill (only for player attackers)
+        if (attackerName) {
+            tryKillBark(attackerName, addLog);
+        }
     }
 
     return newHp;

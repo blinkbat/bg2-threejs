@@ -77,6 +77,19 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     dir.position.set(10, 20, 10);
     scene.add(dir);
 
+    // Cloudy day lighting for forest - soft, diffuse light
+    if (area.id === "forest") {
+        const sun = new THREE.DirectionalLight(0xe8e8e0, 0.5);  // Muted overcast light
+        sun.position.set(-15, 40, 20);  // High in sky
+        sun.castShadow = false;
+        scene.add(sun);
+
+        // Soft fill from opposite side
+        const fillLight = new THREE.DirectionalLight(0xd0d8e0, 0.25);  // Cool gray fill
+        fillLight.position.set(15, 30, -10);
+        scene.add(fillLight);
+    }
+
     // Ground - base layer for non-room areas (corridors, etc)
     const groundMat = new THREE.MeshStandardMaterial({ color: area.groundColor, metalness: 0.2, roughness: 0.9 });
     const ground = new THREE.Mesh(
@@ -197,12 +210,20 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     // Fog mesh Y position - trees in unexplored cells will be capped below this
     const FOG_Y = 2.6;
 
-    area.trees.forEach((tree, i) => {
-        const scale = tree.size;
+    // Tree size multiplier - forest trees are larger
+    const treeSizeMultiplier = area.id === "forest" ? 1.5 : 1.0;
 
-        // Trunk - thick brown cylinder
+    area.trees.forEach((tree, i) => {
+        const scale = tree.size * treeSizeMultiplier;
+
+        // Taller trees are skinnier - use inverse relationship with randomness
+        // skinnyFactor ranges from ~0.6 (for large trees) to ~1.0 (for small trees)
+        const randomVariance = 0.85 + Math.random() * 0.3;  // 0.85-1.15 random multiplier
+        const skinnyFactor = Math.min(1.0, (1.0 / Math.sqrt(scale)) * randomVariance);
+
+        // Trunk - thick brown cylinder (skinnier for tall trees)
         const trunkHeight = 1.2 * scale;
-        const trunkRadius = 0.15 * scale;
+        const trunkRadius = 0.15 * scale * skinnyFactor;
         const trunkColor = trunkColors[i % trunkColors.length];
         const trunk = new THREE.Mesh(
             new THREE.CylinderGeometry(trunkRadius, trunkRadius * 1.3, trunkHeight, 8),
@@ -217,8 +238,8 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         trunk.userData.isTrunk = true;
         scene.add(trunk);
 
-        // Foliage - tall pyramidal cone with varied green colors
-        const foliageRadius = 0.8 * scale;
+        // Foliage - tall pyramidal cone with varied green colors (skinnier for tall trees)
+        const foliageRadius = 0.8 * scale * skinnyFactor;
         const foliageHeight = 2.5 * scale;
         const foliageColor = foliageColors[i % foliageColors.length];
         const foliage = new THREE.Mesh(
@@ -236,6 +257,16 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         foliage.userData.treeX = tree.x;
         foliage.userData.treeZ = tree.z;
         foliage.userData.isFoliage = true;
+
+        // Tree shadow - simple dark circle on ground
+        const shadowRadius = foliageRadius * 0.9;
+        const treeShadow = new THREE.Mesh(
+            new THREE.CircleGeometry(shadowRadius, 16),
+            new THREE.MeshBasicMaterial({ color: "#000000", transparent: true, opacity: 0.25, side: THREE.DoubleSide })
+        );
+        treeShadow.rotation.x = -Math.PI / 2;
+        treeShadow.position.set(tree.x, 0.005, tree.z);
+        scene.add(treeShadow);
         foliage.userData.trunkHeight = trunkHeight;
         foliage.userData.fogY = FOG_Y;
         scene.add(foliage);
@@ -303,8 +334,10 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         scene.add(doorLight);
     });
 
-    // Grid lines - subtle, above room floors
-    const gridMat = new THREE.LineBasicMaterial({ color: "#444444", transparent: true, opacity: 0.25 });
+    // Grid lines - subtle, above room floors (darker for forest to show on green grass)
+    const gridColor = area.id === "forest" ? "#1a3a1a" : "#444444";
+    const gridOpacity = area.id === "forest" ? 0.35 : 0.25;
+    const gridMat = new THREE.LineBasicMaterial({ color: gridColor, transparent: true, opacity: gridOpacity });
     for (let i = 0; i <= GRID_SIZE; i++) {
         scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.002, i), new THREE.Vector3(GRID_SIZE, 0.002, i)]), gridMat));
         scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(i, 0.002, 0), new THREE.Vector3(i, 0.002, GRID_SIZE)]), gridMat));
@@ -387,6 +420,16 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         unitMeshes[unit.id] = box;
         unitOriginalColors[unit.id] = new THREE.Color(data.color);
 
+        // Unit shadow - simple dark circle under unit
+        const shadowRadius = boxW * 0.6;
+        const shadow = new THREE.Mesh(
+            new THREE.CircleGeometry(shadowRadius, 16),
+            new THREE.MeshBasicMaterial({ color: "#000000", transparent: true, opacity: 0.3, side: THREE.DoubleSide })
+        );
+        shadow.rotation.x = -Math.PI / 2;
+        shadow.position.y = 0.004;
+        group.add(shadow);
+
         // All units get subtle innate light (enemies dimmer than players)
         const lightIntensity = isPlayer ? 0.15 : 0.08;
         const unitLight = new THREE.PointLight(data.color, lightIntensity, 2, 2);
@@ -468,6 +511,16 @@ export function addUnitToScene(
     group.add(box);
     unitMeshes[unit.id] = box;
     unitOriginalColors[unit.id] = new THREE.Color(data.color);
+
+    // Unit shadow - simple dark circle under unit
+    const shadowRadius = boxW * 0.6;
+    const shadow = new THREE.Mesh(
+        new THREE.CircleGeometry(shadowRadius, 16),
+        new THREE.MeshBasicMaterial({ color: "#000000", transparent: true, opacity: 0.3, side: THREE.DoubleSide })
+    );
+    shadow.rotation.x = -Math.PI / 2;
+    shadow.position.y = 0.004;
+    group.add(shadow);
 
     // All units get subtle innate light (enemies dimmer than players)
     const lightIntensity = isPlayer ? 0.15 : 0.08;
@@ -684,35 +737,24 @@ export function updateTreeFogVisibility(
     for (const mesh of treeMeshes) {
         const tx = Math.floor(mesh.userData.treeX ?? mesh.position.x);
         const tz = Math.floor(mesh.userData.treeZ ?? mesh.position.z);
-        const vis = visibility[tx]?.[tz] ?? 0;
         const mat = mesh.material as THREE.MeshStandardMaterial;
 
         // Track previous visibility state for fade-in detection
         const wasExplored = mesh.userData.wasExplored as boolean | undefined;
 
-        // Check if ANY neighboring tile is explored (for foliage visibility)
-        // This makes foliage visible even if the tree's exact tile isn't explored yet
-        const hasExploredNeighbor = (): boolean => {
-            for (let dx = -1; dx <= 1; dx++) {
-                for (let dz = -1; dz <= 1; dz++) {
-                    if ((visibility[tx + dx]?.[tz + dz] ?? 0) > 0) {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        };
+        // Tree is discovered if the base cell is explored - reveals the whole tree
+        const treeDiscovered = (visibility[tx]?.[tz] ?? 0) > 0;
 
         if (mesh.userData.isTrunk) {
             const fullHeight = mesh.userData.fullHeight as number;
-            if (vis === 0) {
+            if (!treeDiscovered) {
                 // Unexplored - cap trunk below fog
                 const cappedHeight = Math.min(fullHeight, MAX_HEIGHT_UNEXPLORED);
                 mesh.scale.y = cappedHeight / fullHeight;
                 mesh.position.y = cappedHeight / 2;
                 mesh.userData.wasExplored = false;
             } else {
-                // Seen or visible - full height
+                // Discovered - full height
                 mesh.scale.y = 1;
                 mesh.position.y = fullHeight / 2;
                 mesh.userData.wasExplored = true;
@@ -722,10 +764,7 @@ export function updateTreeFogVisibility(
             const fullHeight = mesh.userData.fullHeight as number;
             const trunkHeight = mesh.userData.trunkHeight as number;
 
-            // Foliage is visible if ANY neighboring tile is explored
-            const foliageExplored = hasExploredNeighbor();
-
-            if (!foliageExplored) {
+            if (!treeDiscovered) {
                 // Unexplored - hide foliage if it would stick above fog
                 const foliageBottom = fullY - fullHeight / 2;
                 if (foliageBottom >= MAX_HEIGHT_UNEXPLORED) {
@@ -747,7 +786,7 @@ export function updateTreeFogVisibility(
                 }
                 mesh.userData.wasExplored = false;
             } else {
-                // Seen or visible - full height with fade-in
+                // Discovered - full height with fade-in
                 mesh.visible = true;
                 mesh.scale.y = 1;
                 mesh.position.y = fullY;

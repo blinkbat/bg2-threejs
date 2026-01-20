@@ -228,8 +228,11 @@ export function logCast(casterName: string, skillName: string): string {
     return `${casterName} casts ${skillName}!`;
 }
 
-/** "{unit}'s {skill} hits {count} target(s)!" */
-export function logAoeHit(casterName: string, skillName: string, hitCount: number): string {
+/** "{unit}'s {skill} hits {count} target(s) for {damage} total damage!" */
+export function logAoeHit(casterName: string, skillName: string, hitCount: number, totalDamage?: number): string {
+    if (totalDamage !== undefined) {
+        return `${casterName}'s ${skillName} hits ${hitCount} target${hitCount !== 1 ? 's' : ''} for ${totalDamage} total damage!`;
+    }
     return `${casterName}'s ${skillName} hits ${hitCount} target${hitCount !== 1 ? 's' : ''}!`;
 }
 
@@ -258,7 +261,7 @@ export function logStunned(targetName: string): string {
     return `${targetName} is stunned!`;
 }
 
-/** "{caster}'s {skill} cleanses {target}!" */
+/** "{caster} cleanses {target}!" */
 export function logCleanse(casterName: string, targetName: string): string {
-    return `${casterName}'s cleanses ${targetName}!`;
+    return `${casterName} cleanses ${targetName}!`;
 }

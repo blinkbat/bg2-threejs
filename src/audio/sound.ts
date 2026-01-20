@@ -403,6 +403,71 @@ const playBroodMotherScreech = () => {
     chitter.stop(ctx.currentTime + 0.55);
 };
 
+// Magic Wave - pure crackling/static sound, no tonal elements
+const playMagicWave = () => {
+    if (muted) return;
+    const ctx = getAudioCtx();
+    const duration = 0.9;
+
+    // White noise source using buffer - the core of the crackle
+    const bufferSize = ctx.sampleRate * duration;
+    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const output = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+        output[i] = Math.random() * 2 - 1;
+    }
+
+    // Noise layer 1 - main crackle with highpass filter
+    const noise1 = ctx.createBufferSource();
+    noise1.buffer = noiseBuffer;
+    const noise1Filter = ctx.createBiquadFilter();
+    noise1Filter.type = "highpass";
+    noise1Filter.frequency.setValueAtTime(2000, ctx.currentTime);
+    const noise1Gain = ctx.createGain();
+    noise1Gain.gain.setValueAtTime(0.12, ctx.currentTime);
+    noise1Gain.gain.linearRampToValueAtTime(0.18, ctx.currentTime + 0.1);
+    noise1Gain.gain.linearRampToValueAtTime(0.14, ctx.currentTime + duration * 0.5);
+    noise1Gain.gain.linearRampToValueAtTime(0.001, ctx.currentTime + duration);
+    noise1.connect(noise1Filter);
+    noise1Filter.connect(noise1Gain);
+    noise1Gain.connect(ctx.destination);
+    noise1.start();
+    noise1.stop(ctx.currentTime + duration);
+
+    // Noise layer 2 - bandpass filtered for mid crackle texture
+    const noise2 = ctx.createBufferSource();
+    noise2.buffer = noiseBuffer;
+    const noise2Filter = ctx.createBiquadFilter();
+    noise2Filter.type = "bandpass";
+    noise2Filter.frequency.setValueAtTime(4000, ctx.currentTime);
+    noise2Filter.Q.setValueAtTime(1.5, ctx.currentTime);
+    const noise2Gain = ctx.createGain();
+    noise2Gain.gain.setValueAtTime(0.08, ctx.currentTime);
+    noise2Gain.gain.linearRampToValueAtTime(0.12, ctx.currentTime + 0.15);
+    noise2Gain.gain.linearRampToValueAtTime(0.001, ctx.currentTime + duration);
+    noise2.connect(noise2Filter);
+    noise2Filter.connect(noise2Gain);
+    noise2Gain.connect(ctx.destination);
+    noise2.start();
+    noise2.stop(ctx.currentTime + duration);
+
+    // Noise layer 3 - very high freq sizzle
+    const noise3 = ctx.createBufferSource();
+    noise3.buffer = noiseBuffer;
+    const noise3Filter = ctx.createBiquadFilter();
+    noise3Filter.type = "highpass";
+    noise3Filter.frequency.setValueAtTime(6000, ctx.currentTime);
+    const noise3Gain = ctx.createGain();
+    noise3Gain.gain.setValueAtTime(0.05, ctx.currentTime);
+    noise3Gain.gain.linearRampToValueAtTime(0.08, ctx.currentTime + 0.2);
+    noise3Gain.gain.linearRampToValueAtTime(0.001, ctx.currentTime + duration);
+    noise3.connect(noise3Filter);
+    noise3Filter.connect(noise3Gain);
+    noise3Gain.connect(ctx.destination);
+    noise3.start();
+    noise3.stop(ctx.currentTime + duration);
+};
+
 export const soundFns = {
     playMove: () => playTone(800, 0.06, 0.12, "square", undefined, 3000),
     playAttack: () => playTone(440, 0.08, 0.15, "square", 330, 2500),
@@ -415,4 +480,5 @@ export const soundFns = {
     playWarcry,
     playScreech,
     playBroodMotherScreech,
+    playMagicWave,
 };

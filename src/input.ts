@@ -68,7 +68,7 @@ export function togglePause(
     refs: Pick<InputRefs, "pauseStartTimeRef" | "actionCooldownRef">,
     state: Pick<InputState, "pausedRef">,
     setters: Pick<InputSetters, "setPaused" | "setSkillCooldowns">,
-    processActionQueue: () => void
+    processActionQueue: (defeatedThisFrame: Set<number>) => void
 ): void {
     const wasPaused = state.pausedRef.current;
     state.pausedRef.current = !state.pausedRef.current;
@@ -81,7 +81,8 @@ export function togglePause(
             adjustCooldownsForPause(refs.actionCooldownRef, setters.setSkillCooldowns, pausedDuration);
         }
         refs.pauseStartTimeRef.current = null;
-        processActionQueue();
+        // Create new defeatedThisFrame for unpause processing (not part of main game loop)
+        processActionQueue(new Set<number>());
     } else {
         // Pausing - record when we paused
         refs.pauseStartTimeRef.current = Date.now();

@@ -17,7 +17,7 @@ import {
 } from "./movement";
 import { getUnitRadius } from "../rendering/range";
 import { clampToGrid } from "../game/geometry";
-import { getAttackRange } from "../game/units";
+import { getAttackRange, ENEMY_STATS } from "../game/units";
 import type { Unit, UnitGroup } from "../core/types";
 
 // =============================================================================
@@ -68,7 +68,7 @@ function getMothersSightTarget(
     if (!broodlingG) return null;
 
     // Check if mother can see ANY player (use mother's aggro range)
-    const motherStats = { aggroRange: 12 };  // Brood mother's aggro range
+    const motherStats = ENEMY_STATS.brood_mother;
     let motherCanSeeAnyPlayer = false;
 
     for (const player of unitsState) {

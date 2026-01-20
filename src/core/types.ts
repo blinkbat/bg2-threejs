@@ -222,4 +222,23 @@ export interface AoeProjectile extends BaseProjectile {
     damage: [number, number];
 }
 
-export type Projectile = BasicProjectile | AoeProjectile;
+export interface MagicMissileProjectile extends BaseProjectile {
+    type: "magic_missile";
+    targetId: number;          // -1 if no enemy target (position-based)
+    targetPos?: { x: number; z: number };  // Used when targetId is -1
+    damage: [number, number];
+    // Zig-zag properties
+    zigzagOffset: number;      // Current lateral offset
+    zigzagDirection: number;   // 1 or -1
+    zigzagPhase: number;       // Phase offset for varied movement
+    // Fan-out properties
+    fanAngle: number;          // Angle offset from center (-0.5 to 0.5 range, scaled)
+    startX: number;            // Starting position for calculating travel distance
+    startZ: number;
+    // Volley tracking
+    volleyId: number;          // Unique ID to group missiles from same cast
+    missileIndex: number;      // Index within the volley (0 to missileCount-1)
+    totalMissiles: number;     // Total missiles in this volley
+}
+
+export type Projectile = BasicProjectile | AoeProjectile | MagicMissileProjectile;
