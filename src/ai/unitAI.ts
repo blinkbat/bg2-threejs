@@ -313,6 +313,7 @@ export interface MovementContext {
     unitsState: Unit[];
     targetX: number;
     targetZ: number;
+    speedMultiplier?: number;  // Optional movement speed multiplier (default 1.0)
 }
 
 /**
@@ -401,7 +402,7 @@ export function applyWallSliding(g: UnitGroup, moveX: number, moveZ: number): vo
  * Run the movement phase - move towards target with avoidance and wall sliding.
  */
 export function runMovementPhase(ctx: MovementContext): void {
-    const { g, targetX, targetZ } = ctx;
+    const { g, targetX, targetZ, speedMultiplier = 1.0 } = ctx;
 
     const dx = targetX - g.position.x;
     const dz = targetZ - g.position.z;
@@ -422,9 +423,10 @@ export function runMovementPhase(ctx: MovementContext): void {
     const moveMag = Math.hypot(moveX, moveZ);
 
     if (moveMag > MOVEMENT_MIN_MAGNITUDE) {
-        // Normalize and apply speed
-        moveX = (moveX / moveMag) * MOVE_SPEED;
-        moveZ = (moveZ / moveMag) * MOVE_SPEED;
+        // Normalize and apply speed (with optional multiplier for faster/slower enemies)
+        const speed = MOVE_SPEED * speedMultiplier;
+        moveX = (moveX / moveMag) * speed;
+        moveZ = (moveZ / moveMag) * speed;
 
         // Apply movement with wall sliding
         applyWallSliding(g, moveX, moveZ);

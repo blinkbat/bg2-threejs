@@ -79,3 +79,31 @@ export function cleanupEnemyKitingState(unitId: number): void {
 export function resetAllEnemyKitingState(): void {
     Object.keys(enemyKitingUntil).forEach(k => delete enemyKitingUntil[Number(k)]);
 }
+
+// =============================================================================
+// BROOD MOTHER SCREECH - Track which brood mothers have already screeched
+// =============================================================================
+
+// Set of brood mother IDs that have already screeched on first sight
+const broodMothersScreeched: Set<number> = new Set();
+
+/**
+ * Check if a brood mother has already screeched.
+ */
+export function hasBroodMotherScreeched(unitId: number): boolean {
+    return broodMothersScreeched.has(unitId);
+}
+
+/**
+ * Mark a brood mother as having screeched.
+ */
+export function markBroodMotherScreeched(unitId: number): void {
+    broodMothersScreeched.add(unitId);
+}
+
+/**
+ * Reset all brood mother screech state (for game restart).
+ */
+export function resetAllBroodMotherScreeches(): void {
+    broodMothersScreeched.clear();
+}

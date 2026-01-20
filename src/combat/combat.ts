@@ -163,7 +163,7 @@ export interface DamageContext {
 }
 
 export interface DamageOptions {
-    poison?: { sourceId: number };
+    poison?: { sourceId: number; damagePerTick?: number };  // Optional custom poison damage
     color?: string;
     skipDefeatTracking?: boolean;
 }
@@ -192,7 +192,7 @@ export function applyDamageToUnit(
         let updated = { ...u, hp: newHp };
         // Shielded units are immune to poison
         if (poison && !hasShieldedEffect(u)) {
-            updated = applyPoison(updated, poison.sourceId, now);
+            updated = applyPoison(updated, poison.sourceId, now, poison.damagePerTick);
         }
         return updated;
     }));

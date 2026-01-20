@@ -79,19 +79,26 @@ export function getDamageColor(targetTeam: "player" | "enemy", isAoe: boolean = 
 
 /**
  * Apply or refresh poison on a unit.
- * Returns the updated unit with poison effect.
+ * Returns the updated unit with poison effect, or the same unit if immune (cleansed).
+ * @param customDamage - Optional custom damage per tick (defaults to POISON_DAMAGE_PER_TICK)
  */
-export function applyPoison(unit: Unit, sourceId: number, now: number): Unit {
+export function applyPoison(unit: Unit, sourceId: number, now: number, customDamage?: number): Unit {
+    // Check for poison immunity (cleansed effect)
+    if (hasCleansedEffect(unit)) {
+        return unit;  // Immune to poison, no change
+    }
+
     const existingEffects = unit.statusEffects || [];
     const existingPoison = existingEffects.find(e => e.type === "poison");
+    const damage = customDamage ?? POISON_DAMAGE_PER_TICK;
 
     if (existingPoison) {
-        // Refresh existing poison
+        // Refresh existing poison (keep the stronger damage if re-poisoned with weaker)
         return {
             ...unit,
             statusEffects: existingEffects.map(e =>
                 e.type === "poison"
-                    ? { ...e, duration: POISON_DURATION, lastTick: now }
+                    ? { ...e, duration: POISON_DURATION, lastTick: now, damagePerTick: Math.max(e.damagePerTick, damage) }
                     : e
             )
         };
@@ -102,7 +109,7 @@ export function applyPoison(unit: Unit, sourceId: number, now: number): Unit {
             duration: POISON_DURATION,
             tickInterval: POISON_TICK_INTERVAL,
             lastTick: now,
-            damagePerTick: POISON_DAMAGE_PER_TICK,
+            damagePerTick: damage,
             sourceId
         };
         return {
@@ -141,6 +148,13 @@ export function hasShieldedEffect(unit: Unit): boolean {
  */
 export function hasStunnedEffect(unit: Unit): boolean {
     return unit.statusEffects?.some(e => e.type === "stunned") ?? false;
+}
+
+/**
+ * Check if a unit currently has the cleansed (poison immune) status effect.
+ */
+export function hasCleansedEffect(unit: Unit): boolean {
+    return unit.statusEffects?.some(e => e.type === "cleansed") ?? false;
 }
 
 /**
@@ -206,7 +220,7 @@ export function logPoisoned(targetName: string): string {
 
 /** "{target} is defeated!" */
 export function logDefeated(targetName: string): string {
-    return `${targetName} is defeated!`;
+    return `${targetName} is killed!`;
 }
 
 /** "{unit} casts {skill}!" */
@@ -242,4 +256,9 @@ export function logBuff(casterName: string, skillName: string): string {
 /** "{target} is stunned!" */
 export function logStunned(targetName: string): string {
     return `${targetName} is stunned!`;
+}
+
+/** "{caster}'s {skill} cleanses {target}!" */
+export function logCleanse(casterName: string, targetName: string): string {
+    return `${casterName}'s cleanses ${targetName}!`;
 }

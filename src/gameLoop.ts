@@ -23,7 +23,7 @@ import { SWIPE_ANIMATE_DURATION } from "./core/constants";
 import { spawnDamageNumber, handleUnitDefeat, createProjectile, getProjectileSpeed, applyDamageToUnit, animateExpandingMesh, getAliveUnitsInRange, type DamageContext } from "./combat/combat";
 import { soundFns } from "./audio/sound";
 import { disposeBasicMesh, disposeTexturedMesh } from "./rendering/disposal";
-import { isEnemyKiting, clearEnemyKiting } from "./game/enemyState";
+import { isEnemyKiting, clearEnemyKiting, hasBroodMotherScreeched, markBroodMotherScreeched } from "./game/enemyState";
 
 // =============================================================================
 // TYPES
@@ -231,16 +231,15 @@ export function processStatusEffects(
                         handleUnitDefeat(unit.id, unitG, unitsRef, addLog, data.name);
                     }
                 }
-            } else if (effect.type === "shielded" || effect.type === "stunned") {
-                // Shielded/stunned buff - just decay duration over time (no damage)
-                const elapsed = now - effect.lastTick;
-                if (elapsed > 0) {
+            } else if (effect.type === "shielded" || effect.type === "stunned" || effect.type === "cleansed") {
+                // Shielded/stunned/cleansed buff - tick down duration at fixed interval (like poison)
+                if (now - effect.lastTick >= effect.tickInterval) {
                     setUnits(prev => prev.map(u => {
                         if (u.id !== unit.id) return u;
 
                         const updatedEffects = (u.statusEffects || []).map(e => {
                             if (e.type === effect.type) {
-                                const newDuration = e.duration - elapsed;
+                                const newDuration = e.duration - e.tickInterval;
                                 return { ...e, duration: newDuration, lastTick: now };
                             }
                             return e;
@@ -362,11 +361,12 @@ export function updateProjectiles(
             if (rollHit(attackerData.accuracy)) {
                 const dmg = calculateDamage(attackerData.damage[0], attackerData.damage[1], getEffectiveArmor(targetUnit, targetData.armor));
                 const willPoison = attackerUnit.team === "enemy" && shouldApplyPoison(attackerData as EnemyStats);
+                const poisonDmg = willPoison && 'poisonDamage' in attackerData ? (attackerData as EnemyStats).poisonDamage : undefined;
 
                 const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
                 applyDamageToUnit(dmgCtx, targetUnit.id, targetG, targetUnit.hp, dmg, targetData.name, {
                     color: logColor,
-                    poison: willPoison ? { sourceId: attackerUnit.id } : undefined
+                    poison: willPoison ? { sourceId: attackerUnit.id, damagePerTick: poisonDmg } : undefined
                 });
 
                 soundFns.playHit();
@@ -729,7 +729,8 @@ export function updateUnitAI(
             // Still kiting - just do path following and movement
             const pathCtx: PathContext = { unit, g, pathsRef, moveStartRef, now, isPlayer };
             const pathResult = runPathFollowingPhase(pathCtx);
-            const movementCtx: MovementContext = { unit, g, unitsRef, unitsState, targetX: pathResult.targetX, targetZ: pathResult.targetZ };
+            const speedMultiplier = !isPlayer && 'moveSpeed' in data ? (data as EnemyStats).moveSpeed : undefined;
+            const movementCtx: MovementContext = { unit, g, unitsRef, unitsState, targetX: pathResult.targetX, targetZ: pathResult.targetZ, speedMultiplier };
             runMovementPhase(movementCtx);
             return;
         }
@@ -752,7 +753,8 @@ export function updateUnitAI(
             // Jump directly to path following and movement
             const pathCtx: PathContext = { unit, g, pathsRef, moveStartRef, now, isPlayer };
             const pathResult = runPathFollowingPhase(pathCtx);
-            const movementCtx: MovementContext = { unit, g, unitsRef, unitsState, targetX: pathResult.targetX, targetZ: pathResult.targetZ };
+            const speedMultiplier = enemyData.moveSpeed;
+            const movementCtx: MovementContext = { unit, g, unitsRef, unitsState, targetX: pathResult.targetX, targetZ: pathResult.targetZ, speedMultiplier };
             runMovementPhase(movementCtx);
             return;
         }
@@ -797,6 +799,13 @@ export function updateUnitAI(
             return Math.sqrt(dx * dx + dz * dz) <= enemyData.aggroRange;
         });
 
+        // Play Brood Mother screech on first sight of player
+        if (playerInSight && unit.enemyType === "brood_mother" && !hasBroodMotherScreeched(unit.id)) {
+            markBroodMotherScreeched(unit.id);
+            soundFns.playBroodMotherScreech();
+            addLog("The Brood Mother lets out a piercing screech!", "#cc6600");
+        }
+
         if (playerInSight && now >= spawnCooldownEnd) {
             // Count current spawns from this unit
             const currentSpawns = unitsState.filter(u => u.spawnedBy === unit.id && u.hp > 0).length;
@@ -823,6 +832,11 @@ export function updateUnitAI(
 
                 // Add the unit to state
                 setUnits(prev => [...prev, spawnedUnit]);
+
+                // Play screech sound for broodling spawns
+                if (spawnSkill.spawnType === "broodling") {
+                    soundFns.playScreech();
+                }
 
                 // Log the spawn
                 addLog(`${enemyData.name} spawns a ${ENEMY_STATS[spawnSkill.spawnType].name}!`, "#cc6600");
@@ -928,11 +942,19 @@ export function updateUnitAI(
 
                         if (rollHit(data.accuracy)) {
                             const dmg = calculateDamage(data.damage[0], data.damage[1], getEffectiveArmor(targetU, targetData.armor));
+                            const willPoison = shouldApplyPoison(data as EnemyStats);
+                            const poisonDmg = willPoison && 'poisonDamage' in data ? (data as EnemyStats).poisonDamage : undefined;
                             const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
-                            applyDamageToUnit(dmgCtx, targetU.id, targetG, targetU.hp, dmg, targetData.name, { color: COLORS.damageEnemy });
+                            applyDamageToUnit(dmgCtx, targetU.id, targetG, targetU.hp, dmg, targetData.name, {
+                                color: COLORS.damageEnemy,
+                                poison: willPoison ? { sourceId: unit.id, damagePerTick: poisonDmg } : undefined
+                            });
 
                             soundFns.playHit();
                             addLog(logHit(data.name, "Attack", targetData.name, dmg), COLORS.damageEnemy);
+                            if (willPoison) {
+                                addLog(logPoisoned(targetData.name), COLORS.poisonText);
+                            }
                         } else {
                             soundFns.playMiss();
                             addLog(logMiss(data.name, "Attack", targetData.name), COLORS.logNeutral);
@@ -956,7 +978,8 @@ export function updateUnitAI(
     targetZ = pathResult.targetZ;
 
     // Phase 4: Movement - move toward target with avoidance and wall sliding
-    const movementCtx: MovementContext = { unit, g, unitsRef, unitsState, targetX, targetZ };
+    const speedMultiplier = !isPlayer && 'moveSpeed' in data ? (data as EnemyStats).moveSpeed : undefined;
+    const movementCtx: MovementContext = { unit, g, unitsRef, unitsState, targetX, targetZ, speedMultiplier };
     runMovementPhase(movementCtx);
 }
 

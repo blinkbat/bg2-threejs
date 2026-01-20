@@ -18,6 +18,7 @@ import { createScene, updateCamera, updateWallTransparency, updateTreeFogVisibil
 import { soundFns } from "./audio/sound";
 import { updateDynamicObstacles } from "./ai/pathfinding";
 import { updateUnitCache } from "./ai/unitAI";
+import { resetAllBroodMotherScreeches } from "./game/enemyState";
 
 // Extracted modules
 import { clearTargetingMode, executeSkill, type SkillExecutionContext } from "./combat/skills";
@@ -230,6 +231,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
 
         // Reset module-level caches on game restart
         resetFogCache();
+        resetAllBroodMotherScreeches();
 
         const sceneRefs = createScene(containerRef.current, units);
         const { scene, camera, renderer, flames, candleMeshes, candleLights, fogTexture, fogMesh, moveMarker, rangeIndicator, aoeIndicator, unitGroups, selectRings, unitMeshes, unitOriginalColors, maxHp, wallMeshes, treeMeshes, doorMeshes } = sceneRefs;

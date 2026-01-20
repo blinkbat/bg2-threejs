@@ -22,7 +22,7 @@ export const SKILLS: Record<string, Skill> = {
         name: "Heal",
         description: "Restore health to an ally.",
         flavor: "Deeper than any salve, purer than any potion.",
-        manaCost: 10,
+        manaCost: 6,
         cooldown: 4000,
         type: "heal",
         targetType: "ally",
@@ -86,6 +86,17 @@ export const SKILLS: Record<string, Skill> = {
         range: 1.8,  // melee range
         value: [10000, 10000],  // stun duration in ms (10 seconds)
         stunChance: 75  // 75% chance to stun
+    },
+    cleanse: {
+        name: "Cleanse",
+        description: "Purify an ally, removing poison and granting immunity to poison for 30 seconds.",
+        flavor: "Where light touches, no venom may linger.",
+        manaCost: 8,
+        cooldown: 4000,
+        type: "buff",
+        targetType: "ally",
+        range: 8,
+        value: [30000, 30000]  // duration in ms (30 seconds)
     }
 };
 
@@ -99,7 +110,7 @@ export const UNIT_DATA: Record<number, UnitData> = {
     3: { name: "Thief", class: "Thief", hp: 25, maxHp: 25, mana: 30, maxMana: 30, damage: [2, 4], accuracy: 75, armor: 1, color: "#8e44ad", skills: [SKILLS.poisonDagger], items: ["Bow"], range: 7, projectileColor: "#a0522d", attackCooldown: 1500 },
     4: { name: "Wizard", class: "Wizard", hp: 18, maxHp: 18, mana: 50, maxMana: 50, damage: [3, 5], accuracy: 60, armor: 0, color: "#3498db", skills: [SKILLS.fireball], items: ["Staff"], range: 8, projectileColor: "#ff6600", attackCooldown: 3000 },
     5: { name: "Monk", class: "Monk", hp: 35, maxHp: 35, mana: 30, maxMana: 30, damage: [2, 5], accuracy: 70, armor: 1, color: "#27ae60", skills: [SKILLS.flurryOfFists], items: ["Fists"], attackCooldown: 1800 },
-    6: { name: "Cleric", class: "Cleric", hp: 30, maxHp: 30, mana: 40, maxMana: 40, damage: [2, 4], accuracy: 60, armor: 2, color: "#ecf0f1", skills: [SKILLS.heal], items: ["Staff"], range: 6, projectileColor: "#ffffaa", attackCooldown: 2500 },
+    6: { name: "Cleric", class: "Cleric", hp: 30, maxHp: 30, mana: 60, maxMana: 60, damage: [2, 4], accuracy: 60, armor: 2, color: "#ecf0f1", skills: [SKILLS.heal, SKILLS.cleanse], items: ["Staff"], range: 6, projectileColor: "#ffffaa", attackCooldown: 2500 },
 };
 
 // Enemy stats registry - keyed by EnemyType
@@ -186,6 +197,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         aggroRange: 12,  // Good LOS - sees you from far
         attackCooldown: 2500,
         size: 1.5,  // Medium size
+        moveSpeed: 0.6,  // 40% slower than normal - lumbering
         spawnSkill: {
             spawnType: "broodling",
             cooldown: 4000,  // Spawn every 4 seconds when in combat
@@ -203,7 +215,10 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         color: "#5c3a38",  // Lighter brown-red
         aggroRange: 10,
         attackCooldown: 800,  // Fast attacks
-        size: 0.6  // Small
+        size: 0.6,  // Small
+        poisonChance: 20,  // 20% chance to apply weak poison on hit
+        poisonDamage: 1,  // Weak poison - only 1 damage per tick
+        moveSpeed: 1.5  // 50% faster than normal
     }
 };
 

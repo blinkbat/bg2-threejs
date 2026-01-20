@@ -20,6 +20,9 @@ export const POISON_TICK_INTERVAL = 1000;  // tick every 1 second
 export const POISON_DAMAGE_PER_TICK = 2;   // 2 damage per tick
 export const POISON_TINT_STRENGTH = 0.4;   // Color lerp amount for poison visual
 
+// Status Effects - Buffs (shielded, stunned, cleansed)
+export const BUFF_TICK_INTERVAL = 100;     // tick every 100ms for smooth duration countdown
+
 // Visual Effects
 export const HEAL_FLASH_DURATION = 200;    // ms for green healing flash
 export const RING_EXPAND_DURATION = 400;   // ms for taunt ring animation
@@ -81,6 +84,12 @@ export const COLORS = {
     shielded: "#d4a017",
     shieldedText: "#f1c40f",
     shieldedBg: "#2a2510",
+    stunned: "#8b4513",
+    stunnedText: "#cd853f",
+    stunnedBg: "#2a1a10",
+    cleansed: "#b8c4d0",
+    cleansedText: "#ecf0f1",
+    cleansedBg: "#1a1a2a",
 
     // HP bar colors
     hpHigh: "#22c55e",          // > 50%

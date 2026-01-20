@@ -4,9 +4,9 @@
 
 import * as THREE from "three";
 import type { Unit, Skill, UnitGroup, Projectile, StatusEffect } from "../core/types";
-import { COLORS } from "../core/constants";
+import { COLORS, BUFF_TICK_INTERVAL } from "../core/constants";
 import { UNIT_DATA, getUnitStats } from "../game/units";
-import { rollDamage, rollChance, calculateDamage, rollHit, getEffectiveArmor, hasShieldedEffect, hasStunnedEffect, logHit, logMiss, logHeal, logPoisoned, logCast, logTaunt, logTauntMiss, logBuff, logStunned } from "./combatMath";
+import { rollDamage, rollChance, calculateDamage, rollHit, getEffectiveArmor, hasShieldedEffect, hasStunnedEffect, hasPoisonEffect, logHit, logMiss, logHeal, logPoisoned, logCast, logTaunt, logTauntMiss, logBuff, logStunned, logCleanse } from "./combatMath";
 import { getUnitRadius, isInRange } from "../rendering/range";
 import { soundFns } from "../audio/sound";
 import { createProjectile, getProjectileSpeed, applyDamageToUnit, animateExpandingMesh, type DamageContext } from "./combat";
@@ -341,7 +341,7 @@ export function executeBuffSkill(
         const shieldedEffect: StatusEffect = {
             type: "shielded",
             duration,
-            tickInterval: duration,  // No ticking needed
+            tickInterval: BUFF_TICK_INTERVAL,
             lastTick: now,
             damagePerTick: 0,
             sourceId: casterId
@@ -367,6 +367,95 @@ export function executeBuffSkill(
     scene.add(ring);
 
     animateExpandingMesh(scene, ring, { maxScale: 1.5, baseRadius: 0.4, duration: 300 });
+
+    return true;
+}
+
+/**
+ * Execute a cleanse skill (remove poison and grant poison immunity to an ally)
+ */
+export function executeCleanseSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill,
+    targetX: number,
+    targetZ: number
+): boolean {
+    const { scene, unitsStateRef, unitsRef, unitMeshRef, hitFlashRef, setUnits, addLog } = ctx;
+
+    // Find closest ally to target position
+    const closest = findClosestTargetByTeam(unitsStateRef.current, unitsRef.current, "player", targetX, targetZ);
+
+    if (!closest) {
+        addLog(`${UNIT_DATA[casterId].name}: No ally at that location!`, COLORS.logNeutral);
+        return false;
+    }
+
+    const { unit: targetAlly, group: targetG } = closest;
+    const targetData = UNIT_DATA[targetAlly.id];
+    const targetId = targetAlly.id;
+    const now = Date.now();
+
+    // Check if ally actually needs cleansing (has poison or no immunity yet)
+    const hasPoisonNow = hasPoisonEffect(targetAlly);
+    const alreadyCleansed = targetAlly.statusEffects?.some(e => e.type === "cleansed") ?? false;
+
+    if (!hasPoisonNow && alreadyCleansed) {
+        addLog(`${UNIT_DATA[casterId].name}: ${targetData.name} is already protected!`, COLORS.logNeutral);
+        return false;
+    }
+
+    consumeSkill(ctx, casterId, skill);
+
+    const casterData = UNIT_DATA[casterId];
+    const duration = skill.value[0];  // Duration in ms (30 seconds)
+
+    // Apply cleanse: remove poison and add cleansed (immunity) effect
+    setUnits(prev => prev.map(u => {
+        if (u.id !== targetId) return u;
+
+        const existingEffects = u.statusEffects || [];
+        // Remove poison effect
+        const withoutPoison = existingEffects.filter(e => e.type !== "poison");
+        // Remove existing cleansed effect if any (refresh)
+        const filteredEffects = withoutPoison.filter(e => e.type !== "cleansed");
+
+        const cleansedEffect: StatusEffect = {
+            type: "cleansed",
+            duration,
+            tickInterval: BUFF_TICK_INTERVAL,
+            lastTick: now,
+            damagePerTick: 0,
+            sourceId: casterId
+        };
+
+        return {
+            ...u,
+            statusEffects: [...filteredEffects, cleansedEffect]
+        };
+    }));
+
+    // Play sound and log
+    soundFns.playHeal();
+    addLog(logCleanse(casterData.name, skill.name), "#ecf0f1");
+
+    // Visual effect - white/silver glow ring
+    const ring = new THREE.Mesh(
+        new THREE.RingGeometry(0.3, 0.5, 32),
+        new THREE.MeshBasicMaterial({ color: "#ecf0f1", transparent: true, opacity: 0.8, side: THREE.DoubleSide })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(targetG.position.x, 0.1, targetG.position.z);
+    scene.add(ring);
+
+    animateExpandingMesh(scene, ring, { maxScale: 1.5, baseRadius: 0.4, duration: 300 });
+
+    // Visual effect - white flash on target
+    const mesh = unitMeshRef.current[targetId];
+    if (targetG && mesh) {
+        (mesh.material as THREE.MeshStandardMaterial).color.set("#ffffff");
+        hitFlashRef.current[targetId] = now;
+    }
 
     return true;
 }
@@ -572,7 +661,7 @@ export function executeDebuffSkill(
                 const stunnedEffect: StatusEffect = {
                     type: "stunned",
                     duration: stunDuration,
-                    tickInterval: stunDuration,  // No ticking needed
+                    tickInterval: BUFF_TICK_INTERVAL,
                     lastTick: now,
                     damagePerTick: 0,
                     sourceId: casterId
@@ -645,6 +734,8 @@ export function executeSkill(
         return executeTauntSkill(ctx, casterId, skill);
     } else if (skill.type === "buff" && skill.targetType === "self") {
         return executeBuffSkill(ctx, casterId, skill);
+    } else if (skill.type === "buff" && skill.targetType === "ally") {
+        return executeCleanseSkill(ctx, casterId, skill, targetX, targetZ);
     } else if (skill.type === "flurry" && skill.targetType === "self") {
         return executeFlurrySkill(ctx, casterId, skill);
     } else if (skill.type === "debuff" && skill.targetType === "enemy") {

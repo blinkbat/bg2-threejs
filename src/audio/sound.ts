@@ -306,6 +306,103 @@ const playWarcry = () => {
     }, 150);
 };
 
+// Broodling screech - high-pitched, creepy insectoid sound
+const playScreech = () => {
+    if (muted) return;
+    const ctx = getAudioCtx();
+
+    // Main screech - high pitched descending tone
+    const screech = ctx.createOscillator();
+    const screechGain = ctx.createGain();
+    const screechFilter = ctx.createBiquadFilter();
+    screech.type = "sawtooth";
+    screech.frequency.setValueAtTime(2400, ctx.currentTime);
+    screech.frequency.exponentialRampToValueAtTime(1800, ctx.currentTime + 0.08);
+    screech.frequency.exponentialRampToValueAtTime(2200, ctx.currentTime + 0.15);
+    screech.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 0.3);
+    screechFilter.type = "bandpass";
+    screechFilter.frequency.setValueAtTime(2000, ctx.currentTime);
+    screechFilter.Q.setValueAtTime(2, ctx.currentTime);
+    screechGain.gain.setValueAtTime(0.15, ctx.currentTime);
+    screechGain.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.05);
+    screechGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    screech.connect(screechFilter);
+    screechFilter.connect(screechGain);
+    screechGain.connect(ctx.destination);
+    screech.start();
+    screech.stop(ctx.currentTime + 0.3);
+
+    // Chittering overtone - adds creepy insect quality
+    const chitter = ctx.createOscillator();
+    const chitterGain = ctx.createGain();
+    chitter.type = "square";
+    chitter.frequency.setValueAtTime(3200, ctx.currentTime);
+    chitter.frequency.exponentialRampToValueAtTime(2400, ctx.currentTime + 0.2);
+    chitterGain.gain.setValueAtTime(0.06, ctx.currentTime);
+    chitterGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+    chitter.connect(chitterGain);
+    chitterGain.connect(ctx.destination);
+    chitter.start();
+    chitter.stop(ctx.currentTime + 0.25);
+};
+
+// Brood Mother screech - longer, higher, more menacing than broodling screech
+const playBroodMotherScreech = () => {
+    if (muted) return;
+    const ctx = getAudioCtx();
+
+    // Main screech - higher pitched, longer sustain, more dramatic
+    const screech = ctx.createOscillator();
+    const screechGain = ctx.createGain();
+    const screechFilter = ctx.createBiquadFilter();
+    screech.type = "sawtooth";
+    screech.frequency.setValueAtTime(3200, ctx.currentTime);  // Higher start
+    screech.frequency.exponentialRampToValueAtTime(2800, ctx.currentTime + 0.1);
+    screech.frequency.exponentialRampToValueAtTime(3400, ctx.currentTime + 0.25);  // Rise up
+    screech.frequency.exponentialRampToValueAtTime(2600, ctx.currentTime + 0.4);
+    screech.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.7);  // Long descent
+    screechFilter.type = "bandpass";
+    screechFilter.frequency.setValueAtTime(2800, ctx.currentTime);
+    screechFilter.Q.setValueAtTime(3, ctx.currentTime);  // Sharper resonance
+    screechGain.gain.setValueAtTime(0.2, ctx.currentTime);
+    screechGain.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + 0.1);
+    screechGain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.4);
+    screechGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.7);
+    screech.connect(screechFilter);
+    screechFilter.connect(screechGain);
+    screechGain.connect(ctx.destination);
+    screech.start();
+    screech.stop(ctx.currentTime + 0.7);
+
+    // High harmonic layer - piercing overtone
+    const harmonic = ctx.createOscillator();
+    const harmonicGain = ctx.createGain();
+    harmonic.type = "sine";
+    harmonic.frequency.setValueAtTime(4800, ctx.currentTime);
+    harmonic.frequency.exponentialRampToValueAtTime(4200, ctx.currentTime + 0.3);
+    harmonic.frequency.exponentialRampToValueAtTime(2400, ctx.currentTime + 0.6);
+    harmonicGain.gain.setValueAtTime(0.08, ctx.currentTime);
+    harmonicGain.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 0.15);
+    harmonicGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+    harmonic.connect(harmonicGain);
+    harmonicGain.connect(ctx.destination);
+    harmonic.start();
+    harmonic.stop(ctx.currentTime + 0.6);
+
+    // Chittering undertone - creepy layered effect
+    const chitter = ctx.createOscillator();
+    const chitterGain = ctx.createGain();
+    chitter.type = "square";
+    chitter.frequency.setValueAtTime(4000, ctx.currentTime);
+    chitter.frequency.exponentialRampToValueAtTime(3200, ctx.currentTime + 0.5);
+    chitterGain.gain.setValueAtTime(0.05, ctx.currentTime);
+    chitterGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.55);
+    chitter.connect(chitterGain);
+    chitterGain.connect(ctx.destination);
+    chitter.start();
+    chitter.stop(ctx.currentTime + 0.55);
+};
+
 export const soundFns = {
     playMove: () => playTone(800, 0.06, 0.12, "square", undefined, 3000),
     playAttack: () => playTone(440, 0.08, 0.15, "square", 330, 2500),
@@ -316,4 +413,6 @@ export const soundFns = {
     playHeal,
     playDeath,
     playWarcry,
+    playScreech,
+    playBroodMotherScreech,
 };

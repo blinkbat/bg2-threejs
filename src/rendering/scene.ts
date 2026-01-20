@@ -690,6 +690,19 @@ export function updateTreeFogVisibility(
         // Track previous visibility state for fade-in detection
         const wasExplored = mesh.userData.wasExplored as boolean | undefined;
 
+        // Check if ANY neighboring tile is explored (for foliage visibility)
+        // This makes foliage visible even if the tree's exact tile isn't explored yet
+        const hasExploredNeighbor = (): boolean => {
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dz = -1; dz <= 1; dz++) {
+                    if ((visibility[tx + dx]?.[tz + dz] ?? 0) > 0) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
+
         if (mesh.userData.isTrunk) {
             const fullHeight = mesh.userData.fullHeight as number;
             if (vis === 0) {
@@ -709,7 +722,10 @@ export function updateTreeFogVisibility(
             const fullHeight = mesh.userData.fullHeight as number;
             const trunkHeight = mesh.userData.trunkHeight as number;
 
-            if (vis === 0) {
+            // Foliage is visible if ANY neighboring tile is explored
+            const foliageExplored = hasExploredNeighbor();
+
+            if (!foliageExplored) {
                 // Unexplored - hide foliage if it would stick above fog
                 const foliageBottom = fullY - fullHeight / 2;
                 if (foliageBottom >= MAX_HEIGHT_UNEXPLORED) {

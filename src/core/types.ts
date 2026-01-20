@@ -10,7 +10,7 @@ export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "og
 // STATUS EFFECTS
 // =============================================================================
 
-export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned";
+export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed";
 
 export interface StatusEffect {
     type: StatusEffectType;
@@ -103,6 +103,7 @@ export interface EnemyStats {
     size?: number;
     // Optional status effect on hit
     poisonChance?: number;  // 0-100 percent chance to apply poison
+    poisonDamage?: number;  // Custom poison damage per tick (default POISON_DAMAGE_PER_TICK)
     // Optional special skill
     skill?: EnemySkill;
     // Optional heal skill for support enemies
@@ -113,6 +114,8 @@ export interface EnemyStats {
     kiteTrigger?: number;    // Distance at which kiting triggers (melee range)
     // Optional spawn skill for spawner enemies (like Brood Mother)
     spawnSkill?: EnemySpawnSkill;
+    // Optional movement speed multiplier (default 1.0)
+    moveSpeed?: number;
 }
 
 export interface EnemySpawnSkill {

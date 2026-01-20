@@ -76,7 +76,7 @@ export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, ski
             </div>
 
             <div className="tab-container">
-                {["status", "skills", "items"].map(t => (
+                {["status", "skills", "equipment"].map(t => (
                     <div
                         key={t}
                         className={`tab ${tab === t ? "active" : ""}`}
@@ -100,7 +100,7 @@ export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, ski
                         onCastSkill={onCastSkill}
                     />
                 )}
-                {tab === "items" && <ItemsTab items={data.items} />}
+                {tab === "equipment" && <EquipmentTab items={data.items} />}
             </div>
         </div>
     );
@@ -138,7 +138,9 @@ function StatusTab({ unit, data, onToggleAI, unitId }: { unit: Unit; data: typeo
                             const remainingSec = Math.ceil(effect.duration / 1000);
                             const effectColorMap: Record<string, { bg: string; border: string; text: string }> = {
                                 poison: { bg: COLORS.poisonBg, border: COLORS.poison, text: COLORS.poisonText },
-                                shielded: { bg: COLORS.shieldedBg, border: COLORS.shielded, text: COLORS.shieldedText }
+                                shielded: { bg: COLORS.shieldedBg, border: COLORS.shielded, text: COLORS.shieldedText },
+                                stunned: { bg: COLORS.stunnedBg, border: COLORS.stunned, text: COLORS.stunnedText },
+                                cleansed: { bg: COLORS.cleansedBg, border: COLORS.cleansed, text: COLORS.cleansedText }
                             };
                             const colors = effectColorMap[effect.type] || { bg: "#1a1a2a", border: "#444", text: COLORS.logNeutral };
                             return (
@@ -186,9 +188,18 @@ function SkillTooltip({ skill, isShielded }: { skill: Skill; isShielded: boolean
         lines.push({ label: "Taunt chance", value: `${skill.value[0]}%` });
     } else if (skill.type === "buff") {
         const durationSec = Math.round(skill.value[0] / 1000);
-        lines.push({ label: "Duration", value: `${durationSec}s`, color: COLORS.shieldedText });
-        lines.push({ label: "Effect", value: "×2 armor, ×2 cooldowns", color: COLORS.shieldedText });
-        lines.push({ label: "Bonus", value: "Poison immune", color: COLORS.poisonText });
+        // Different buff types have different effects
+        if (skill.name === "Raise Shield") {
+            lines.push({ label: "Duration", value: `${durationSec}s`, color: COLORS.shieldedText });
+            lines.push({ label: "Effect", value: "×2 armor, ×2 cooldowns", color: COLORS.shieldedText });
+        } else if (skill.name === "Cleanse") {
+            lines.push({ label: "Duration", value: `${durationSec}s`, color: COLORS.cleansedText });
+            lines.push({ label: "Effect", value: "Removes poison", color: COLORS.poisonText });
+            lines.push({ label: "Bonus", value: "Poison immune", color: COLORS.cleansedText });
+        } else {
+            // Generic buff fallback
+            lines.push({ label: "Duration", value: `${durationSec}s`, color: COLORS.shieldedText });
+        }
     } else if (skill.type === "flurry") {
         lines.push({ label: "Damage", value: `${skill.value[0]}-${skill.value[1]} × ${skill.hitCount ?? 5}` });
         lines.push({ label: "Targets", value: `Up to ${skill.hitCount ?? 5} nearby` });
@@ -329,7 +340,7 @@ function SkillsTab({
     );
 }
 
-function ItemsTab({ items }: { items: string[] }) {
+function EquipmentTab({ items }: { items: string[] }) {
     return (
         <div className="flex flex-col gap-8">
             {items.map((s: string, i: number) => (
