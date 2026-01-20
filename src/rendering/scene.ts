@@ -19,6 +19,7 @@ export interface SceneRefs {
     camera: THREE.OrthographicCamera;
     renderer: THREE.WebGLRenderer;
     flames: THREE.Mesh[];
+    candleMeshes: THREE.Mesh[];  // Candle body meshes for occlusion transparency
     candleLights: THREE.PointLight[];
     fogTexture: FogTexture;
     fogMesh: THREE.Mesh;
@@ -41,25 +42,22 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
 
     const scene = new THREE.Scene();
 
-    // Create sky gradient for all areas
+    // Create sky background - gradient for both outdoor and dungeon
     const canvas = document.createElement("canvas");
     canvas.width = 2;
     canvas.height = 256;
     const ctx = canvas.getContext("2d")!;
     const gradient = ctx.createLinearGradient(0, 0, 0, 256);
-
     if (area.id === "field") {
-        // Darker blue gradient for outdoor field
         gradient.addColorStop(0, "#0a1520");    // Very dark blue at top
         gradient.addColorStop(0.5, "#1a3040");  // Dark blue-gray
         gradient.addColorStop(1, "#2a4a60");    // Medium dark blue at bottom (horizon)
     } else {
-        // Dark slate to dark purple for dungeon
-        gradient.addColorStop(0, "#1a1a2e");    // Dark purple at top
-        gradient.addColorStop(0.5, "#16213e");  // Dark slate-purple
-        gradient.addColorStop(1, "#1f2937");    // Dark slate at bottom
+        // Dungeon gradient - very dark with subtle color variation
+        gradient.addColorStop(0, "#020204");    // Almost black at top
+        gradient.addColorStop(0.5, "#050508");  // Very dark blue-gray
+        gradient.addColorStop(1, "#08080c");    // Slightly lighter at bottom
     }
-
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, 2, 256);
     const skyTexture = new THREE.CanvasTexture(canvas);
@@ -104,29 +102,58 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     });
 
     // Torches with flames and lights (only in areas with candles)
+    // PERF OPTIMIZATION: Use 1 light per room instead of per-candle (~72 -> ~9 lights)
     const flames: THREE.Mesh[] = [];
+    const candleMeshes: THREE.Mesh[] = [];  // Track candle bodies for occlusion fading
     const candleLights: THREE.PointLight[] = [];
+
+    // Share materials across all candles for better batching
+    // Each candle needs its own material instance for individual opacity control
+    const baseCandleMat = { color: "#e8d4a8", metalness: 0.1, roughness: 0.9, transparent: true, opacity: 1 };
+    const flameMat = new THREE.MeshBasicMaterial({ color: "#ffcc44", transparent: true, opacity: 0.85 });
+    const candleGeo = new THREE.CylinderGeometry(0.06, 0.08, 0.3, 6);
+    const flameGeo = new THREE.SphereGeometry(0.08, 4, 4);
+
+    // Group candles by room and create 1 light per room (at room center)
+    const roomLightsCreated = new Set<string>();
+
     computed.candlePositions.forEach((pos) => {
-        const candle = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.06, 0.08, 0.3, 8),
-            new THREE.MeshStandardMaterial({ color: "#e8d4a8", metalness: 0.1, roughness: 0.9 })
-        );
+        // Each candle needs its own material for individual opacity
+        const candleMat = new THREE.MeshStandardMaterial(baseCandleMat);
+        const candle = new THREE.Mesh(candleGeo, candleMat);
         candle.position.set(pos.x + pos.dx * 0.3, 1.85, pos.z + pos.dz * 0.3);
         scene.add(candle);
+        candleMeshes.push(candle);
 
-        const flame = new THREE.Mesh(
-            new THREE.SphereGeometry(0.08, 8, 8),
-            new THREE.MeshBasicMaterial({ color: "#ffcc44", transparent: true, opacity: 0.85 })
-        );
+        // Flame also needs own material for individual opacity
+        const flameMatInstance = flameMat.clone();
+        const flame = new THREE.Mesh(flameGeo, flameMatInstance);
         flame.position.set(pos.x + pos.dx * 0.3, 2.05, pos.z + pos.dz * 0.3);
         flame.scale.y = 1.8;
         scene.add(flame);
         flames.push(flame);
 
-        const light = new THREE.PointLight("#ffaa44", 15, 18, 1.5);
-        light.position.set(pos.x + pos.dx * 0.3, 2.05, pos.z + pos.dz * 0.3);  // Same as flame
-        scene.add(light);
-        candleLights.push(light);
+        // Find which room this candle belongs to and create 1 light per room
+        for (const room of area.rooms) {
+            // Check if candle is on this room's wall (within 2 cells of room boundary)
+            const inRoomX = pos.x >= room.x - 2 && pos.x <= room.x + room.w + 1;
+            const inRoomZ = pos.z >= room.z - 2 && pos.z <= room.z + room.h + 1;
+            if (inRoomX && inRoomZ) {
+                const roomKey = `${room.x},${room.z}`;
+                if (!roomLightsCreated.has(roomKey)) {
+                    roomLightsCreated.add(roomKey);
+                    // Create 1 light at room center with larger radius to cover whole room
+                    const roomCenterX = room.x + room.w / 2;
+                    const roomCenterZ = room.z + room.h / 2;
+                    const roomSize = Math.max(room.w, room.h);
+                    const light = new THREE.PointLight("#ffaa44", 15, roomSize * 0.8, 1.5);
+                    light.position.set(roomCenterX, 2.5, roomCenterZ);
+                    scene.add(light);
+                    candleLights.push(light);
+                }
+                break;
+            }
+        }
     });
 
     // Treasure chests from area data
@@ -390,6 +417,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         camera,
         renderer,
         flames,
+        candleMeshes,
         candleLights,
         fogTexture,
         fogMesh,
@@ -413,83 +441,185 @@ export function updateCamera(camera: THREE.OrthographicCamera, offset: { x: numb
     camera.lookAt(offset.x, 0, offset.z);
 }
 
+// Light LOD: only enable lights within this distance of camera focus
+const LIGHT_LOD_DISTANCE = 25;
+
+/**
+ * Update light LOD - disable lights that are far from camera to save GPU cycles.
+ * Since we now have ~9 room lights instead of 72, this is less critical but still helpful.
+ */
+export function updateLightLOD(
+    candleLights: THREE.PointLight[],
+    cameraOffset: { x: number; z: number }
+): void {
+    for (const light of candleLights) {
+        const dx = light.position.x - cameraOffset.x;
+        const dz = light.position.z - cameraOffset.z;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+        // Enable light if within LOD distance, disable if far away
+        light.visible = dist < LIGHT_LOD_DISTANCE;
+    }
+}
+
 // Opacity values for wall/tree transparency
 const WALL_OPACITY_NORMAL = 1.0;
 const WALL_OPACITY_OCCLUDING = 0.25;
 const WALL_OPACITY_LERP_SPEED = 0.15;  // How fast walls fade in/out
 
+// Reusable objects to avoid allocations every frame
+const _unitPos = new THREE.Vector3();
+const _cameraPos = new THREE.Vector3();
+const _dirToUnit = new THREE.Vector3();
+const _intersection = new THREE.Vector3();
+const _ray = new THREE.Ray();
+const _meshBox = new THREE.Box3();
+
+// Throttle expensive ray-box tests - only recalculate every N frames
+const WALL_CHECK_INTERVAL = 3;
+let wallCheckFrame = 0;
+let cachedOccludingMeshes = new Set<THREE.Mesh>();
+
 /**
- * Update wall and tree transparency based on unit occlusion.
- * Walls/trees that are between the camera and any unit become semi-transparent.
+ * Update wall, tree, and candle transparency based on unit occlusion.
+ * Objects between the camera and any unit become semi-transparent.
+ * Ray-box intersection tests are throttled to every 3rd frame for performance.
  */
 export function updateWallTransparency(
     camera: THREE.OrthographicCamera,
     wallMeshes: THREE.Mesh[],
     unitGroups: Record<number, UnitGroup>,
     unitsState: Unit[],
-    treeMeshes?: THREE.Mesh[]
+    treeMeshes?: THREE.Mesh[],
+    candleMeshes?: THREE.Mesh[],
+    flameMeshes?: THREE.Mesh[]
 ): void {
-    // Combine walls and trees for occlusion checking
-    const allOccluders = treeMeshes ? [...wallMeshes, ...treeMeshes] : wallMeshes;
+    wallCheckFrame++;
 
-    // Track which meshes should be transparent this frame
-    const occludingMeshes = new Set<THREE.Mesh>();
+    // Only recalculate occlusion every N frames (expensive ray-box tests)
+    if (wallCheckFrame >= WALL_CHECK_INTERVAL) {
+        wallCheckFrame = 0;
+        cachedOccludingMeshes.clear();
 
-    // For each alive unit, check if any wall/tree is between camera and unit
-    for (const unit of unitsState) {
-        if (unit.hp <= 0) continue;
-        const unitGroup = unitGroups[unit.id];
-        if (!unitGroup || !unitGroup.visible) continue;
+        _cameraPos.copy(camera.position);
 
-        // Get unit position in world space
-        const unitPos = new THREE.Vector3(unitGroup.position.x, 0.5, unitGroup.position.z);
+        // Only check player units for occlusion (enemies don't need wall transparency)
+        for (const unit of unitsState) {
+            if (unit.hp <= 0 || unit.team !== "player") continue;
+            const unitGroup = unitGroups[unit.id];
+            if (!unitGroup || !unitGroup.visible) continue;
 
-        // Direction from camera to unit
-        const cameraPos = camera.position.clone();
-        const dirToUnit = unitPos.clone().sub(cameraPos).normalize();
+            _unitPos.set(unitGroup.position.x, 0.5, unitGroup.position.z);
+            _dirToUnit.subVectors(_unitPos, _cameraPos).normalize();
+            _ray.set(_cameraPos, _dirToUnit);
 
-        // Check each wall/tree for occlusion
-        for (const mesh of allOccluders) {
-            // Quick check: is mesh roughly between camera and unit?
-            // Use bounding box for efficiency
-            const meshBox = new THREE.Box3().setFromObject(mesh);
+            const distToUnit = _cameraPos.distanceTo(_unitPos);
 
-            // Create a ray from camera towards unit
-            const ray = new THREE.Ray(cameraPos, dirToUnit);
+            // Check walls
+            for (const mesh of wallMeshes) {
+                if (cachedOccludingMeshes.has(mesh)) continue;  // Already marked
+                _meshBox.setFromObject(mesh);
+                if (_ray.intersectBox(_meshBox, _intersection)) {
+                    if (_cameraPos.distanceTo(_intersection) < distToUnit) {
+                        cachedOccludingMeshes.add(mesh);
+                    }
+                }
+            }
 
-            // Check if ray intersects mesh bounding box
-            const intersection = ray.intersectBox(meshBox, new THREE.Vector3());
-            if (intersection) {
-                // Check if intersection is between camera and unit
-                const distToMesh = cameraPos.distanceTo(intersection);
-                const distToUnit = cameraPos.distanceTo(unitPos);
+            // Check trees if provided
+            if (treeMeshes) {
+                for (const mesh of treeMeshes) {
+                    if (cachedOccludingMeshes.has(mesh)) continue;
+                    _meshBox.setFromObject(mesh);
+                    if (_ray.intersectBox(_meshBox, _intersection)) {
+                        if (_cameraPos.distanceTo(_intersection) < distToUnit) {
+                            cachedOccludingMeshes.add(mesh);
+                        }
+                    }
+                }
+            }
 
-                if (distToMesh < distToUnit) {
-                    occludingMeshes.add(mesh);
+            // Check candles if provided (use simple distance check - candles are small)
+            if (candleMeshes) {
+                for (let i = 0; i < candleMeshes.length; i++) {
+                    const candle = candleMeshes[i];
+                    if (cachedOccludingMeshes.has(candle)) continue;
+                    // Simple proximity check: if candle is between camera and unit
+                    const candleX = candle.position.x;
+                    const candleZ = candle.position.z;
+                    const unitX = unitGroup.position.x;
+                    const unitZ = unitGroup.position.z;
+                    // Check if candle is roughly in front of unit from camera's perspective
+                    const dx = candleX - unitX;
+                    const dz = candleZ - unitZ;
+                    const distToCandle = Math.sqrt(dx * dx + dz * dz);
+                    // Candle occludes if it's close to unit (within 2 units) and between camera and unit
+                    if (distToCandle < 2.5) {
+                        // Check if candle is between camera and unit using dot product
+                        const camToUnit = { x: unitX - _cameraPos.x, z: unitZ - _cameraPos.z };
+                        const camToCandle = { x: candleX - _cameraPos.x, z: candleZ - _cameraPos.z };
+                        const dot = camToUnit.x * camToCandle.x + camToUnit.z * camToCandle.z;
+                        const camToUnitLen = Math.sqrt(camToUnit.x * camToUnit.x + camToUnit.z * camToUnit.z);
+                        const camToCandleLen = Math.sqrt(camToCandle.x * camToCandle.x + camToCandle.z * camToCandle.z);
+                        if (dot > 0 && camToCandleLen < camToUnitLen) {
+                            cachedOccludingMeshes.add(candle);
+                            // Also mark corresponding flame
+                            if (flameMeshes && flameMeshes[i]) {
+                                cachedOccludingMeshes.add(flameMeshes[i]);
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 
-    // Update opacities with smooth lerping
-    for (const mesh of allOccluders) {
+    // Update wall opacities every frame (smooth lerp using cached occlusion data)
+    for (const mesh of wallMeshes) {
         const mat = mesh.material as THREE.MeshStandardMaterial;
-        const targetOpacity = occludingMeshes.has(mesh) ? WALL_OPACITY_OCCLUDING : WALL_OPACITY_NORMAL;
+        const targetOpacity = cachedOccludingMeshes.has(mesh) ? WALL_OPACITY_OCCLUDING : WALL_OPACITY_NORMAL;
+        mat.opacity += (targetOpacity - mat.opacity) * WALL_OPACITY_LERP_SPEED;
+        if (Math.abs(mat.opacity - targetOpacity) < 0.01) mat.opacity = targetOpacity;
+    }
 
-        // Lerp towards target opacity
-        mat.opacity = mat.opacity + (targetOpacity - mat.opacity) * WALL_OPACITY_LERP_SPEED;
+    // Update tree opacities if provided
+    if (treeMeshes) {
+        for (const mesh of treeMeshes) {
+            const mat = mesh.material as THREE.MeshStandardMaterial;
+            const targetOpacity = cachedOccludingMeshes.has(mesh) ? WALL_OPACITY_OCCLUDING : WALL_OPACITY_NORMAL;
+            mat.opacity += (targetOpacity - mat.opacity) * WALL_OPACITY_LERP_SPEED;
+            if (Math.abs(mat.opacity - targetOpacity) < 0.01) mat.opacity = targetOpacity;
+        }
+    }
 
-        // Snap to target if very close (avoid floating point drift)
-        if (Math.abs(mat.opacity - targetOpacity) < 0.01) {
-            mat.opacity = targetOpacity;
+    // Update candle opacities if provided
+    if (candleMeshes) {
+        for (const mesh of candleMeshes) {
+            const mat = mesh.material as THREE.MeshStandardMaterial;
+            const targetOpacity = cachedOccludingMeshes.has(mesh) ? WALL_OPACITY_OCCLUDING : WALL_OPACITY_NORMAL;
+            mat.opacity += (targetOpacity - mat.opacity) * WALL_OPACITY_LERP_SPEED;
+            if (Math.abs(mat.opacity - targetOpacity) < 0.01) mat.opacity = targetOpacity;
+        }
+    }
+
+    // Update flame opacities if provided (use MeshBasicMaterial)
+    if (flameMeshes) {
+        for (const mesh of flameMeshes) {
+            const mat = mesh.material as THREE.MeshBasicMaterial;
+            const baseOpacity = 0.85;  // Flame's normal opacity
+            const targetOpacity = cachedOccludingMeshes.has(mesh) ? baseOpacity * WALL_OPACITY_OCCLUDING : baseOpacity;
+            mat.opacity += (targetOpacity - mat.opacity) * WALL_OPACITY_LERP_SPEED;
+            if (Math.abs(mat.opacity - targetOpacity) < 0.01) mat.opacity = targetOpacity;
         }
     }
 }
 
+// Fade speed for tree foliage reveal
+const TREE_FADE_SPEED = 0.08;
+
 /**
  * Update tree heights based on fog of war visibility.
  * Trees in unexplored (vis=0) cells are cut below the fog layer.
- * Trees in seen or visible areas are shown at full height.
+ * Trees in seen or visible areas are shown at full height with fade-in.
  */
 export function updateTreeFogVisibility(
     treeMeshes: THREE.Mesh[],
@@ -502,6 +632,10 @@ export function updateTreeFogVisibility(
         const tx = Math.floor(mesh.userData.treeX ?? mesh.position.x);
         const tz = Math.floor(mesh.userData.treeZ ?? mesh.position.z);
         const vis = visibility[tx]?.[tz] ?? 0;
+        const mat = mesh.material as THREE.MeshStandardMaterial;
+
+        // Track previous visibility state for fade-in detection
+        const wasExplored = mesh.userData.wasExplored as boolean | undefined;
 
         if (mesh.userData.isTrunk) {
             const fullHeight = mesh.userData.fullHeight as number;
@@ -510,10 +644,12 @@ export function updateTreeFogVisibility(
                 const cappedHeight = Math.min(fullHeight, MAX_HEIGHT_UNEXPLORED);
                 mesh.scale.y = cappedHeight / fullHeight;
                 mesh.position.y = cappedHeight / 2;
+                mesh.userData.wasExplored = false;
             } else {
                 // Seen or visible - full height
                 mesh.scale.y = 1;
                 mesh.position.y = fullHeight / 2;
+                mesh.userData.wasExplored = true;
             }
         } else if (mesh.userData.isFoliage) {
             const fullY = mesh.userData.fullY as number;
@@ -526,23 +662,37 @@ export function updateTreeFogVisibility(
                 if (foliageBottom >= MAX_HEIGHT_UNEXPLORED) {
                     // Foliage entirely above fog - hide it
                     mesh.visible = false;
+                    mat.opacity = 0;
                 } else {
                     // Partially clip foliage
                     mesh.visible = true;
                     const availableSpace = MAX_HEIGHT_UNEXPLORED - trunkHeight;
                     if (availableSpace <= 0) {
                         mesh.visible = false;
+                        mat.opacity = 0;
                     } else {
                         const scaleFactor = Math.min(1, availableSpace / fullHeight);
                         mesh.scale.y = scaleFactor;
                         mesh.position.y = trunkHeight + (fullHeight * scaleFactor) / 2;
                     }
                 }
+                mesh.userData.wasExplored = false;
             } else {
-                // Seen or visible - full height
+                // Seen or visible - full height with fade-in
                 mesh.visible = true;
                 mesh.scale.y = 1;
                 mesh.position.y = fullY;
+
+                // Fade in if just revealed
+                if (!wasExplored) {
+                    mat.opacity = 0;
+                }
+                // Lerp opacity towards 1
+                if (mat.opacity < 1) {
+                    mat.opacity = Math.min(1, mat.opacity + TREE_FADE_SPEED);
+                }
+
+                mesh.userData.wasExplored = true;
             }
         }
     }

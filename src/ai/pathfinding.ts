@@ -263,13 +263,19 @@ export function findPath(startX: number, startZ: number, endX: number, endZ: num
         return null;
     }
 
-    const open: PathNode[] = [{ x: sx, z: sz, g: 0, h: Math.hypot(ex - sx, ez - sz), parent: null }];
+    const startNode: PathNode = { x: sx, z: sz, g: 0, h: Math.hypot(ex - sx, ez - sz), parent: null };
+    const open: PathNode[] = [startNode];
     const closed = new Set<string>();
+    // Map for O(1) lookup of nodes in open list by coordinate key
+    const openMap = new Map<string, PathNode>();
     const key = (x: number, z: number) => `${x},${z}`;
+    openMap.set(key(sx, sz), startNode);
 
     while (open.length > 0) {
         // List is already sorted, just take the first element (lowest f-score)
         const current = open.shift()!;
+        const currentKey = key(current.x, current.z);
+        openMap.delete(currentKey);
 
         if (current.x === ex && current.z === ez) {
             const path: { x: number; z: number }[] = [];
@@ -282,28 +288,31 @@ export function findPath(startX: number, startZ: number, endX: number, endZ: num
             return path;
         }
 
-        closed.add(key(current.x, current.z));
+        closed.add(currentKey);
 
         // Get valid neighbors (handles bounds, blocking, and corner-cutting)
         const neighbors = getNeighbors(current.x, current.z, ASTAR_DIAGONAL_COST);
 
         for (const n of neighbors) {
-            if (closed.has(key(n.x, n.z))) continue;
+            const nKey = key(n.x, n.z);
+            if (closed.has(nKey)) continue;
 
             const g = current.g + n.cost;
-            const existingIndex = open.findIndex(o => o.x === n.x && o.z === n.z);
-            if (existingIndex !== -1) {
-                const existing = open[existingIndex];
+            const existing = openMap.get(nKey);
+            if (existing) {
                 if (g < existing.g) {
-                    // Remove from current position and re-insert with updated g value
-                    open.splice(existingIndex, 1);
+                    // Remove from sorted array and re-insert with updated g value
+                    const existingIndex = open.indexOf(existing);
+                    if (existingIndex !== -1) open.splice(existingIndex, 1);
                     existing.g = g;
                     existing.parent = current;
                     insertSorted(open, existing);
                 }
             } else {
                 // Insert new node in sorted position
-                insertSorted(open, { x: n.x, z: n.z, g, h: Math.hypot(ex - n.x, ez - n.z), parent: current });
+                const newNode: PathNode = { x: n.x, z: n.z, g, h: Math.hypot(ex - n.x, ez - n.z), parent: current };
+                insertSorted(open, newNode);
+                openMap.set(nKey, newNode);
             }
         }
     }

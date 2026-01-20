@@ -14,9 +14,10 @@ import type { Unit, Skill, CombatLogEntry, SelectionBox, DamageText, UnitGroup, 
 import { blocked } from "./game/dungeon";
 import { getCurrentArea, setCurrentArea, type AreaId, type AreaTransition } from "./game/areas";
 import { UNIT_DATA, ENEMY_STATS, getBasicAttackSkill } from "./game/units";
-import { createScene, updateCamera, updateWallTransparency, updateTreeFogVisibility, type DoorMesh } from "./rendering/scene";
+import { createScene, updateCamera, updateWallTransparency, updateTreeFogVisibility, updateLightLOD, type DoorMesh } from "./rendering/scene";
 import { soundFns } from "./audio/sound";
 import { updateDynamicObstacles } from "./ai/pathfinding";
+import { updateUnitCache } from "./ai/unitAI";
 
 // Extracted modules
 import { clearTargetingMode, executeSkill, type SkillExecutionContext } from "./combat/skills";
@@ -177,8 +178,12 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
     const [hoveredChest, setHoveredChest] = useState<{ x: number; y: number } | null>(null);
     const [hoveredPlayer, setHoveredPlayer] = useState<{ id: number; x: number; y: number } | null>(null);
     const [hoveredDoor, setHoveredDoor] = useState<{ targetArea: string; x: number; y: number } | null>(null);
+    const [fps, setFps] = useState(0);
     // Current area comes from prop (set by parent during transitions)
     const currentArea = startingArea;
+    // FPS tracking refs
+    const fpsFrameCount = useRef(0);
+    const fpsLastTime = useRef(Date.now());
 
     // Refs for accessing state in callbacks
     const selectedRef = useRef(selectedIds);
@@ -227,7 +232,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         resetFogCache();
 
         const sceneRefs = createScene(containerRef.current, units);
-        const { scene, camera, renderer, flames, candleLights, fogTexture, fogMesh, moveMarker, rangeIndicator, aoeIndicator, unitGroups, selectRings, unitMeshes, unitOriginalColors, maxHp, wallMeshes, treeMeshes, doorMeshes } = sceneRefs;
+        const { scene, camera, renderer, flames, candleMeshes, candleLights, fogTexture, fogMesh, moveMarker, rangeIndicator, aoeIndicator, unitGroups, selectRings, unitMeshes, unitOriginalColors, maxHp, wallMeshes, treeMeshes, doorMeshes } = sceneRefs;
 
         sceneRef.current = scene;
         cameraRef.current = camera;
@@ -629,12 +634,23 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
             animId = requestAnimationFrame(animate);
             const now = Date.now();
 
-            // Flickering flames - slow, intense flicker
+            // FPS counter
+            fpsFrameCount.current++;
+            if (now - fpsLastTime.current >= 1000) {
+                setFps(fpsFrameCount.current);
+                fpsFrameCount.current = 0;
+                fpsLastTime.current = now;
+            }
+
+            // Flickering flames - slow, intense flicker (flames and room lights are separate now)
             flames.forEach((flame, i) => {
                 const flicker = 0.6 + Math.sin(now * 0.004 + i * 2) * 0.25 + Math.random() * 0.1;
                 flame.scale.y = 1.6 + Math.sin(now * 0.005 + i) * 0.5;
                 (flame.material as THREE.MeshBasicMaterial).opacity = flicker;
-                candleLights[i].intensity = 6 + Math.sin(now * 0.003 + i * 1.7) * 2 + Math.random() * 0.5;
+            });
+            // Room lights flicker subtly (1 per room, not per candle)
+            candleLights.forEach((light, i) => {
+                light.intensity = 12 + Math.sin(now * 0.003 + i * 1.7) * 3 + Math.random() * 1;
             });
 
             // Keyboard panning
@@ -712,6 +728,9 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                 // Update dynamic obstacle map for pathfinding (units avoid each other)
                 updateDynamicObstacles(currentUnits, unitsRef.current);
 
+                // Update unit cache for O(1) lookups in AI calculations
+                updateUnitCache(currentUnits);
+
                 currentUnits.forEach(unit => {
                     const g = unitsRef.current[unit.id];
                     if (!g || unit.hp <= 0) return;
@@ -760,8 +779,11 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
             const rect = renderer.domElement.getBoundingClientRect();
             setHpBarPositions(updateHpBarPositions(currentUnits, unitsRef.current, camera, rect, zoomLevel.current));
 
-            // Update wall and tree transparency for occluded units
-            updateWallTransparency(camera, wallMeshesRef.current, unitsRef.current, currentUnits, treeMeshesRef.current);
+            // Update wall, tree, and candle transparency for occluded units
+            updateWallTransparency(camera, wallMeshesRef.current, unitsRef.current, currentUnits, treeMeshesRef.current, candleMeshes, flames);
+
+            // Light LOD - disable distant room lights to save GPU
+            updateLightLOD(candleLights, cameraOffset.current);
 
             renderer.render(scene, camera);
         };
@@ -917,6 +939,10 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
             {/* Current area indicator */}
             <div style={{ position: "absolute", top: 10, left: 10, color: "#fff", fontSize: 12, opacity: 0.7, textTransform: "capitalize" }}>
                 {currentArea}
+            </div>
+            {/* FPS counter */}
+            <div style={{ position: "absolute", top: 10, right: 10, color: "#888", fontSize: 11, fontFamily: "monospace", opacity: 0.6 }}>
+                {fps} fps
             </div>
             <HUD aliveEnemies={aliveEnemies} alivePlayers={alivePlayers} paused={paused} areaHasEnemies={areaHasEnemies} onTogglePause={handleTogglePause} onShowHelp={onShowHelp} onRestart={onRestart} />
             <CombatLog log={combatLog} />

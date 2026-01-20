@@ -90,33 +90,62 @@ function carve(blocked: boolean[][], x1: number, z1: number, x2: number, z2: num
 
 /**
  * Generate wall sconces based on room positions.
+ * Places 1-2 candles per wall depending on room size.
  */
 function generateCandles(rooms: Room[], blocked: boolean[][], gridSize: number): CandlePosition[] {
     const candles: CandlePosition[] = [];
 
     rooms.forEach(r => {
-        const midX = r.x + Math.floor(r.w / 2);
-        const midZ = r.z + Math.floor(r.h / 2);
+        // For larger rooms (>8 cells), place 2 candles per wall; otherwise just 1
+        const numCandlesX = r.w > 8 ? 2 : 1;
+        const numCandlesZ = r.h > 8 ? 2 : 1;
 
         // South wall
         const sWallZ = r.z - 1;
-        if (sWallZ >= 0 && blocked[midX]?.[sWallZ]) {
-            candles.push({ x: midX + 0.5, z: sWallZ + 0.85, dx: 0, dz: 1 });
+        if (sWallZ >= 0) {
+            for (let i = 0; i < numCandlesX; i++) {
+                const xPos = r.x + (i + 0.5) * (r.w / numCandlesX);
+                const xInt = Math.floor(xPos);
+                if (blocked[xInt]?.[sWallZ]) {
+                    candles.push({ x: xPos, z: sWallZ + 0.85, dx: 0, dz: 1 });
+                }
+            }
         }
+
         // North wall
         const nWallZ = r.z + r.h;
-        if (nWallZ < gridSize && blocked[midX]?.[nWallZ]) {
-            candles.push({ x: midX + 0.5, z: nWallZ + 0.15, dx: 0, dz: -1 });
+        if (nWallZ < gridSize) {
+            for (let i = 0; i < numCandlesX; i++) {
+                const xPos = r.x + (i + 0.5) * (r.w / numCandlesX);
+                const xInt = Math.floor(xPos);
+                if (blocked[xInt]?.[nWallZ]) {
+                    candles.push({ x: xPos, z: nWallZ + 0.15, dx: 0, dz: -1 });
+                }
+            }
         }
+
         // West wall
         const wWallX = r.x - 1;
-        if (wWallX >= 0 && blocked[wWallX]?.[midZ]) {
-            candles.push({ x: wWallX + 0.85, z: midZ + 0.5, dx: 1, dz: 0 });
+        if (wWallX >= 0) {
+            for (let i = 0; i < numCandlesZ; i++) {
+                const zPos = r.z + (i + 0.5) * (r.h / numCandlesZ);
+                const zInt = Math.floor(zPos);
+                if (blocked[wWallX]?.[zInt]) {
+                    candles.push({ x: wWallX + 0.85, z: zPos, dx: 1, dz: 0 });
+                }
+            }
         }
+
         // East wall
         const eWallX = r.x + r.w;
-        if (eWallX < gridSize && blocked[eWallX]?.[midZ]) {
-            candles.push({ x: eWallX + 0.15, z: midZ + 0.5, dx: -1, dz: 0 });
+        if (eWallX < gridSize) {
+            for (let i = 0; i < numCandlesZ; i++) {
+                const zPos = r.z + (i + 0.5) * (r.h / numCandlesZ);
+                const zInt = Math.floor(zPos);
+                if (blocked[eWallX]?.[zInt]) {
+                    candles.push({ x: eWallX + 0.15, z: zPos, dx: -1, dz: 0 });
+                }
+            }
         }
     });
 
@@ -218,10 +247,10 @@ export const DUNGEON_AREA: AreaData = {
     id: "dungeon",
     name: "Dungeon",
     gridSize: GRID_SIZE,
-    backgroundColor: "#0d1117",
+    backgroundColor: "#050508",
     groundColor: "#0a0a10",
-    ambientLight: 0.08,
-    directionalLight: 0.15,
+    ambientLight: 0.15,
+    directionalLight: 0.25,
     hasFogOfWar: true,
     rooms: [
         { x: 1, z: 1, w: 12, h: 12 },      // Room A - player spawn (SW)
@@ -235,18 +264,19 @@ export const DUNGEON_AREA: AreaData = {
         { x: 18, z: 38, w: 10, h: 10 },    // Room I - N middle
     ],
     hallways: [
-        { x1: 12, z1: 3, x2: 18, z2: 10 },     // A to F
-        { x1: 27, z1: 3, x2: 36, z2: 10 },     // F to C
-        { x1: 3, z1: 12, x2: 10, z2: 18 },     // A to G
-        { x1: 3, z1: 27, x2: 10, z2: 36 },     // G to B
-        { x1: 10, z1: 20, x2: 16, z2: 27 },    // G to E
-        { x1: 31, z1: 20, x2: 38, z2: 27 },    // E to H
-        { x1: 40, z1: 12, x2: 47, z2: 18 },    // C to H
-        { x1: 40, z1: 27, x2: 47, z2: 36 },    // H to D
-        { x1: 20, z1: 10, x2: 27, z2: 16 },    // F to E
-        { x1: 20, z1: 31, x2: 27, z2: 38 },    // E to I
-        { x1: 10, z1: 40, x2: 18, z2: 47 },    // B to I
-        { x1: 27, z1: 40, x2: 36, z2: 47 },    // I to D
+        // Tighter, longer hallways (width of 2-3 cells)
+        { x1: 13, z1: 5, x2: 18, z2: 7 },      // A to F (horizontal, tight)
+        { x1: 28, z1: 5, x2: 36, z2: 7 },      // F to C (horizontal, tight)
+        { x1: 5, z1: 13, x2: 7, z2: 18 },      // A to G (vertical, tight)
+        { x1: 5, z1: 28, x2: 7, z2: 36 },      // G to B (vertical, tight)
+        { x1: 11, z1: 22, x2: 16, z2: 24 },    // G to E (horizontal, tight)
+        { x1: 32, z1: 22, x2: 38, z2: 24 },    // E to H (horizontal, tight)
+        { x1: 42, z1: 13, x2: 44, z2: 18 },    // C to H (vertical, tight)
+        { x1: 42, z1: 28, x2: 44, z2: 36 },    // H to D (vertical, tight)
+        { x1: 22, z1: 11, x2: 24, z2: 16 },    // F to E (vertical, tight)
+        { x1: 22, z1: 32, x2: 24, z2: 38 },    // E to I (vertical, tight)
+        { x1: 13, z1: 42, x2: 18, z2: 44 },    // B to I (horizontal, tight)
+        { x1: 28, z1: 42, x2: 36, z2: 44 },    // I to D (horizontal, tight)
     ],
     roomFloors: [
         { x: 1, z: 1, w: 12, h: 12, color: "#1a1a1a" },

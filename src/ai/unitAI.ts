@@ -20,6 +20,30 @@ import { clampToGrid } from "../game/geometry";
 import type { Unit, UnitGroup } from "../core/types";
 
 // =============================================================================
+// UNIT LOOKUP CACHE - O(1) unit lookups by ID
+// =============================================================================
+
+// Module-level cache for fast unit lookups - updated once per frame
+let unitsByIdCache: Map<number, Unit> = new Map();
+
+/**
+ * Update the unit lookup cache. Call this once per frame before AI updates.
+ */
+export function updateUnitCache(unitsState: Unit[]): void {
+    unitsByIdCache.clear();
+    for (const unit of unitsState) {
+        unitsByIdCache.set(unit.id, unit);
+    }
+}
+
+/**
+ * Get a unit by ID from the cache - O(1) lookup.
+ */
+function getUnitById(id: number): Unit | undefined {
+    return unitsByIdCache.get(id);
+}
+
+// =============================================================================
 // TARGETING PHASE
 // =============================================================================
 
@@ -295,14 +319,15 @@ export interface MovementContext {
  * Calculate avoidance vector from nearby units.
  */
 export function calculateAvoidance(ctx: MovementContext, desiredX: number, desiredZ: number): { avoidX: number; avoidZ: number } {
-    const { unit, g, unitsRef, unitsState } = ctx;
+    const { unit, g, unitsRef } = ctx;
     const myRadius = getUnitRadius(unit);
     let avoidX = 0, avoidZ = 0;
 
     for (const [otherId, otherG] of Object.entries(unitsRef)) {
         if (String(unit.id) === otherId) continue;
 
-        const otherU = unitsState.find(u => u.id === Number(otherId));
+        // O(1) lookup instead of O(n) .find()
+        const otherU = getUnitById(Number(otherId));
         if (!otherU || otherU.hp <= 0) continue;
 
         const otherRadius = getUnitRadius(otherU);

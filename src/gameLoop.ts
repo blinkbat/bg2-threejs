@@ -78,6 +78,12 @@ export function updateDamageTexts(
 // HIT FLASH EFFECT
 // =============================================================================
 
+// Pre-allocated color objects to avoid allocations every frame
+const _flashWhite = new THREE.Color(1, 1, 1);
+const _tempColor = new THREE.Color();
+const _targetColor = new THREE.Color();
+const _poisonColor = new THREE.Color(COLORS.poison);
+
 export function updateHitFlash(
     hitFlashRef: Record<number, number>,
     unitMeshRef: Record<number, THREE.Mesh>,
@@ -91,20 +97,23 @@ export function updateHitFlash(
         if (!mesh || !originalColor) return;
         const elapsed = now - hitTime;
 
-        // Get the target color (original or poison-tinted)
+        // Get the target color (original or poison-tinted) - reuse _targetColor
         const unit = unitsState.find(u => u.id === Number(id));
         const isPoisoned = unit ? hasPoisonEffect(unit) : false;
-        const targetColor = isPoisoned
-            ? new THREE.Color(originalColor).lerp(new THREE.Color(COLORS.poison), POISON_TINT_STRENGTH)
-            : originalColor;
+        if (isPoisoned) {
+            _targetColor.copy(originalColor).lerp(_poisonColor, POISON_TINT_STRENGTH);
+        } else {
+            _targetColor.copy(originalColor);
+        }
 
         if (elapsed > FLASH_DURATION) {
-            (mesh.material as THREE.MeshStandardMaterial).color.copy(targetColor);
+            (mesh.material as THREE.MeshStandardMaterial).color.copy(_targetColor);
             delete hitFlashRef[Number(id)];
         } else {
             const t = elapsed / FLASH_DURATION;
-            const flashColor = new THREE.Color(1, 1, 1).lerp(targetColor, t);
-            (mesh.material as THREE.MeshStandardMaterial).color.copy(flashColor);
+            // Reuse _tempColor: start with white, lerp to target
+            _tempColor.copy(_flashWhite).lerp(_targetColor, t);
+            (mesh.material as THREE.MeshStandardMaterial).color.copy(_tempColor);
         }
     });
 }
@@ -115,25 +124,25 @@ export function updatePoisonVisuals(
     unitOriginalColorRef: Record<number, THREE.Color>,
     hitFlashRef: Record<number, number>
 ): void {
-    unitsState.forEach(unit => {
+    for (const unit of unitsState) {
         const mesh = unitMeshRef[unit.id];
         const originalColor = unitOriginalColorRef[unit.id];
-        if (!mesh || !originalColor) return;
+        if (!mesh || !originalColor) continue;
 
         // Skip if currently flashing (hit flash will handle the color)
-        if (hitFlashRef[unit.id] !== undefined) return;
+        if (hitFlashRef[unit.id] !== undefined) continue;
 
         const isPoisoned = hasPoisonEffect(unit);
 
         if (isPoisoned) {
-            // Apply green poison tint
-            const poisonColor = new THREE.Color(originalColor).lerp(new THREE.Color(COLORS.poison), POISON_TINT_STRENGTH);
-            (mesh.material as THREE.MeshStandardMaterial).color.copy(poisonColor);
+            // Apply green poison tint - reuse _tempColor
+            _tempColor.copy(originalColor).lerp(_poisonColor, POISON_TINT_STRENGTH);
+            (mesh.material as THREE.MeshStandardMaterial).color.copy(_tempColor);
         } else {
             // Restore original color
             (mesh.material as THREE.MeshStandardMaterial).color.copy(originalColor);
         }
-    });
+    }
 }
 
 // =============================================================================
@@ -438,32 +447,15 @@ export function updateFogOfWar(
 
         ctx.clearRect(0, 0, GRID_SIZE, GRID_SIZE);
 
-        // Helper: check if cell is adjacent to a visible cell (internal edge)
-        const isInternalEdge = (x: number, z: number): boolean => {
-            for (let dx = -1; dx <= 1; dx++) {
-                for (let dz = -1; dz <= 1; dz++) {
-                    const nx = x + dx, nz = z + dz;
-                    if (nx >= 0 && nx < GRID_SIZE && nz >= 0 && nz < GRID_SIZE) {
-                        if (visibility[nx][nz] === 2) return true;
-                    }
-                }
-            }
-            return false;
-        };
-
-        // Draw fog with soft edges only on internal boundaries
+        // Simple fog rendering without expensive distance calculations
+        // Use fixed alpha values - the texture filtering provides some softness
         for (let x = 0; x < GRID_SIZE; x++) {
             for (let z = 0; z < GRID_SIZE; z++) {
                 const vis = visibility[x][z];
-                if (vis === 2) continue;
+                if (vis === 2) continue;  // Visible - no fog
 
-                // Use softer opacity near visible areas, full opacity elsewhere
-                const nearVisible = isInternalEdge(x, z);
-                if (vis === 1) {
-                    ctx.fillStyle = nearVisible ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,0.5)";
-                } else {
-                    ctx.fillStyle = nearVisible ? "rgba(0,0,0,0.85)" : "rgba(0,0,0,0.95)";
-                }
+                // Simple alpha: seen = 0.4, unexplored = 0.9
+                ctx.fillStyle = vis === 1 ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,0.9)";
                 ctx.fillRect(x, z, 1, 1);
             }
         }
@@ -916,6 +908,9 @@ export function updateUnitAI(
 // HP BAR POSITIONS
 // =============================================================================
 
+// Reusable vector for HP bar position calculations
+const _hpWorldPos = new THREE.Vector3();
+
 export function updateHpBarPositions(
     unitsState: Unit[],
     unitsRef: Record<number, UnitGroup>,
@@ -924,21 +919,24 @@ export function updateHpBarPositions(
     zoomLevel: number
 ): { positions: Record<number, { x: number; y: number; visible: boolean }>; scale: number } {
     const positions: Record<number, { x: number; y: number; visible: boolean }> = {};
+    const halfWidth = rendererRect.width * 0.5;
+    const halfHeight = rendererRect.height * 0.5;
 
-    unitsState.forEach(u => {
+    for (const u of unitsState) {
         const g = unitsRef[u.id];
-        if (!g) return;
+        if (!g) continue;
         const isPlayer = u.team === "player";
         const data = getUnitStats(u);
         const size = (!isPlayer && 'size' in data && data.size) ? data.size : 1;
         const boxH = isPlayer ? 1 : (size > 1 ? 1.8 : 0.6);
-        const worldPos = new THREE.Vector3(g.position.x, boxH + 0.4, g.position.z);
-        worldPos.project(camera);
-        const x = (worldPos.x * 0.5 + 0.5) * rendererRect.width;
-        const y = (-worldPos.y * 0.5 + 0.5) * rendererRect.height;
-        positions[u.id] = { x, y, visible: g.visible && u.hp > 0 };
-    });
+        _hpWorldPos.set(g.position.x, boxH + 0.4, g.position.z);
+        _hpWorldPos.project(camera);
+        positions[u.id] = {
+            x: (_hpWorldPos.x + 1) * halfWidth,
+            y: (-_hpWorldPos.y + 1) * halfHeight,
+            visible: g.visible && u.hp > 0
+        };
+    }
 
-    const scale = 10 / zoomLevel;
-    return { positions, scale };
+    return { positions, scale: 10 / zoomLevel };
 }
