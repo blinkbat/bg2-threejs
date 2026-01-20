@@ -113,6 +113,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
     const rangeIndicatorRef = useRef<THREE.Mesh | null>(null);
     const aoeIndicatorRef = useRef<THREE.Mesh | null>(null);
     const wallMeshesRef = useRef<THREE.Mesh[]>([]);
+    const treeMeshesRef = useRef<THREE.Mesh[]>([]);
     const doorMeshesRef = useRef<DoorMesh[]>([]);
 
     // Action queue (per-unit: last action wins)
@@ -226,7 +227,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         resetFogCache();
 
         const sceneRefs = createScene(containerRef.current, units);
-        const { scene, camera, renderer, flames, candleLights, fogTexture, fogMesh, moveMarker, rangeIndicator, aoeIndicator, unitGroups, selectRings, unitMeshes, unitOriginalColors, maxHp, wallMeshes, doorMeshes } = sceneRefs;
+        const { scene, camera, renderer, flames, candleLights, fogTexture, fogMesh, moveMarker, rangeIndicator, aoeIndicator, unitGroups, selectRings, unitMeshes, unitOriginalColors, maxHp, wallMeshes, treeMeshes, doorMeshes } = sceneRefs;
 
         sceneRef.current = scene;
         cameraRef.current = camera;
@@ -242,6 +243,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         unitOriginalColorRef.current = unitOriginalColors;
         maxHpRef.current = maxHp;
         wallMeshesRef.current = wallMeshes;
+        treeMeshesRef.current = treeMeshes;
         doorMeshesRef.current = doorMeshes;
         units.forEach(unit => { pathsRef.current[unit.id] = []; });
 
@@ -755,8 +757,8 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
             const rect = renderer.domElement.getBoundingClientRect();
             setHpBarPositions(updateHpBarPositions(currentUnits, unitsRef.current, camera, rect, zoomLevel.current));
 
-            // Update wall transparency for occluded units
-            updateWallTransparency(camera, wallMeshesRef.current, unitsRef.current, currentUnits);
+            // Update wall and tree transparency for occluded units
+            updateWallTransparency(camera, wallMeshesRef.current, unitsRef.current, currentUnits, treeMeshesRef.current);
 
             renderer.render(scene, camera);
         };

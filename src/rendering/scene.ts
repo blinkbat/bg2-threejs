@@ -31,6 +31,7 @@ export interface SceneRefs {
     unitOriginalColors: Record<number, THREE.Color>;
     maxHp: Record<number, number>;
     wallMeshes: THREE.Mesh[];
+    treeMeshes: THREE.Mesh[];  // Tree foliage meshes for transparency
     doorMeshes: DoorMesh[];
 }
 
@@ -137,37 +138,42 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         scene.add(chestGroup);
     });
 
-    // Trees - simple cylinders for trunk + box for foliage
-    area.trees.forEach(tree => {
-        const treeGroup = new THREE.Group();
+    // Trees - cylinders for trunk + cone for pyramidal foliage
+    // Various green shades and brown trunks for variety
+    const foliageColors = ["#228B22", "#2E8B57", "#3CB371", "#006400", "#32CD32", "#556B2F"];
+    const trunkColors = ["#654321", "#8B4513", "#A0522D", "#5C4033", "#6F4E37"];
+    const treeMeshes: THREE.Mesh[] = [];
+
+    area.trees.forEach((tree, i) => {
         const scale = tree.size;
 
-        // Trunk - brown cylinder
-        const trunkHeight = 1.5 * scale;
-        const trunkRadius = 0.15 * scale;
+        // Trunk - short brown cylinder
+        const trunkHeight = 0.4 * scale;
+        const trunkRadius = 0.08 * scale;
+        const trunkColor = trunkColors[i % trunkColors.length];
         const trunk = new THREE.Mesh(
-            new THREE.CylinderGeometry(trunkRadius, trunkRadius * 1.2, trunkHeight, 8),
-            new THREE.MeshStandardMaterial({ color: "#4a3728", metalness: 0.1, roughness: 0.9 })
+            new THREE.CylinderGeometry(trunkRadius, trunkRadius * 1.2, trunkHeight, 6),
+            new THREE.MeshStandardMaterial({ color: trunkColor, metalness: 0.0, roughness: 1.0, transparent: true, opacity: 1 })
         );
-        trunk.position.y = trunkHeight / 2;
-        treeGroup.add(trunk);
+        trunk.position.set(tree.x, trunkHeight / 2, tree.z);
+        trunk.name = "tree";
+        scene.add(trunk);
 
-        // Foliage - green box (simple, not fancy)
-        const foliageSize = 1.2 * scale;
-        const foliageHeight = 1.8 * scale;
+        // Foliage - pyramidal cone with varied green colors
+        const foliageRadius = 0.6 * scale;
+        const foliageHeight = 1.6 * scale;
+        const foliageColor = foliageColors[i % foliageColors.length];
         const foliage = new THREE.Mesh(
-            new THREE.BoxGeometry(foliageSize, foliageHeight, foliageSize),
-            new THREE.MeshStandardMaterial({ color: "#2d5a27", metalness: 0.0, roughness: 0.8 })
+            new THREE.ConeGeometry(foliageRadius, foliageHeight, 6),
+            new THREE.MeshStandardMaterial({ color: foliageColor, metalness: 0.0, roughness: 0.8, transparent: true, opacity: 1 })
         );
-        foliage.position.y = trunkHeight + foliageHeight / 2 - 0.2 * scale;
-        treeGroup.add(foliage);
+        foliage.position.set(tree.x, trunkHeight + foliageHeight / 2, tree.z);
+        foliage.name = "tree";
+        scene.add(foliage);
 
-        // Mark as obstacle for raycasting
-        trunk.name = "obstacle";
-        foliage.name = "obstacle";
-
-        treeGroup.position.set(tree.x, 0, tree.z);
-        scene.add(treeGroup);
+        // Track both trunk and foliage for transparency updates
+        treeMeshes.push(trunk);
+        treeMeshes.push(foliage);
     });
 
     // Walls - with transparent support for unit occlusion
@@ -354,6 +360,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         unitOriginalColors,
         maxHp,
         wallMeshes,
+        treeMeshes,
         doorMeshes,
     };
 }
@@ -364,25 +371,29 @@ export function updateCamera(camera: THREE.OrthographicCamera, offset: { x: numb
     camera.lookAt(offset.x, 0, offset.z);
 }
 
-// Opacity values for wall transparency
+// Opacity values for wall/tree transparency
 const WALL_OPACITY_NORMAL = 1.0;
 const WALL_OPACITY_OCCLUDING = 0.25;
 const WALL_OPACITY_LERP_SPEED = 0.15;  // How fast walls fade in/out
 
 /**
- * Update wall transparency based on unit occlusion.
- * Walls that are between the camera and any unit become semi-transparent.
+ * Update wall and tree transparency based on unit occlusion.
+ * Walls/trees that are between the camera and any unit become semi-transparent.
  */
 export function updateWallTransparency(
     camera: THREE.OrthographicCamera,
     wallMeshes: THREE.Mesh[],
     unitGroups: Record<number, UnitGroup>,
-    unitsState: Unit[]
+    unitsState: Unit[],
+    treeMeshes?: THREE.Mesh[]
 ): void {
-    // Track which walls should be transparent this frame
-    const occludingWalls = new Set<THREE.Mesh>();
+    // Combine walls and trees for occlusion checking
+    const allOccluders = treeMeshes ? [...wallMeshes, ...treeMeshes] : wallMeshes;
 
-    // For each alive unit, check if any wall is between camera and unit
+    // Track which meshes should be transparent this frame
+    const occludingMeshes = new Set<THREE.Mesh>();
+
+    // For each alive unit, check if any wall/tree is between camera and unit
     for (const unit of unitsState) {
         if (unit.hp <= 0) continue;
         const unitGroup = unitGroups[unit.id];
@@ -395,33 +406,33 @@ export function updateWallTransparency(
         const cameraPos = camera.position.clone();
         const dirToUnit = unitPos.clone().sub(cameraPos).normalize();
 
-        // Check each wall for occlusion
-        for (const wall of wallMeshes) {
-            // Quick check: is wall roughly between camera and unit?
+        // Check each wall/tree for occlusion
+        for (const mesh of allOccluders) {
+            // Quick check: is mesh roughly between camera and unit?
             // Use bounding box for efficiency
-            const wallBox = new THREE.Box3().setFromObject(wall);
+            const meshBox = new THREE.Box3().setFromObject(mesh);
 
             // Create a ray from camera towards unit
             const ray = new THREE.Ray(cameraPos, dirToUnit);
 
-            // Check if ray intersects wall bounding box
-            const intersection = ray.intersectBox(wallBox, new THREE.Vector3());
+            // Check if ray intersects mesh bounding box
+            const intersection = ray.intersectBox(meshBox, new THREE.Vector3());
             if (intersection) {
                 // Check if intersection is between camera and unit
-                const distToWall = cameraPos.distanceTo(intersection);
+                const distToMesh = cameraPos.distanceTo(intersection);
                 const distToUnit = cameraPos.distanceTo(unitPos);
 
-                if (distToWall < distToUnit) {
-                    occludingWalls.add(wall);
+                if (distToMesh < distToUnit) {
+                    occludingMeshes.add(mesh);
                 }
             }
         }
     }
 
-    // Update wall opacities with smooth lerping
-    for (const wall of wallMeshes) {
-        const mat = wall.material as THREE.MeshStandardMaterial;
-        const targetOpacity = occludingWalls.has(wall) ? WALL_OPACITY_OCCLUDING : WALL_OPACITY_NORMAL;
+    // Update opacities with smooth lerping
+    for (const mesh of allOccluders) {
+        const mat = mesh.material as THREE.MeshStandardMaterial;
+        const targetOpacity = occludingMeshes.has(mesh) ? WALL_OPACITY_OCCLUDING : WALL_OPACITY_NORMAL;
 
         // Lerp towards target opacity
         mat.opacity = mat.opacity + (targetOpacity - mat.opacity) * WALL_OPACITY_LERP_SPEED;

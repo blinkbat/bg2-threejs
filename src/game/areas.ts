@@ -68,6 +68,7 @@ export interface ComputedAreaData {
     blocked: boolean[][];
     mergedObstacles: MergedObstacle[];
     candlePositions: CandlePosition[];
+    treeBlocked: Set<string>;  // Set of "x,z" keys for tree-blocked cells (for LOS)
 }
 
 // =============================================================================
@@ -174,6 +175,30 @@ export function computeAreaData(area: AreaData): ComputedAreaData {
     // Carve transition areas (doors)
     area.transitions.forEach(t => carve(blocked, t.x, t.z, t.x + t.w - 1, t.z + t.h - 1));
 
+    // Block tree positions for pathing and LOS
+    const treeBlocked = new Set<string>();
+    area.trees.forEach(tree => {
+        const tx = Math.floor(tree.x);
+        const tz = Math.floor(tree.z);
+        // Block the cell the tree is on
+        if (tx >= 0 && tx < area.gridSize && tz >= 0 && tz < area.gridSize) {
+            blocked[tx][tz] = true;
+            treeBlocked.add(`${tx},${tz}`);
+        }
+        // Taller trees (size >= 1.0) block adjacent cells for LOS only
+        if (tree.size >= 1.0) {
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dz = -1; dz <= 1; dz++) {
+                    if (dx === 0 && dz === 0) continue;
+                    const nx = tx + dx, nz = tz + dz;
+                    if (nx >= 0 && nx < area.gridSize && nz >= 0 && nz < area.gridSize) {
+                        treeBlocked.add(`${nx},${nz}`);
+                    }
+                }
+            }
+        }
+    });
+
     // Generate candles only for dungeon-like areas
     const candlePositions = area.id === "dungeon"
         ? generateCandles(area.rooms, blocked, area.gridSize)
@@ -182,7 +207,7 @@ export function computeAreaData(area: AreaData): ComputedAreaData {
     // Merge obstacles
     const mergedObstacles = mergeObstacles(blocked, area.gridSize);
 
-    return { blocked, mergedObstacles, candlePositions };
+    return { blocked, mergedObstacles, candlePositions, treeBlocked };
 }
 
 // =============================================================================
@@ -373,4 +398,8 @@ export function setCurrentArea(areaId: AreaId): ComputedAreaData {
 
 export function getBlocked(): boolean[][] {
     return getComputedAreaData().blocked;
+}
+
+export function isTreeBlocked(x: number, z: number): boolean {
+    return getComputedAreaData().treeBlocked.has(`${x},${z}`);
 }

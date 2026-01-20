@@ -1,5 +1,6 @@
 import { GRID_SIZE, VISION_RADIUS, PATH_RECURSION_LIMIT, ASTAR_BLOCKED_TARGET_SEARCH, ASTAR_DIAGONAL_COST } from "../core/constants";
 import { blocked } from "../game/dungeon";
+import { isTreeBlocked } from "../game/areas";
 import { isWithinGrid } from "../game/geometry";
 import type { PathNode, Unit, UnitGroup } from "../core/types";
 
@@ -122,8 +123,10 @@ export function hasLineOfSight(x0: number, z0: number, x1: number, z1: number): 
 
     while (true) {
         if (x === x1 && z === z1) return true;
-        // Skip start cell, check all others for blocking
-        if (isBlocked(x, z) && !(x === x0 && z === z0)) return false;
+        // Skip start cell, check all others for blocking (walls and trees)
+        if (!(x === x0 && z === z0)) {
+            if (isBlocked(x, z) || isTreeBlocked(x, z)) return false;
+        }
         const e2 = 2 * err;
         if (e2 > -dz) { err -= dz; x += sx; }
         if (e2 < dx) { err += dx; z += sz; }
