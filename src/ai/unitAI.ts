@@ -3,7 +3,7 @@
 // =============================================================================
 
 import {
-    MOVE_SPEED, ATTACK_RANGE,
+    MOVE_SPEED,
     AVOIDANCE_RANGE_MULTIPLIER, AVOIDANCE_OVERLAP_STRENGTH,
     AVOIDANCE_STEER_THRESHOLD, AVOIDANCE_STEER_STRENGTH,
     MOVEMENT_MIN_DIST, MOVEMENT_MIN_MAGNITUDE
@@ -17,6 +17,7 @@ import {
 } from "./movement";
 import { getUnitRadius } from "../rendering/range";
 import { clampToGrid } from "../game/geometry";
+import { getAttackRange } from "../game/units";
 import type { Unit, UnitGroup } from "../core/types";
 
 // =============================================================================
@@ -41,6 +42,79 @@ export function updateUnitCache(unitsState: Unit[]): void {
  */
 function getUnitById(id: number): Unit | undefined {
     return unitsByIdCache.get(id);
+}
+
+/**
+ * Check if a broodling's mother can see any player.
+ * Returns the nearest player to the broodling if mother can see ANY player.
+ * Broodlings act like guided missiles while their mother lives.
+ */
+function getMothersSightTarget(
+    unit: Unit,
+    unitsState: Unit[],
+    unitsRef: Record<number, UnitGroup>,
+    defeatedThisFrame: Set<number>
+): { targetId: number; dist: number } | null {
+    // Only applies to broodlings with a living mother
+    if (unit.enemyType !== "broodling" || !unit.spawnedBy) return null;
+
+    const mother = unitsState.find(u => u.id === unit.spawnedBy);
+    if (!mother || mother.hp <= 0) return null;
+
+    const motherG = unitsRef[mother.id];
+    if (!motherG) return null;
+
+    const broodlingG = unitsRef[unit.id];
+    if (!broodlingG) return null;
+
+    // Check if mother can see ANY player (use mother's aggro range)
+    const motherStats = { aggroRange: 12 };  // Brood mother's aggro range
+    let motherCanSeeAnyPlayer = false;
+
+    for (const player of unitsState) {
+        if (player.team !== "player" || player.hp <= 0) continue;
+        if (defeatedThisFrame.has(player.id)) continue;
+
+        const playerG = unitsRef[player.id];
+        if (!playerG) continue;
+
+        // Distance from MOTHER to player
+        const motherToPlayer = Math.hypot(
+            motherG.position.x - playerG.position.x,
+            motherG.position.z - playerG.position.z
+        );
+
+        if (motherToPlayer <= motherStats.aggroRange) {
+            motherCanSeeAnyPlayer = true;
+            break;
+        }
+    }
+
+    // If mother can't see anyone, broodling relies on its own limited sight
+    if (!motherCanSeeAnyPlayer) return null;
+
+    // Mother can see players - broodling targets the NEAREST player to itself
+    // This makes broodlings act like guided missiles
+    let nearestTarget: { targetId: number; dist: number } | null = null;
+
+    for (const player of unitsState) {
+        if (player.team !== "player" || player.hp <= 0) continue;
+        if (defeatedThisFrame.has(player.id)) continue;
+
+        const playerG = unitsRef[player.id];
+        if (!playerG) continue;
+
+        const broodlingToPlayer = Math.hypot(
+            broodlingG.position.x - playerG.position.x,
+            broodlingG.position.z - playerG.position.z
+        );
+
+        if (!nearestTarget || broodlingToPlayer < nearestTarget.dist) {
+            nearestTarget = { targetId: player.id, dist: broodlingToPlayer };
+        }
+    }
+
+    return nearestTarget;
 }
 
 // =============================================================================
@@ -79,6 +153,7 @@ export function validateCurrentTarget(
 /**
  * Find the nearest valid enemy target within aggro range.
  * If alerted is true, ignores aggro range and searches entire map.
+ * Broodlings can also see through their mother's eyes if she's alive.
  */
 export function findNearestTarget(ctx: TargetingContext, alerted: boolean = false): number | null {
     const { unit, g, unitsRef, unitsState, visibility, now, defeatedThisFrame, aggroRange } = ctx;
@@ -91,6 +166,21 @@ export function findNearestTarget(ctx: TargetingContext, alerted: boolean = fals
     let nearest: number | null = null;
     // Alerted enemies search the whole map, otherwise use aggro range
     let nearestDist = alerted ? Infinity : aggroRange;
+
+    // Broodlings can see through their mother's eyes - they act as guided missiles
+    // If mother can see ANY player, broodling targets the nearest player to itself
+    // regardless of the broodling's own limited aggro range
+    if (!isPlayer && unit.enemyType === "broodling") {
+        const motherTarget = getMothersSightTarget(unit, unitsState, unitsRef, defeatedThisFrame);
+        if (motherTarget && !blockedTargets.includes(motherTarget.targetId)) {
+            // Mother can see a player - broodling ALWAYS targets them (missile behavior)
+            // Set this as the target and use its distance as the reference
+            nearest = motherTarget.targetId;
+            nearestDist = motherTarget.dist;
+            // Return early - broodlings with mother sight don't need to check their own limited range
+            return nearest;
+        }
+    }
 
     for (const enemy of unitsState) {
         if (enemy.team !== enemyTeam || enemy.hp <= 0) continue;
@@ -131,7 +221,8 @@ export function acquireTarget(ctx: TargetingContext, targetId: number): boolean 
     if (targetG) {
         // Check if already in attack range (no path needed)
         const dist = Math.hypot(g.position.x - targetG.position.x, g.position.z - targetG.position.z);
-        if (dist < ATTACK_RANGE) {
+        const attackRange = getAttackRange(unit);
+        if (dist < attackRange) {
             // Already in attack range, no path needed
             pathsRef[unit.id] = [];
             return true;

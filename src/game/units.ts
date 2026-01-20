@@ -197,7 +197,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         aggroRange: 12,  // Good LOS - sees you from far
         attackCooldown: 2500,
         size: 1.5,  // Medium size
-        moveSpeed: 0.6,  // 40% slower than normal - lumbering
+        moveSpeed: 0.5,  // 50% slower than normal - lumbering
         spawnSkill: {
             spawnType: "broodling",
             cooldown: 4000,  // Spawn every 4 seconds when in combat
@@ -213,12 +213,13 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         accuracy: 65,
         armor: 0,
         color: "#5c3a38",  // Lighter brown-red
-        aggroRange: 10,
+        aggroRange: 4,  // Limited LOS - relies on mother's sight
         attackCooldown: 800,  // Fast attacks
         size: 0.6,  // Small
+        range: 1.0,  // Short melee range - they're small
         poisonChance: 20,  // 20% chance to apply weak poison on hit
         poisonDamage: 1,  // Weak poison - only 1 damage per tick
-        moveSpeed: 1.5  // 50% faster than normal
+        moveSpeed: 1.8  // 50% faster than normal
     }
 };
 
@@ -359,4 +360,16 @@ export function getBasicAttackSkill(unitId: number): Skill {
 export function getAllSkills(unitId: number): Skill[] {
     const data = UNIT_DATA[unitId];
     return [getBasicAttackSkill(unitId), ...data.skills];
+}
+
+// Default melee attack range (used when unit has no range specified)
+export const DEFAULT_MELEE_RANGE = 1.8;
+
+/**
+ * Get the attack range for any unit (player or enemy).
+ * Returns the unit's range if specified, or DEFAULT_MELEE_RANGE for melee units.
+ */
+export function getAttackRange(unit: Unit): number {
+    const stats = getUnitStats(unit);
+    return stats.range ?? DEFAULT_MELEE_RANGE;
 }

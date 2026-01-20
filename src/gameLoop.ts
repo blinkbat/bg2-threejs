@@ -5,7 +5,7 @@
 import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation, EnemyStats, EnemySkill, EnemyHealSkill, EnemySpawnSkill } from "./core/types";
 import {
-    GRID_SIZE, ATTACK_RANGE, HIT_DETECTION_RADIUS, FLASH_DURATION,
+    GRID_SIZE, HIT_DETECTION_RADIUS, FLASH_DURATION,
     SWING_DURATION, COLORS, SKILL_SINGLE_TARGET_CHANCE, POISON_TINT_STRENGTH
 } from "./core/constants";
 import { getUnitRadius, isInRange } from "./rendering/range";
@@ -16,7 +16,7 @@ import {
     runTargetingPhase, runPathFollowingPhase, runMovementPhase, recalculatePathIfNeeded,
     type TargetingContext, type PathContext, type MovementContext
 } from "./ai/unitAI";
-import { getUnitStats, getBasicAttackSkill, ENEMY_STATS } from "./game/units";
+import { getUnitStats, getBasicAttackSkill, getAttackRange, ENEMY_STATS } from "./game/units";
 import type { ActionQueue } from "./input";
 import { calculateDamage, calculateDistance, getDirectionAndDistance, rollHit, shouldApplyPoison, hasPoisonEffect, hasStunnedEffect, getEffectiveArmor, logHit, logMiss, logPoisoned, logAoeHit, logAoeMiss, getDamageColor } from "./combat/combatMath";
 import { SWIPE_ANIMATE_DURATION } from "./core/constants";
@@ -859,8 +859,7 @@ export function updateUnitAI(
         if (targetG && targetU && targetU.hp > 0) {
             targetX = targetG.position.x;
             targetZ = targetG.position.z;
-            const isRanged = 'range' in data && data.range !== undefined;
-            const unitRange = isRanged ? (data as { range: number }).range : ATTACK_RANGE;
+            const unitRange = getAttackRange(unit);
 
             // Use hitbox-aware range: if closest edge of target is in range, we can attack
             const targetRadius = getUnitRadius(targetU);
@@ -931,7 +930,9 @@ export function updateUnitAI(
                     const attackCooldownEnd = now + data.attackCooldown;
                     actionCooldownRef[unit.id] = attackCooldownEnd;
 
-                    if (isRanged && 'projectileColor' in data && data.projectileColor) {
+                    // Check if enemy is ranged (has projectile color)
+                    const isRangedEnemy = 'projectileColor' in data && data.projectileColor;
+                    if (isRangedEnemy) {
                         const projectile = createProjectile(scene, "enemy", g.position.x, g.position.z, data.projectileColor as string);
                         projectilesRef.push({ type: "basic", mesh: projectile, targetId: targetU.id, attackerId: unit.id, speed: getProjectileSpeed("enemy") });
                         soundFns.playAttack();
