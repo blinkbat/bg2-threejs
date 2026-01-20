@@ -361,7 +361,13 @@ export const FIELD_AREA: AreaData = {
         // Main grass floor
         { x: 1, z: 1, w: 48, h: 48, color: "#2d5a27" }
     ],
-    enemySpawns: [],  // No enemies for now
+    enemySpawns: [
+        // Brood Mothers scattered in the forest
+        { x: 8, z: 10, type: "brood_mother" },     // NW area near trees
+        { x: 38, z: 12, type: "brood_mother" },    // NE area near trees
+        { x: 10, z: 38, type: "brood_mother" },    // SW area near trees
+        { x: 40, z: 40, type: "brood_mother" },    // SE area near trees
+    ],
     transitions: [
         // Door on north edge, leads back to dungeon
         {

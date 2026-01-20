@@ -174,6 +174,36 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
             maxTargets: 3,
             range: 2.5
         }
+    },
+    brood_mother: {
+        name: "Brood Mother",
+        hp: 45,
+        maxHp: 45,
+        damage: [3, 6],
+        accuracy: 55,
+        armor: 2,
+        color: "#4a2c2a",  // Dark brownish-red (spider-like)
+        aggroRange: 12,  // Good LOS - sees you from far
+        attackCooldown: 2500,
+        size: 1.5,  // Medium size
+        spawnSkill: {
+            spawnType: "broodling",
+            cooldown: 4000,  // Spawn every 4 seconds when in combat
+            maxSpawns: 3,    // Max 3 broodlings at once
+            spawnRange: 1.5  // Spawn nearby
+        }
+    },
+    broodling: {
+        name: "Broodling",
+        hp: 8,
+        maxHp: 8,
+        damage: [1, 2],  // Low damage
+        accuracy: 65,
+        armor: 0,
+        color: "#5c3a38",  // Lighter brown-red
+        aggroRange: 10,
+        attackCooldown: 800,  // Fast attacks
+        size: 0.6  // Small
     }
 };
 

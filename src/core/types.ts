@@ -4,7 +4,7 @@ import * as THREE from "three";
 // TYPE DEFINITIONS
 // =============================================================================
 
-export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre";
+export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling";
 
 // =============================================================================
 // STATUS EFFECTS
@@ -32,6 +32,7 @@ export interface Unit {
     target: number | null;
     aiEnabled: boolean;
     statusEffects?: StatusEffect[];  // Active status effects
+    spawnedBy?: number;  // ID of the unit that spawned this one (for broodlings)
 }
 
 export interface Skill {
@@ -110,6 +111,15 @@ export interface EnemyStats {
     kiteDistance?: number;   // Distance to retreat when player gets too close
     kiteCooldown?: number;   // Minimum ms between kite attempts
     kiteTrigger?: number;    // Distance at which kiting triggers (melee range)
+    // Optional spawn skill for spawner enemies (like Brood Mother)
+    spawnSkill?: EnemySpawnSkill;
+}
+
+export interface EnemySpawnSkill {
+    spawnType: EnemyType;    // What enemy type to spawn
+    cooldown: number;        // ms between spawns
+    maxSpawns: number;       // Maximum active spawns at once
+    spawnRange: number;      // How far from the spawner to place the spawn
 }
 
 export interface Room {

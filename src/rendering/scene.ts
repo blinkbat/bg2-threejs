@@ -441,6 +441,59 @@ export function updateCamera(camera: THREE.OrthographicCamera, offset: { x: numb
     camera.lookAt(offset.x, 0, offset.z);
 }
 
+/**
+ * Dynamically add a unit to the scene (for spawned units like broodlings).
+ * Returns the group and mesh so they can be tracked in refs.
+ */
+export function addUnitToScene(
+    scene: THREE.Scene,
+    unit: Unit,
+    unitGroups: Record<number, UnitGroup>,
+    selectRings: Record<number, THREE.Mesh>,
+    unitMeshes: Record<number, THREE.Mesh>,
+    unitOriginalColors: Record<number, THREE.Color>,
+    maxHp: Record<number, number>
+): void {
+    const isPlayer = unit.team === "player";
+    const data = getUnitStats(unit);
+    const size = (!isPlayer && 'size' in data && data.size) ? data.size : 1;
+    const group = new THREE.Group();
+
+    const boxH = isPlayer ? 1 : (size > 1 ? 1.8 : 0.6);
+    const boxW = 0.6 * size;
+    const boxMat = new THREE.MeshStandardMaterial({ color: data.color, metalness: 0.5, roughness: 0.4 });
+    const box = new THREE.Mesh(new THREE.BoxGeometry(boxW, boxH, boxW), boxMat);
+    box.position.y = boxH / 2;
+    box.userData.unitId = unit.id;
+    group.add(box);
+    unitMeshes[unit.id] = box;
+    unitOriginalColors[unit.id] = new THREE.Color(data.color);
+
+    // All units get subtle innate light (enemies dimmer than players)
+    const lightIntensity = isPlayer ? 0.15 : 0.08;
+    const unitLight = new THREE.PointLight(data.color, lightIntensity, 2, 2);
+    unitLight.position.y = boxH / 2;
+    group.add(unitLight);
+
+    const selInner = 0.5 * size;
+    const selOuter = 0.55 * size;
+    const sel = new THREE.Mesh(
+        new THREE.RingGeometry(selInner, selOuter, 32),
+        new THREE.MeshBasicMaterial({ color: "#00ff00", side: THREE.DoubleSide })
+    );
+    sel.rotation.x = -Math.PI / 2;
+    sel.position.y = 0.03;
+    sel.visible = false;
+    group.add(sel);
+    selectRings[unit.id] = sel;
+    maxHp[unit.id] = data.maxHp;
+
+    group.position.set(unit.x, 0, unit.z);
+    group.userData = { unitId: unit.id, targetX: unit.x, targetZ: unit.z, attackTarget: null };
+    scene.add(group);
+    unitGroups[unit.id] = group as UnitGroup;
+}
+
 // Light LOD: only enable lights within this distance of camera focus
 const LIGHT_LOD_DISTANCE = 25;
 

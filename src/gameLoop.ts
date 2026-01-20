@@ -3,7 +3,7 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation, EnemyStats, EnemySkill, EnemyHealSkill } from "./core/types";
+import type { Unit, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation, EnemyStats, EnemySkill, EnemyHealSkill, EnemySpawnSkill } from "./core/types";
 import {
     GRID_SIZE, ATTACK_RANGE, HIT_DETECTION_RADIUS, FLASH_DURATION,
     SWING_DURATION, COLORS, SKILL_SINGLE_TARGET_CHANCE, POISON_TINT_STRENGTH
@@ -16,7 +16,7 @@ import {
     runTargetingPhase, runPathFollowingPhase, runMovementPhase, recalculatePathIfNeeded,
     type TargetingContext, type PathContext, type MovementContext
 } from "./ai/unitAI";
-import { getUnitStats, getBasicAttackSkill } from "./game/units";
+import { getUnitStats, getBasicAttackSkill, ENEMY_STATS } from "./game/units";
 import type { ActionQueue } from "./input";
 import { calculateDamage, calculateDistance, getDirectionAndDistance, rollHit, shouldApplyPoison, hasPoisonEffect, hasStunnedEffect, getEffectiveArmor, logHit, logMiss, logPoisoned, logAoeHit, logAoeMiss, getDamageColor } from "./combat/combatMath";
 import { SWIPE_ANIMATE_DURATION } from "./core/constants";
@@ -776,6 +776,62 @@ export function updateUnitAI(
                 }));
                 actionCooldownRef[unit.id] = now + data.attackCooldown;
                 return;
+            }
+        }
+    }
+
+    // Phase 1.7: Enemy spawn check - spawner enemies (Brood Mother) spawn minions when they see players
+    if (!isPlayer && 'spawnSkill' in data && data.spawnSkill) {
+        const spawnSkill = data.spawnSkill as EnemySpawnSkill;
+        const spawnCooldownKey = `${unit.id}-spawn`;
+        const spawnCooldownEnd = skillCooldowns[spawnCooldownKey]?.end || 0;
+
+        // Check if any player is visible (within aggro range)
+        const enemyData = data as EnemyStats;
+        const playerInSight = unitsState.some(u => {
+            if (u.team !== "player" || u.hp <= 0) return false;
+            const playerG = unitsRef[u.id];
+            if (!playerG) return false;
+            const dx = playerG.position.x - g.position.x;
+            const dz = playerG.position.z - g.position.z;
+            return Math.sqrt(dx * dx + dz * dz) <= enemyData.aggroRange;
+        });
+
+        if (playerInSight && now >= spawnCooldownEnd) {
+            // Count current spawns from this unit
+            const currentSpawns = unitsState.filter(u => u.spawnedBy === unit.id && u.hp > 0).length;
+
+            if (currentSpawns < spawnSkill.maxSpawns) {
+                // Spawn a new minion
+                const spawnAngle = Math.random() * Math.PI * 2;
+                const spawnX = g.position.x + Math.cos(spawnAngle) * spawnSkill.spawnRange;
+                const spawnZ = g.position.z + Math.sin(spawnAngle) * spawnSkill.spawnRange;
+
+                // Create the spawned unit
+                const newId = Math.max(...unitsState.map(u => u.id)) + 1;
+                const spawnedUnit: Unit = {
+                    id: newId,
+                    x: spawnX,
+                    z: spawnZ,
+                    hp: ENEMY_STATS[spawnSkill.spawnType].maxHp,
+                    team: "enemy",
+                    enemyType: spawnSkill.spawnType,
+                    target: null,
+                    aiEnabled: true,
+                    spawnedBy: unit.id
+                };
+
+                // Add the unit to state
+                setUnits(prev => [...prev, spawnedUnit]);
+
+                // Log the spawn
+                addLog(`${enemyData.name} spawns a ${ENEMY_STATS[spawnSkill.spawnType].name}!`, "#cc6600");
+
+                // Set cooldown
+                setSkillCooldowns(prev => ({
+                    ...prev,
+                    [spawnCooldownKey]: { end: now + spawnSkill.cooldown, duration: spawnSkill.cooldown }
+                }));
             }
         }
     }

@@ -14,7 +14,7 @@ import type { Unit, Skill, CombatLogEntry, SelectionBox, DamageText, UnitGroup, 
 import { blocked } from "./game/dungeon";
 import { getCurrentArea, setCurrentArea, type AreaId, type AreaTransition } from "./game/areas";
 import { UNIT_DATA, ENEMY_STATS, getBasicAttackSkill } from "./game/units";
-import { createScene, updateCamera, updateWallTransparency, updateTreeFogVisibility, updateLightLOD, type DoorMesh } from "./rendering/scene";
+import { createScene, updateCamera, updateWallTransparency, updateTreeFogVisibility, updateLightLOD, addUnitToScene, type DoorMesh } from "./rendering/scene";
 import { soundFns } from "./audio/sound";
 import { updateDynamicObstacles } from "./ai/pathfinding";
 import { updateUnitCache } from "./ai/unitAI";
@@ -724,6 +724,23 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
             if (!pausedRef.current) {
                 // Process queued actions (skills waiting for cooldown)
                 doProcessQueue();
+
+                // Check for newly spawned units and add them to the scene
+                currentUnits.forEach(unit => {
+                    if (!unitsRef.current[unit.id] && unit.hp > 0) {
+                        // This is a newly spawned unit - add it to the scene
+                        addUnitToScene(
+                            scene,
+                            unit,
+                            unitsRef.current,
+                            selectRingsRef.current,
+                            unitMeshRef.current,
+                            unitOriginalColorRef.current,
+                            maxHpRef.current
+                        );
+                        pathsRef.current[unit.id] = [];
+                    }
+                });
 
                 // Update dynamic obstacle map for pathfinding (units avoid each other)
                 updateDynamicObstacles(currentUnits, unitsRef.current);
