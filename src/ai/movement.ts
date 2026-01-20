@@ -1,5 +1,5 @@
 // =============================================================================
-// PATH MANAGER - Centralized path state and management utilities
+// MOVEMENT SYSTEM - Consolidated path state, stuck detection, and movement
 // =============================================================================
 
 import {
@@ -320,9 +320,9 @@ export function cleanupUnitState(unitId: number): void {
 }
 
 /**
- * Reset all path manager state (for game restart).
+ * Reset all movement state (for game restart).
  */
-export function resetAllState(): void {
+export function resetAllMovementState(): void {
     Object.keys(gaveUpUntil).forEach(k => delete gaveUpUntil[Number(k)]);
     Object.keys(lastTargetScan).forEach(k => delete lastTargetScan[Number(k)]);
     Object.keys(unreachableTargets).forEach(k => delete unreachableTargets[Number(k)]);

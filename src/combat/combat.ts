@@ -7,7 +7,7 @@ import type { DamageText, UnitGroup, Unit } from "../core/types";
 import { PROJECTILE_CONFIG, COLORS, RING_EXPAND_DURATION } from "../core/constants";
 import { getUnitRadius, isInRange } from "../rendering/range";
 import { soundFns } from "../audio/sound";
-import { cleanupUnitState } from "../ai/pathManager";
+import { cleanupUnitState } from "../ai/movement";
 import { cleanupEnemyKiteCooldown } from "../game/enemyState";
 import { logDefeated, applyPoison, hasShieldedEffect } from "./combatMath";
 

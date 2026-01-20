@@ -11,9 +11,11 @@ interface PartyBarProps {
 }
 
 export function PartyBar({ units, selectedIds, onSelect, targetingMode, onTargetUnit }: PartyBarProps) {
+    const playerUnits = units.filter((u: Unit) => u.team === "player");
+
     return (
         <div className="party-bar glass-panel">
-            {units.filter((u: Unit) => u.team === "player").map((unit: Unit) => {
+            {playerUnits.map((unit: Unit) => {
                 const data = UNIT_DATA[unit.id];
                 if (!data) return null;
                 const isSelected = selectedIds.includes(unit.id);

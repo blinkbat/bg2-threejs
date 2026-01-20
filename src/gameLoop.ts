@@ -9,10 +9,10 @@ import {
     SWING_DURATION, COLORS, SKILL_SINGLE_TARGET_CHANCE, POISON_TINT_STRENGTH
 } from "./core/constants";
 import { getUnitRadius, isInRange } from "./rendering/range";
-import { updateVisibility, findPath, isPassable } from "./ai/pathfinding";
-import { recentlyGaveUp, checkPathNeedsRecalc, createPathToTarget } from "./ai/pathManager";
+import { updateVisibility } from "./ai/pathfinding";
+import { tryKite, type KiteContext } from "./ai/targeting";
 import {
-    runTargetingPhase, runPathFollowingPhase, runMovementPhase,
+    runTargetingPhase, runPathFollowingPhase, runMovementPhase, recalculatePathIfNeeded,
     type TargetingContext, type PathContext, type MovementContext
 } from "./ai/unitAI";
 import { getUnitStats, getBasicAttackSkill } from "./game/units";
@@ -22,7 +22,7 @@ import { SWIPE_ANIMATE_DURATION } from "./core/constants";
 import { spawnDamageNumber, handleUnitDefeat, createProjectile, getProjectileSpeed, applyDamageToUnit, animateExpandingMesh, getAliveUnitsInRange, type DamageContext } from "./combat/combat";
 import { soundFns } from "./audio/sound";
 import { disposeBasicMesh, disposeTexturedMesh } from "./rendering/disposal";
-import { getEnemyKiteCooldown, setEnemyKiteCooldown, isEnemyKiting, setEnemyKitingUntil, clearEnemyKiting } from "./game/enemyState";
+import { isEnemyKiting, clearEnemyKiting } from "./game/enemyState";
 
 // =============================================================================
 // TYPES
@@ -733,95 +733,19 @@ export function updateUnitAI(
     };
     runTargetingPhase(targetingCtx);
 
-    // Phase 1.5: Kiting - ranged enemies retreat when taking damage or players get too close
-    let isKiting = false;
+    // Phase 1.5: Kiting - ranged enemies retreat when players get too close
     const enemyData = !isPlayer ? data as EnemyStats : null;
-    const kiteTrigger = enemyData?.kiteTrigger;
-    if (kiteTrigger) {
-        const kiteCooldownEnd = getEnemyKiteCooldown(unit.id);
-        if (now >= kiteCooldownEnd) {
-            // Find nearest player unit
-            let nearestPlayerDist = Infinity;
-            let nearestPlayerG: UnitGroup | null = null;
-            for (const player of unitsState) {
-                if (player.team !== "player" || player.hp <= 0) continue;
-                const pg = unitsRef[player.id];
-                if (!pg) continue;
-                const dist = Math.hypot(pg.position.x - g.position.x, pg.position.z - g.position.z);
-                if (dist < nearestPlayerDist) {
-                    nearestPlayerDist = dist;
-                    nearestPlayerG = pg;
-                }
-            }
-
-            // Check if recently took damage (within last 2 seconds)
-            const recentlyHit = g.userData.lastHitTime && (now - g.userData.lastHitTime) < 2000;
-            // Expand kite trigger range if recently hit - prioritize survival
-            const effectiveTriggerRange = recentlyHit ? kiteTrigger * 2 : kiteTrigger;
-
-            // If player is within kite trigger range (or recently hit), retreat
-            if (nearestPlayerG && nearestPlayerDist < effectiveTriggerRange) {
-                const kiteDistance = enemyData.kiteDistance || 3;
-                // Shorter cooldown if recently hit - more desperate to escape
-                const kiteCooldown = recentlyHit ? (enemyData.kiteCooldown || 4000) / 2 : (enemyData.kiteCooldown || 4000);
-
-                // Calculate retreat direction (away from the player)
-                const { dx, dz, dist } = getDirectionAndDistance(nearestPlayerG.position.x, nearestPlayerG.position.z, g.position.x, g.position.z);
-                if (dist > 0.1) {
-                    // Try multiple retreat angles if direct path is blocked
-                    const angles = [0, Math.PI / 4, -Math.PI / 4, Math.PI / 2, -Math.PI / 2, Math.PI * 3/4, -Math.PI * 3/4];
-
-                    for (const angleOffset of angles) {
-                        // Rotate the retreat direction
-                        const cos = Math.cos(angleOffset);
-                        const sin = Math.sin(angleOffset);
-                        const rotatedDx = dx * cos - dz * sin;
-                        const rotatedDz = dx * sin + dz * cos;
-
-                        const retreatX = g.position.x + rotatedDx * kiteDistance;
-                        const retreatZ = g.position.z + rotatedDz * kiteDistance;
-
-                        // Clamp to grid bounds
-                        const clampedX = Math.max(0.5, Math.min(GRID_SIZE - 0.5, retreatX));
-                        const clampedZ = Math.max(0.5, Math.min(GRID_SIZE - 0.5, retreatZ));
-
-                        // Check if destination is passable
-                        if (!isPassable(Math.floor(clampedX), Math.floor(clampedZ))) continue;
-
-                        // Use A* to find a path to the retreat point
-                        const path = findPath(g.position.x, g.position.z, clampedX, clampedZ);
-                        if (path && path.length > 0) {
-                            // Skip the first waypoint if it's the start position
-                            pathsRef[unit.id] = path.length > 1 ? path.slice(1) : path;
-                            moveStartRef[unit.id] = { time: now, x: g.position.x, z: g.position.z };
-                            setEnemyKiteCooldown(unit.id, now + kiteCooldown);
-                            // Clear attack target so enemy focuses on retreating
-                            g.userData.attackTarget = null;
-                            // Mark enemy as kiting - prevent re-targeting until path done or 3 seconds
-                            const kiteDuration = Math.min(3000, path.length * 500);
-                            setEnemyKitingUntil(unit.id, now + kiteDuration);
-                            isKiting = true;
-                            break;
-                        }
-                    }
-
-                    // If no path found, still set cooldown to prevent spamming
-                    if (!isKiting) {
-                        setEnemyKiteCooldown(unit.id, now + kiteCooldown / 2);
-                    }
-                }
-            }
+    if (enemyData) {
+        const kiteCtx: KiteContext = { unit, g, unitsRef, unitsState, pathsRef, moveStartRef, now };
+        const kiteResult = tryKite(kiteCtx, enemyData);
+        if (kiteResult.isKiting) {
+            // Jump directly to path following and movement
+            const pathCtx: PathContext = { unit, g, pathsRef, moveStartRef, now, isPlayer };
+            const pathResult = runPathFollowingPhase(pathCtx);
+            const movementCtx: MovementContext = { unit, g, unitsRef, unitsState, targetX: pathResult.targetX, targetZ: pathResult.targetZ };
+            runMovementPhase(movementCtx);
+            return;
         }
-    }
-
-    // If kiting, skip attack processing this frame - prioritize retreat
-    if (isKiting) {
-        // Jump directly to path following and movement
-        const pathCtx: PathContext = { unit, g, pathsRef, moveStartRef, now, isPlayer };
-        const pathResult = runPathFollowingPhase(pathCtx);
-        const movementCtx: MovementContext = { unit, g, unitsRef, unitsState, targetX: pathResult.targetX, targetZ: pathResult.targetZ };
-        runMovementPhase(movementCtx);
-        return;
     }
 
     // Phase 1.6: Enemy heal check - healer enemies try to heal injured allies
@@ -952,16 +876,7 @@ export function updateUnitAI(
                 return;
             } else {
                 // Recalculate path if needed (but not if we recently gave up)
-                if (!recentlyGaveUp(unit.id, now)) {
-                    const { needsNewPath } = checkPathNeedsRecalc(pathsRef[unit.id], targetX, targetZ, g.position.x, g.position.z);
-                    if (needsNewPath) {
-                        const result = createPathToTarget(g.position.x, g.position.z, targetX, targetZ);
-                        pathsRef[unit.id] = result.path;
-                        if (result.success) {
-                            moveStartRef[unit.id] = { time: now, x: g.position.x, z: g.position.z };
-                        }
-                    }
-                }
+                recalculatePathIfNeeded(unit.id, g, targetX, targetZ, pathsRef, moveStartRef, now);
             }
         } else {
             g.userData.attackTarget = null;

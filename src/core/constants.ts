@@ -12,7 +12,6 @@ export const PAN_SPEED = 0.4;
 // Combat
 export const HIT_DETECTION_RADIUS = 0.3;
 export const ALLY_CLICK_RADIUS = 2;
-export const FORMATION_SPACING = 1.2;
 export const FLASH_DURATION = 200;
 
 // Status Effects - Poison

@@ -4,7 +4,6 @@
 
 import * as THREE from "three";
 import type { Unit, Skill, UnitGroup, SelectionBox } from "./core/types";
-import { GRID_SIZE, FORMATION_SPACING } from "./core/constants";
 import { getUnitRadius, isInRange } from "./rendering/range";
 import { findPath } from "./ai/pathfinding";
 import { UNIT_DATA } from "./game/units";
@@ -254,22 +253,11 @@ export function buildMoveTargets(
     gx: number,
     gz: number
 ): { id: number; x: number; z: number }[] {
-    const moveTargets: { id: number; x: number; z: number }[] = [];
-    let idx = 0;
-
-    selectedIds.forEach(uid => {
-        const u = unitsState.find(u => u.id === uid);
-        if (u && u.hp > 0) {
-            const ox = (idx % 3 - 1) * FORMATION_SPACING;
-            const oz = Math.floor(idx / 3) * FORMATION_SPACING;
-            idx++;
-            const tx = Math.max(0.5, Math.min(GRID_SIZE - 0.5, gx + ox));
-            const tz = Math.max(0.5, Math.min(GRID_SIZE - 0.5, gz + oz));
-            moveTargets.push({ id: uid, x: tx, z: tz });
-        }
-    });
-
-    return moveTargets;
+    // All selected alive units move to the clicked point
+    return selectedIds
+        .map(uid => unitsState.find(u => u.id === uid))
+        .filter((u): u is Unit => u !== undefined && u.hp > 0)
+        .map(u => ({ id: u.id, x: gx, z: gz }));
 }
 
 // =============================================================================

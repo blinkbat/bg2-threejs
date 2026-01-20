@@ -15,35 +15,35 @@ const carve = (x1: number, z1: number, x2: number, z2: number): void => {
     }
 };
 
-// Rooms - big rooms spread out with longer hallways
+// Rooms - larger rooms with wider hallways
 export const rooms: Room[] = [
-    { x: 1, z: 1, w: 10, h: 10 },      // Room A - player spawn (SW)
-    { x: 1, z: 38, w: 10, h: 10 },     // Room B - NW
-    { x: 38, z: 1, w: 10, h: 10 },     // Room C - SE
-    { x: 38, z: 38, w: 10, h: 10 },    // Room D - kobold lair (NE)
-    { x: 19, z: 19, w: 12, h: 12 },    // Room E - central great hall
-    { x: 19, z: 1, w: 8, h: 8 },       // Room F - S middle
-    { x: 1, z: 19, w: 8, h: 8 },       // Room G - W middle
-    { x: 40, z: 19, w: 8, h: 8 },      // Room H - E middle
-    { x: 19, z: 40, w: 8, h: 8 },      // Room I - N middle
+    { x: 1, z: 1, w: 12, h: 12 },      // Room A - player spawn (SW)
+    { x: 1, z: 36, w: 12, h: 12 },     // Room B - NW
+    { x: 36, z: 1, w: 12, h: 12 },     // Room C - SE
+    { x: 36, z: 36, w: 12, h: 12 },    // Room D - kobold lair (NE)
+    { x: 16, z: 16, w: 16, h: 16 },    // Room E - central great hall (bigger)
+    { x: 18, z: 1, w: 10, h: 10 },     // Room F - S middle
+    { x: 1, z: 18, w: 10, h: 10 },     // Room G - W middle
+    { x: 38, z: 18, w: 10, h: 10 },    // Room H - E middle
+    { x: 18, z: 38, w: 10, h: 10 },    // Room I - N middle
 ];
 
 // Carve rooms
 rooms.forEach(r => carve(r.x, r.z, r.x + r.w - 1, r.z + r.h - 1));
 
-// Hallways (5-6 wide) - longer corridors connecting rooms
-carve(10, 3, 19, 7);      // A to F (longer)
-carve(26, 3, 38, 7);      // F to C (longer)
-carve(3, 10, 7, 19);      // A to G (longer)
-carve(3, 27, 7, 38);      // G to B (longer)
-carve(8, 21, 19, 25);     // G to E (longer)
-carve(30, 21, 40, 25);    // E to H (longer)
-carve(42, 10, 46, 19);    // C to H (longer)
-carve(42, 27, 46, 38);    // H to D (longer)
-carve(21, 8, 25, 19);     // F to E (longer)
-carve(21, 30, 25, 40);    // E to I (longer)
-carve(8, 40, 19, 44);     // B to I (longer)
-carve(26, 42, 38, 46);    // I to D (longer)
+// Hallways (7-8 wide) - wider corridors connecting rooms
+carve(12, 3, 18, 10);     // A to F
+carve(27, 3, 36, 10);     // F to C
+carve(3, 12, 10, 18);     // A to G
+carve(3, 27, 10, 36);     // G to B
+carve(10, 20, 16, 27);    // G to E
+carve(31, 20, 38, 27);    // E to H
+carve(40, 12, 47, 18);    // C to H
+carve(40, 27, 47, 36);    // H to D
+carve(20, 10, 27, 16);    // F to E
+carve(20, 31, 27, 38);    // E to I
+carve(10, 40, 18, 47);    // B to I
+carve(27, 40, 36, 47);    // I to D
 
 // Wall sconces - find wall cells adjacent to rooms, place sconce facing into room
 export const candlePositions: CandlePosition[] = [];
@@ -119,13 +119,13 @@ for (let x = 0; x < GRID_SIZE; x++) {
 
 // Room floor colors for rendering
 export const roomFloors = [
-    { x: 1, z: 1, w: 10, h: 10, color: "#1a1a1a" },
-    { x: 1, z: 38, w: 10, h: 10, color: "#1a1a2a" },
-    { x: 38, z: 1, w: 10, h: 10, color: "#2a1a1a" },
-    { x: 38, z: 38, w: 10, h: 10, color: "#2a1a2a" },
-    { x: 19, z: 19, w: 12, h: 12, color: "#1a2020" },
-    { x: 19, z: 1, w: 8, h: 8, color: "#20201a" },
-    { x: 1, z: 19, w: 8, h: 8, color: "#1a201a" },
-    { x: 40, z: 19, w: 8, h: 8, color: "#201a20" },
-    { x: 19, z: 40, w: 8, h: 8, color: "#1a1a20" },
+    { x: 1, z: 1, w: 12, h: 12, color: "#1a1a1a" },
+    { x: 1, z: 36, w: 12, h: 12, color: "#1a1a2a" },
+    { x: 36, z: 1, w: 12, h: 12, color: "#2a1a1a" },
+    { x: 36, z: 36, w: 12, h: 12, color: "#2a1a2a" },
+    { x: 16, z: 16, w: 16, h: 16, color: "#1a2020" },
+    { x: 18, z: 1, w: 10, h: 10, color: "#20201a" },
+    { x: 1, z: 18, w: 10, h: 10, color: "#1a201a" },
+    { x: 38, z: 18, w: 10, h: 10, color: "#201a20" },
+    { x: 18, z: 38, w: 10, h: 10, color: "#1a1a20" },
 ];

@@ -187,61 +187,61 @@ export function getUnitStats(unit: Unit): UnitData | EnemyStats {
     return ENEMY_STATS[unit.enemyType];
 }
 
-// Ogre spawn - center of the map (great hall)
-const ogreSpawn = { x: 25.5, z: 25.5 };
+// Ogre spawn - center of the map (great hall, now 16x16 at x:16-31, z:16-31)
+const ogreSpawn = { x: 24.5, z: 24.5 };
 
-// Kobold spawn locations across the dungeon (updated for 50x50 map)
+// Kobold spawn locations across the dungeon (updated for larger rooms)
 const koboldSpawns = [
-    // Room D - kobold lair (NE corner, x:38-47, z:38-47) - 4 kobolds
-    { x: 41.5, z: 41.5 }, { x: 43.5, z: 41.5 }, { x: 41.5, z: 43.5 }, { x: 43.5, z: 43.5 },
-    // Room E - central great hall (x:19-30, z:19-30) - 3 kobolds
-    { x: 23.5, z: 23.5 }, { x: 27.5, z: 23.5 }, { x: 27.5, z: 27.5 },
-    // Room B - NW (x:1-10, z:38-47) - 2 kobolds
-    { x: 4.5, z: 41.5 }, { x: 6.5, z: 41.5 },
-    // Room C - SE (x:38-47, z:1-10) - 3 kobolds
-    { x: 41.5, z: 4.5 }, { x: 43.5, z: 4.5 }, { x: 42.5, z: 6.5 },
-    // Room F - S middle (x:19-26, z:1-8) - 2 kobolds
-    { x: 22.5, z: 4.5 }, { x: 24.5, z: 4.5 },
-    // Room G - W middle (x:1-8, z:19-26) - 1 kobold (archer added separately)
-    { x: 4.5, z: 22.5 },
-    // Room H - E middle (x:40-47, z:19-26) - 1 kobold (archer added separately)
+    // Room D - kobold lair (NE corner, x:36-47, z:36-47) - 4 kobolds
+    { x: 40.5, z: 40.5 }, { x: 43.5, z: 40.5 }, { x: 40.5, z: 43.5 }, { x: 43.5, z: 43.5 },
+    // Room E - central great hall (x:16-31, z:16-31) - 3 kobolds
+    { x: 20.5, z: 20.5 }, { x: 27.5, z: 20.5 }, { x: 27.5, z: 27.5 },
+    // Room B - NW (x:1-12, z:36-47) - 2 kobolds
+    { x: 5.5, z: 40.5 }, { x: 8.5, z: 40.5 },
+    // Room C - SE (x:36-47, z:1-12) - 3 kobolds
+    { x: 40.5, z: 5.5 }, { x: 43.5, z: 5.5 }, { x: 42.5, z: 8.5 },
+    // Room F - S middle (x:18-27, z:1-10) - 2 kobolds
+    { x: 22.5, z: 5.5 }, { x: 24.5, z: 5.5 },
+    // Room G - W middle (x:1-10, z:18-27) - 1 kobold (archer added separately)
+    { x: 5.5, z: 22.5 },
+    // Room H - E middle (x:38-47, z:18-27) - 1 kobold (archer added separately)
     { x: 43.5, z: 22.5 },
-    // Room I - N middle (x:19-26, z:40-47) - 2 kobolds
+    // Room I - N middle (x:18-27, z:38-47) - 2 kobolds
     { x: 22.5, z: 43.5 }, { x: 24.5, z: 43.5 },
 ];
 
-// Kobold Archer spawns - in the side rooms (updated for 50x50 map)
+// Kobold Archer spawns - in the side rooms (updated for larger rooms)
 const koboldArcherSpawns = [
     // Room G - W middle
-    { x: 4.5, z: 24.5 },
+    { x: 5.5, z: 25.5 },
     // Room H - E middle
-    { x: 43.5, z: 24.5 },
+    { x: 43.5, z: 25.5 },
     // Room B - NW (one archer in back)
-    { x: 4.5, z: 44.5 },
+    { x: 5.5, z: 44.5 },
     // Room C - SE (one archer in back)
-    { x: 44.5, z: 6.5 },
+    { x: 44.5, z: 8.5 },
 ];
 
 // Kobold Witch Doctor spawns - support units that heal allies
 const witchDoctorSpawns = [
-    // Room D - center (near ogre)
-    { x: 25.5, z: 25.5 },
+    // Room E - central (near ogre)
+    { x: 24.5, z: 28.5 },
     // Room B - NW (supporting kobolds)
-    { x: 6.5, z: 43.5 },
+    { x: 8.5, z: 43.5 },
     // Room C - SE (supporting kobolds)
-    { x: 43.5, z: 6.5 },
+    { x: 43.5, z: 8.5 },
 ];
 
 // Helper to create initial units
 export function createInitialUnits(): Unit[] {
     return [
-        // Player units
+        // Player units (starting in Room A, now 12x12 at x:1-12, z:1-12)
         ...Object.keys(UNIT_DATA).map((id, i) => {
             const data = UNIT_DATA[Number(id)];
             return {
                 id: Number(id),
-                x: 4.5 + (i % 3) * 2,
-                z: 4.5 + Math.floor(i / 3) * 2,
+                x: 5.5 + (i % 3) * 2,
+                z: 5.5 + Math.floor(i / 3) * 2,
                 hp: data.hp,
                 mana: data.mana,
                 team: "player" as const,

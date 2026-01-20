@@ -224,12 +224,11 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         unitMeshes[unit.id] = box;
         unitOriginalColors[unit.id] = new THREE.Color(data.color);
 
-        // Player units get subtle innate light
-        if (isPlayer) {
-            const unitLight = new THREE.PointLight(data.color, 0.15, 2, 2);
-            unitLight.position.y = boxH / 2;
-            group.add(unitLight);
-        }
+        // All units get subtle innate light (enemies dimmer than players)
+        const lightIntensity = isPlayer ? 0.15 : 0.08;
+        const unitLight = new THREE.PointLight(data.color, lightIntensity, 2, 2);
+        unitLight.position.y = boxH / 2;
+        group.add(unitLight);
 
         const selInner = 0.5 * size;
         const selOuter = 0.55 * size;
