@@ -129,9 +129,9 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         projectileColor: "#8B4513",
         poisonChance: 35,  // 35% chance to poison on hit
         // Kiting behavior - retreat when players get close
-        kiteTrigger: 2.5,    // Start kiting when player within this range
-        kiteDistance: 3,     // How far to retreat
-        kiteCooldown: 4000   // Can only kite every 4 seconds
+        kiteTrigger: 4,      // Start kiting when player within this range
+        kiteDistance: 4,     // How far to retreat
+        kiteCooldown: 3000   // Can only kite every 3 seconds
     },
     kobold_witch_doctor: {
         name: "Kobold Witch Doctor",
@@ -150,7 +150,11 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
             cooldown: 8000,  // 8 seconds
             heal: [4, 8],
             range: 6  // Range to find hurt allies
-        }
+        },
+        // Kiting behavior - retreat when players get close
+        kiteTrigger: 4,      // Start kiting when player within this range
+        kiteDistance: 5,     // How far to retreat
+        kiteCooldown: 3500   // Can only kite every 3.5 seconds
     },
     ogre: {
         name: "Ogre",

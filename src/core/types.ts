@@ -186,6 +186,7 @@ export interface UnitGroup extends THREE.Group {
         targetZ: number;
         attackTarget: number | null;
         alerted?: boolean;  // Set when enemy is hit - makes them seek nearest player
+        lastHitTime?: number;  // Timestamp when unit last took damage (for kiting AI)
     };
 }
 

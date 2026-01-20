@@ -3,7 +3,7 @@
 // =============================================================================
 
 import {
-    MOVE_SPEED,
+    MOVE_SPEED, ATTACK_RANGE,
     AVOIDANCE_RANGE_MULTIPLIER, AVOIDANCE_OVERLAP_STRENGTH,
     AVOIDANCE_STEER_THRESHOLD, AVOIDANCE_STEER_STRENGTH,
     MOVEMENT_MIN_DIST, MOVEMENT_MIN_MAGNITUDE
@@ -105,10 +105,10 @@ export function acquireTarget(ctx: TargetingContext, targetId: number): boolean 
     const targetG = unitsRef[targetId];
 
     if (targetG) {
-        // Check if already close enough (no path needed)
+        // Check if already in attack range (no path needed)
         const dist = Math.hypot(g.position.x - targetG.position.x, g.position.z - targetG.position.z);
-        if (dist < 3) {
-            // Already in or near attack range, no path needed
+        if (dist < ATTACK_RANGE) {
+            // Already in attack range, no path needed
             pathsRef[unit.id] = [];
             return true;
         }

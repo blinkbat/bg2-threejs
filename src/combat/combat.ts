@@ -201,6 +201,9 @@ export function applyDamageToUnit(
     hitFlashRef[targetId] = now;
     spawnDamageNumber(scene, targetGroup.position.x, targetGroup.position.z, damage, color, damageTexts);
 
+    // Track when this unit last took damage (for AI kiting decisions)
+    targetGroup.userData.lastHitTime = now;
+
     // Defeat handling
     if (newHp <= 0) {
         if (defeatedThisFrame && !skipDefeatTracking) {

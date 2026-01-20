@@ -88,7 +88,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         scene.add(flame);
         flames.push(flame);
 
-        const light = new THREE.PointLight("#ffaa44", 8, 12, 1.5);
+        const light = new THREE.PointLight("#ffaa44", 15, 18, 1.5);
         light.position.set(pos.x + pos.dx * 0.3, 2.05, pos.z + pos.dz * 0.3);  // Same as flame
         scene.add(light);
         candleLights.push(light);

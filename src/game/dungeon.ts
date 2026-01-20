@@ -50,6 +50,7 @@ export const candlePositions: CandlePosition[] = [];
 rooms.forEach(r => {
     const midX = r.x + Math.floor(r.w / 2);
     const midZ = r.z + Math.floor(r.h / 2);
+    const isOgreRoom = r.x === 19 && r.z === 19; // Room E - central great hall
 
     // South wall (wall cell just south of room)
     const sWallZ = r.z - 1;
@@ -70,6 +71,26 @@ rooms.forEach(r => {
     const eWallX = r.x + r.w;
     if (eWallX < GRID_SIZE && blocked[eWallX]?.[midZ]) {
         candlePositions.push({ x: eWallX + 0.15, z: midZ + 0.5, dx: -1, dz: 0 });
+    }
+
+    // Extra candles for ogre room (corners)
+    if (isOgreRoom) {
+        // SW corner
+        if (blocked[r.x - 1]?.[r.z]) {
+            candlePositions.push({ x: r.x - 0.15, z: r.z + 0.5, dx: 1, dz: 0 });
+        }
+        // SE corner
+        if (blocked[r.x + r.w]?.[r.z]) {
+            candlePositions.push({ x: r.x + r.w + 0.15, z: r.z + 0.5, dx: -1, dz: 0 });
+        }
+        // NW corner
+        if (blocked[r.x - 1]?.[r.z + r.h - 1]) {
+            candlePositions.push({ x: r.x - 0.15, z: r.z + r.h - 0.5, dx: 1, dz: 0 });
+        }
+        // NE corner
+        if (blocked[r.x + r.w]?.[r.z + r.h - 1]) {
+            candlePositions.push({ x: r.x + r.w + 0.15, z: r.z + r.h - 0.5, dx: -1, dz: 0 });
+        }
     }
 });
 
