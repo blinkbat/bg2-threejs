@@ -437,7 +437,7 @@ export function executeCleanseSkill(
 
     // Play sound and log
     soundFns.playHeal();
-    addLog(logCleanse(casterData.name, skill.name), "#ecf0f1");
+    addLog(logCleanse(casterData.name, targetData.name), "#ecf0f1");
 
     // Visual effect - white/silver glow ring
     const ring = new THREE.Mesh(

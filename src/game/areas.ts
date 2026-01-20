@@ -9,7 +9,7 @@ import type { Room, CandlePosition, MergedObstacle, EnemyType } from "../core/ty
 // TYPES
 // =============================================================================
 
-export type AreaId = "dungeon" | "field";
+export type AreaId = "dungeon" | "forest";
 
 export interface RoomFloor {
     x: number;
@@ -332,7 +332,7 @@ export const DUNGEON_AREA: AreaData = {
         // Door on south wall of starting room (Room A), leads to field
         {
             x: 5, z: 0, w: 3, h: 1,
-            targetArea: "field",
+            targetArea: "forest",
             targetSpawn: { x: 25, z: 47 },  // North side of field (top of diamond)
             direction: "south"
         }
@@ -344,8 +344,8 @@ export const DUNGEON_AREA: AreaData = {
 };
 
 export const FIELD_AREA: AreaData = {
-    id: "field",
-    name: "Green Fields",
+    id: "forest",
+    name: "Forest",
     gridSize: GRID_SIZE,
     backgroundColor: "#87CEEB",  // Sky blue
     groundColor: "#228B22",      // Forest green
@@ -444,7 +444,7 @@ export const FIELD_AREA: AreaData = {
 // Registry of all areas
 export const AREAS: Record<AreaId, AreaData> = {
     dungeon: DUNGEON_AREA,
-    field: FIELD_AREA
+    forest: FIELD_AREA
 };
 
 // =============================================================================

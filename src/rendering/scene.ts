@@ -48,7 +48,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     canvas.height = 256;
     const ctx = canvas.getContext("2d")!;
     const gradient = ctx.createLinearGradient(0, 0, 0, 256);
-    if (area.id === "field") {
+    if (area.id === "forest") {
         gradient.addColorStop(0, "#0a1520");    // Very dark blue at top
         gradient.addColorStop(0.5, "#1a3040");  // Dark blue-gray
         gradient.addColorStop(1, "#2a4a60");    // Medium dark blue at bottom (horizon)
