@@ -40,7 +40,25 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     const computed = getComputedAreaData();
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(area.backgroundColor);
+
+    // Create sky gradient for outdoor areas, solid color for indoor
+    if (area.id === "field") {
+        // Create vertical gradient texture for sky
+        const canvas = document.createElement("canvas");
+        canvas.width = 2;
+        canvas.height = 256;
+        const ctx = canvas.getContext("2d")!;
+        const gradient = ctx.createLinearGradient(0, 0, 0, 256);
+        gradient.addColorStop(0, "#1a3a5c");    // Dark blue at top
+        gradient.addColorStop(0.5, "#4a7a9c");  // Medium blue
+        gradient.addColorStop(1, "#87CEEB");    // Light sky blue at bottom (horizon)
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, 2, 256);
+        const skyTexture = new THREE.CanvasTexture(canvas);
+        scene.background = skyTexture;
+    } else {
+        scene.background = new THREE.Color(area.backgroundColor);
+    }
 
     const aspect = container.clientWidth / container.clientHeight;
     const camera = new THREE.OrthographicCamera(-15 * aspect, 15 * aspect, 15, -15, 0.1, 1000);
@@ -147,28 +165,32 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     area.trees.forEach((tree, i) => {
         const scale = tree.size;
 
-        // Trunk - short brown cylinder
-        const trunkHeight = 0.4 * scale;
-        const trunkRadius = 0.08 * scale;
+        // Trunk - thick brown cylinder
+        const trunkHeight = 1.2 * scale;
+        const trunkRadius = 0.15 * scale;
         const trunkColor = trunkColors[i % trunkColors.length];
         const trunk = new THREE.Mesh(
-            new THREE.CylinderGeometry(trunkRadius, trunkRadius * 1.2, trunkHeight, 6),
+            new THREE.CylinderGeometry(trunkRadius, trunkRadius * 1.3, trunkHeight, 8),
             new THREE.MeshStandardMaterial({ color: trunkColor, metalness: 0.0, roughness: 1.0, transparent: true, opacity: 1 })
         );
         trunk.position.set(tree.x, trunkHeight / 2, tree.z);
         trunk.name = "tree";
+        // Store original color for fog restoration
+        trunk.userData.originalColor = new THREE.Color(trunkColor);
         scene.add(trunk);
 
-        // Foliage - pyramidal cone with varied green colors
-        const foliageRadius = 0.6 * scale;
-        const foliageHeight = 1.6 * scale;
+        // Foliage - tall pyramidal cone with varied green colors
+        const foliageRadius = 0.8 * scale;
+        const foliageHeight = 2.5 * scale;
         const foliageColor = foliageColors[i % foliageColors.length];
         const foliage = new THREE.Mesh(
-            new THREE.ConeGeometry(foliageRadius, foliageHeight, 6),
+            new THREE.ConeGeometry(foliageRadius, foliageHeight, 8),
             new THREE.MeshStandardMaterial({ color: foliageColor, metalness: 0.0, roughness: 0.8, transparent: true, opacity: 1 })
         );
         foliage.position.set(tree.x, trunkHeight + foliageHeight / 2, tree.z);
         foliage.name = "tree";
+        // Store original color for fog restoration
+        foliage.userData.originalColor = new THREE.Color(foliageColor);
         scene.add(foliage);
 
         // Track both trunk and foliage for transparency updates
@@ -440,6 +462,41 @@ export function updateWallTransparency(
         // Snap to target if very close (avoid floating point drift)
         if (Math.abs(mat.opacity - targetOpacity) < 0.01) {
             mat.opacity = targetOpacity;
+        }
+    }
+}
+
+// Color for trees in unexplored fog
+const FOG_BLACK = new THREE.Color(0x000000);
+const FOG_SEEN_DARKEN = 0.3;  // Multiplier for "seen but not visible" areas
+
+/**
+ * Update tree colors based on fog of war visibility.
+ * Trees in unexplored areas turn black, trees in seen areas are darkened.
+ */
+export function updateTreeFogVisibility(
+    treeMeshes: THREE.Mesh[],
+    visibility: number[][]
+): void {
+    for (const mesh of treeMeshes) {
+        const mat = mesh.material as THREE.MeshStandardMaterial;
+        const originalColor = mesh.userData.originalColor as THREE.Color | undefined;
+        if (!originalColor) continue;
+
+        // Get visibility at tree position
+        const tx = Math.floor(mesh.position.x);
+        const tz = Math.floor(mesh.position.z);
+        const vis = visibility[tx]?.[tz] ?? 0;
+
+        if (vis === 0) {
+            // Unexplored - turn black
+            mat.color.copy(FOG_BLACK);
+        } else if (vis === 1) {
+            // Seen but not currently visible - darken
+            mat.color.copy(originalColor).multiplyScalar(FOG_SEEN_DARKEN);
+        } else {
+            // Currently visible - restore original color
+            mat.color.copy(originalColor);
         }
     }
 }

@@ -175,12 +175,20 @@ export function computeAreaData(area: AreaData): ComputedAreaData {
     // Carve transition areas (doors)
     area.transitions.forEach(t => carve(blocked, t.x, t.z, t.x + t.w - 1, t.z + t.h - 1));
 
-    // Block tree positions for pathing and LOS
+    // Generate candles only for dungeon-like areas
+    const candlePositions = area.id === "dungeon"
+        ? generateCandles(area.rooms, blocked, area.gridSize)
+        : [];
+
+    // Merge obstacles BEFORE blocking trees (so trees don't become walls)
+    const mergedObstacles = mergeObstacles(blocked, area.gridSize);
+
+    // Block tree positions for pathing and LOS (after wall merging)
     const treeBlocked = new Set<string>();
     area.trees.forEach(tree => {
         const tx = Math.floor(tree.x);
         const tz = Math.floor(tree.z);
-        // Block the cell the tree is on
+        // Block the cell the tree is on for pathfinding
         if (tx >= 0 && tx < area.gridSize && tz >= 0 && tz < area.gridSize) {
             blocked[tx][tz] = true;
             treeBlocked.add(`${tx},${tz}`);
@@ -198,14 +206,6 @@ export function computeAreaData(area: AreaData): ComputedAreaData {
             }
         }
     });
-
-    // Generate candles only for dungeon-like areas
-    const candlePositions = area.id === "dungeon"
-        ? generateCandles(area.rooms, blocked, area.gridSize)
-        : [];
-
-    // Merge obstacles
-    const mergedObstacles = mergeObstacles(blocked, area.gridSize);
 
     return { blocked, mergedObstacles, candlePositions, treeBlocked };
 }
@@ -343,22 +343,65 @@ export const FIELD_AREA: AreaData = {
     ],
     chests: [],
     trees: [
-        // Scattered trees around the field
+        // Dense forest scattered around the field
+        // Northwest cluster
+        { x: 5, z: 5, size: 1.3 },
         { x: 8, z: 8, size: 1.2 },
+        { x: 4, z: 10, size: 1.0 },
+        { x: 10, z: 6, size: 0.9 },
+        { x: 7, z: 12, size: 1.1 },
+        { x: 12, z: 10, size: 0.8 },
+        // West side
+        { x: 3, z: 18, size: 1.2 },
+        { x: 6, z: 22, size: 1.0 },
+        { x: 5, z: 28, size: 1.4 },
+        { x: 8, z: 32, size: 0.9 },
+        { x: 4, z: 36, size: 1.1 },
+        { x: 7, z: 40, size: 1.3 },
+        // Southwest cluster
+        { x: 10, z: 38, size: 1.0 },
+        { x: 12, z: 42, size: 1.2 },
+        { x: 15, z: 40, size: 0.8 },
+        { x: 8, z: 44, size: 1.1 },
+        // North side (away from door at z:47-49)
         { x: 12, z: 15, size: 0.8 },
-        { x: 5, z: 25, size: 1.0 },
-        { x: 10, z: 35, size: 1.4 },
-        { x: 15, z: 42, size: 0.7 },
-        { x: 35, z: 10, size: 1.1 },
-        { x: 40, z: 18, size: 0.9 },
-        { x: 38, z: 30, size: 1.3 },
-        { x: 42, z: 40, size: 0.6 },
+        { x: 16, z: 12, size: 1.0 },
+        { x: 20, z: 10, size: 1.2 },
         { x: 30, z: 8, size: 1.0 },
+        { x: 35, z: 10, size: 1.1 },
+        { x: 38, z: 6, size: 0.9 },
+        // Northeast cluster
+        { x: 42, z: 5, size: 1.3 },
+        { x: 45, z: 8, size: 1.0 },
+        { x: 44, z: 12, size: 1.1 },
+        { x: 40, z: 10, size: 0.8 },
+        // East side
+        { x: 44, z: 18, size: 0.9 },
+        { x: 46, z: 22, size: 1.2 },
+        { x: 43, z: 26, size: 1.0 },
+        { x: 45, z: 32, size: 1.1 },
+        { x: 44, z: 38, size: 0.8 },
+        { x: 42, z: 42, size: 1.3 },
+        // Southeast cluster
+        { x: 38, z: 40, size: 1.0 },
+        { x: 40, z: 44, size: 0.9 },
+        { x: 36, z: 42, size: 1.2 },
+        // Center-ish trees (sparser for gameplay)
         { x: 18, z: 20, size: 0.8 },
-        { x: 32, z: 35, size: 1.5 },
-        { x: 8, z: 42, size: 1.0 },
-        { x: 45, z: 25, size: 0.9 },
-        { x: 20, z: 12, size: 1.1 },
+        { x: 24, z: 18, size: 1.0 },
+        { x: 32, z: 22, size: 1.1 },
+        { x: 28, z: 28, size: 0.9 },
+        { x: 20, z: 32, size: 1.0 },
+        { x: 34, z: 34, size: 1.2 },
+        // South side (sparse near door area)
+        { x: 14, z: 46, size: 0.7 },
+        { x: 34, z: 46, size: 0.8 },
+        // GIANT TREES - ancient forest sentinels
+        { x: 6, z: 15, size: 2.5 },    // West side giant
+        { x: 42, z: 28, size: 2.8 },   // East side giant
+        { x: 15, z: 35, size: 2.3 },   // Southwest giant
+        { x: 38, z: 15, size: 2.6 },   // Northeast giant
+        { x: 25, z: 25, size: 3.0 },   // Center giant - the biggest
     ]
 };
 

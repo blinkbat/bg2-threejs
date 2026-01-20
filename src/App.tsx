@@ -14,7 +14,7 @@ import type { Unit, Skill, CombatLogEntry, SelectionBox, DamageText, UnitGroup, 
 import { blocked } from "./game/dungeon";
 import { getCurrentArea, setCurrentArea, type AreaId, type AreaTransition } from "./game/areas";
 import { UNIT_DATA, ENEMY_STATS, getBasicAttackSkill } from "./game/units";
-import { createScene, updateCamera, updateWallTransparency, type DoorMesh } from "./rendering/scene";
+import { createScene, updateCamera, updateWallTransparency, updateTreeFogVisibility, type DoorMesh } from "./rendering/scene";
 import { soundFns } from "./audio/sound";
 import { updateDynamicObstacles } from "./ai/pathfinding";
 
@@ -700,6 +700,9 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
             if (fogTextureRef.current && fogMeshRef.current) {
                 updateFogOfWar(visibilityRef.current, playerUnits, unitsRef.current, fogTextureRef.current, currentUnits, fogMeshRef.current);
             }
+
+            // Update tree colors based on fog visibility
+            updateTreeFogVisibility(treeMeshesRef.current, visibilityRef.current);
 
             // Unit AI & movement
             if (!pausedRef.current) {
