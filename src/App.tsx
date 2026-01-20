@@ -13,7 +13,7 @@ import type { Unit, Skill, CombatLogEntry, SelectionBox, DamageText, UnitGroup, 
 // Game Logic
 import { blocked } from "./game/dungeon";
 import { UNIT_DATA, ENEMY_STATS, createInitialUnits, getBasicAttackSkill } from "./game/units";
-import { createScene, updateCamera } from "./rendering/scene";
+import { createScene, updateCamera, updateWallTransparency } from "./rendering/scene";
 import { soundFns } from "./audio/sound";
 import { updateDynamicObstacles } from "./ai/pathfinding";
 
@@ -89,6 +89,7 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
     const swingAnimationsRef = useRef<SwingAnimation[]>([]);
     const rangeIndicatorRef = useRef<THREE.Mesh | null>(null);
     const aoeIndicatorRef = useRef<THREE.Mesh | null>(null);
+    const wallMeshesRef = useRef<THREE.Mesh[]>([]);
 
     // Action queue (per-unit: last action wins)
     const actionQueueRef = useRef<ActionQueue>({});
@@ -156,7 +157,7 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
         resetFogCache();
 
         const sceneRefs = createScene(containerRef.current, units);
-        const { scene, camera, renderer, flames, candleLights, fogTexture, moveMarker, rangeIndicator, aoeIndicator, unitGroups, selectRings, unitMeshes, unitOriginalColors, maxHp } = sceneRefs;
+        const { scene, camera, renderer, flames, candleLights, fogTexture, moveMarker, rangeIndicator, aoeIndicator, unitGroups, selectRings, unitMeshes, unitOriginalColors, maxHp, wallMeshes } = sceneRefs;
 
         sceneRef.current = scene;
         cameraRef.current = camera;
@@ -170,6 +171,7 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
         unitMeshRef.current = unitMeshes;
         unitOriginalColorRef.current = unitOriginalColors;
         maxHpRef.current = maxHp;
+        wallMeshesRef.current = wallMeshes;
         units.forEach(unit => { pathsRef.current[unit.id] = []; });
 
         const updateCam = () => updateCamera(camera, cameraOffset.current);
@@ -625,6 +627,9 @@ function Game({ onRestart, onShowHelp, onCloseHelp, helpOpen }: { onRestart: () 
             // HP bar positions
             const rect = renderer.domElement.getBoundingClientRect();
             setHpBarPositions(updateHpBarPositions(currentUnits, unitsRef.current, camera, rect, zoomLevel.current));
+
+            // Update wall transparency for occluded units
+            updateWallTransparency(camera, wallMeshesRef.current, unitsRef.current, currentUnits);
 
             renderer.render(scene, camera);
         };

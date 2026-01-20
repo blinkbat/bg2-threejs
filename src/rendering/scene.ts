@@ -24,6 +24,7 @@ export interface SceneRefs {
     unitMeshes: Record<number, THREE.Mesh>;
     unitOriginalColors: Record<number, THREE.Color>;
     maxHp: Record<number, number>;
+    wallMeshes: THREE.Mesh[];
 }
 
 export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs {
@@ -125,16 +126,18 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     chestGroup.position.set(2.5, 0, 2.5);
     scene.add(chestGroup);
 
-    // Walls
+    // Walls - with transparent support for unit occlusion
+    const wallMeshes: THREE.Mesh[] = [];
     mergedObstacles.forEach((o, i) => {
         const shade = 0x2d3748 + (i % 3) * 0x050505;
         const mesh = new THREE.Mesh(
             new THREE.BoxGeometry(o.w, 2.5, o.h),
-            new THREE.MeshStandardMaterial({ color: shade, metalness: 0.2, roughness: 0.8 })
+            new THREE.MeshStandardMaterial({ color: shade, metalness: 0.2, roughness: 0.8, transparent: true, opacity: 1 })
         );
         mesh.position.set(o.x + o.w / 2, 1.25, o.z + o.h / 2);
         mesh.name = "obstacle";
         scene.add(mesh);
+        wallMeshes.push(mesh);
     });
 
     // Grid lines - subtle, above room floors
@@ -263,6 +266,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         unitMeshes,
         unitOriginalColors,
         maxHp,
+        wallMeshes,
     };
 }
 
@@ -270,4 +274,73 @@ export function updateCamera(camera: THREE.OrthographicCamera, offset: { x: numb
     const d = 20;
     camera.position.set(offset.x + d, d, offset.z + d);
     camera.lookAt(offset.x, 0, offset.z);
+}
+
+// Opacity values for wall transparency
+const WALL_OPACITY_NORMAL = 1.0;
+const WALL_OPACITY_OCCLUDING = 0.25;
+const WALL_OPACITY_LERP_SPEED = 0.15;  // How fast walls fade in/out
+
+/**
+ * Update wall transparency based on unit occlusion.
+ * Walls that are between the camera and any unit become semi-transparent.
+ */
+export function updateWallTransparency(
+    camera: THREE.OrthographicCamera,
+    wallMeshes: THREE.Mesh[],
+    unitGroups: Record<number, UnitGroup>,
+    unitsState: Unit[]
+): void {
+    // Track which walls should be transparent this frame
+    const occludingWalls = new Set<THREE.Mesh>();
+
+    // For each alive unit, check if any wall is between camera and unit
+    for (const unit of unitsState) {
+        if (unit.hp <= 0) continue;
+        const unitGroup = unitGroups[unit.id];
+        if (!unitGroup || !unitGroup.visible) continue;
+
+        // Get unit position in world space
+        const unitPos = new THREE.Vector3(unitGroup.position.x, 0.5, unitGroup.position.z);
+
+        // Direction from camera to unit
+        const cameraPos = camera.position.clone();
+        const dirToUnit = unitPos.clone().sub(cameraPos).normalize();
+
+        // Check each wall for occlusion
+        for (const wall of wallMeshes) {
+            // Quick check: is wall roughly between camera and unit?
+            // Use bounding box for efficiency
+            const wallBox = new THREE.Box3().setFromObject(wall);
+
+            // Create a ray from camera towards unit
+            const ray = new THREE.Ray(cameraPos, dirToUnit);
+
+            // Check if ray intersects wall bounding box
+            const intersection = ray.intersectBox(wallBox, new THREE.Vector3());
+            if (intersection) {
+                // Check if intersection is between camera and unit
+                const distToWall = cameraPos.distanceTo(intersection);
+                const distToUnit = cameraPos.distanceTo(unitPos);
+
+                if (distToWall < distToUnit) {
+                    occludingWalls.add(wall);
+                }
+            }
+        }
+    }
+
+    // Update wall opacities with smooth lerping
+    for (const wall of wallMeshes) {
+        const mat = wall.material as THREE.MeshStandardMaterial;
+        const targetOpacity = occludingWalls.has(wall) ? WALL_OPACITY_OCCLUDING : WALL_OPACITY_NORMAL;
+
+        // Lerp towards target opacity
+        mat.opacity = mat.opacity + (targetOpacity - mat.opacity) * WALL_OPACITY_LERP_SPEED;
+
+        // Snap to target if very close (avoid floating point drift)
+        if (Math.abs(mat.opacity - targetOpacity) < 0.01) {
+            mat.opacity = targetOpacity;
+        }
+    }
 }
