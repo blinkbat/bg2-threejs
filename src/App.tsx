@@ -100,7 +100,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
     // Initialize camera centered on spawn point (or default for dungeon start)
     const initialCamOffset = spawnPoint ? { x: spawnPoint.x, z: spawnPoint.z } : { x: 6, z: 6 };
     const cameraOffset = useRef(initialCamOffset);
-    const zoomLevel = useRef(10);
+    const zoomLevel = useRef(12);
     const isDragging = useRef(false);
     const didPan = useRef(false);
     const keysPressed = useRef<Set<string>>(new Set());
@@ -244,6 +244,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         resetBarks();
 
         // Clear local refs that persist between game sessions
+        zoomLevel.current = 12;
         targetRingTimers.current = {};
         Object.keys(hitFlashRef.current).forEach(k => delete hitFlashRef.current[Number(k)]);
         Object.keys(moveStartRef.current).forEach(k => delete moveStartRef.current[Number(k)]);
