@@ -9,7 +9,7 @@ import type { Room, CandlePosition, MergedObstacle, EnemyType } from "../core/ty
 // TYPES
 // =============================================================================
 
-export type AreaId = "dungeon" | "forest";
+export type AreaId = "dungeon" | "forest" | "coast";
 
 export interface RoomFloor {
     x: number;
@@ -376,8 +376,15 @@ export const FIELD_AREA: AreaData = {
         {
             x: 23, z: 49, w: 5, h: 1,
             targetArea: "dungeon",
-            targetSpawn: { x: 6.5, z: 2 },  // Starting room (south side)
+            targetSpawn: { x: 6.5, z: 2 },
             direction: "north"
+        },
+        // South edge leads to coast
+        {
+            x: 23, z: 0, w: 5, h: 1,
+            targetArea: "coast",
+            targetSpawn: { x: 25, z: 47 },
+            direction: "south"
         }
     ],
     chests: [],
@@ -444,17 +451,68 @@ export const FIELD_AREA: AreaData = {
     ]
 };
 
+export const COAST_AREA: AreaData = {
+    id: "coast",
+    name: "The Coast",
+    flavor: "Salt air fills your lungs as waves crash against the shore.",
+    gridSize: GRID_SIZE,
+    backgroundColor: "#87CEEB",  // Sky blue
+    groundColor: "#c2b280",      // Sandy tan
+    ambientLight: 0.6,
+    directionalLight: 0.9,
+    hasFogOfWar: true,
+    rooms: [
+        // Full area - water is visual only (no walls)
+        { x: 1, z: 1, w: 48, h: 48 }
+    ],
+    hallways: [],
+    roomFloors: [
+        // Sandy beach - gradient from dry to wet sand
+        { x: 1, z: 40, w: 48, h: 9, color: "#d4c4a8" },   // Dry sand (north)
+        { x: 1, z: 32, w: 48, h: 8, color: "#c2b280" },   // Mid sand
+        { x: 1, z: 25, w: 48, h: 7, color: "#a89968" },   // Wet sand (near water)
+        // Shoreline visual (not walkable - just for color reference)
+        { x: 1, z: 20, w: 48, h: 5, color: "#5f9ea0" },   // Shallow water
+        { x: 1, z: 1, w: 48, h: 19, color: "#4682b4" }    // Deep water
+    ],
+    enemySpawns: [],  // No enemies for now
+    transitions: [
+        // North edge leads back to forest
+        {
+            x: 23, z: 49, w: 5, h: 1,
+            targetArea: "forest",
+            targetSpawn: { x: 25, z: 2 },
+            direction: "north"
+        }
+    ],
+    chests: [],
+    trees: [
+        // Palm trees scattered along the beach
+        { x: 5, z: 42, size: 1.2 },
+        { x: 12, z: 44, size: 1.0 },
+        { x: 18, z: 41, size: 1.3 },
+        { x: 32, z: 43, size: 1.1 },
+        { x: 40, z: 42, size: 1.2 },
+        { x: 46, z: 45, size: 0.9 },
+        // A few near the water
+        { x: 8, z: 28, size: 1.0 },
+        { x: 25, z: 30, size: 1.4 },
+        { x: 42, z: 29, size: 1.1 },
+    ]
+};
+
 // Registry of all areas
 export const AREAS: Record<AreaId, AreaData> = {
     dungeon: DUNGEON_AREA,
-    forest: FIELD_AREA
+    forest: FIELD_AREA,
+    coast: COAST_AREA
 };
 
 // =============================================================================
 // AREA STATE MANAGEMENT
 // =============================================================================
 
-let currentAreaId: AreaId = "dungeon";
+let currentAreaId: AreaId = "coast";
 let currentAreaComputed: ComputedAreaData | null = null;
 
 export function getCurrentAreaId(): AreaId {

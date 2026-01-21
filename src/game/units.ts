@@ -295,13 +295,13 @@ const witchDoctorSpawns = [
 // Helper to create initial units
 export function createInitialUnits(): Unit[] {
     return [
-        // Player units (starting in Room A, now 12x12 at x:1-12, z:1-12)
+        // Player units (starting near north door in coast)
         ...Object.keys(UNIT_DATA).map((id, i) => {
             const data = UNIT_DATA[Number(id)];
             return {
                 id: Number(id),
-                x: 5.5 + (i % 3) * 2,
-                z: 5.5 + Math.floor(i / 3) * 2,
+                x: 23.5 + (i % 3) * 2,
+                z: 46.5 - Math.floor(i / 3) * 2,
                 hp: data.hp,
                 mana: data.mana,
                 team: "player" as const,
