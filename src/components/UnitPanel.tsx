@@ -18,19 +18,21 @@ interface UnitPanelProps {
 
 export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, skillCooldowns = {}, paused = false, queuedSkills = [] }: UnitPanelProps) {
     const [, setTick] = useState(0);
-    const [pauseTime, setPauseTime] = useState<number | null>(paused ? Date.now() : null);
+    // Use a ref to capture pause time immediately without waiting for state update
+    const [pauseTimeState, setPauseTimeState] = useState<number | null>(() => paused ? Date.now() : null);
 
     useEffect(() => {
         if (paused) {
-            setPauseTime(Date.now());
+            setPauseTimeState(Date.now());
             return;
         }
-        setPauseTime(null);
+        setPauseTimeState(null);
         const interval = setInterval(() => setTick(t => t + 1), 100);
         return () => clearInterval(interval);
     }, [paused]);
 
-    const displayTime = paused && pauseTime ? pauseTime : Date.now();
+    // When paused, freeze display time. Use current time if pauseTimeState hasn't updated yet.
+    const displayTime = paused ? (pauseTimeState ?? Date.now()) : Date.now();
     const [tab, setTab] = useState("status");
     const data = UNIT_DATA[unitId];
     const unit = units.find((u: Unit) => u.id === unitId);

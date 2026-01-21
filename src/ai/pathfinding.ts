@@ -444,7 +444,7 @@ export function findPath(startX: number, startZ: number, endX: number, endZ: num
     }
 
     // Check cache first
-    const now = performance.now();
+    const now = Date.now();
     const cached = getCachedPath(sx, sz, ex, ez, now);
     if (cached) return cached;
 

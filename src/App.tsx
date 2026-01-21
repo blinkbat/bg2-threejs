@@ -243,6 +243,13 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         resetAllBroodMotherScreeches();
         resetBarks();
 
+        // Clear local refs that persist between game sessions
+        targetRingTimers.current = {};
+        Object.keys(hitFlashRef.current).forEach(k => delete hitFlashRef.current[Number(k)]);
+        Object.keys(moveStartRef.current).forEach(k => delete moveStartRef.current[Number(k)]);
+        Object.keys(actionCooldownRef.current).forEach(k => delete actionCooldownRef.current[Number(k)]);
+        Object.keys(pathsRef.current).forEach(k => delete pathsRef.current[Number(k)]);
+
         const sceneRefs = createScene(containerRef.current, units);
         const { scene, camera, renderer, flames, candleMeshes, candleLights, fogTexture, fogMesh, moveMarker, rangeIndicator, aoeIndicator, unitGroups, selectRings, targetRings, unitMeshes, unitOriginalColors, maxHp, wallMeshes, treeMeshes, doorMeshes } = sceneRefs;
 
@@ -637,11 +644,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
             camera.updateProjectionMatrix();
         };
 
-        renderer.domElement.addEventListener("click", onClick);
-        renderer.domElement.addEventListener("mousedown", onMouseDown);
-        renderer.domElement.addEventListener("mousemove", onMouseMove);
-        renderer.domElement.addEventListener("mouseup", onMouseUp);
-        renderer.domElement.addEventListener("contextmenu", (e) => {
+        const onContextMenu = (e: MouseEvent) => {
             e.preventDefault();
             // Don't deselect if we were panning
             if (didPan.current) return;
@@ -651,7 +654,13 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                 // Right-click deselects all units
                 setSelectedIds([]);
             }
-        });
+        };
+
+        renderer.domElement.addEventListener("click", onClick);
+        renderer.domElement.addEventListener("mousedown", onMouseDown);
+        renderer.domElement.addEventListener("mousemove", onMouseMove);
+        renderer.domElement.addEventListener("mouseup", onMouseUp);
+        renderer.domElement.addEventListener("contextmenu", onContextMenu);
         renderer.domElement.addEventListener("wheel", onWheel, { passive: false });
         window.addEventListener("keydown", onKeyDown);
         window.addEventListener("keyup", onKeyUp);
@@ -874,6 +883,11 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
             window.removeEventListener("resize", onResize);
             window.removeEventListener("keydown", onKeyDown);
             window.removeEventListener("keyup", onKeyUp);
+            renderer.domElement.removeEventListener("click", onClick);
+            renderer.domElement.removeEventListener("mousedown", onMouseDown);
+            renderer.domElement.removeEventListener("mousemove", onMouseMove);
+            renderer.domElement.removeEventListener("mouseup", onMouseUp);
+            renderer.domElement.removeEventListener("contextmenu", onContextMenu);
             renderer.domElement.removeEventListener("wheel", onWheel);
             renderer.dispose();
             containerRef.current?.removeChild(renderer.domElement);
