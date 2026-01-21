@@ -513,7 +513,7 @@ export const AREAS: Record<AreaId, AreaData> = {
 // AREA STATE MANAGEMENT
 // =============================================================================
 
-let currentAreaId: AreaId = "coast";
+let currentAreaId: AreaId = "dungeon";
 let currentAreaComputed: ComputedAreaData | null = null;
 
 export function getCurrentAreaId(): AreaId {

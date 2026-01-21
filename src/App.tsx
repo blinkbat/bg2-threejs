@@ -100,7 +100,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
     // Initialize camera centered on spawn point (or default for dungeon start)
     const initialCamOffset = spawnPoint ? { x: spawnPoint.x, z: spawnPoint.z } : { x: 6, z: 6 };
     const cameraOffset = useRef(initialCamOffset);
-    const zoomLevel = useRef(7);
+    const zoomLevel = useRef(10);
     const isDragging = useRef(false);
     const didPan = useRef(false);
     const keysPressed = useRef<Set<string>>(new Set());
@@ -267,6 +267,14 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
 
         const updateCam = () => updateCamera(camera, cameraOffset.current);
         updateCam();
+
+        // Apply initial zoom level (camera is created with default zoom, need to sync with zoomLevel ref)
+        const aspect = containerRef.current.clientWidth / containerRef.current.clientHeight;
+        camera.left = -zoomLevel.current * aspect;
+        camera.right = zoomLevel.current * aspect;
+        camera.top = zoomLevel.current;
+        camera.bottom = -zoomLevel.current;
+        camera.updateProjectionMatrix();
 
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
@@ -545,7 +553,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                             if (targetRing) {
                                 targetRing.visible = true;
                                 (targetRing.material as THREE.MeshBasicMaterial).opacity = 1;
-                                targetRingTimers.current[targetId] = performance.now();
+                                targetRingTimers.current[targetId] = Date.now();
                             }
 
                             selectedRef.current.forEach(uid => {

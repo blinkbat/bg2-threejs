@@ -454,11 +454,10 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         if (!isPlayer) {
             const targetRing = new THREE.Mesh(
                 new THREE.RingGeometry(selInner, selOuter, 32),
-                new THREE.MeshBasicMaterial({ color: "#ff0000", side: THREE.DoubleSide, transparent: true, opacity: 1, depthTest: false })
+                new THREE.MeshBasicMaterial({ color: "#ff0000", side: THREE.DoubleSide, transparent: true, opacity: 1 })
             );
             targetRing.rotation.x = -Math.PI / 2;
-            targetRing.position.y = 0.02;
-            targetRing.renderOrder = 1;  // Render after ground
+            targetRing.position.y = 0.03;
             targetRing.visible = false;
             group.add(targetRing);
             targetRings[unit.id] = targetRing;
@@ -560,14 +559,16 @@ export function addUnitToScene(
     selectRings[unit.id] = sel;
 
     // Target ring (red) for enemies - shows when player targets them
+    // Slightly larger than selection ring so both can be visible simultaneously
     if (!isPlayer) {
+        const targetInner = 0.5 * size;
+        const targetOuter = 0.6 * size;
         const targetRing = new THREE.Mesh(
-            new THREE.RingGeometry(selInner, selOuter, 32),
-            new THREE.MeshBasicMaterial({ color: "#ff0000", side: THREE.DoubleSide, transparent: true, opacity: 1, depthTest: false })
+            new THREE.RingGeometry(targetInner, targetOuter, 32),
+            new THREE.MeshBasicMaterial({ color: "#ff0000", side: THREE.DoubleSide, transparent: true, opacity: 1 })
         );
         targetRing.rotation.x = -Math.PI / 2;
-        targetRing.position.y = 0.02;
-        targetRing.renderOrder = 1;  // Render after ground
+        targetRing.position.y = 0.04;
         targetRing.visible = false;
         group.add(targetRing);
         targetRings[unit.id] = targetRing;

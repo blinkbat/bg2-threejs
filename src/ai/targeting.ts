@@ -5,6 +5,7 @@
 import { GRID_SIZE } from "../core/constants";
 import { findPath, isPassable } from "./pathfinding";
 import { getEnemyKiteCooldown, setEnemyKiteCooldown, setEnemyKitingUntil } from "../game/enemyState";
+import { getDirectionAndDistance } from "../combat/combatMath";
 import type { Unit, UnitGroup, EnemyStats } from "../core/types";
 
 // =============================================================================
@@ -23,20 +24,6 @@ export interface KiteContext {
 
 export interface KiteResult {
     isKiting: boolean;
-}
-
-/**
- * Calculate direction and distance between two points.
- */
-function getDirectionAndDistance(fromX: number, fromZ: number, toX: number, toZ: number): { dx: number; dz: number; dist: number } {
-    const dx = toX - fromX;
-    const dz = toZ - fromZ;
-    const dist = Math.hypot(dx, dz);
-    return {
-        dx: dist > 0 ? dx / dist : 0,
-        dz: dist > 0 ? dz / dist : 0,
-        dist
-    };
 }
 
 /**
