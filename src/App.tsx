@@ -86,6 +86,8 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
     const sceneRef = useRef<THREE.Scene | null>(null);
     const unitsRef = useRef<Record<number, UnitGroup>>({});
     const selectRingsRef = useRef<Record<number, THREE.Mesh>>({});
+    const targetRingsRef = useRef<Record<number, THREE.Mesh>>({});
+    const targetRingTimers = useRef<Record<number, number>>({});  // Track when target was set for fade
     const maxHpRef = useRef<Record<number, number>>({});
     const moveMarkerRef = useRef<THREE.Mesh | null>(null);
     const moveMarkerStartRef = useRef<number>(0);  // Track when marker was shown for fade animation
@@ -98,7 +100,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
     // Initialize camera centered on spawn point (or default for dungeon start)
     const initialCamOffset = spawnPoint ? { x: spawnPoint.x, z: spawnPoint.z } : { x: 6, z: 6 };
     const cameraOffset = useRef(initialCamOffset);
-    const zoomLevel = useRef(10);
+    const zoomLevel = useRef(7);
     const isDragging = useRef(false);
     const didPan = useRef(false);
     const keysPressed = useRef<Set<string>>(new Set());
@@ -242,7 +244,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         resetBarks();
 
         const sceneRefs = createScene(containerRef.current, units);
-        const { scene, camera, renderer, flames, candleMeshes, candleLights, fogTexture, fogMesh, moveMarker, rangeIndicator, aoeIndicator, unitGroups, selectRings, unitMeshes, unitOriginalColors, maxHp, wallMeshes, treeMeshes, doorMeshes } = sceneRefs;
+        const { scene, camera, renderer, flames, candleMeshes, candleLights, fogTexture, fogMesh, moveMarker, rangeIndicator, aoeIndicator, unitGroups, selectRings, targetRings, unitMeshes, unitOriginalColors, maxHp, wallMeshes, treeMeshes, doorMeshes } = sceneRefs;
 
         sceneRef.current = scene;
         cameraRef.current = camera;
@@ -254,6 +256,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         aoeIndicatorRef.current = aoeIndicator;
         unitsRef.current = unitGroups;
         selectRingsRef.current = selectRings;
+        targetRingsRef.current = targetRings;
         unitMeshRef.current = unitMeshes;
         unitOriginalColorRef.current = unitOriginalColors;
         maxHpRef.current = maxHp;
@@ -537,6 +540,14 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                             const targetId = clickedUnit.id;
                             const targetG = unitsRef.current[targetId];
 
+                            // Show red target ring on the enemy (will fade out)
+                            const targetRing = targetRingsRef.current[targetId];
+                            if (targetRing) {
+                                targetRing.visible = true;
+                                (targetRing.material as THREE.MeshBasicMaterial).opacity = 1;
+                                targetRingTimers.current[targetId] = performance.now();
+                            }
+
                             selectedRef.current.forEach(uid => {
                                 const casterG = unitsRef.current[uid];
                                 if (casterG) {
@@ -746,6 +757,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                             unit,
                             unitsRef.current,
                             selectRingsRef.current,
+                            targetRingsRef.current,
                             unitMeshRef.current,
                             unitOriginalColorRef.current,
                             maxHpRef.current
@@ -794,6 +806,24 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                     }
                 }
             }
+
+            // Update target rings - fade out over time
+            const targetRingDuration = 1500;  // 1.5 seconds total
+            const targetRingFadeStart = 500;   // Start fading after 0.5 seconds
+            Object.entries(targetRingTimers.current).forEach(([idStr, startTime]) => {
+                const id = Number(idStr);
+                const ring = targetRingsRef.current[id];
+                if (!ring) return;
+
+                const age = now - startTime;
+                if (age >= targetRingDuration) {
+                    ring.visible = false;
+                    delete targetRingTimers.current[id];
+                } else if (age > targetRingFadeStart) {
+                    const fadeProgress = (age - targetRingFadeStart) / (targetRingDuration - targetRingFadeStart);
+                    (ring.material as THREE.MeshBasicMaterial).opacity = 1 - fadeProgress;
+                }
+            });
 
             // Update range indicator to follow caster during targeting mode
             if (targetingModeRef.current && rangeIndicatorRef.current?.visible) {

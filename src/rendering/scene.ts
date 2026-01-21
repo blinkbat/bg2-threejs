@@ -28,6 +28,7 @@ export interface SceneRefs {
     aoeIndicator: THREE.Mesh;
     unitGroups: Record<number, UnitGroup>;
     selectRings: Record<number, THREE.Mesh>;
+    targetRings: Record<number, THREE.Mesh>;  // Red rings for targeted enemies
     unitMeshes: Record<number, THREE.Mesh>;
     unitOriginalColors: Record<number, THREE.Color>;
     maxHp: Record<number, number>;
@@ -399,6 +400,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     // Create unit meshes
     const unitGroups: Record<number, UnitGroup> = {};
     const selectRings: Record<number, THREE.Mesh> = {};
+    const targetRings: Record<number, THREE.Mesh> = {};  // Red rings for targeted enemies
     const unitMeshes: Record<number, THREE.Mesh> = {};
     const unitOriginalColors: Record<number, THREE.Color> = {};
     const maxHp: Record<number, number> = {};
@@ -447,6 +449,21 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         sel.visible = false;
         group.add(sel);
         selectRings[unit.id] = sel;
+
+        // Target ring (red) for enemies - shows when player targets them
+        if (!isPlayer) {
+            const targetRing = new THREE.Mesh(
+                new THREE.RingGeometry(selInner, selOuter, 32),
+                new THREE.MeshBasicMaterial({ color: "#ff0000", side: THREE.DoubleSide, transparent: true, opacity: 1, depthTest: false })
+            );
+            targetRing.rotation.x = -Math.PI / 2;
+            targetRing.position.y = 0.02;
+            targetRing.renderOrder = 1;  // Render after ground
+            targetRing.visible = false;
+            group.add(targetRing);
+            targetRings[unit.id] = targetRing;
+        }
+
         maxHp[unit.id] = data.maxHp;
 
         group.position.set(unit.x, 0, unit.z);
@@ -469,6 +486,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         aoeIndicator,
         unitGroups,
         selectRings,
+        targetRings,
         unitMeshes,
         unitOriginalColors,
         maxHp,
@@ -493,6 +511,7 @@ export function addUnitToScene(
     unit: Unit,
     unitGroups: Record<number, UnitGroup>,
     selectRings: Record<number, THREE.Mesh>,
+    targetRings: Record<number, THREE.Mesh>,
     unitMeshes: Record<number, THREE.Mesh>,
     unitOriginalColors: Record<number, THREE.Color>,
     maxHp: Record<number, number>
@@ -539,6 +558,21 @@ export function addUnitToScene(
     sel.visible = false;
     group.add(sel);
     selectRings[unit.id] = sel;
+
+    // Target ring (red) for enemies - shows when player targets them
+    if (!isPlayer) {
+        const targetRing = new THREE.Mesh(
+            new THREE.RingGeometry(selInner, selOuter, 32),
+            new THREE.MeshBasicMaterial({ color: "#ff0000", side: THREE.DoubleSide, transparent: true, opacity: 1, depthTest: false })
+        );
+        targetRing.rotation.x = -Math.PI / 2;
+        targetRing.position.y = 0.02;
+        targetRing.renderOrder = 1;  // Render after ground
+        targetRing.visible = false;
+        group.add(targetRing);
+        targetRings[unit.id] = targetRing;
+    }
+
     maxHp[unit.id] = data.maxHp;
 
     group.position.set(unit.x, 0, unit.z);

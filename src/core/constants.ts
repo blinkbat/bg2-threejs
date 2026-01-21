@@ -20,8 +20,13 @@ export const POISON_TICK_INTERVAL = 1000;  // tick every 1 second
 export const POISON_DAMAGE_PER_TICK = 2;   // 2 damage per tick
 export const POISON_TINT_STRENGTH = 0.4;   // Color lerp amount for poison visual
 
-// Status Effects - Buffs (shielded, stunned, cleansed)
+// Status Effects - Buffs (shielded, stunned, cleansed, pinned)
 export const BUFF_TICK_INTERVAL = 100;     // tick every 100ms for smooth duration countdown
+
+// Trap Projectile
+export const TRAP_FLIGHT_DURATION = 600;   // ms for arc flight
+export const TRAP_ARC_HEIGHT = 2.5;        // Peak height of thrown trap
+export const TRAP_MESH_SIZE = 0.25;        // Size of trap mesh
 
 // Visual Effects
 export const HEAL_FLASH_DURATION = 200;    // ms for green healing flash
@@ -90,6 +95,9 @@ export const COLORS = {
     cleansed: "#b8c4d0",
     cleansedText: "#ecf0f1",
     cleansedBg: "#1a1a2a",
+    pinned: "#8b0000",
+    pinnedText: "#ff4444",
+    pinnedBg: "#2a1010",
 
     // HP bar colors
     hpHigh: "#22c55e",          // > 50%

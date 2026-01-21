@@ -158,6 +158,13 @@ export function hasCleansedEffect(unit: Unit): boolean {
 }
 
 /**
+ * Check if a unit currently has the pinned status effect.
+ */
+export function hasPinnedEffect(unit: Unit): boolean {
+    return unit.statusEffects?.some(e => e.type === "pinned") ?? false;
+}
+
+/**
  * Get effective armor for a unit, applying shielded buff (doubles armor).
  */
 export function getEffectiveArmor(unit: Unit, baseArmor: number): number {
@@ -264,4 +271,14 @@ export function logStunned(targetName: string): string {
 /** "{caster} cleanses {target}!" */
 export function logCleanse(casterName: string, targetName: string): string {
     return `${casterName} cleanses ${targetName}!`;
+}
+
+/** "{caster} throws {skill}!" */
+export function logTrapThrown(casterName: string, skillName: string): string {
+    return `${casterName} throws ${skillName}!`;
+}
+
+/** "{skill} triggers, pinning {count} enemies!" */
+export function logTrapTriggered(skillName: string, pinnedCount: number): string {
+    return `${skillName} triggers, pinning ${pinnedCount} enem${pinnedCount !== 1 ? 'ies' : 'y'}!`;
 }

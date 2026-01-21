@@ -3,10 +3,10 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, Skill, UnitGroup, Projectile, StatusEffect, MagicMissileProjectile } from "../core/types";
-import { COLORS, BUFF_TICK_INTERVAL } from "../core/constants";
+import type { Unit, Skill, UnitGroup, Projectile, StatusEffect, MagicMissileProjectile, TrapProjectile } from "../core/types";
+import { COLORS, BUFF_TICK_INTERVAL, TRAP_FLIGHT_DURATION, TRAP_ARC_HEIGHT, TRAP_MESH_SIZE } from "../core/constants";
 import { UNIT_DATA, getUnitStats } from "../game/units";
-import { rollDamage, rollChance, calculateDamage, rollHit, getEffectiveArmor, hasShieldedEffect, hasStunnedEffect, hasPoisonEffect, logHit, logMiss, logHeal, logPoisoned, logCast, logTaunt, logTauntMiss, logBuff, logStunned, logCleanse } from "./combatMath";
+import { rollDamage, rollChance, calculateDamage, rollHit, getEffectiveArmor, hasShieldedEffect, hasStunnedEffect, hasPoisonEffect, logHit, logMiss, logHeal, logPoisoned, logCast, logTaunt, logTauntMiss, logBuff, logStunned, logCleanse, logTrapThrown } from "./combatMath";
 import { tryHealBark, trySpellBark } from "./barks";
 import { getUnitRadius, isInRange } from "../rendering/range";
 import { soundFns } from "../audio/sound";
@@ -243,11 +243,11 @@ export function executeMeleeSkill(
         applyDamageToUnit(dmgCtx, targetId, targetG, targetEnemy.hp, dmg, targetData.name, {
             color: COLORS.damagePlayer,
             poison: willPoison ? { sourceId: casterId } : undefined,
-            attackerName: casterData.name
+            attackerName: casterData.name,
+            hitMessage: { text: logHit(casterData.name, skill.name, targetData.name, dmg), color: COLORS.damagePlayer }
         });
 
         soundFns.playHit();
-        addLog(logHit(casterData.name, skill.name, targetData.name, dmg), COLORS.damagePlayer);
 
         if (willPoison) {
             addLog(logPoisoned(targetData.name), COLORS.poisonText);
@@ -812,6 +812,58 @@ export function executeMagicWaveSkill(
 }
 
 /**
+ * Execute a trap skill (like Caltrops) - throws a trap that lands and waits for enemies
+ */
+export function executeTrapSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill,
+    targetX: number,
+    targetZ: number
+): boolean {
+    const { scene, unitsRef, projectilesRef, addLog } = ctx;
+
+    const casterG = unitsRef.current[casterId];
+    if (!casterG) return false;
+
+    consumeSkill(ctx, casterId, skill);
+
+    const casterData = UNIT_DATA[casterId];
+    const now = Date.now();
+
+    // Create trap projectile mesh (spiky appearance)
+    const trapGeometry = new THREE.OctahedronGeometry(TRAP_MESH_SIZE, 0);
+    const trapMaterial = new THREE.MeshBasicMaterial({ color: "#888888" });
+    const trapMesh = new THREE.Mesh(trapGeometry, trapMaterial);
+    trapMesh.position.set(casterG.position.x, 0.5, casterG.position.z);
+    scene.add(trapMesh);
+
+    // Create trap projectile with arc trajectory
+    const trapProjectile: TrapProjectile = {
+        type: "trap",
+        mesh: trapMesh,
+        attackerId: casterId,
+        speed: 0,  // Speed not used for arc trajectory
+        targetPos: { x: targetX, z: targetZ },
+        aoeRadius: skill.aoeRadius ?? 2,
+        pinnedDuration: skill.value[0],
+        startX: casterG.position.x,
+        startZ: casterG.position.z,
+        startTime: now,
+        flightDuration: TRAP_FLIGHT_DURATION,
+        arcHeight: TRAP_ARC_HEIGHT,
+        isLanded: false
+    };
+
+    projectilesRef.current.push(trapProjectile);
+
+    addLog(logTrapThrown(casterData.name, skill.name), "#888888");
+    soundFns.playAttack();  // Throwing sound
+
+    return true;
+}
+
+/**
  * Execute a skill based on its type
  */
 export function executeSkill(
@@ -861,6 +913,8 @@ export function executeSkill(
         return executeFlurrySkill(ctx, casterId, skill);
     } else if (skill.type === "debuff" && skill.targetType === "enemy") {
         return executeDebuffSkill(ctx, casterId, skill, targetX, targetZ);
+    } else if (skill.type === "trap" && skill.targetType === "aoe") {
+        return executeTrapSkill(ctx, casterId, skill, targetX, targetZ);
     }
 
     return false;

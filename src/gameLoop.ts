@@ -3,7 +3,7 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation, EnemyStats, EnemySkill, EnemyHealSkill, EnemySpawnSkill, MagicMissileProjectile } from "./core/types";
+import type { Unit, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation, EnemyStats, EnemySkill, EnemyHealSkill, EnemySpawnSkill, MagicMissileProjectile, TrapProjectile, StatusEffect } from "./core/types";
 import {
     GRID_SIZE, HIT_DETECTION_RADIUS, FLASH_DURATION,
     SWING_DURATION, COLORS, SKILL_SINGLE_TARGET_CHANCE, POISON_TINT_STRENGTH
@@ -18,7 +18,8 @@ import {
 } from "./ai/unitAI";
 import { getUnitStats, getBasicAttackSkill, getAttackRange, ENEMY_STATS } from "./game/units";
 import type { ActionQueue } from "./input";
-import { calculateDamage, calculateDistance, getDirectionAndDistance, rollHit, shouldApplyPoison, hasPoisonEffect, hasStunnedEffect, getEffectiveArmor, logHit, logMiss, logPoisoned, logAoeHit, logAoeMiss, getDamageColor } from "./combat/combatMath";
+import { calculateDamage, calculateDistance, getDirectionAndDistance, rollHit, shouldApplyPoison, hasPoisonEffect, hasStunnedEffect, hasPinnedEffect, getEffectiveArmor, logHit, logMiss, logPoisoned, logAoeHit, logAoeMiss, getDamageColor, logTrapTriggered } from "./combat/combatMath";
+import { BUFF_TICK_INTERVAL } from "./core/constants";
 import { SWIPE_ANIMATE_DURATION } from "./core/constants";
 import { spawnDamageNumber, handleUnitDefeat, createProjectile, getProjectileSpeed, applyDamageToUnit, animateExpandingMesh, getAliveUnitsInRange, type DamageContext } from "./combat/combat";
 import { soundFns } from "./audio/sound";
@@ -262,8 +263,8 @@ export function processStatusEffects(
                         handleUnitDefeat(unit.id, unitG, unitsRef, addLog, data.name);
                     }
                 }
-            } else if (effect.type === "shielded" || effect.type === "stunned" || effect.type === "cleansed") {
-                // Shielded/stunned/cleansed buff - tick down duration at fixed interval (like poison)
+            } else if (effect.type === "shielded" || effect.type === "stunned" || effect.type === "cleansed" || effect.type === "pinned") {
+                // Shielded/stunned/cleansed/pinned buff - tick down duration at fixed interval (like poison)
                 if (now - effect.lastTick >= effect.tickInterval) {
                     setUnits(prev => prev.map(u => {
                         if (u.id !== unit.id) return u;
@@ -518,6 +519,118 @@ export function updateProjectiles(
             return true;
         }
 
+        // Trap projectile (like Caltrops) - arc trajectory then wait for trigger
+        if (proj.type === "trap") {
+            const trapProj = proj as TrapProjectile;
+            const elapsed = now - trapProj.startTime;
+
+            if (!trapProj.isLanded) {
+                // Arc trajectory during flight
+                const t = Math.min(1, elapsed / trapProj.flightDuration);
+
+                // Parabolic arc: lerp x/z, parabola for y
+                const startX = trapProj.startX;
+                const startZ = trapProj.startZ;
+                const endX = trapProj.targetPos.x;
+                const endZ = trapProj.targetPos.z;
+
+                proj.mesh.position.x = startX + (endX - startX) * t;
+                proj.mesh.position.z = startZ + (endZ - startZ) * t;
+                // Parabolic height: 4 * h * t * (1 - t) peaks at t=0.5
+                proj.mesh.position.y = 0.1 + trapProj.arcHeight * 4 * t * (1 - t);
+
+                // Spin the trap during flight
+                proj.mesh.rotation.x += 0.15;
+                proj.mesh.rotation.y += 0.1;
+
+                // Check if landed
+                if (t >= 1) {
+                    trapProj.isLanded = true;
+                    proj.mesh.position.y = 0.15;  // Settle on ground
+                    proj.mesh.rotation.x = 0;
+                    proj.mesh.rotation.z = 0;
+                    // Change color to indicate armed trap
+                    (proj.mesh.material as THREE.MeshBasicMaterial).color.set("#cc4444");
+                }
+                return true;
+            }
+
+            // Trap is on the ground - check for enemy triggers
+            const enemies = unitsState.filter(u =>
+                u.team === "enemy" &&
+                u.hp > 0 &&
+                !defeatedThisFrame.has(u.id)
+            );
+
+            for (const enemy of enemies) {
+                const enemyG = unitsRef[enemy.id];
+                if (!enemyG) continue;
+
+                const dist = calculateDistance(
+                    enemyG.position.x, enemyG.position.z,
+                    trapProj.targetPos.x, trapProj.targetPos.z
+                );
+
+                if (dist <= trapProj.aoeRadius) {
+                    // Trap triggered! Apply pinned effect to all enemies in radius
+                    let pinnedCount = 0;
+
+                    enemies.forEach(target => {
+                        const targetG = unitsRef[target.id];
+                        if (!targetG) return;
+
+                        const targetDist = calculateDistance(
+                            targetG.position.x, targetG.position.z,
+                            trapProj.targetPos.x, trapProj.targetPos.z
+                        );
+
+                        if (targetDist <= trapProj.aoeRadius) {
+                            // Apply pinned effect
+                            const pinnedEffect: StatusEffect = {
+                                type: "pinned",
+                                duration: trapProj.pinnedDuration,
+                                tickInterval: BUFF_TICK_INTERVAL,
+                                lastTick: now,
+                                damagePerTick: 0,
+                                sourceId: trapProj.attackerId
+                            };
+
+                            setUnits(prev => prev.map(u => {
+                                if (u.id !== target.id) return u;
+                                const existingEffects = u.statusEffects || [];
+                                // Remove existing pinned effect if any (refresh)
+                                const filteredEffects = existingEffects.filter(e => e.type !== "pinned");
+                                return {
+                                    ...u,
+                                    statusEffects: [...filteredEffects, pinnedEffect]
+                                };
+                            }));
+
+                            pinnedCount++;
+                        }
+                    });
+
+                    // Visual effect - red ring expanding
+                    const triggerRing = new THREE.Mesh(
+                        new THREE.RingGeometry(0.2, trapProj.aoeRadius, 32),
+                        new THREE.MeshBasicMaterial({ color: "#cc4444", transparent: true, opacity: 0.6, side: THREE.DoubleSide })
+                    );
+                    triggerRing.rotation.x = -Math.PI / 2;
+                    triggerRing.position.set(trapProj.targetPos.x, 0.1, trapProj.targetPos.z);
+                    scene.add(triggerRing);
+                    animateExpandingMesh(scene, triggerRing, { duration: 400, initialOpacity: 0.6, maxScale: trapProj.aoeRadius * 1.3, baseRadius: trapProj.aoeRadius });
+
+                    soundFns.playHit();
+                    addLog(logTrapTriggered("Caltrops", pinnedCount), COLORS.pinnedText);
+
+                    disposeProjectile(scene, proj);
+                    return false;
+                }
+            }
+
+            return true;  // Trap still active, waiting for trigger
+        }
+
         // Regular projectile (single target) - validate target exists
         if (proj.type !== "basic") return true;
         const targetUnit = unitsState.find(u => u.id === proj.targetId);
@@ -552,11 +665,11 @@ export function updateProjectiles(
                 applyDamageToUnit(dmgCtx, targetUnit.id, targetG, targetUnit.hp, dmg, targetData.name, {
                     color: logColor,
                     poison: willPoison ? { sourceId: attackerUnit.id, damagePerTick: poisonDmg } : undefined,
-                    attackerName: attackerUnit.team === "player" ? attackerData.name : undefined
+                    attackerName: attackerUnit.team === "player" ? attackerData.name : undefined,
+                    hitMessage: { text: logHit(attackerData.name, "Attack", targetData.name, dmg), color: logColor }
                 });
 
                 soundFns.playHit();
-                addLog(logHit(attackerData.name, "Attack", targetData.name, dmg), logColor);
 
                 if (willPoison) {
                     addLog(logPoisoned(targetData.name), COLORS.poisonText);
@@ -1136,11 +1249,11 @@ export function updateUnitAI(
                             const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
                             applyDamageToUnit(dmgCtx, targetU.id, targetG, targetU.hp, dmg, targetData.name, {
                                 color: COLORS.damageEnemy,
-                                poison: willPoison ? { sourceId: unit.id, damagePerTick: poisonDmg } : undefined
+                                poison: willPoison ? { sourceId: unit.id, damagePerTick: poisonDmg } : undefined,
+                                hitMessage: { text: logHit(data.name, "Attack", targetData.name, dmg), color: COLORS.damageEnemy }
                             });
 
                             soundFns.playHit();
-                            addLog(logHit(data.name, "Attack", targetData.name, dmg), COLORS.damageEnemy);
                             if (willPoison) {
                                 addLog(logPoisoned(targetData.name), COLORS.poisonText);
                             }
@@ -1167,7 +1280,9 @@ export function updateUnitAI(
     targetZ = pathResult.targetZ;
 
     // Phase 4: Movement - move toward target with avoidance and wall sliding
-    const speedMultiplier = !isPlayer && 'moveSpeed' in data ? (data as EnemyStats).moveSpeed : undefined;
+    // Pinned units cannot move (speed = 0)
+    const baseSpeedMultiplier = !isPlayer && 'moveSpeed' in data ? (data as EnemyStats).moveSpeed : undefined;
+    const speedMultiplier = hasPinnedEffect(unit) ? 0 : baseSpeedMultiplier;
     const movementCtx: MovementContext = { unit, g, unitsRef, unitsState, targetX, targetZ, speedMultiplier };
     runMovementPhase(movementCtx);
 }

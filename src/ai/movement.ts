@@ -49,8 +49,13 @@ export interface StuckResult {
     isJittering: boolean;
 }
 
+// Pre-compute squared distance thresholds for fast comparison
+const STUCK_REALLY_STUCK_DIST_SQ = STUCK_REALLY_STUCK_DIST * STUCK_REALLY_STUCK_DIST;
+const STUCK_DIST_SQ = STUCK_DIST * STUCK_DIST;
+
 /**
  * Check if a unit is stuck based on time and distance moved.
+ * Uses squared distances to avoid sqrt calls.
  */
 export function checkIfStuck(
     unitId: number,
@@ -64,11 +69,13 @@ export function checkIfStuck(
     }
 
     const timeSinceStart = now - moveStart.time;
-    const movedDist = Math.hypot(currentX - moveStart.x, currentZ - moveStart.z);
+    const dx = currentX - moveStart.x;
+    const dz = currentZ - moveStart.z;
+    const movedDistSq = dx * dx + dz * dz;
 
-    // Give up faster if really stuck
-    const isReallyStuck = timeSinceStart > STUCK_REALLY_STUCK_MS && movedDist < STUCK_REALLY_STUCK_DIST;
-    const isStuck = timeSinceStart > STUCK_MS && movedDist < STUCK_DIST;
+    // Give up faster if really stuck (using squared distance comparison)
+    const isReallyStuck = timeSinceStart > STUCK_REALLY_STUCK_MS && movedDistSq < STUCK_REALLY_STUCK_DIST_SQ;
+    const isStuck = timeSinceStart > STUCK_MS && movedDistSq < STUCK_DIST_SQ;
 
     // Check for jittering (rapid direction changes)
     const isJittering = checkJitter(unitId, currentX, currentZ, now);
@@ -76,9 +83,13 @@ export function checkIfStuck(
     return { isStuck, isReallyStuck, isJittering };
 }
 
+// Squared threshold for movement detection (0.01^2)
+const JITTER_MOVE_THRESHOLD_SQ = 0.0001;
+
 /**
  * Track movement direction and detect jittering (rapid oscillation).
  * Returns true if unit has been jittering for longer than JITTER_DETECTION_MS.
+ * Uses squared distances to avoid sqrt where possible.
  */
 function checkJitter(unitId: number, currentX: number, currentZ: number, now: number): boolean {
     const state = jitterTracking[unitId];
@@ -99,10 +110,12 @@ function checkJitter(unitId: number, currentX: number, currentZ: number, now: nu
     // Calculate movement delta
     const dx = currentX - state.lastX;
     const dz = currentZ - state.lastZ;
-    const moveDist = Math.hypot(dx, dz);
+    const moveDistSq = dx * dx + dz * dz;
 
-    // Only track direction if we actually moved
-    if (moveDist > 0.01) {
+    // Only track direction if we actually moved (using squared comparison)
+    if (moveDistSq > JITTER_MOVE_THRESHOLD_SQ) {
+        // Only compute sqrt when we need the actual distance for normalization
+        const moveDist = Math.sqrt(moveDistSq);
         const dirX = dx / moveDist;
         const dirZ = dz / moveDist;
 
@@ -231,9 +244,14 @@ export interface PathRecalcResult {
     reason: "no_path" | "target_moved" | "unit_deviated" | "none";
 }
 
+// Pre-compute squared thresholds
+const PATH_MAX_DEVIATION_SQ = PATH_MAX_DEVIATION * PATH_MAX_DEVIATION;
+const PATH_MAX_DEVIATION_DOUBLE_SQ = (PATH_MAX_DEVIATION * 2) * (PATH_MAX_DEVIATION * 2);
+
 /**
  * Check if a path needs to be recalculated.
  * Considers both target movement and unit deviation from path.
+ * Uses squared distances to avoid sqrt calls.
  */
 export function checkPathNeedsRecalc(
     currentPath: { x: number; z: number }[] | undefined,
@@ -246,20 +264,22 @@ export function checkPathNeedsRecalc(
         return { needsNewPath: true, reason: "no_path" };
     }
 
-    // Check if target has moved too far from path end
+    // Check if target has moved too far from path end (squared comparison)
     const pathEnd = currentPath[currentPath.length - 1];
-    const distToPathEnd = Math.hypot(pathEnd.x - targetX, pathEnd.z - targetZ);
-    if (distToPathEnd > PATH_MAX_DEVIATION) {
+    const dx = pathEnd.x - targetX;
+    const dz = pathEnd.z - targetZ;
+    if (dx * dx + dz * dz > PATH_MAX_DEVIATION_SQ) {
         return { needsNewPath: true, reason: "target_moved" };
     }
 
     // Check if unit has deviated too far from current waypoint (if position provided)
     if (unitX !== undefined && unitZ !== undefined && currentPath.length > 0) {
         const nextWaypoint = currentPath[0];
-        const distToWaypoint = Math.hypot(nextWaypoint.x - unitX, nextWaypoint.z - unitZ);
+        const wdx = nextWaypoint.x - unitX;
+        const wdz = nextWaypoint.z - unitZ;
         // If unit is very far from next waypoint, path may be invalid
         // Use a larger threshold since unit might be approaching from an angle
-        if (distToWaypoint > PATH_MAX_DEVIATION * 2) {
+        if (wdx * wdx + wdz * wdz > PATH_MAX_DEVIATION_DOUBLE_SQ) {
             return { needsNewPath: true, reason: "unit_deviated" };
         }
     }
@@ -267,8 +287,12 @@ export function checkPathNeedsRecalc(
     return { needsNewPath: false, reason: "none" };
 }
 
+// Pre-compute squared waypoint reach distance
+const PATH_WAYPOINT_REACH_DIST_SQ = PATH_WAYPOINT_REACH_DIST * PATH_WAYPOINT_REACH_DIST;
+
 /**
  * Check if unit has reached the current waypoint.
+ * Uses squared distance to avoid sqrt call.
  */
 export function hasReachedWaypoint(
     unitX: number,
@@ -276,7 +300,9 @@ export function hasReachedWaypoint(
     waypointX: number,
     waypointZ: number
 ): boolean {
-    return Math.hypot(waypointX - unitX, waypointZ - unitZ) < PATH_WAYPOINT_REACH_DIST;
+    const dx = waypointX - unitX;
+    const dz = waypointZ - unitZ;
+    return dx * dx + dz * dz < PATH_WAYPOINT_REACH_DIST_SQ;
 }
 
 // =============================================================================

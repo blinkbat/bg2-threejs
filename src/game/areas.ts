@@ -4,6 +4,7 @@
 
 import { GRID_SIZE } from "../core/constants";
 import type { Room, CandlePosition, MergedObstacle, EnemyType } from "../core/types";
+import { clearPathCache, invalidateDynamicObstacles } from "../ai/pathfinding";
 
 // =============================================================================
 // TYPES
@@ -533,6 +534,9 @@ export function getComputedAreaData(): ComputedAreaData {
 export function setCurrentArea(areaId: AreaId): ComputedAreaData {
     currentAreaId = areaId;
     currentAreaComputed = computeAreaData(AREAS[areaId]);
+    // Invalidate pathfinding caches when changing areas
+    clearPathCache();
+    invalidateDynamicObstacles();
     return currentAreaComputed;
 }
 

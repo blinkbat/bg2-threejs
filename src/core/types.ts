@@ -10,7 +10,7 @@ export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "og
 // STATUS EFFECTS
 // =============================================================================
 
-export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed";
+export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned";
 
 export interface StatusEffect {
     type: StatusEffectType;
@@ -41,7 +41,7 @@ export interface Skill {
     flavor?: string;       // Flavor text for tooltip
     manaCost: number;
     cooldown: number;  // ms
-    type: "damage" | "heal" | "buff" | "taunt" | "flurry" | "debuff";
+    type: "damage" | "heal" | "buff" | "taunt" | "flurry" | "debuff" | "trap";
     targetType: "enemy" | "ally" | "self" | "aoe";
     range: number;
     aoeRadius?: number;
@@ -241,4 +241,18 @@ export interface MagicMissileProjectile extends BaseProjectile {
     totalMissiles: number;     // Total missiles in this volley
 }
 
-export type Projectile = BasicProjectile | AoeProjectile | MagicMissileProjectile;
+export interface TrapProjectile extends BaseProjectile {
+    type: "trap";
+    targetPos: { x: number; z: number };
+    aoeRadius: number;
+    pinnedDuration: number;  // Duration of pinned effect in ms
+    // Arc trajectory properties
+    startX: number;
+    startZ: number;
+    startTime: number;
+    flightDuration: number;  // ms for the arc flight
+    arcHeight: number;       // Peak height of the arc
+    isLanded: boolean;       // Whether trap has landed and is active
+}
+
+export type Projectile = BasicProjectile | AoeProjectile | MagicMissileProjectile | TrapProjectile;

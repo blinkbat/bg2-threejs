@@ -209,6 +209,7 @@ export interface DamageOptions {
     color?: string;
     skipDefeatTracking?: boolean;
     attackerName?: string;  // For bark system - name of the player unit dealing damage
+    hitMessage?: { text: string; color: string };  // Log hit message before defeat message
 }
 
 /**
@@ -225,7 +226,7 @@ export function applyDamageToUnit(
     options: DamageOptions = {}
 ): number {
     const { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame } = ctx;
-    const { poison, color = COLORS.damageEnemy, skipDefeatTracking = false, attackerName } = options;
+    const { poison, color = COLORS.damageEnemy, skipDefeatTracking = false, attackerName, hitMessage } = options;
 
     const newHp = Math.max(0, currentHp - damage);
 
@@ -246,6 +247,11 @@ export function applyDamageToUnit(
 
     // Track when this unit last took damage (for AI kiting decisions)
     targetGroup.userData.lastHitTime = now;
+
+    // Log hit message before defeat message (if provided)
+    if (hitMessage) {
+        addLog(hitMessage.text, hitMessage.color);
+    }
 
     // Defeat handling
     if (newHp <= 0) {
