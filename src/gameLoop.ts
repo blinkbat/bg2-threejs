@@ -4,7 +4,7 @@
 
 import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation, EnemyStats, EnemySpawnSkill } from "./core/types";
-import { COLORS, SKILL_SINGLE_TARGET_CHANCE } from "./core/constants";
+import { COLORS, SKILL_SINGLE_TARGET_CHANCE, SLOW_COOLDOWN_MULT, SLOW_MOVE_MULT } from "./core/constants";
 import { getUnitRadius, isInRange } from "./rendering/range";
 import { tryKite, type KiteContext } from "./ai/targeting";
 import {
@@ -13,7 +13,8 @@ import {
 } from "./ai/unitAI";
 import { getUnitStats, getBasicAttackSkill, getAttackRange, ENEMY_STATS } from "./game/units";
 import type { ActionQueue } from "./input";
-import { calculateDamage, rollHit, shouldApplyPoison, hasStunnedEffect, hasPinnedEffect, getEffectiveArmor, logHit, logMiss, logPoisoned } from "./combat/combatMath";
+import { getNextUnitId, initializeUnitIdCounter } from "./core/unitIds";
+import { calculateDamage, rollHit, shouldApplyPoison, shouldApplySlow, hasStunnedEffect, hasPinnedEffect, hasSlowedEffect, getEffectiveArmor, getEffectiveDamage, logHit, logMiss, logPoisoned, logSlowed } from "./combat/combatMath";
 import { createProjectile, getProjectileSpeed, applyDamageToUnit, getAliveUnitsInRange, type DamageContext } from "./combat/combat";
 import { soundFns } from "./audio/sound";
 import { isEnemyKiting, clearEnemyKiting, hasBroodMotherScreeched, markBroodMotherScreeched } from "./game/enemyState";
@@ -26,22 +27,8 @@ export { spawnSwingIndicator, updateSwingAnimations } from "./gameLoop/swingAnim
 import { executeEnemySwipe, executeEnemyHeal } from "./gameLoop/enemySkills";
 import { spawnSwingIndicator } from "./gameLoop/swingAnimations";
 
-// =============================================================================
-// UNIT ID COUNTER - Prevents ID collision when spawning units
-// =============================================================================
-
-let nextUnitId = 1000;  // Start high to avoid collision with initial party IDs
-
-/** Get the next unique unit ID for spawning */
-export function getNextUnitId(): number {
-    return nextUnitId++;
-}
-
-/** Initialize the unit ID counter based on existing units (call on game start/restart) */
-export function initializeUnitIdCounter(units: Unit[]): void {
-    const maxId = Math.max(...units.map(u => u.id), 0);
-    nextUnitId = maxId + 1;
-}
+// Re-export unit ID utilities for backwards compatibility
+export { getNextUnitId, initializeUnitIdCounter } from "./core/unitIds";
 
 // =============================================================================
 // TYPES
@@ -158,11 +145,12 @@ export function updateUnitAI(
                 setUnits, addLog
             );
             if (executed) {
+                const cooldownMult = hasSlowedEffect(unit) ? SLOW_COOLDOWN_MULT : 1;
                 setSkillCooldowns(prev => ({
                     ...prev,
-                    [healCooldownKey]: { end: now + healSkill.cooldown, duration: healSkill.cooldown }
+                    [healCooldownKey]: { end: now + healSkill.cooldown * cooldownMult, duration: healSkill.cooldown }
                 }));
-                actionCooldownRef[unit.id] = now + data.attackCooldown;
+                actionCooldownRef[unit.id] = now + data.attackCooldown * cooldownMult;
                 return;
             }
         }
@@ -278,11 +266,12 @@ export function updateUnitAI(
                                     hitFlashRef, setUnits, addLog, now, defeatedThisFrame
                                 );
                                 if (executed) {
+                                    const cooldownMult = hasSlowedEffect(unit) ? SLOW_COOLDOWN_MULT : 1;
                                     setSkillCooldowns(prev => ({
                                         ...prev,
-                                        [enemySkillKey]: { end: now + skill.cooldown, duration: skill.cooldown }
+                                        [enemySkillKey]: { end: now + skill.cooldown * cooldownMult, duration: skill.cooldown }
                                     }));
-                                    actionCooldownRef[unit.id] = now + data.attackCooldown;
+                                    actionCooldownRef[unit.id] = now + data.attackCooldown * cooldownMult;
                                     return;
                                 }
                             }
@@ -313,7 +302,8 @@ export function updateUnitAI(
                     }
 
                     // Enemy units: execute attack directly (they don't use player skill queue)
-                    const attackCooldownEnd = now + data.attackCooldown;
+                    const cooldownMult = hasSlowedEffect(unit) ? SLOW_COOLDOWN_MULT : 1;
+                    const attackCooldownEnd = now + data.attackCooldown * cooldownMult;
                     actionCooldownRef[unit.id] = attackCooldownEnd;
 
                     // Check if enemy is ranged (has projectile color)
@@ -328,19 +318,26 @@ export function updateUnitAI(
                         spawnSwingIndicator(scene, g, targetG, false, swingAnimations, now);
 
                         if (rollHit(data.accuracy)) {
-                            const dmg = calculateDamage(data.damage[0], data.damage[1], getEffectiveArmor(targetU, targetData.armor));
+                            const effectiveDamage = getEffectiveDamage(unit, data.damage as [number, number]);
+                            const dmg = calculateDamage(effectiveDamage[0], effectiveDamage[1], getEffectiveArmor(targetU, targetData.armor));
                             const willPoison = shouldApplyPoison(data as EnemyStats);
+                            const willSlow = shouldApplySlow(data as EnemyStats);
                             const poisonDmg = willPoison && 'poisonDamage' in data ? (data as EnemyStats).poisonDamage : undefined;
                             const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
                             applyDamageToUnit(dmgCtx, targetU.id, targetG, targetU.hp, dmg, targetData.name, {
                                 color: COLORS.damageEnemy,
                                 poison: willPoison ? { sourceId: unit.id, damagePerTick: poisonDmg } : undefined,
-                                hitMessage: { text: logHit(data.name, "Attack", targetData.name, dmg), color: COLORS.damageEnemy }
+                                slow: willSlow ? { sourceId: unit.id } : undefined,
+                                hitMessage: { text: logHit(data.name, "Attack", targetData.name, dmg), color: COLORS.damageEnemy },
+                                targetUnit: targetU
                             });
 
                             soundFns.playHit();
                             if (willPoison) {
                                 addLog(logPoisoned(targetData.name), COLORS.poisonText);
+                            }
+                            if (willSlow) {
+                                addLog(logSlowed(targetData.name), "#5599ff");
                             }
                         } else {
                             soundFns.playMiss();
@@ -365,9 +362,10 @@ export function updateUnitAI(
     targetZ = pathResult.targetZ;
 
     // Phase 4: Movement - move toward target with avoidance and wall sliding
-    // Pinned units cannot move (speed = 0)
+    // Pinned units cannot move (speed = 0), slowed units move at half speed
     const baseSpeedMultiplier = !isPlayer && 'moveSpeed' in data ? (data as EnemyStats).moveSpeed : undefined;
-    const speedMultiplier = hasPinnedEffect(unit) ? 0 : baseSpeedMultiplier;
+    const slowMultiplier = hasSlowedEffect(unit) ? SLOW_MOVE_MULT : 1;
+    const speedMultiplier = hasPinnedEffect(unit) ? 0 : (baseSpeedMultiplier ?? 1) * slowMultiplier;
     const movementCtx: MovementContext = { unit, g, unitsRef, unitsState, targetX, targetZ, speedMultiplier };
     runMovementPhase(movementCtx);
 }

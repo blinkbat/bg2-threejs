@@ -3,7 +3,7 @@
 // =============================================================================
 
 import type { Unit, UnitData, EnemyStats, StatusEffect } from "../core/types";
-import { POISON_DURATION, POISON_TICK_INTERVAL, POISON_DAMAGE_PER_TICK, COLORS } from "../core/constants";
+import { POISON_DURATION, POISON_TICK_INTERVAL, POISON_DAMAGE_PER_TICK, SLOW_DURATION, BUFF_TICK_INTERVAL, COLORS } from "../core/constants";
 
 // =============================================================================
 // DISTANCE & POSITION UTILITIES
@@ -165,10 +165,77 @@ export function hasPinnedEffect(unit: Unit): boolean {
 }
 
 /**
+ * Check if a unit currently has the slowed status effect.
+ */
+export function hasSlowedEffect(unit: Unit): boolean {
+    return unit.statusEffects?.some(e => e.type === "slowed") ?? false;
+}
+
+/**
+ * Apply the slowed debuff to a unit (1.5x cooldowns, 0.5x move speed for 10s).
+ */
+export function applySlowed(unit: Unit, sourceId: number, now: number): Unit {
+    const existingEffects = unit.statusEffects || [];
+    const existingSlowed = existingEffects.find(e => e.type === "slowed");
+
+    if (existingSlowed) {
+        // Refresh existing slow
+        return {
+            ...unit,
+            statusEffects: existingEffects.map(e =>
+                e.type === "slowed"
+                    ? { ...e, duration: SLOW_DURATION, lastTick: now }
+                    : e
+            )
+        };
+    }
+
+    // Apply new slow effect
+    const slowEffect: StatusEffect = {
+        type: "slowed",
+        duration: SLOW_DURATION,
+        tickInterval: BUFF_TICK_INTERVAL,
+        lastTick: now,
+        damagePerTick: 0,  // Slow doesn't deal damage
+        sourceId
+    };
+
+    return {
+        ...unit,
+        statusEffects: [...existingEffects, slowEffect]
+    };
+}
+
+/**
+ * Check if an attacker should apply slow based on their slow chance.
+ */
+export function shouldApplySlow(attackerData: UnitData | EnemyStats): boolean {
+    if (!('slowChance' in attackerData) || !attackerData.slowChance) {
+        return false;
+    }
+    return rollChance(attackerData.slowChance);
+}
+
+/**
  * Get effective armor for a unit, applying shielded buff (doubles armor).
  */
 export function getEffectiveArmor(unit: Unit, baseArmor: number): number {
     return hasShieldedEffect(unit) ? baseArmor * 2 : baseArmor;
+}
+
+/**
+ * Get effective damage range for a unit, accounting for amoeba split weakening.
+ * Each split reduces damage by 15%.
+ */
+export function getEffectiveDamage(unit: Unit, baseDamage: [number, number]): [number, number] {
+    if (unit.enemyType === "giant_amoeba" && unit.splitCount !== undefined && unit.splitCount > 0) {
+        const scaleFactor = Math.pow(0.85, unit.splitCount);
+        return [
+            Math.max(1, Math.floor(baseDamage[0] * scaleFactor)),
+            Math.max(1, Math.floor(baseDamage[1] * scaleFactor))
+        ];
+    }
+    return baseDamage;
 }
 
 /**
@@ -223,6 +290,11 @@ export function logHeal(casterName: string, skillName: string, targetName: strin
 /** "{target} is poisoned!" */
 export function logPoisoned(targetName: string): string {
     return `${targetName} is poisoned!`;
+}
+
+/** "{target} is slowed!" */
+export function logSlowed(targetName: string): string {
+    return `${targetName} is slowed!`;
 }
 
 /** "{target} is defeated!" */

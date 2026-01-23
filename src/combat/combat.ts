@@ -9,8 +9,10 @@ import { getUnitRadius, isInRange } from "../rendering/range";
 import { soundFns } from "../audio/sound";
 import { cleanupUnitState } from "../ai/movement";
 import { cleanupEnemyKiteCooldown } from "../game/enemyState";
-import { logDefeated, applyPoison, hasShieldedEffect } from "./combatMath";
+import { logDefeated, applyPoison, applySlowed, hasShieldedEffect } from "./combatMath";
 import { tryKillBark } from "./barks";
+import { getNextUnitId } from "../core/unitIds";
+import { ENEMY_STATS } from "../game/units";
 
 // =============================================================================
 // PROJECTILE CREATION
@@ -206,10 +208,12 @@ export interface DamageContext {
 
 export interface DamageOptions {
     poison?: { sourceId: number; damagePerTick?: number };  // Optional custom poison damage
+    slow?: { sourceId: number };  // Apply slow debuff (1.5x cooldowns, 0.5x move speed)
     color?: string;
     skipDefeatTracking?: boolean;
     attackerName?: string;  // For bark system - name of the player unit dealing damage
     hitMessage?: { text: string; color: string };  // Log hit message before defeat message
+    targetUnit?: Unit;  // Full unit data for special mechanics (e.g., amoeba split)
 }
 
 /**
@@ -226,17 +230,93 @@ export function applyDamageToUnit(
     options: DamageOptions = {}
 ): number {
     const { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame } = ctx;
-    const { poison, color = COLORS.damageEnemy, skipDefeatTracking = false, attackerName, hitMessage } = options;
+    const { poison, slow, color = COLORS.damageEnemy, skipDefeatTracking = false, attackerName, hitMessage, targetUnit } = options;
 
     const newHp = Math.max(0, currentHp - damage);
 
-    // Single setUnits call for both damage and optional poison
+    // Check for amoeba split mechanic
+    const shouldSplit = targetUnit?.enemyType === "giant_amoeba" &&
+        newHp > 0 &&  // Survived the hit
+        (targetUnit.splitCount ?? 0) < (ENEMY_STATS.giant_amoeba.maxSplitCount ?? 3);
+
+    if (shouldSplit && targetUnit) {
+        // Amoeba splits! Original dies, two smaller ones spawn
+        const currentSplitCount = targetUnit.splitCount ?? 0;
+        const newSplitCount = currentSplitCount + 1;
+
+        // Calculate HP for split offspring (divide remaining HP, minimum 1)
+        const splitHp = Math.max(1, Math.floor(newHp / 2));
+
+        // Spawn positions - offset from original position
+        const offsetDist = 0.8;
+        const angle1 = Math.random() * Math.PI * 2;
+        const angle2 = angle1 + Math.PI;  // Opposite direction
+
+        const spawn1: Unit = {
+            id: getNextUnitId(),
+            x: targetGroup.position.x + Math.cos(angle1) * offsetDist,
+            z: targetGroup.position.z + Math.sin(angle1) * offsetDist,
+            hp: splitHp,
+            team: "enemy",
+            enemyType: "giant_amoeba",
+            target: null,
+            aiEnabled: true,
+            splitCount: newSplitCount
+        };
+
+        const spawn2: Unit = {
+            id: getNextUnitId(),
+            x: targetGroup.position.x + Math.cos(angle2) * offsetDist,
+            z: targetGroup.position.z + Math.sin(angle2) * offsetDist,
+            hp: splitHp,
+            team: "enemy",
+            enemyType: "giant_amoeba",
+            target: null,
+            aiEnabled: true,
+            splitCount: newSplitCount
+        };
+
+        // Update state: kill original, spawn two new ones
+        setUnits(prev => [
+            ...prev.map(u => {
+                if (u.id !== targetId) return u;
+                return { ...u, hp: 0 };  // Kill the original
+            }),
+            spawn1,
+            spawn2
+        ]);
+
+        // Visual feedback
+        hitFlashRef[targetId] = now;
+        spawnDamageNumber(scene, targetGroup.position.x, targetGroup.position.z, damage, color, damageTexts);
+
+        // Play gushing sound for the split
+        soundFns.playGush();
+
+        // Log the split
+        const sizeDesc = newSplitCount === 1 ? "smaller" : newSplitCount === 2 ? "small" : "tiny";
+        addLog(`The ${targetName} splits into two ${sizeDesc} amoebas!`, "#3cb371");
+
+        // Mark original as defeated
+        if (defeatedThisFrame && !skipDefeatTracking) {
+            defeatedThisFrame.add(targetId);
+        }
+        handleUnitDefeat(targetId, targetGroup, unitsRef, addLog, targetName, true);  // Silent defeat
+
+        return 0;  // Original is now dead
+    }
+
+    // Normal damage handling (non-amoeba or can't split)
     setUnits(prev => prev.map(u => {
         if (u.id !== targetId) return u;
         let updated = { ...u, hp: newHp };
         // Shielded units are immune to poison
         if (poison && !hasShieldedEffect(u)) {
             updated = applyPoison(updated, poison.sourceId, now, poison.damagePerTick);
+        }
+        // Apply slow debuff
+        if (slow) {
+            updated = applySlowed(updated, slow.sourceId, now);
         }
         return updated;
     }));
@@ -306,10 +386,13 @@ export function handleUnitDefeat(
     targetGroup: UnitGroup,
     unitsRef: Record<number, UnitGroup>,
     addLog: (text: string, color?: string) => void,
-    targetName: string
+    targetName: string,
+    silent: boolean = false
 ): void {
-    addLog(logDefeated(targetName), "#f59e0b");
-    soundFns.playDeath();
+    if (!silent) {
+        addLog(logDefeated(targetName), "#f59e0b");
+        soundFns.playDeath();
+    }
     targetGroup.visible = false;
 
     // Clear attack targets pointing to defeated unit

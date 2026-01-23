@@ -12,9 +12,9 @@ import type { Unit, Skill, CombatLogEntry, SelectionBox, DamageText, UnitGroup, 
 
 // Game Logic
 import { blocked } from "./game/dungeon";
-import { getCurrentArea, setCurrentArea, AREAS, type AreaId, type AreaTransition } from "./game/areas";
+import { getCurrentArea, setCurrentArea, AREAS, DEFAULT_STARTING_AREA, DEFAULT_SPAWN_POINT, type AreaId, type AreaTransition } from "./game/areas";
 import { UNIT_DATA, ENEMY_STATS, getBasicAttackSkill } from "./game/units";
-import { createScene, updateCamera, updateWallTransparency, updateTreeFogVisibility, updateLightLOD, addUnitToScene, type DoorMesh } from "./rendering/scene";
+import { createScene, updateCamera, updateWallTransparency, updateTreeFogVisibility, updateLightLOD, addUnitToScene, updateWater, type DoorMesh } from "./rendering/scene";
 import { soundFns } from "./audio/sound";
 import { updateDynamicObstacles } from "./ai/pathfinding";
 import { updateUnitCache } from "./ai/unitAI";
@@ -97,8 +97,8 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
     const visibilityRef = useRef<number[][]>(Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(0)));
 
     // Camera & input refs
-    // Initialize camera centered on spawn point (or default for dungeon start)
-    const initialCamOffset = spawnPoint ? { x: spawnPoint.x, z: spawnPoint.z } : { x: 6, z: 6 };
+    // Initialize camera centered on spawn point (or default start)
+    const initialCamOffset = spawnPoint ?? DEFAULT_SPAWN_POINT;
     const cameraOffset = useRef(initialCamOffset);
     const zoomLevel = useRef(12);
     const isDragging = useRef(false);
@@ -121,6 +121,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
     const wallMeshesRef = useRef<THREE.Mesh[]>([]);
     const treeMeshesRef = useRef<THREE.Mesh[]>([]);
     const doorMeshesRef = useRef<DoorMesh[]>([]);
+    const waterMeshRef = useRef<THREE.Mesh | null>(null);
 
     // Action queue (per-unit: last action wins)
     const actionQueueRef = useRef<ActionQueue>({});
@@ -132,7 +133,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
 
         // Create player units - either from persisted state or fresh
         const playerIds = Object.keys(UNIT_DATA).map(Number);
-        const spawn = spawnPoint || { x: 5.5, z: 5.5 };  // Default spawn in Room A
+        const spawn = spawnPoint ?? DEFAULT_SPAWN_POINT;
 
         const players: Unit[] = playerIds.map((id, i) => {
             const data = UNIT_DATA[id];
@@ -252,7 +253,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         Object.keys(pathsRef.current).forEach(k => delete pathsRef.current[Number(k)]);
 
         const sceneRefs = createScene(containerRef.current, units);
-        const { scene, camera, renderer, flames, candleMeshes, candleLights, fogTexture, fogMesh, moveMarker, rangeIndicator, aoeIndicator, unitGroups, selectRings, targetRings, unitMeshes, unitOriginalColors, maxHp, wallMeshes, treeMeshes, doorMeshes } = sceneRefs;
+        const { scene, camera, renderer, flames, candleMeshes, candleLights, fogTexture, fogMesh, moveMarker, rangeIndicator, aoeIndicator, unitGroups, selectRings, targetRings, unitMeshes, unitOriginalColors, maxHp, wallMeshes, treeMeshes, doorMeshes, waterMesh } = sceneRefs;
 
         sceneRef.current = scene;
         cameraRef.current = camera;
@@ -271,6 +272,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         wallMeshesRef.current = wallMeshes;
         treeMeshesRef.current = treeMeshes;
         doorMeshesRef.current = doorMeshes;
+        waterMeshRef.current = waterMesh;
         units.forEach(unit => { pathsRef.current[unit.id] = []; });
 
         const updateCam = () => updateCamera(camera, cameraOffset.current);
@@ -862,6 +864,9 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
             // Light LOD - disable distant room lights to save GPU
             updateLightLOD(candleLights, cameraOffset.current);
 
+            // Animated water waves
+            updateWater(waterMeshRef.current, now);
+
             renderer.render(scene, camera);
         };
         animate();
@@ -1068,15 +1073,15 @@ export default function App() {
     const [showHelp, setShowHelp] = useState(true); // Show help on initial page load
     // Persisted player state survives area transitions
     const [persistedPlayers, setPersistedPlayers] = useState<PersistedPlayer[] | null>(null);
-    const [startingArea, setStartingArea] = useState<AreaId>("dungeon");
+    const [startingArea, setStartingArea] = useState<AreaId>(DEFAULT_STARTING_AREA);
     const [spawnPoint, setSpawnPoint] = useState<{ x: number; z: number } | null>(null);
 
     // Full restart (resets player state too)
     const handleFullRestart = () => {
         setPersistedPlayers(null);
-        setStartingArea("dungeon");
+        setStartingArea(DEFAULT_STARTING_AREA);
         setSpawnPoint(null);
-        setCurrentArea("dungeon");  // Reset area system
+        setCurrentArea(DEFAULT_STARTING_AREA);
         setGameKey(k => k + 1);
     };
 

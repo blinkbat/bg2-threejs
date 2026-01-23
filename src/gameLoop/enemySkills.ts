@@ -75,7 +75,7 @@ export function executeEnemySwipe(
 
         if (rollHit(enemyData.accuracy)) {
             const dmg = calculateDamage(skill.damage[0], skill.damage[1], getEffectiveArmor(target, targetData.armor));
-            applyDamageToUnit(dmgCtx, target.id, tg, target.hp, dmg, targetData.name, { color: "#ff4444" });
+            applyDamageToUnit(dmgCtx, target.id, tg, target.hp, dmg, targetData.name, { color: "#ff4444", targetUnit: target });
             hitCount++;
             totalDamage += dmg;
         }

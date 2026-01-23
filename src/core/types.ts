@@ -4,13 +4,13 @@ import * as THREE from "three";
 // TYPE DEFINITIONS
 // =============================================================================
 
-export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling";
+export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba";
 
 // =============================================================================
 // STATUS EFFECTS
 // =============================================================================
 
-export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned";
+export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed";
 
 export interface StatusEffect {
     type: StatusEffectType;
@@ -33,6 +33,7 @@ export interface Unit {
     aiEnabled: boolean;
     statusEffects?: StatusEffect[];  // Active status effects
     spawnedBy?: number;  // ID of the unit that spawned this one (for broodlings)
+    splitCount?: number;  // For amoebas - how many times this lineage has split (affects size)
 }
 
 export interface Skill {
@@ -104,6 +105,7 @@ export interface EnemyStats {
     // Optional status effect on hit
     poisonChance?: number;  // 0-100 percent chance to apply poison
     poisonDamage?: number;  // Custom poison damage per tick (default POISON_DAMAGE_PER_TICK)
+    slowChance?: number;    // 0-100 percent chance to apply slow (1.5x cooldowns, 0.5x move speed)
     // Optional special skill
     skill?: EnemySkill;
     // Optional heal skill for support enemies
@@ -116,6 +118,8 @@ export interface EnemyStats {
     spawnSkill?: EnemySpawnSkill;
     // Optional movement speed multiplier (default 1.0)
     moveSpeed?: number;
+    // Optional max split count for splitting enemies (like Giant Amoeba)
+    maxSplitCount?: number;
 }
 
 export interface EnemySpawnSkill {

@@ -244,7 +244,8 @@ export function executeMeleeSkill(
             color: COLORS.damagePlayer,
             poison: willPoison ? { sourceId: casterId } : undefined,
             attackerName: casterData.name,
-            hitMessage: { text: logHit(casterData.name, skill.name, targetData.name, dmg), color: COLORS.damagePlayer }
+            hitMessage: { text: logHit(casterData.name, skill.name, targetData.name, dmg), color: COLORS.damagePlayer },
+            targetUnit: targetEnemy
         });
 
         soundFns.playHit();
@@ -520,7 +521,8 @@ export function executeFlurrySkill(
             const currentHp = hpTracker[target.id];
             applyDamageToUnit(dmgCtx, target.id, targetG, currentHp, dmg, targetData.name, {
                 color: COLORS.damagePlayer,
-                attackerName: casterData.name
+                attackerName: casterData.name,
+                targetUnit: target
             });
 
             // Update local HP tracker

@@ -8,6 +8,18 @@ import { getCurrentArea, getComputedAreaData, type AreaTransition } from "../gam
 import { getUnitStats } from "../game/units";
 import type { Unit, UnitGroup, FogTexture } from "../core/types";
 
+/**
+ * Calculate effective size for a unit, accounting for amoeba split scaling
+ */
+function getEffectiveSize(unit: Unit, baseSize: number): number {
+    if (unit.enemyType === "giant_amoeba" && unit.splitCount !== undefined) {
+        // Each split reduces size: 2.0 → 1.4 → 1.0 → 0.7
+        const scaleFactor = Math.pow(0.7, unit.splitCount);
+        return baseSize * scaleFactor;
+    }
+    return baseSize;
+}
+
 export interface DoorMesh extends THREE.Mesh {
     userData: {
         transition: AreaTransition;
@@ -35,7 +47,9 @@ export interface SceneRefs {
     wallMeshes: THREE.Mesh[];
     treeMeshes: THREE.Mesh[];  // Tree foliage meshes for transparency
     doorMeshes: DoorMesh[];
+    waterMesh: THREE.Mesh | null;  // Water for coast
 }
+
 
 export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs {
     const area = getCurrentArea();
@@ -78,19 +92,6 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     dir.position.set(10, 20, 10);
     scene.add(dir);
 
-    // Cloudy day lighting for forest - soft, diffuse light
-    if (area.id === "forest") {
-        const sun = new THREE.DirectionalLight(0xe8e8e0, 0.5);  // Muted overcast light
-        sun.position.set(-15, 40, 20);  // High in sky
-        sun.castShadow = false;
-        scene.add(sun);
-
-        // Soft fill from opposite side
-        const fillLight = new THREE.DirectionalLight(0xd0d8e0, 0.25);  // Cool gray fill
-        fillLight.position.set(15, 30, -10);
-        scene.add(fillLight);
-    }
-
     // Ground - base layer for non-room areas (corridors, etc)
     const groundMat = new THREE.MeshStandardMaterial({ color: area.groundColor, metalness: 0.2, roughness: 0.9 });
     const ground = new THREE.Mesh(
@@ -103,7 +104,15 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     scene.add(ground);
 
     // Room floors - slightly above ground to avoid z-fighting, same material properties
+    // For coast, detect water floors by color and skip them (we'll create animated water instead)
+    const waterColors = ["#5f9ea0", "#4682b4"];  // Shallow and deep water colors
+    let waterMesh: THREE.Mesh | null = null;
+
     area.roomFloors.forEach(r => {
+        // Skip water floors on coast - we'll render them with animated shader
+        if (area.id === "coast" && waterColors.includes(r.color)) {
+            return;
+        }
         const floorMat = new THREE.MeshStandardMaterial({ color: r.color, metalness: 0.2, roughness: 0.9 });
         const floor = new THREE.Mesh(
             new THREE.PlaneGeometry(r.w, r.h),
@@ -114,6 +123,34 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         floor.name = "ground";
         scene.add(floor);
     });
+
+    // Create water for coast area - gradient from shallow to deep
+    if (area.id === "coast") {
+        const waterW = 48;
+        const waterH = 15;
+        const waterX = 1;
+        const waterZ = 1;
+
+        // Create gradient texture using canvas
+        const waterCanvas = document.createElement("canvas");
+        waterCanvas.width = 1;
+        waterCanvas.height = 256;
+        const ctx = waterCanvas.getContext("2d")!;
+        const gradient = ctx.createLinearGradient(0, 0, 0, 256);
+        gradient.addColorStop(0, "#0a1820");   // Deep (far from shore) - very dark
+        gradient.addColorStop(0.5, "#1a3a4a"); // Mid - dark blue
+        gradient.addColorStop(1, "#4a8090");   // Shallow (near shore) - teal
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, 1, 256);
+
+        const waterTexture = new THREE.CanvasTexture(waterCanvas);
+        const waterMat = new THREE.MeshBasicMaterial({ map: waterTexture });
+        waterMesh = new THREE.Mesh(new THREE.PlaneGeometry(waterW, waterH), waterMat);
+        waterMesh.rotation.x = -Math.PI / 2;
+        waterMesh.position.set(waterX + waterW / 2, 0.002, waterZ + waterH / 2);
+        waterMesh.name = "water";
+        scene.add(waterMesh);
+    }
 
     // Torches with flames and lights (only in areas with candles)
     // PERF OPTIMIZATION: Use 1 light per room instead of per-candle (~72 -> ~9 lights)
@@ -408,13 +445,21 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     units.forEach(unit => {
         const isPlayer = unit.team === "player";
         const data = getUnitStats(unit);
-        const size = (!isPlayer && 'size' in data && data.size) ? data.size : 1;
+        const baseSize = (!isPlayer && 'size' in data && data.size) ? data.size : 1;
+        const size = getEffectiveSize(unit, baseSize);
         const group = new THREE.Group();
 
 
         const boxH = isPlayer ? 1 : (size > 1 ? 1.8 : 0.6);
         const boxW = 0.6 * size;
-        const boxMat = new THREE.MeshStandardMaterial({ color: data.color, metalness: 0.5, roughness: 0.4 });
+        const isAmoeba = unit.enemyType === "giant_amoeba";
+        const boxMat = new THREE.MeshStandardMaterial({
+            color: data.color,
+            metalness: isAmoeba ? 0.1 : 0.5,
+            roughness: isAmoeba ? 0.2 : 0.4,
+            transparent: isAmoeba,
+            opacity: isAmoeba ? 0.6 : 1.0
+        });
         const box = new THREE.Mesh(new THREE.BoxGeometry(boxW, boxH, boxW), boxMat);
         box.position.y = boxH / 2;
         box.userData.unitId = unit.id;
@@ -492,6 +537,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         wallMeshes,
         treeMeshes,
         doorMeshes,
+        waterMesh,
     };
 }
 
@@ -499,6 +545,13 @@ export function updateCamera(camera: THREE.OrthographicCamera, offset: { x: numb
     const d = 20;
     camera.position.set(offset.x + d, d, offset.z + d);
     camera.lookAt(offset.x, 0, offset.z);
+}
+
+/**
+ * Update water (no-op for now).
+ */
+export function updateWater(_waterMesh: THREE.Mesh | null, _time: number): void {
+    // Simple blue water - no animation
 }
 
 /**
@@ -517,12 +570,20 @@ export function addUnitToScene(
 ): void {
     const isPlayer = unit.team === "player";
     const data = getUnitStats(unit);
-    const size = (!isPlayer && 'size' in data && data.size) ? data.size : 1;
+    const baseSize = (!isPlayer && 'size' in data && data.size) ? data.size : 1;
+    const size = getEffectiveSize(unit, baseSize);
     const group = new THREE.Group();
 
     const boxH = isPlayer ? 1 : (size > 1 ? 1.8 : 0.6);
     const boxW = 0.6 * size;
-    const boxMat = new THREE.MeshStandardMaterial({ color: data.color, metalness: 0.5, roughness: 0.4 });
+    const isAmoeba = unit.enemyType === "giant_amoeba";
+    const boxMat = new THREE.MeshStandardMaterial({
+        color: data.color,
+        metalness: isAmoeba ? 0.1 : 0.5,
+        roughness: isAmoeba ? 0.2 : 0.4,
+        transparent: isAmoeba,
+        opacity: isAmoeba ? 0.6 : 1.0
+    });
     const box = new THREE.Mesh(new THREE.BoxGeometry(boxW, boxH, boxW), boxMat);
     box.position.y = boxH / 2;
     box.userData.unitId = unit.id;

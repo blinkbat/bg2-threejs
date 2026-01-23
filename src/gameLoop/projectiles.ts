@@ -114,7 +114,8 @@ export function updateProjectiles(
                         const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
                         applyDamageToUnit(dmgCtx, target.id, tg, currentHp, dmg, targetData.name, {
                             color: getDamageColor(target.team, true),
-                            attackerName: attackerUnit?.team === "player" ? attackerData?.name : undefined
+                            attackerName: attackerUnit?.team === "player" ? attackerData?.name : undefined,
+                            targetUnit: target
                         });
                         hpTracker[target.id] = Math.max(0, currentHp - dmg);
                         hitCount++;
@@ -215,7 +216,8 @@ export function updateProjectiles(
                     const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
                     applyDamageToUnit(dmgCtx, targetUnit.id, targetG, currentHp, dmgDealt, targetData.name, {
                         color: "#9966ff",
-                        attackerName: attackerUnit.team === "player" ? getUnitStats(attackerUnit).name : undefined
+                        attackerName: attackerUnit.team === "player" ? getUnitStats(attackerUnit).name : undefined,
+                        targetUnit: targetUnit
                     });
 
                     // Update local HP tracker for subsequent projectiles in same frame
@@ -429,7 +431,8 @@ export function updateProjectiles(
                     color: logColor,
                     poison: willPoison ? { sourceId: attackerUnit.id, damagePerTick: poisonDmg } : undefined,
                     attackerName: attackerUnit.team === "player" ? attackerData.name : undefined,
-                    hitMessage: { text: logHit(attackerData.name, "Attack", targetData.name, dmg), color: logColor }
+                    hitMessage: { text: logHit(attackerData.name, "Attack", targetData.name, dmg), color: logColor },
+                    targetUnit: targetUnit
                 });
 
                 soundFns.playHit();

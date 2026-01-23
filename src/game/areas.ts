@@ -12,6 +12,10 @@ import { clearPathCache, invalidateDynamicObstacles } from "../ai/pathfinding";
 
 export type AreaId = "dungeon" | "forest" | "coast";
 
+// Default game start configuration - single source of truth
+export const DEFAULT_STARTING_AREA: AreaId = "coast";
+export const DEFAULT_SPAWN_POINT = { x: 25, z: 18 };  // Water's edge, away from amoebas
+
 export interface RoomFloor {
     x: number;
     z: number;
@@ -470,13 +474,16 @@ export const COAST_AREA: AreaData = {
     roomFloors: [
         // Sandy beach - gradient from dry to wet sand
         { x: 1, z: 40, w: 48, h: 9, color: "#d4c4a8" },   // Dry sand (north)
-        { x: 1, z: 32, w: 48, h: 8, color: "#c2b280" },   // Mid sand
-        { x: 1, z: 25, w: 48, h: 7, color: "#a89968" },   // Wet sand (near water)
-        // Shoreline visual (not walkable - just for color reference)
-        { x: 1, z: 20, w: 48, h: 5, color: "#5f9ea0" },   // Shallow water
-        { x: 1, z: 1, w: 48, h: 19, color: "#4682b4" }    // Deep water
+        { x: 1, z: 28, w: 48, h: 12, color: "#c2b280" },  // Mid sand
+        { x: 1, z: 16, w: 48, h: 12, color: "#a89968" },  // Wet sand (near water)
+        // Shoreline visual - reduced water
+        { x: 1, z: 10, w: 48, h: 6, color: "#5f9ea0" },   // Shallow water
+        { x: 1, z: 1, w: 48, h: 9, color: "#4682b4" }     // Deep water
     ],
-    enemySpawns: [],  // No enemies for now
+    enemySpawns: [
+        { x: 15, z: 38, type: "giant_amoeba" },
+        { x: 35, z: 35, type: "giant_amoeba" }
+    ],
     transitions: [
         // North edge leads back to forest
         {
@@ -495,10 +502,12 @@ export const COAST_AREA: AreaData = {
         { x: 32, z: 43, size: 1.1 },
         { x: 40, z: 42, size: 1.2 },
         { x: 46, z: 45, size: 0.9 },
-        // A few near the water
-        { x: 8, z: 28, size: 1.0 },
-        { x: 25, z: 30, size: 1.4 },
-        { x: 42, z: 29, size: 1.1 },
+        // Mid beach
+        { x: 8, z: 30, size: 1.0 },
+        { x: 42, z: 32, size: 1.1 },
+        // Near water's edge (party spawn area)
+        { x: 18, z: 20, size: 1.1 },
+        { x: 32, z: 19, size: 1.0 },
     ]
 };
 
@@ -513,7 +522,7 @@ export const AREAS: Record<AreaId, AreaData> = {
 // AREA STATE MANAGEMENT
 // =============================================================================
 
-let currentAreaId: AreaId = "dungeon";
+let currentAreaId: AreaId = DEFAULT_STARTING_AREA;
 let currentAreaComputed: ComputedAreaData | null = null;
 
 export function getCurrentAreaId(): AreaId {

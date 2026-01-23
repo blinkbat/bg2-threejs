@@ -23,6 +23,11 @@ export const POISON_TINT_STRENGTH = 0.4;   // Color lerp amount for poison visua
 // Status Effects - Buffs (shielded, stunned, cleansed, pinned)
 export const BUFF_TICK_INTERVAL = 100;     // tick every 100ms for smooth duration countdown
 
+// Status Effects - Slow
+export const SLOW_DURATION = 10000;        // 10 seconds
+export const SLOW_COOLDOWN_MULT = 1.5;     // 1.5x cooldowns when slowed
+export const SLOW_MOVE_MULT = 0.5;         // 0.5x move speed when slowed
+
 // Trap Projectile
 export const TRAP_FLIGHT_DURATION = 600;   // ms for arc flight
 export const TRAP_ARC_HEIGHT = 2.5;        // Peak height of thrown trap

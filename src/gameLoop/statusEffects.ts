@@ -72,8 +72,8 @@ export function processStatusEffects(
                         handleUnitDefeat(unit.id, unitG, unitsRef, addLog, data.name);
                     }
                 }
-            } else if (effect.type === "shielded" || effect.type === "stunned" || effect.type === "cleansed" || effect.type === "pinned") {
-                // Shielded/stunned/cleansed/pinned buff - tick down duration at fixed interval (like poison)
+            } else if (effect.type === "shielded" || effect.type === "stunned" || effect.type === "cleansed" || effect.type === "pinned" || effect.type === "slowed") {
+                // Shielded/stunned/cleansed/pinned/slowed buff - tick down duration at fixed interval (like poison)
                 if (now - effect.lastTick >= effect.tickInterval) {
                     setUnits(prev => prev.map(u => {
                         if (u.id !== unit.id) return u;

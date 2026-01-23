@@ -1,4 +1,5 @@
 import type { UnitData, EnemyStats, EnemyType, Unit, Skill } from "../core/types";
+import { DEFAULT_SPAWN_POINT } from "./areas";
 
 // =============================================================================
 // SKILLS
@@ -246,6 +247,21 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         poisonChance: 20,  // 20% chance to apply weak poison on hit
         poisonDamage: 1,  // Weak poison - only 1 damage per tick
         moveSpeed: 1.8  // 50% faster than normal
+    },
+    giant_amoeba: {
+        name: "Giant Amoeba",
+        hp: 55,
+        maxHp: 55,
+        damage: [6, 10],
+        accuracy: 60,
+        armor: 1,
+        color: "#3cb371",  // Medium sea green - translucent blob
+        aggroRange: 6,
+        attackCooldown: 2000,
+        size: 2.0,  // Large - decreases with each split
+        moveSpeed: 0.7,  // Slightly slower, it's a blob
+        maxSplitCount: 3,  // Can split up to 3 times (4 generations total)
+        slowChance: 40  // 40% chance to slow on hit (1.5x cooldowns, 0.5x move speed for 10s)
     }
 };
 
@@ -307,13 +323,13 @@ const witchDoctorSpawns = [
 // Helper to create initial units
 export function createInitialUnits(): Unit[] {
     return [
-        // Player units (starting near north door in coast)
+        // Player units (starting at spawn point - water's edge on coast)
         ...Object.keys(UNIT_DATA).map((id, i) => {
             const data = UNIT_DATA[Number(id)];
             return {
                 id: Number(id),
-                x: 23.5 + (i % 3) * 2,
-                z: 46.5 - Math.floor(i / 3) * 2,
+                x: DEFAULT_SPAWN_POINT.x + (i % 3) * 2,
+                z: DEFAULT_SPAWN_POINT.z + Math.floor(i / 3) * 2,
                 hp: data.hp,
                 mana: data.mana,
                 team: "player" as const,
