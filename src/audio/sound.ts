@@ -403,73 +403,63 @@ const playBroodMotherScreech = () => {
     chitter.stop(ctx.currentTime + 0.55);
 };
 
-// Gush/Splat - wet splattering sound for amoeba splits
+// Rip/Tear - velcro-like tearing sound for amoeba splits
 const playGush = () => {
     if (muted) return;
     const ctx = getAudioCtx();
+    const duration = 0.35;
 
-    // Low wet "splorch" - descending with wobble, longer decay
-    const splat = ctx.createOscillator();
-    const splatGain = ctx.createGain();
-    const splatFilter = ctx.createBiquadFilter();
-    splat.type = "sine";
-    splat.frequency.setValueAtTime(180, ctx.currentTime);
-    splat.frequency.exponentialRampToValueAtTime(120, ctx.currentTime + 0.1);
-    splat.frequency.exponentialRampToValueAtTime(50, ctx.currentTime + 0.6);
-    splatFilter.type = "lowpass";
-    splatFilter.frequency.setValueAtTime(400, ctx.currentTime);
-    splatFilter.frequency.exponentialRampToValueAtTime(150, ctx.currentTime + 0.7);
-    splatFilter.Q.setValueAtTime(2, ctx.currentTime);
-    splatGain.gain.setValueAtTime(0.35, ctx.currentTime);
-    splatGain.gain.linearRampToValueAtTime(0.25, ctx.currentTime + 0.2);
-    splatGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
-    splat.connect(splatFilter);
-    splatFilter.connect(splatGain);
-    splatGain.connect(ctx.destination);
-    splat.start();
-    splat.stop(ctx.currentTime + 0.8);
-
-    // Bubbly noise layer - filtered noise for wet texture, extended
-    const bufferSize = ctx.sampleRate * 1.0;
+    // Crackly noise with rising pitch - the "rrrriiIIP" effect
+    const bufferSize = ctx.sampleRate * duration;
     const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
     const output = noiseBuffer.getChannelData(0);
     for (let i = 0; i < bufferSize; i++) {
-        // Create bubbly effect with sample-and-hold at varying rates
-        const bubbleRate = 8 + Math.floor(Math.random() * 8);
-        if (i % bubbleRate === 0) {
-            output[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.5));
-        } else {
-            output[i] = output[i - 1] * 0.95;
-        }
+        // Crackly texture - random pops and clicks
+        const t = i / bufferSize;
+        const crackle = Math.random() > 0.7 ? (Math.random() * 2 - 1) : 0;
+        const base = (Math.random() * 2 - 1) * 0.3;
+        output[i] = (base + crackle) * (1 - t * 0.3);  // Slight decay
     }
     const noise = ctx.createBufferSource();
     noise.buffer = noiseBuffer;
+
+    // Highpass filter that sweeps up - creates the rising "riiip"
+    const hpFilter = ctx.createBiquadFilter();
+    hpFilter.type = "highpass";
+    hpFilter.frequency.setValueAtTime(200, ctx.currentTime);
+    hpFilter.frequency.exponentialRampToValueAtTime(2000, ctx.currentTime + duration * 0.8);
+    hpFilter.Q.setValueAtTime(2, ctx.currentTime);
+
+    // Bandpass for texture
+    const bpFilter = ctx.createBiquadFilter();
+    bpFilter.type = "bandpass";
+    bpFilter.frequency.setValueAtTime(800, ctx.currentTime);
+    bpFilter.frequency.exponentialRampToValueAtTime(3000, ctx.currentTime + duration);
+    bpFilter.Q.setValueAtTime(1.5, ctx.currentTime);
+
     const noiseGain = ctx.createGain();
-    const noiseFilter = ctx.createBiquadFilter();
-    noiseFilter.type = "bandpass";
-    noiseFilter.frequency.setValueAtTime(800, ctx.currentTime);
-    noiseFilter.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.9);
-    noiseFilter.Q.setValueAtTime(1, ctx.currentTime);
-    noiseGain.gain.setValueAtTime(0.25, ctx.currentTime);
-    noiseGain.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 0.3);
-    noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.0);
-    noise.connect(noiseFilter);
-    noiseFilter.connect(noiseGain);
+    noiseGain.gain.setValueAtTime(0.4, ctx.currentTime);
+    noiseGain.gain.linearRampToValueAtTime(0.5, ctx.currentTime + duration * 0.6);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+
+    noise.connect(hpFilter);
+    hpFilter.connect(bpFilter);
+    bpFilter.connect(noiseGain);
     noiseGain.connect(ctx.destination);
     noise.start();
 
-    // High splatter layer - longer decay
-    const splatter = ctx.createOscillator();
-    const splatterGain = ctx.createGain();
-    splatter.type = "sawtooth";
-    splatter.frequency.setValueAtTime(600, ctx.currentTime);
-    splatter.frequency.exponentialRampToValueAtTime(150, ctx.currentTime + 0.3);
-    splatterGain.gain.setValueAtTime(0.1, ctx.currentTime);
-    splatterGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
-    splatter.connect(splatterGain);
-    splatterGain.connect(ctx.destination);
-    splatter.start();
-    splatter.stop(ctx.currentTime + 0.4);
+    // Add a slight rising tone for emphasis
+    const tone = ctx.createOscillator();
+    const toneGain = ctx.createGain();
+    tone.type = "sawtooth";
+    tone.frequency.setValueAtTime(150, ctx.currentTime);
+    tone.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + duration * 0.7);
+    toneGain.gain.setValueAtTime(0.08, ctx.currentTime);
+    toneGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration * 0.8);
+    tone.connect(toneGain);
+    toneGain.connect(ctx.destination);
+    tone.start();
+    tone.stop(ctx.currentTime + duration);
 };
 
 // Magic Wave - pure crackling/static sound, no tonal elements

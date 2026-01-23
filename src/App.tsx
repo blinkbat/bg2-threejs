@@ -74,11 +74,10 @@ interface GameProps {
     onCloseHelp: () => void;
     helpOpen: boolean;
     persistedPlayers: PersistedPlayer[] | null;
-    startingArea: AreaId;
     spawnPoint: { x: number; z: number } | null;
 }
 
-function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, persistedPlayers, startingArea, spawnPoint }: GameProps) {
+function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, persistedPlayers, spawnPoint }: GameProps) {
     // Three.js refs
     const containerRef = useRef<HTMLDivElement>(null);
     const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -98,8 +97,9 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
 
     // Camera & input refs
     // Initialize camera centered on spawn point (or default start)
+    // Clone to avoid mutating DEFAULT_SPAWN_POINT when panning
     const initialCamOffset = spawnPoint ?? DEFAULT_SPAWN_POINT;
-    const cameraOffset = useRef(initialCamOffset);
+    const cameraOffset = useRef({ ...initialCamOffset });
     const zoomLevel = useRef(12);
     const isDragging = useRef(false);
     const didPan = useRef(false);
@@ -122,6 +122,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
     const treeMeshesRef = useRef<THREE.Mesh[]>([]);
     const doorMeshesRef = useRef<DoorMesh[]>([]);
     const waterMeshRef = useRef<THREE.Mesh | null>(null);
+    const debugGridRef = useRef<THREE.Group | null>(null);
 
     // Action queue (per-unit: last action wins)
     const actionQueueRef = useRef<ActionQueue>({});
@@ -188,8 +189,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
     const [hoveredPlayer, setHoveredPlayer] = useState<{ id: number; x: number; y: number } | null>(null);
     const [hoveredDoor, setHoveredDoor] = useState<{ targetArea: string; x: number; y: number } | null>(null);
     const [fps, setFps] = useState(0);
-    // Current area comes from prop (set by parent during transitions)
-    const currentArea = startingArea;
+    const [debug, setDebug] = useState(false);
     // FPS tracking refs
     const fpsFrameCount = useRef(0);
     const fpsLastTime = useRef(Date.now());
@@ -211,6 +211,56 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
     useEffect(() => { showPanelRef.current = showPanel; }, [showPanel]);
     useEffect(() => { helpOpenRef.current = helpOpen; }, [helpOpen]);
     useEffect(() => { skillCooldownsRef.current = skillCooldowns; }, [skillCooldowns]);
+
+    // Debug grid effect
+    useEffect(() => {
+        const scene = sceneRef.current;
+        if (!scene) return;
+
+        // Remove existing debug grid
+        if (debugGridRef.current) {
+            scene.remove(debugGridRef.current);
+            debugGridRef.current = null;
+        }
+
+        if (debug) {
+            const group = new THREE.Group();
+            group.name = "debugGrid";
+
+            // Create coordinate markers every 5 units
+            for (let x = 0; x <= GRID_SIZE; x += 5) {
+                for (let z = 0; z <= GRID_SIZE; z += 5) {
+                    // Create a small sphere at each grid point
+                    const marker = new THREE.Mesh(
+                        new THREE.SphereGeometry(0.08, 8, 8),
+                        new THREE.MeshBasicMaterial({ color: 0xff0000 })
+                    );
+                    marker.position.set(x, 0.2, z);
+                    group.add(marker);
+
+                    // Create text sprite for coordinates
+                    const canvas = document.createElement("canvas");
+                    canvas.width = 48;
+                    canvas.height = 24;
+                    const ctx = canvas.getContext("2d")!;
+                    ctx.fillStyle = "#ffffff";
+                    ctx.font = "bold 14px monospace";
+                    ctx.textAlign = "center";
+                    ctx.fillText(`${x},${z}`, 24, 17);
+
+                    const texture = new THREE.CanvasTexture(canvas);
+                    const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true });
+                    const sprite = new THREE.Sprite(spriteMat);
+                    sprite.position.set(x, 0.5, z);
+                    sprite.scale.set(1, 0.5, 1);
+                    group.add(sprite);
+                }
+            }
+
+            scene.add(group);
+            debugGridRef.current = group;
+        }
+    }, [debug]);
 
     const addLog = (text: string, color?: string) => setCombatLog(prev => [...prev.slice(-50), { text, color }]);
 
@@ -1022,15 +1072,11 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                     <div className="enemy-tooltip-status" style={{ color: "#4a90d9" }}>To: {AREAS[hoveredDoor.targetArea as AreaId]?.name ?? hoveredDoor.targetArea}</div>
                 </div>
             )}
-            {/* Current area indicator */}
-            <div style={{ position: "absolute", top: 10, left: 10, color: "#fff", fontSize: 12, opacity: 0.7, textTransform: "capitalize" }}>
-                {currentArea}
-            </div>
             {/* FPS counter */}
             <div style={{ position: "absolute", top: 10, right: 10, color: "#888", fontSize: 11, fontFamily: "monospace", opacity: 0.6 }}>
                 {fps} fps
             </div>
-            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onShowHelp={onShowHelp} onRestart={onRestart} />
+            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onShowHelp={onShowHelp} onRestart={onRestart} debug={debug} onToggleDebug={() => setDebug(d => !d)} />
             <CombatLog log={combatLog} />
             <PartyBar
                 units={units}
@@ -1073,13 +1119,11 @@ export default function App() {
     const [showHelp, setShowHelp] = useState(true); // Show help on initial page load
     // Persisted player state survives area transitions
     const [persistedPlayers, setPersistedPlayers] = useState<PersistedPlayer[] | null>(null);
-    const [startingArea, setStartingArea] = useState<AreaId>(DEFAULT_STARTING_AREA);
     const [spawnPoint, setSpawnPoint] = useState<{ x: number; z: number } | null>(null);
 
     // Full restart (resets player state too)
     const handleFullRestart = () => {
         setPersistedPlayers(null);
-        setStartingArea(DEFAULT_STARTING_AREA);
         setSpawnPoint(null);
         setCurrentArea(DEFAULT_STARTING_AREA);
         setGameKey(k => k + 1);
@@ -1088,7 +1132,6 @@ export default function App() {
     // Area transition (preserves player state)
     const handleAreaTransition = (players: PersistedPlayer[], targetArea: AreaId, spawn: { x: number; z: number }) => {
         setPersistedPlayers(players);
-        setStartingArea(targetArea);
         setSpawnPoint(spawn);
         setCurrentArea(targetArea);
         setGameKey(k => k + 1);  // Remount with new area
@@ -1104,7 +1147,6 @@ export default function App() {
                 onCloseHelp={() => setShowHelp(false)}
                 helpOpen={showHelp}
                 persistedPlayers={persistedPlayers}
-                startingArea={startingArea}
                 spawnPoint={spawnPoint}
             />
             {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}

@@ -9,9 +9,11 @@ interface HUDProps {
     onTogglePause: () => void;
     onShowHelp: () => void;
     onRestart: () => void;
+    debug: boolean;
+    onToggleDebug: () => void;
 }
 
-export function HUD({ areaName, areaFlavor, alivePlayers, paused, onTogglePause, onShowHelp, onRestart }: HUDProps) {
+export function HUD({ areaName, areaFlavor, alivePlayers, paused, onTogglePause, onShowHelp, onRestart, debug, onToggleDebug }: HUDProps) {
     const [muted, setMuted] = useState(isMuted());
 
     const handleToggleMute = () => {
@@ -41,6 +43,9 @@ export function HUD({ areaName, areaFlavor, alivePlayers, paused, onTogglePause,
                 </button>
                 <button className="btn btn-restart" onClick={onRestart}>
                     Restart
+                </button>
+                <button className={`btn ${debug ? "active" : ""}`} onClick={onToggleDebug}>
+                    Debug
                 </button>
             </div>
         </div>
