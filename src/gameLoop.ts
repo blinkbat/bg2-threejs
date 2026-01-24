@@ -26,6 +26,7 @@ export { processStatusEffects } from "./gameLoop/statusEffects";
 export { updateProjectiles } from "./gameLoop/projectiles";
 export { spawnSwingIndicator, updateSwingAnimations } from "./gameLoop/swingAnimations";
 export { processAcidTiles, createAcidTile, clearAcidTiles } from "./gameLoop/acidTiles";
+export { processSanctuaryTiles, createSanctuaryTile, clearSanctuaryTiles } from "./gameLoop/sanctuaryTiles";
 import { executeEnemySwipe, executeEnemyHeal } from "./gameLoop/enemySkills";
 import { spawnSwingIndicator } from "./gameLoop/swingAnimations";
 import { createAcidTile } from "./gameLoop/acidTiles";

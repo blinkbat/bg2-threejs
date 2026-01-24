@@ -36,6 +36,12 @@ export const ACID_AURA_COOLDOWN = 3000;    // 3 seconds between aura creation
 export const ACID_AURA_RADIUS = 1.5;       // Grid cells around slug for aura
 export const ACID_MAX_TILES = 40;          // Max tiles in world to prevent spam
 
+// Sanctuary Tiles - Healing ground created by Paladin
+export const SANCTUARY_TILE_DURATION = 20000;  // 20 seconds per tile
+export const SANCTUARY_TICK_INTERVAL = 2000;   // Heal every 2 seconds
+export const SANCTUARY_HEAL_PER_TICK = 3;      // 3 HP per tick
+export const SANCTUARY_MAX_TILES = 25;         // Max tiles in world
+
 // Trap Projectile
 export const TRAP_FLIGHT_DURATION = 600;   // ms for arc flight
 export const TRAP_ARC_HEIGHT = 2.5;        // Peak height of thrown trap
@@ -113,6 +119,8 @@ export const COLORS = {
     pinnedBg: "#2a1010",
     acid: "#9acd32",            // Yellow-green for acid tiles
     acidText: "#b8e060",        // Brighter for damage text
+    sanctuary: "#ffd700",       // Golden for sanctuary tiles
+    sanctuaryText: "#ffe44d",   // Brighter gold for heal text
 
     // HP bar colors
     hpHigh: "#22c55e",          // > 50%

@@ -3,14 +3,15 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, Skill, UnitGroup, Projectile, StatusEffect, MagicMissileProjectile, TrapProjectile } from "../core/types";
-import { COLORS, BUFF_TICK_INTERVAL, TRAP_FLIGHT_DURATION, TRAP_ARC_HEIGHT, TRAP_MESH_SIZE } from "../core/constants";
+import type { Unit, Skill, UnitGroup, Projectile, StatusEffect, MagicMissileProjectile, TrapProjectile, SanctuaryTile, AcidTile } from "../core/types";
+import { COLORS, BUFF_TICK_INTERVAL, TRAP_FLIGHT_DURATION, TRAP_ARC_HEIGHT, TRAP_MESH_SIZE, SANCTUARY_HEAL_PER_TICK } from "../core/constants";
 import { UNIT_DATA, getUnitStats } from "../game/units";
 import { rollDamage, rollChance, calculateDamage, rollHit, getEffectiveArmor, hasShieldedEffect, hasStunnedEffect, hasPoisonEffect, logHit, logMiss, logHeal, logPoisoned, logCast, logTaunt, logTauntMiss, logBuff, logStunned, logCleanse, logTrapThrown } from "./combatMath";
 import { tryHealBark, trySpellBark } from "./barks";
 import { getUnitRadius, isInRange } from "../rendering/range";
 import { soundFns } from "../audio/sound";
 import { createProjectile, getProjectileSpeed, applyDamageToUnit, createAnimatedRing, type DamageContext } from "./combat";
+import { createSanctuaryTile } from "../gameLoop/sanctuaryTiles";
 
 export interface SkillExecutionContext {
     scene: THREE.Scene;
@@ -26,6 +27,9 @@ export interface SkillExecutionContext {
     setSkillCooldowns: React.Dispatch<React.SetStateAction<Record<string, { end: number; duration: number }>>>;
     addLog: (text: string, color?: string) => void;
     defeatedThisFrame: Set<number>;  // Shared set to track units defeated this frame
+    // Optional tile refs for skills that interact with ground tiles
+    sanctuaryTilesRef?: React.MutableRefObject<Map<string, SanctuaryTile>>;
+    acidTilesRef?: React.MutableRefObject<Map<string, AcidTile>>;
 }
 
 // =============================================================================
@@ -866,6 +870,68 @@ export function executeTrapSkill(
 }
 
 /**
+ * Execute Sanctuary skill - creates healing tiles and dispels acid
+ */
+export function executeSanctuarySkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill,
+    targetX: number,
+    targetZ: number
+): boolean {
+    const { scene, unitsRef, sanctuaryTilesRef, acidTilesRef, addLog } = ctx;
+
+    // Sanctuary requires tile refs to function
+    if (!sanctuaryTilesRef || !acidTilesRef) {
+        addLog("Sanctuary cannot be cast right now.", COLORS.logWarning);
+        return false;
+    }
+
+    const casterG = unitsRef.current[casterId];
+    if (!casterG) return false;
+
+    consumeSkill(ctx, casterId, skill);
+
+    const casterData = UNIT_DATA[casterId];
+    const now = Date.now();
+    const radius = skill.aoeRadius ?? 2.5;
+    const healPerTick = skill.value[0] ?? SANCTUARY_HEAL_PER_TICK;
+
+    // Create sanctuary tiles in radius, dispelling acid
+    const centerX = Math.floor(targetX);
+    const centerZ = Math.floor(targetZ);
+    const radiusCells = Math.ceil(radius);
+    let tilesCreated = 0;
+
+    for (let dx = -radiusCells; dx <= radiusCells; dx++) {
+        for (let dz = -radiusCells; dz <= radiusCells; dz++) {
+            const dist = Math.sqrt(dx * dx + dz * dz);
+            if (dist <= radius) {
+                const tile = createSanctuaryTile(
+                    scene,
+                    sanctuaryTilesRef.current,
+                    acidTilesRef.current,
+                    centerX + dx,
+                    centerZ + dz,
+                    casterId,
+                    healPerTick,
+                    now
+                );
+                if (tile) tilesCreated++;
+            }
+        }
+    }
+
+    // Create visual ring effect
+    createAnimatedRing(scene, targetX, targetZ, COLORS.sanctuary, { maxScale: radius });
+
+    addLog(`${casterData.name} casts ${skill.name}, consecrating the ground!`, COLORS.sanctuaryText);
+    soundFns.playHeal();  // Holy sound
+
+    return true;
+}
+
+/**
  * Execute a skill based on its type
  */
 export function executeSkill(
@@ -917,6 +983,8 @@ export function executeSkill(
         return executeDebuffSkill(ctx, casterId, skill, targetX, targetZ);
     } else if (skill.type === "trap" && skill.targetType === "aoe") {
         return executeTrapSkill(ctx, casterId, skill, targetX, targetZ);
+    } else if (skill.type === "sanctuary" && skill.targetType === "aoe") {
+        return executeSanctuarySkill(ctx, casterId, skill, targetX, targetZ);
     }
 
     return false;

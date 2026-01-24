@@ -124,6 +124,18 @@ export const SKILLS: Record<string, Skill> = {
         range: 8,
         aoeRadius: 2,  // Trigger and effect radius
         value: [10000, 10000]  // Pinned duration in ms (10 seconds)
+    },
+    sanctuary: {
+        name: "Sanctuary",
+        description: "Consecrate the ground, dispelling hazards and creating holy tiles that heal allies over time.",
+        flavor: "\"Stand fast, for this ground is sacred now.\" - Paladin Aldric",
+        manaCost: 18,
+        cooldown: 15000,
+        type: "sanctuary",
+        targetType: "aoe",
+        range: 8,
+        aoeRadius: 2.5,  // Radius of effect
+        value: [3, 3]  // Heal per tick (uses SANCTUARY_HEAL_PER_TICK from constants)
     }
 };
 
@@ -133,7 +145,7 @@ export const SKILLS: Record<string, Skill> = {
 
 export const UNIT_DATA: Record<number, UnitData> = {
     1: { name: "Barbarian", class: "Barbarian", hp: 50, maxHp: 50, mana: 25, maxMana: 25, damage: [3, 6], accuracy: 70, armor: 2, color: "#c0392b", skills: [SKILLS.warcry, SKILLS.stunningBlow], items: ["Axe"], attackCooldown: 2000 },
-    2: { name: "Paladin", class: "Paladin", hp: 45, maxHp: 45, mana: 20, maxMana: 20, damage: [2, 5], accuracy: 65, armor: 3, color: "#f1c40f", skills: [SKILLS.raiseShield], items: ["Mace"], attackCooldown: 2500 },
+    2: { name: "Paladin", class: "Paladin", hp: 45, maxHp: 45, mana: 35, maxMana: 35, damage: [2, 5], accuracy: 65, armor: 3, color: "#f1c40f", skills: [SKILLS.raiseShield, SKILLS.sanctuary], items: ["Mace"], attackCooldown: 2500 },
     3: { name: "Thief", class: "Thief", hp: 25, maxHp: 25, mana: 30, maxMana: 30, damage: [2, 4], accuracy: 75, armor: 1, color: "#8e44ad", skills: [SKILLS.poisonDagger, SKILLS.caltrops], items: ["Bow"], range: 7, projectileColor: "#a0522d", attackCooldown: 1500 },
     4: { name: "Wizard", class: "Wizard", hp: 18, maxHp: 18, mana: 80, maxMana: 80, damage: [3, 5], accuracy: 60, armor: 0, color: "#3498db", skills: [SKILLS.fireball, SKILLS.magicWave], items: ["Staff"], range: 8, projectileColor: "#ff6600", attackCooldown: 3000 },
     5: { name: "Monk", class: "Monk", hp: 35, maxHp: 35, mana: 30, maxMana: 30, damage: [2, 5], accuracy: 70, armor: 1, color: "#27ae60", skills: [SKILLS.flurryOfFists], items: ["Fists"], attackCooldown: 1800 },

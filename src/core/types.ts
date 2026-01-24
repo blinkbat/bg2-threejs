@@ -42,7 +42,7 @@ export interface Skill {
     flavor?: string;       // Flavor text for tooltip
     manaCost: number;
     cooldown: number;  // ms
-    type: "damage" | "heal" | "buff" | "taunt" | "flurry" | "debuff" | "trap";
+    type: "damage" | "heal" | "buff" | "taunt" | "flurry" | "debuff" | "trap" | "sanctuary";
     targetType: "enemy" | "ally" | "self" | "aoe";
     range: number;
     aoeRadius?: number;
@@ -275,4 +275,16 @@ export interface AcidTile {
     duration: number;    // Total duration in ms
     lastDamageTick: number;  // When damage was last applied
     sourceId: number;    // ID of the slug that created it
+}
+
+// Sanctuary tile - healing ground created by Paladin
+export interface SanctuaryTile {
+    mesh: THREE.Mesh;
+    x: number;           // Grid cell X
+    z: number;           // Grid cell Z
+    createdAt: number;   // Timestamp
+    duration: number;    // Total duration in ms
+    lastHealTick: number;  // When healing was last applied
+    sourceId: number;    // ID of the unit that created it
+    healPerTick: number; // How much to heal each tick
 }

@@ -8,7 +8,7 @@ import * as THREE from "three";
 
 // Constants & Types
 import { GRID_SIZE, PAN_SPEED } from "./core/constants";
-import type { Unit, Skill, CombatLogEntry, SelectionBox, DamageText, UnitGroup, FogTexture, Projectile, SwingAnimation } from "./core/types";
+import type { Unit, Skill, CombatLogEntry, SelectionBox, DamageText, UnitGroup, FogTexture, Projectile, SwingAnimation, SanctuaryTile } from "./core/types";
 
 // Game Logic
 import { blocked } from "./game/dungeon";
@@ -46,7 +46,9 @@ import {
     updateSwingAnimations,
     processStatusEffects,
     updatePoisonVisuals,
-    processAcidTiles
+    processAcidTiles,
+    processSanctuaryTiles,
+    clearSanctuaryTiles
 } from "./gameLoop";
 import type { AcidTile } from "./core/types";
 
@@ -126,6 +128,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
     const waterMeshRef = useRef<THREE.Mesh | null>(null);
     const debugGridRef = useRef<THREE.Group | null>(null);
     const acidTilesRef = useRef<Map<string, AcidTile>>(new Map());
+    const sanctuaryTilesRef = useRef<Map<string, SanctuaryTile>>(new Map());
 
     // Action queue (per-unit: last action wins)
     const actionQueueRef = useRef<ActionQueue>({});
@@ -282,7 +285,9 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         setUnits,
         setSkillCooldowns,
         addLog,
-        defeatedThisFrame: defeatedThisFrame ?? new Set<number>()
+        defeatedThisFrame: defeatedThisFrame ?? new Set<number>(),
+        sanctuaryTilesRef,
+        acidTilesRef
     });
 
     // =============================================================================
@@ -305,6 +310,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         Object.keys(actionCooldownRef.current).forEach(k => delete actionCooldownRef.current[Number(k)]);
         Object.keys(pathsRef.current).forEach(k => delete pathsRef.current[Number(k)]);
         acidTilesRef.current.clear();  // Clear acid tiles (meshes will be in old scene)
+        sanctuaryTilesRef.current.clear();  // Clear sanctuary tiles
 
         const sceneRefs = createScene(containerRef.current, units);
         const { scene, camera, renderer, flames, candleMeshes, candleLights, fogTexture, fogMesh, moveMarker, rangeIndicator, aoeIndicator, unitGroups, selectRings, targetRings, unitMeshes, unitOriginalColors, maxHp, wallMeshes, treeMeshes, doorMeshes, waterMesh } = sceneRefs;
@@ -811,6 +817,18 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                     addLog,
                     now,
                     defeatedThisFrame
+                );
+
+                // Process sanctuary tiles (heal player units standing on them)
+                processSanctuaryTiles(
+                    sanctuaryTilesRef.current,
+                    unitsStateRef.current,
+                    unitsRef.current,
+                    scene,
+                    damageTexts.current,
+                    setUnits,
+                    addLog,
+                    now
                 );
 
                 // Hit flash effect
