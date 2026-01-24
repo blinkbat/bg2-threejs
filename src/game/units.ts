@@ -262,6 +262,23 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         moveSpeed: 0.7,  // Slightly slower, it's a blob
         maxSplitCount: 3,  // Can split up to 3 times (4 generations total)
         slowChance: 40  // 40% chance to slow on hit (1.5x cooldowns, 0.5x move speed for 10s)
+    },
+    acid_slug: {
+        name: "Acid Slug",
+        hp: 120,
+        maxHp: 120,
+        damage: [3, 9],
+        accuracy: 70,
+        armor: 0,
+        color: "#9acd32",  // Yellow-green - acidic
+        aggroRange: 7,
+        attackCooldown: 1800,
+        size: 1.0,
+        moveSpeed: 0.5,    // Slow - it's a slug
+        acidTrail: true,   // Leaves acid on cells it moves through
+        acidAura: true,    // Periodically creates acid around itself
+        acidAuraCooldown: 3000,  // 3 seconds between aura creation
+        acidAuraRadius: 1.5      // 1.5 grid cells around itself
     }
 };
 

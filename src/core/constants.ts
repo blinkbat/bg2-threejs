@@ -28,6 +28,14 @@ export const SLOW_DURATION = 10000;        // 10 seconds
 export const SLOW_COOLDOWN_MULT = 1.5;     // 1.5x cooldowns when slowed
 export const SLOW_MOVE_MULT = 0.5;         // 0.5x move speed when slowed
 
+// Acid Tiles - Ground hazard from acid slugs
+export const ACID_TILE_DURATION = 8000;    // 8 seconds per tile
+export const ACID_TICK_INTERVAL = 1000;    // Damage every 1 second
+export const ACID_DAMAGE_PER_TICK = 4;     // 4 damage per tick
+export const ACID_AURA_COOLDOWN = 3000;    // 3 seconds between aura creation
+export const ACID_AURA_RADIUS = 1.5;       // Grid cells around slug for aura
+export const ACID_MAX_TILES = 40;          // Max tiles in world to prevent spam
+
 // Trap Projectile
 export const TRAP_FLIGHT_DURATION = 600;   // ms for arc flight
 export const TRAP_ARC_HEIGHT = 2.5;        // Peak height of thrown trap
@@ -103,6 +111,8 @@ export const COLORS = {
     pinned: "#8b0000",
     pinnedText: "#ff4444",
     pinnedBg: "#2a1010",
+    acid: "#9acd32",            // Yellow-green for acid tiles
+    acidText: "#b8e060",        // Brighter for damage text
 
     // HP bar colors
     hpHigh: "#22c55e",          // > 50%

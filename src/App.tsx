@@ -45,8 +45,10 @@ import {
     updateHpBarPositions,
     updateSwingAnimations,
     processStatusEffects,
-    updatePoisonVisuals
+    updatePoisonVisuals,
+    processAcidTiles
 } from "./gameLoop";
+import type { AcidTile } from "./core/types";
 
 // UI Components
 import { PartyBar } from "./components/PartyBar";
@@ -123,6 +125,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
     const doorMeshesRef = useRef<DoorMesh[]>([]);
     const waterMeshRef = useRef<THREE.Mesh | null>(null);
     const debugGridRef = useRef<THREE.Group | null>(null);
+    const acidTilesRef = useRef<Map<string, AcidTile>>(new Map());
 
     // Action queue (per-unit: last action wins)
     const actionQueueRef = useRef<ActionQueue>({});
@@ -301,6 +304,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         Object.keys(moveStartRef.current).forEach(k => delete moveStartRef.current[Number(k)]);
         Object.keys(actionCooldownRef.current).forEach(k => delete actionCooldownRef.current[Number(k)]);
         Object.keys(pathsRef.current).forEach(k => delete pathsRef.current[Number(k)]);
+        acidTilesRef.current.clear();  // Clear acid tiles (meshes will be in old scene)
 
         const sceneRefs = createScene(containerRef.current, units);
         const { scene, camera, renderer, flames, candleMeshes, candleLights, fogTexture, fogMesh, moveMarker, rangeIndicator, aoeIndicator, unitGroups, selectRings, targetRings, unitMeshes, unitOriginalColors, maxHp, wallMeshes, treeMeshes, doorMeshes, waterMesh } = sceneRefs;
@@ -795,6 +799,20 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                     defeatedThisFrame
                 );
 
+                // Process acid tiles (damage units standing on acid)
+                processAcidTiles(
+                    acidTilesRef.current,
+                    unitsStateRef.current,
+                    unitsRef.current,
+                    scene,
+                    damageTexts.current,
+                    hitFlashRef.current,
+                    setUnits,
+                    addLog,
+                    now,
+                    defeatedThisFrame
+                );
+
                 // Hit flash effect
                 updateHitFlash(hitFlashRef.current, unitMeshRef.current, unitOriginalColorRef.current, unitsStateRef.current, now);
 
@@ -852,7 +870,8 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                         moveStartRef.current, scene, setUnits, addLog, now,
                         defeatedThisFrame,
                         skillCooldownsRef.current, setSkillCooldowns,
-                        actionQueueRef.current, setQueuedActions
+                        actionQueueRef.current, setQueuedActions,
+                        acidTilesRef.current
                     );
                 });
 

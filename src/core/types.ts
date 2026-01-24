@@ -4,7 +4,7 @@ import * as THREE from "three";
 // TYPE DEFINITIONS
 // =============================================================================
 
-export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba";
+export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba" | "acid_slug";
 
 // =============================================================================
 // STATUS EFFECTS
@@ -120,6 +120,11 @@ export interface EnemyStats {
     moveSpeed?: number;
     // Optional max split count for splitting enemies (like Giant Amoeba)
     maxSplitCount?: number;
+    // Optional acid trail for acid slug enemies
+    acidTrail?: boolean;       // Creates acid on grid cells when moving
+    acidAura?: boolean;        // Periodically creates acid around itself
+    acidAuraCooldown?: number; // ms between aura acid creation
+    acidAuraRadius?: number;   // Radius in grid cells for aura
 }
 
 export interface EnemySpawnSkill {
@@ -260,3 +265,14 @@ export interface TrapProjectile extends BaseProjectile {
 }
 
 export type Projectile = BasicProjectile | AoeProjectile | MagicMissileProjectile | TrapProjectile;
+
+// Acid tile - ground hazard created by acid slugs
+export interface AcidTile {
+    mesh: THREE.Mesh;
+    x: number;           // Grid cell X
+    z: number;           // Grid cell Z
+    createdAt: number;   // Timestamp
+    duration: number;    // Total duration in ms
+    lastDamageTick: number;  // When damage was last applied
+    sourceId: number;    // ID of the slug that created it
+}

@@ -14,7 +14,7 @@ export type AreaId = "dungeon" | "forest" | "coast";
 
 // Default game start configuration - single source of truth
 export const DEFAULT_STARTING_AREA: AreaId = "coast";
-export const DEFAULT_SPAWN_POINT = { x: 25, z: 18 };  // Water's edge, away from amoebas
+export const DEFAULT_SPAWN_POINT = { x: 25, z: 12 };  // Near water's edge
 
 export interface RoomFloor {
     x: number;
@@ -474,15 +474,19 @@ export const COAST_AREA: AreaData = {
     roomFloors: [
         // Sandy beach - gradient from dry to wet sand
         { x: 1, z: 40, w: 48, h: 9, color: "#d4c4a8" },   // Dry sand (north)
-        { x: 1, z: 28, w: 48, h: 12, color: "#c2b280" },  // Mid sand
-        { x: 1, z: 16, w: 48, h: 12, color: "#a89968" },  // Wet sand (near water)
+        { x: 1, z: 22, w: 48, h: 18, color: "#c2b280" },  // Mid sand (expanded)
+        { x: 1, z: 10, w: 48, h: 12, color: "#a89968" },  // Wet sand (near water)
         // Shoreline visual - reduced water
-        { x: 1, z: 10, w: 48, h: 6, color: "#5f9ea0" },   // Shallow water
-        { x: 1, z: 1, w: 48, h: 9, color: "#4682b4" }     // Deep water
+        { x: 1, z: 5, w: 48, h: 5, color: "#5f9ea0" },    // Shallow water (smaller)
+        { x: 1, z: 1, w: 48, h: 4, color: "#4682b4" }     // Deep water (smaller)
     ],
     enemySpawns: [
-        { x: 15, z: 38, type: "giant_amoeba" },
-        { x: 35, z: 35, type: "giant_amoeba" }
+        { x: 15, z: 42, type: "giant_amoeba" },
+        { x: 35, z: 40, type: "giant_amoeba" },
+        // Acid slugs further up the beach
+        { x: 10, z: 32, type: "acid_slug" },
+        { x: 40, z: 34, type: "acid_slug" },
+        { x: 25, z: 36, type: "acid_slug" }
     ],
     transitions: [
         // North edge leads back to forest

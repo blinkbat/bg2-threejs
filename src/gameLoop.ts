@@ -18,14 +18,17 @@ import { calculateDamage, rollHit, shouldApplyPoison, shouldApplySlow, hasStunne
 import { createProjectile, getProjectileSpeed, applyDamageToUnit, getAliveUnitsInRange, type DamageContext } from "./combat/combat";
 import { soundFns } from "./audio/sound";
 import { isEnemyKiting, clearEnemyKiting, hasBroodMotherScreeched, markBroodMotherScreeched } from "./game/enemyState";
+import { findPath } from "./ai/pathfinding";
 
 // Re-export from split modules
 export { updateDamageTexts, updateHitFlash, updatePoisonVisuals, updateFogOfWar, resetFogCache } from "./gameLoop/visuals";
 export { processStatusEffects } from "./gameLoop/statusEffects";
 export { updateProjectiles } from "./gameLoop/projectiles";
 export { spawnSwingIndicator, updateSwingAnimations } from "./gameLoop/swingAnimations";
+export { processAcidTiles, createAcidTile, clearAcidTiles } from "./gameLoop/acidTiles";
 import { executeEnemySwipe, executeEnemyHeal } from "./gameLoop/enemySkills";
 import { spawnSwingIndicator } from "./gameLoop/swingAnimations";
+import { createAcidTile } from "./gameLoop/acidTiles";
 
 // Re-export unit ID utilities for backwards compatibility
 export { getNextUnitId, initializeUnitIdCounter } from "./core/unitIds";
@@ -81,7 +84,9 @@ export function updateUnitAI(
     setSkillCooldowns: React.Dispatch<React.SetStateAction<Record<string, { end: number; duration: number }>>>,
     // For player AI auto-queueing attacks
     actionQueueRef?: ActionQueue,
-    setQueuedActions?: React.Dispatch<React.SetStateAction<{ unitId: number; skillName: string }[]>>
+    setQueuedActions?: React.Dispatch<React.SetStateAction<{ unitId: number; skillName: string }[]>>,
+    // For acid slug enemies
+    acidTilesRef?: Map<string, import("./core/types").AcidTile>
 ): void {
     const isPlayer = unit.team === "player";
     const data = getUnitStats(unit);
@@ -130,6 +135,106 @@ export function updateUnitAI(
             const movementCtx: MovementContext = { unit, g, unitsRef, unitsState, targetX: pathResult.targetX, targetZ: pathResult.targetZ, speedMultiplier };
             runMovementPhase(movementCtx);
             return;
+        }
+    }
+
+    // Phase 1.55: Acid slug patrol - circle around players spreading acid instead of attacking
+    if (!isPlayer && unit.enemyType === "acid_slug" && acidTilesRef) {
+        const slugData = data as EnemyStats;
+
+        // Find closest player
+        let closestPlayer: { unit: Unit; group: UnitGroup; dist: number } | null = null;
+        for (const u of unitsState) {
+            if (u.team !== "player" || u.hp <= 0) continue;
+            const playerG = unitsRef[u.id];
+            if (!playerG) continue;
+            const dx = playerG.position.x - g.position.x;
+            const dz = playerG.position.z - g.position.z;
+            const dist = Math.sqrt(dx * dx + dz * dz);
+            if (dist <= slugData.aggroRange && (!closestPlayer || dist < closestPlayer.dist)) {
+                closestPlayer = { unit: u, group: playerG, dist };
+            }
+        }
+
+        if (closestPlayer) {
+            // Clear attack target - slugs don't attack
+            g.userData.attackTarget = null;
+
+            // Check if we need a new patrol destination (no path or reached destination)
+            const currentPath = pathsRef[unit.id];
+            const needsNewDestination = !currentPath || currentPath.length === 0;
+
+            if (needsNewDestination) {
+                // Pick a random point around the player to patrol to
+                const patrolRadius = 3 + Math.random() * 3;  // 3-6 units away from player
+                const patrolAngle = Math.random() * Math.PI * 2;
+                const patrolX = closestPlayer.group.position.x + Math.cos(patrolAngle) * patrolRadius;
+                const patrolZ = closestPlayer.group.position.z + Math.sin(patrolAngle) * patrolRadius;
+
+                const path = findPath(
+                    Math.floor(g.position.x), Math.floor(g.position.z),
+                    Math.floor(patrolX), Math.floor(patrolZ)
+                );
+                if (path && path.length > 0) {
+                    pathsRef[unit.id] = path;
+                    moveStartRef[unit.id] = { time: now, x: g.position.x, z: g.position.z };
+                }
+            }
+
+            // Continue to movement phase (skip attack logic)
+            // Track old position for acid trail
+            const oldGridX = Math.floor(g.position.x);
+            const oldGridZ = Math.floor(g.position.z);
+
+            // Path following
+            const pathCtx: PathContext = { unit, g, pathsRef, moveStartRef, now, isPlayer };
+            const pathResult = runPathFollowingPhase(pathCtx);
+
+            // Movement
+            const baseSpeedMultiplier = slugData.moveSpeed ?? 1;
+            const slowMultiplier = hasSlowedEffect(unit) ? SLOW_MOVE_MULT : 1;
+            const speedMultiplier = hasPinnedEffect(unit) ? 0 : baseSpeedMultiplier * slowMultiplier;
+            const movementCtx: MovementContext = { unit, g, unitsRef, unitsState, targetX: pathResult.targetX, targetZ: pathResult.targetZ, speedMultiplier };
+            runMovementPhase(movementCtx);
+
+            // Acid trail when moving
+            const newGridX = Math.floor(g.position.x);
+            const newGridZ = Math.floor(g.position.z);
+            const movedCell = newGridX !== oldGridX || newGridZ !== oldGridZ;
+
+            if (slugData.acidTrail && movedCell) {
+                createAcidTile(scene, acidTilesRef, oldGridX, oldGridZ, unit.id, now);
+            }
+
+            // Acid aura when stationary
+            if (slugData.acidAura && !movedCell) {
+                const auraCooldownKey = `${unit.id}-acidAura`;
+                const auraCooldownEnd = skillCooldowns[auraCooldownKey]?.end || 0;
+                const auraCooldown = slugData.acidAuraCooldown || 3000;
+                const auraRadius = slugData.acidAuraRadius || 1.5;
+
+                if (now >= auraCooldownEnd) {
+                    const centerX = newGridX;
+                    const centerZ = newGridZ;
+                    const radiusCells = Math.ceil(auraRadius);
+
+                    for (let dx = -radiusCells; dx <= radiusCells; dx++) {
+                        for (let dz = -radiusCells; dz <= radiusCells; dz++) {
+                            const dist = Math.sqrt(dx * dx + dz * dz);
+                            if (dist <= auraRadius) {
+                                createAcidTile(scene, acidTilesRef, centerX + dx, centerZ + dz, unit.id, now);
+                            }
+                        }
+                    }
+
+                    setSkillCooldowns(prev => ({
+                        ...prev,
+                        [auraCooldownKey]: { end: now + auraCooldown, duration: auraCooldown }
+                    }));
+                }
+            }
+
+            return;  // Skip normal attack behavior
         }
     }
 
@@ -245,7 +350,18 @@ export function updateUnitAI(
 
             if (inAttackRange) {
                 const cooldownEnd = actionCooldownRef[unit.id] || 0;
-                if (now >= cooldownEnd) {
+
+                // Acid slugs prioritize acid aura over attacking - check if aura is ready
+                let skipAttackForAcidAura = false;
+                if (!isPlayer && 'acidAura' in data && data.acidAura) {
+                    const auraCooldownKey = `${unit.id}-acidAura`;
+                    const auraCooldownEnd = skillCooldowns[auraCooldownKey]?.end || 0;
+                    if (now >= auraCooldownEnd) {
+                        skipAttackForAcidAura = true;
+                    }
+                }
+
+                if (now >= cooldownEnd && !skipAttackForAcidAura) {
                     // Check if enemy has a skill and it's ready
                     if (!isPlayer && 'skill' in data && data.skill) {
                         const skill = data.skill;
@@ -361,6 +477,10 @@ export function updateUnitAI(
     targetX = pathResult.targetX;
     targetZ = pathResult.targetZ;
 
+    // Track old position for acid trail (before movement)
+    const oldGridX = Math.floor(g.position.x);
+    const oldGridZ = Math.floor(g.position.z);
+
     // Phase 4: Movement - move toward target with avoidance and wall sliding
     // Pinned units cannot move (speed = 0), slowed units move at half speed
     const baseSpeedMultiplier = !isPlayer && 'moveSpeed' in data ? (data as EnemyStats).moveSpeed : undefined;
@@ -368,6 +488,49 @@ export function updateUnitAI(
     const speedMultiplier = hasPinnedEffect(unit) ? 0 : (baseSpeedMultiplier ?? 1) * slowMultiplier;
     const movementCtx: MovementContext = { unit, g, unitsRef, unitsState, targetX, targetZ, speedMultiplier };
     runMovementPhase(movementCtx);
+
+    // Phase 5: Acid slug - create acid trail when moving, aura when stationary
+    if (!isPlayer && acidTilesRef) {
+        const enemyStats = data as EnemyStats;
+        const newGridX = Math.floor(g.position.x);
+        const newGridZ = Math.floor(g.position.z);
+        const movedCell = newGridX !== oldGridX || newGridZ !== oldGridZ;
+
+        // Acid trail - leave acid on cells we move through
+        if (enemyStats.acidTrail && movedCell) {
+            createAcidTile(scene, acidTilesRef, oldGridX, oldGridZ, unit.id, now);
+        }
+
+        // Acid aura - periodically create acid around self when NOT moving
+        if (enemyStats.acidAura && !movedCell) {
+            const auraCooldownKey = `${unit.id}-acidAura`;
+            const auraCooldownEnd = skillCooldowns[auraCooldownKey]?.end || 0;
+            const auraCooldown = enemyStats.acidAuraCooldown || 3000;
+            const auraRadius = enemyStats.acidAuraRadius || 1.5;
+
+            if (now >= auraCooldownEnd) {
+                // Create acid tiles in radius around slug
+                const centerX = newGridX;
+                const centerZ = newGridZ;
+                const radiusCells = Math.ceil(auraRadius);
+
+                for (let dx = -radiusCells; dx <= radiusCells; dx++) {
+                    for (let dz = -radiusCells; dz <= radiusCells; dz++) {
+                        const dist = Math.sqrt(dx * dx + dz * dz);
+                        if (dist <= auraRadius) {
+                            createAcidTile(scene, acidTilesRef, centerX + dx, centerZ + dz, unit.id, now);
+                        }
+                    }
+                }
+
+                // Set cooldown
+                setSkillCooldowns(prev => ({
+                    ...prev,
+                    [auraCooldownKey]: { end: now + auraCooldown, duration: auraCooldown }
+                }));
+            }
+        }
+    }
 }
 
 // =============================================================================
