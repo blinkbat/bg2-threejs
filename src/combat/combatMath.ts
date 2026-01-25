@@ -391,3 +391,41 @@ export function logTrapThrown(casterName: string, skillName: string): string {
 export function logTrapTriggered(skillName: string, pinnedCount: number): string {
     return `${skillName} triggers, pinning ${pinnedCount} enem${pinnedCount !== 1 ? 'ies' : 'y'}!`;
 }
+
+// =============================================================================
+// UNIT STATE HELPERS
+// =============================================================================
+
+/**
+ * Check if a unit is alive (HP > 0 and not defeated this frame).
+ * Consolidates the common pattern: `if (unit.hp <= 0 || defeatedThisFrame.has(unit.id)) continue;`
+ */
+export function isUnitAlive(unit: Unit, defeatedThisFrame?: Set<number>): boolean {
+    if (unit.hp <= 0) return false;
+    if (defeatedThisFrame && defeatedThisFrame.has(unit.id)) return false;
+    return true;
+}
+
+// =============================================================================
+// STATUS EFFECT HELPERS
+// =============================================================================
+
+/**
+ * Apply a status effect to a unit, optionally replacing an existing effect of the same type.
+ * Returns a new statusEffects array (does not mutate).
+ *
+ * @param existingEffects - Current status effects array (or undefined)
+ * @param newEffect - The effect to apply
+ * @param replaceExisting - If true, removes any existing effect of the same type first (default: true)
+ */
+export function applyStatusEffect(
+    existingEffects: StatusEffect[] | undefined,
+    newEffect: StatusEffect,
+    replaceExisting: boolean = true
+): StatusEffect[] {
+    const effects = existingEffects || [];
+    const filtered = replaceExisting
+        ? effects.filter(e => e.type !== newEffect.type)
+        : effects;
+    return [...filtered, newEffect];
+}
