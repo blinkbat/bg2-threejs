@@ -6,29 +6,29 @@ import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, AcidTile } from "../core/types";
 import { COLORS, ACID_TILE_DURATION, ACID_TICK_INTERVAL, ACID_DAMAGE_PER_TICK, ACID_MAX_TILES } from "../core/constants";
 import { getUnitStats } from "../game/units";
-import { spawnDamageNumber, handleUnitDefeat } from "../combat/combat";
+import { handleUnitDefeat, showDamageVisual } from "../combat/combat";
+import { createTileMesh, updateTileFade, removeExpiredTiles, clearAllTiles, getTileKey, isUnitOnTile, type TileProcessConfig } from "./tileUtils";
+import { isUnitAlive } from "../combat/combatMath";
+
+// =============================================================================
+// CONSTANTS
+// =============================================================================
+
+const ACID_MESH_CONFIG = {
+    color: COLORS.acid,
+    opacity: 0.5,
+    yPosition: 0.02,
+    name: "acidTile"
+} as const;
+
+const ACID_PROCESS_CONFIG: TileProcessConfig = {
+    fadeStartPercent: 0.5,
+    baseOpacity: 0.5
+};
 
 // =============================================================================
 // ACID TILE CREATION
 // =============================================================================
-
-/**
- * Create an acid tile mesh at the given grid position.
- */
-export function createAcidTileMesh(x: number, z: number): THREE.Mesh {
-    const geometry = new THREE.CircleGeometry(0.45, 16);
-    const material = new THREE.MeshBasicMaterial({
-        color: COLORS.acid,
-        transparent: true,
-        opacity: 0.5,
-        side: THREE.DoubleSide
-    });
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.rotation.x = -Math.PI / 2;
-    mesh.position.set(x + 0.5, 0.02, z + 0.5);  // Center of grid cell, slightly above ground
-    mesh.name = "acidTile";
-    return mesh;
-}
 
 /**
  * Create a new acid tile at the given grid position.
@@ -42,7 +42,7 @@ export function createAcidTile(
     sourceId: number,
     now: number
 ): AcidTile | null {
-    const key = `${gridX},${gridZ}`;
+    const key = getTileKey(gridX, gridZ);
 
     // Don't exceed max tiles
     if (acidTiles.size >= ACID_MAX_TILES && !acidTiles.has(key)) {
@@ -54,13 +54,12 @@ export function createAcidTile(
     if (existing) {
         existing.createdAt = now;
         existing.duration = ACID_TILE_DURATION;
-        // Reset opacity
-        (existing.mesh.material as THREE.MeshBasicMaterial).opacity = 0.5;
+        (existing.mesh.material as THREE.MeshBasicMaterial).opacity = ACID_MESH_CONFIG.opacity;
         return existing;
     }
 
     // Create new tile
-    const mesh = createAcidTileMesh(gridX, gridZ);
+    const mesh = createTileMesh(gridX, gridZ, ACID_MESH_CONFIG);
     scene.add(mesh);
 
     const tile: AcidTile = {
@@ -100,20 +99,10 @@ export function processAcidTiles(
     const tilesToRemove: string[] = [];
 
     acidTiles.forEach((tile, key) => {
-        const elapsed = now - tile.createdAt;
-
-        // Check if tile has expired
-        if (elapsed >= tile.duration) {
+        // Handle expiration and fade
+        if (updateTileFade(tile, now, ACID_PROCESS_CONFIG)) {
             tilesToRemove.push(key);
             return;
-        }
-
-        // Update visual opacity based on remaining time
-        const remaining = tile.duration - elapsed;
-        const fadeStart = tile.duration * 0.5;  // Start fading at 50% duration
-        if (remaining < fadeStart) {
-            const fadeProgress = remaining / fadeStart;
-            (tile.mesh.material as THREE.MeshBasicMaterial).opacity = 0.5 * fadeProgress;
         }
 
         // Check for damage tick
@@ -122,18 +111,13 @@ export function processAcidTiles(
 
             // Find units standing on this tile (acid slugs are immune)
             unitsState.forEach(unit => {
-                if (unit.hp <= 0 || defeatedThisFrame.has(unit.id)) return;
-                if (unit.enemyType === "acid_slug") return;  // Acid slugs immune to acid
+                if (!isUnitAlive(unit, defeatedThisFrame)) return;
+                if (unit.enemyType === "acid_slug") return;
 
                 const unitG = unitsRef[unit.id];
                 if (!unitG) return;
 
-                // Check if unit is on this grid cell
-                const unitGridX = Math.floor(unitG.position.x);
-                const unitGridZ = Math.floor(unitG.position.z);
-
-                if (unitGridX === tile.x && unitGridZ === tile.z) {
-                    // Deal acid damage
+                if (isUnitOnTile(unitG.position.x, unitG.position.z, tile.x, tile.z)) {
                     const dmg = ACID_DAMAGE_PER_TICK;
                     const data = getUnitStats(unit);
                     let wasDefeated = false;
@@ -145,9 +129,7 @@ export function processAcidTiles(
                         return { ...u, hp: newHp };
                     }));
 
-                    hitFlashRef[unit.id] = now;
-                    spawnDamageNumber(scene, unitG.position.x, unitG.position.z, dmg, COLORS.acidText, damageTexts);
-                    addLog(`${data.name} takes ${dmg} acid damage.`, COLORS.acidText);
+                    showDamageVisual(scene, unit.id, unitG.position.x, unitG.position.z, dmg, COLORS.acidText, hitFlashRef, damageTexts, addLog, `${data.name} takes ${dmg} acid damage.`, now);
 
                     if (wasDefeated) {
                         defeatedThisFrame.add(unit.id);
@@ -158,16 +140,7 @@ export function processAcidTiles(
         }
     });
 
-    // Remove expired tiles
-    tilesToRemove.forEach(key => {
-        const tile = acidTiles.get(key);
-        if (tile) {
-            scene.remove(tile.mesh);
-            tile.mesh.geometry.dispose();
-            (tile.mesh.material as THREE.MeshBasicMaterial).dispose();
-            acidTiles.delete(key);
-        }
-    });
+    removeExpiredTiles(acidTiles, tilesToRemove, scene);
 }
 
 /**
@@ -175,10 +148,5 @@ export function processAcidTiles(
  * Called on game restart.
  */
 export function clearAcidTiles(acidTiles: Map<string, AcidTile>, scene: THREE.Scene): void {
-    acidTiles.forEach(tile => {
-        scene.remove(tile.mesh);
-        tile.mesh.geometry.dispose();
-        (tile.mesh.material as THREE.MeshBasicMaterial).dispose();
-    });
-    acidTiles.clear();
+    clearAllTiles(acidTiles, scene);
 }

@@ -2,17 +2,12 @@
 // COMBAT MATH - Unified damage calculation and combat utilities
 // =============================================================================
 
-import type { Unit, UnitData, EnemyStats, StatusEffect } from "../core/types";
+import type { Unit, UnitData, EnemyStats, StatusEffect, StatusEffectType } from "../core/types";
 import { POISON_DURATION, POISON_TICK_INTERVAL, POISON_DAMAGE_PER_TICK, SLOW_DURATION, BUFF_TICK_INTERVAL, COLORS } from "../core/constants";
 
 // =============================================================================
 // DISTANCE & POSITION UTILITIES
 // =============================================================================
-
-/** Calculate distance between two 2D points (x,z plane) */
-export function calculateDistance(x1: number, z1: number, x2: number, z2: number): number {
-    return Math.hypot(x2 - x1, z2 - z1);
-}
 
 /** Get direction vector and distance between two points. Returns normalized dx/dz and distance. */
 export function getDirectionAndDistance(
@@ -56,15 +51,6 @@ export function isBlockedByFrontShield(
 
     // If angle difference is within 90 degrees (PI/2), attack is from the front
     return Math.abs(angleDiff) < Math.PI / 2;
-}
-
-// =============================================================================
-// GRID UTILITIES
-// =============================================================================
-
-/** Convert world position to grid cell coordinates */
-export function getGridCell(x: number, z: number): { cellX: number; cellZ: number } {
-    return { cellX: Math.floor(x), cellZ: Math.floor(z) };
 }
 
 // =============================================================================
@@ -116,7 +102,7 @@ export function getDamageColor(targetTeam: "player" | "enemy", isAoe: boolean = 
  */
 export function applyPoison(unit: Unit, sourceId: number, now: number, customDamage?: number): Unit {
     // Check for poison immunity (cleansed effect)
-    if (hasCleansedEffect(unit)) {
+    if (hasStatusEffect(unit, "cleansed")) {
         return unit;  // Immune to poison, no change
     }
 
@@ -162,45 +148,10 @@ export function shouldApplyPoison(attackerData: UnitData | EnemyStats): boolean 
 }
 
 /**
- * Check if a unit currently has the poison status effect.
+ * Check if a unit currently has a specific status effect.
  */
-export function hasPoisonEffect(unit: Unit): boolean {
-    return unit.statusEffects?.some(e => e.type === "poison") ?? false;
-}
-
-/**
- * Check if a unit currently has the shielded status effect.
- */
-export function hasShieldedEffect(unit: Unit): boolean {
-    return unit.statusEffects?.some(e => e.type === "shielded") ?? false;
-}
-
-/**
- * Check if a unit currently has the stunned status effect.
- */
-export function hasStunnedEffect(unit: Unit): boolean {
-    return unit.statusEffects?.some(e => e.type === "stunned") ?? false;
-}
-
-/**
- * Check if a unit currently has the cleansed (poison immune) status effect.
- */
-export function hasCleansedEffect(unit: Unit): boolean {
-    return unit.statusEffects?.some(e => e.type === "cleansed") ?? false;
-}
-
-/**
- * Check if a unit currently has the pinned status effect.
- */
-export function hasPinnedEffect(unit: Unit): boolean {
-    return unit.statusEffects?.some(e => e.type === "pinned") ?? false;
-}
-
-/**
- * Check if a unit currently has the slowed status effect.
- */
-export function hasSlowedEffect(unit: Unit): boolean {
-    return unit.statusEffects?.some(e => e.type === "slowed") ?? false;
+export function hasStatusEffect(unit: Unit, effectType: StatusEffectType): boolean {
+    return unit.statusEffects?.some(e => e.type === effectType) ?? false;
 }
 
 /**
@@ -252,7 +203,7 @@ export function shouldApplySlow(attackerData: UnitData | EnemyStats): boolean {
  * Get effective armor for a unit, applying shielded buff (doubles armor).
  */
 export function getEffectiveArmor(unit: Unit, baseArmor: number): number {
-    return hasShieldedEffect(unit) ? baseArmor * 2 : baseArmor;
+    return hasStatusEffect(unit, "shielded") ? baseArmor * 2 : baseArmor;
 }
 
 /**

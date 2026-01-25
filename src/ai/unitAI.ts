@@ -16,7 +16,7 @@ import {
     hasReachedWaypoint, checkIfStuck, handleGiveUp, clearJitterTracking
 } from "./movement";
 import { getUnitRadius } from "../rendering/range";
-import { clampToGrid } from "../game/geometry";
+import { clampToGrid, distanceBetween } from "../game/geometry";
 import { getAttackRange, ENEMY_STATS } from "../game/units";
 import type { Unit, UnitGroup } from "../core/types";
 
@@ -198,7 +198,7 @@ export function findNearestTarget(ctx: TargetingContext, alerted: boolean = fals
             if (visibility[enemyX]?.[enemyZ] !== 2) continue;
         }
 
-        const d = Math.hypot(g.position.x - eg.position.x, g.position.z - eg.position.z);
+        const d = distanceBetween(g.position, eg.position);
         if (d < nearestDist) {
             nearestDist = d;
             nearest = enemy.id;
@@ -221,7 +221,7 @@ export function acquireTarget(ctx: TargetingContext, targetId: number): boolean 
 
     if (targetG) {
         // Check if already in attack range (no path needed)
-        const dist = Math.hypot(g.position.x - targetG.position.x, g.position.z - targetG.position.z);
+        const dist = distanceBetween(g.position, targetG.position);
         const attackRange = getAttackRange(unit);
         if (dist < attackRange) {
             // Already in attack range, no path needed

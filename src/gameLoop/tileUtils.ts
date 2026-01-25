@@ -1,0 +1,143 @@
+// =============================================================================
+// TILE UTILITIES - Shared logic for ground tile systems (acid, sanctuary, etc.)
+// =============================================================================
+
+import * as THREE from "three";
+import { disposeBasicMesh } from "../rendering/disposal";
+
+// =============================================================================
+// TYPES
+// =============================================================================
+
+/** Base interface for all tile types */
+export interface BaseTile {
+    mesh: THREE.Mesh;
+    x: number;
+    z: number;
+    createdAt: number;
+    duration: number;
+}
+
+/** Configuration for creating tile meshes */
+export interface TileMeshConfig {
+    color: string;
+    opacity: number;
+    yPosition: number;
+    name: string;
+    radius?: number;
+    segments?: number;
+}
+
+/** Configuration for tile processing */
+export interface TileProcessConfig {
+    fadeStartPercent: number;  // When to start fading (0.5 = 50% remaining)
+    baseOpacity: number;       // Original opacity to fade from
+}
+
+// =============================================================================
+// MESH CREATION
+// =============================================================================
+
+/**
+ * Create a ground tile mesh at the given grid position.
+ * All tile types use the same base geometry (flat circle on ground).
+ */
+export function createTileMesh(x: number, z: number, config: TileMeshConfig): THREE.Mesh {
+    const radius = config.radius ?? 0.45;
+    const segments = config.segments ?? 16;
+
+    const geometry = new THREE.CircleGeometry(radius, segments);
+    const material = new THREE.MeshBasicMaterial({
+        color: config.color,
+        transparent: true,
+        opacity: config.opacity,
+        side: THREE.DoubleSide
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(x + 0.5, config.yPosition, z + 0.5);
+    mesh.name = config.name;
+    return mesh;
+}
+
+// =============================================================================
+// TILE LIFECYCLE
+// =============================================================================
+
+/**
+ * Update tile opacity based on remaining time (fade effect).
+ * Returns true if tile has expired and should be removed.
+ */
+export function updateTileFade<T extends BaseTile>(
+    tile: T,
+    now: number,
+    config: TileProcessConfig
+): boolean {
+    const elapsed = now - tile.createdAt;
+
+    // Check if expired
+    if (elapsed >= tile.duration) {
+        return true;
+    }
+
+    // Update opacity based on remaining time
+    const remaining = tile.duration - elapsed;
+    const fadeStart = tile.duration * config.fadeStartPercent;
+    if (remaining < fadeStart) {
+        const fadeProgress = remaining / fadeStart;
+        (tile.mesh.material as THREE.MeshBasicMaterial).opacity = config.baseOpacity * fadeProgress;
+    }
+
+    return false;
+}
+
+/**
+ * Remove and dispose a list of tiles by their keys.
+ */
+export function removeExpiredTiles<T extends BaseTile>(
+    tiles: Map<string, T>,
+    keysToRemove: string[],
+    scene: THREE.Scene
+): void {
+    keysToRemove.forEach(key => {
+        const tile = tiles.get(key);
+        if (tile) {
+            disposeBasicMesh(scene, tile.mesh);
+            tiles.delete(key);
+        }
+    });
+}
+
+/**
+ * Clear all tiles from a tile map.
+ */
+export function clearAllTiles<T extends BaseTile>(
+    tiles: Map<string, T>,
+    scene: THREE.Scene
+): void {
+    tiles.forEach(tile => {
+        disposeBasicMesh(scene, tile.mesh);
+    });
+    tiles.clear();
+}
+
+/**
+ * Get tile key from grid coordinates.
+ */
+export function getTileKey(gridX: number, gridZ: number): string {
+    return `${gridX},${gridZ}`;
+}
+
+/**
+ * Check if a unit is standing on a specific grid cell.
+ */
+export function isUnitOnTile(
+    unitX: number,
+    unitZ: number,
+    tileX: number,
+    tileZ: number
+): boolean {
+    const unitGridX = Math.floor(unitX);
+    const unitGridZ = Math.floor(unitZ);
+    return unitGridX === tileX && unitGridZ === tileZ;
+}

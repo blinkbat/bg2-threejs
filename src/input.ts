@@ -10,6 +10,7 @@ import { UNIT_DATA } from "./game/units";
 import { soundFns } from "./audio/sound";
 import { executeSkill, clearTargetingMode, type SkillExecutionContext } from "./combat/skills";
 import { disposeGeometry } from "./rendering/disposal";
+import { distanceToPoint } from "./game/geometry";
 
 // =============================================================================
 // TYPES
@@ -392,7 +393,7 @@ export function handleTargetingClick(
 
     const targetX = hit.point.x;
     const targetZ = hit.point.z;
-    const dist = Math.hypot(targetX - casterG.position.x, targetZ - casterG.position.z);
+    const dist = distanceToPoint(casterG.position, targetX, targetZ);
 
     if (dist > skill.range) {
         addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, "#888");

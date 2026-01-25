@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import Tippy from "@tippyjs/react";
 import type { Unit, Skill, StatusEffect } from "../core/types";
 import { UNIT_DATA, getAllSkills } from "../game/units";
-import { getHpPercentage, getHpColor, getMana, hasShieldedEffect, getEffectiveArmor } from "../combat/combatMath";
+import { getHpPercentage, getHpColor, getMana, hasStatusEffect, getEffectiveArmor } from "../combat/combatMath";
 import { COLORS } from "../core/constants";
 
 interface UnitPanelProps {
@@ -109,7 +109,7 @@ export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, ski
 }
 
 function StatusTab({ unit, data, onToggleAI, unitId }: { unit: Unit; data: typeof UNIT_DATA[number]; onToggleAI: (id: number) => void; unitId: number }) {
-    const isShielded = hasShieldedEffect(unit);
+    const isShielded = hasStatusEffect(unit, "shielded");
     const effectiveArmor = getEffectiveArmor(unit, data.armor);
 
     return (
@@ -292,7 +292,7 @@ function SkillsTab({
     queuedSkills: string[];
     onCastSkill?: (unitId: number, skill: Skill) => void;
 }) {
-    const isShielded = hasShieldedEffect(unit);
+    const isShielded = hasStatusEffect(unit, "shielded");
 
     return (
         <div className="flex flex-col gap-8">

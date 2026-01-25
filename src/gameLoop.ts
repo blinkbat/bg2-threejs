@@ -14,7 +14,7 @@ import {
 import { getUnitStats, getBasicAttackSkill, getAttackRange, ENEMY_STATS } from "./game/units";
 import type { ActionQueue } from "./input";
 import { getNextUnitId } from "./core/unitIds";
-import { calculateDamage, rollHit, shouldApplyPoison, shouldApplySlow, hasStunnedEffect, hasPinnedEffect, hasSlowedEffect, getEffectiveArmor, getEffectiveDamage, logHit, logLifestealHit, logMiss, logPoisoned, logSlowed } from "./combat/combatMath";
+import { calculateDamage, rollHit, shouldApplyPoison, shouldApplySlow, hasStatusEffect, getEffectiveArmor, getEffectiveDamage, logHit, logLifestealHit, logMiss, logPoisoned, logSlowed } from "./combat/combatMath";
 import { createProjectile, getProjectileSpeed, applyDamageToUnit, getAliveUnitsInRange, spawnDamageNumber, type DamageContext } from "./combat/combat";
 import { soundFns } from "./audio/sound";
 import { isEnemyKiting, clearEnemyKiting, hasBroodMotherScreeched, markBroodMotherScreeched } from "./game/enemyState";
@@ -93,7 +93,7 @@ export function updateUnitAI(
     const data = getUnitStats(unit);
 
     // Skip all actions if stunned - unit cannot move or attack
-    if (hasStunnedEffect(unit)) {
+    if (hasStatusEffect(unit, "stunned")) {
         return;
     }
 
@@ -194,8 +194,8 @@ export function updateUnitAI(
 
             // Movement
             const baseSpeedMultiplier = slugData.moveSpeed ?? 1;
-            const slowMultiplier = hasSlowedEffect(unit) ? SLOW_MOVE_MULT : 1;
-            const speedMultiplier = hasPinnedEffect(unit) ? 0 : baseSpeedMultiplier * slowMultiplier;
+            const slowMultiplier = hasStatusEffect(unit, "slowed") ? SLOW_MOVE_MULT : 1;
+            const speedMultiplier = hasStatusEffect(unit, "pinned") ? 0 : baseSpeedMultiplier * slowMultiplier;
             const movementCtx: MovementContext = { unit, g, unitsRef, unitsState, targetX: pathResult.targetX, targetZ: pathResult.targetZ, speedMultiplier };
             runMovementPhase(movementCtx);
 
@@ -252,7 +252,7 @@ export function updateUnitAI(
                 setUnits, addLog
             );
             if (executed) {
-                const cooldownMult = hasSlowedEffect(unit) ? SLOW_COOLDOWN_MULT : 1;
+                const cooldownMult = hasStatusEffect(unit, "slowed") ? SLOW_COOLDOWN_MULT : 1;
                 setSkillCooldowns(prev => ({
                     ...prev,
                     [healCooldownKey]: { end: now + healSkill.cooldown * cooldownMult, duration: healSkill.cooldown }
@@ -384,7 +384,7 @@ export function updateUnitAI(
                                     hitFlashRef, setUnits, addLog, now, defeatedThisFrame
                                 );
                                 if (executed) {
-                                    const cooldownMult = hasSlowedEffect(unit) ? SLOW_COOLDOWN_MULT : 1;
+                                    const cooldownMult = hasStatusEffect(unit, "slowed") ? SLOW_COOLDOWN_MULT : 1;
                                     setSkillCooldowns(prev => ({
                                         ...prev,
                                         [enemySkillKey]: { end: now + skill.cooldown * cooldownMult, duration: skill.cooldown }
@@ -420,7 +420,7 @@ export function updateUnitAI(
                     }
 
                     // Enemy units: execute attack directly (they don't use player skill queue)
-                    const cooldownMult = hasSlowedEffect(unit) ? SLOW_COOLDOWN_MULT : 1;
+                    const cooldownMult = hasStatusEffect(unit, "slowed") ? SLOW_COOLDOWN_MULT : 1;
                     const attackCooldownEnd = now + data.attackCooldown * cooldownMult;
                     actionCooldownRef[unit.id] = attackCooldownEnd;
 
@@ -511,8 +511,8 @@ export function updateUnitAI(
     // Phase 4: Movement - move toward target with avoidance and wall sliding
     // Pinned units cannot move (speed = 0), slowed units move at half speed
     const baseSpeedMultiplier = !isPlayer && 'moveSpeed' in data ? (data as EnemyStats).moveSpeed : undefined;
-    const slowMultiplier = hasSlowedEffect(unit) ? SLOW_MOVE_MULT : 1;
-    const speedMultiplier = hasPinnedEffect(unit) ? 0 : (baseSpeedMultiplier ?? 1) * slowMultiplier;
+    const slowMultiplier = hasStatusEffect(unit, "slowed") ? SLOW_MOVE_MULT : 1;
+    const speedMultiplier = hasStatusEffect(unit, "pinned") ? 0 : (baseSpeedMultiplier ?? 1) * slowMultiplier;
     const movementCtx: MovementContext = { unit, g, unitsRef, unitsState, targetX, targetZ, speedMultiplier };
     runMovementPhase(movementCtx);
 

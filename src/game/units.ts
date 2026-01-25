@@ -67,7 +67,7 @@ export const SKILLS: Record<string, Skill> = {
     flurryOfFists: {
         name: "Flurry of Fists",
         description: "Unleash 5 rapid strikes on nearby enemies.",
-        flavor: "The imps never saw it coming -- then they never saw again.",
+        flavor: "The imps never saw it coming -- then they never saw anything again.",
         manaCost: 8,
         cooldown: 4000,
         type: "flurry",
@@ -307,18 +307,18 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     bat: {
         name: "Vampire Bat",
-        hp: 20,
-        maxHp: 20,
-        damage: [3, 6 ],
+        hp: 25,
+        maxHp: 25,
+        damage: [3, 7],
         accuracy: 70,
         armor: 0,
         color: "#2a1a2a",  // Dark purple-black
         aggroRange: 10,    // Good vision in the dark
         attackCooldown: 1200,  // Fast attacks
         size: 1,
-        moveSpeed: 1.2,    // Fast flyer
+        moveSpeed: 1.4,    // Fast flyer
         flying: true,      // Floats above ground
-        lifesteal: 0.5     // Heals for 50% of damage dealt
+        lifesteal: 0.7     // Heals for 70% of damage dealt
     },
     undead_knight: {
         name: "Undead Knight",

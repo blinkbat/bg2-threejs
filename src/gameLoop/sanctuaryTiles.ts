@@ -7,28 +7,28 @@ import type { Unit, UnitGroup, DamageText, SanctuaryTile, AcidTile } from "../co
 import { COLORS, SANCTUARY_TILE_DURATION, SANCTUARY_TICK_INTERVAL, SANCTUARY_MAX_TILES } from "../core/constants";
 import { getUnitStats } from "../game/units";
 import { spawnDamageNumber } from "../combat/combat";
+import { disposeBasicMesh } from "../rendering/disposal";
+import { createTileMesh, updateTileFade, removeExpiredTiles, clearAllTiles, getTileKey, isUnitOnTile, type TileProcessConfig } from "./tileUtils";
+
+// =============================================================================
+// CONSTANTS
+// =============================================================================
+
+const SANCTUARY_MESH_CONFIG = {
+    color: COLORS.sanctuary,
+    opacity: 0.4,
+    yPosition: 0.03,
+    name: "sanctuaryTile"
+} as const;
+
+const SANCTUARY_PROCESS_CONFIG: TileProcessConfig = {
+    fadeStartPercent: 0.3,
+    baseOpacity: 0.4
+};
 
 // =============================================================================
 // SANCTUARY TILE CREATION
 // =============================================================================
-
-/**
- * Create a sanctuary tile mesh at the given grid position.
- */
-export function createSanctuaryTileMesh(x: number, z: number): THREE.Mesh {
-    const geometry = new THREE.CircleGeometry(0.45, 16);
-    const material = new THREE.MeshBasicMaterial({
-        color: COLORS.sanctuary,
-        transparent: true,
-        opacity: 0.4,
-        side: THREE.DoubleSide
-    });
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.rotation.x = -Math.PI / 2;
-    mesh.position.set(x + 0.5, 0.03, z + 0.5);  // Slightly above acid tiles
-    mesh.name = "sanctuaryTile";
-    return mesh;
-}
 
 /**
  * Create a new sanctuary tile at the given grid position.
@@ -45,14 +45,12 @@ export function createSanctuaryTile(
     healPerTick: number,
     now: number
 ): SanctuaryTile | null {
-    const key = `${gridX},${gridZ}`;
+    const key = getTileKey(gridX, gridZ);
 
     // Remove any acid tile at this position
     const existingAcid = acidTiles.get(key);
     if (existingAcid) {
-        scene.remove(existingAcid.mesh);
-        existingAcid.mesh.geometry.dispose();
-        (existingAcid.mesh.material as THREE.MeshBasicMaterial).dispose();
+        disposeBasicMesh(scene, existingAcid.mesh);
         acidTiles.delete(key);
     }
 
@@ -66,13 +64,12 @@ export function createSanctuaryTile(
     if (existing) {
         existing.createdAt = now;
         existing.duration = SANCTUARY_TILE_DURATION;
-        // Reset opacity
-        (existing.mesh.material as THREE.MeshBasicMaterial).opacity = 0.4;
+        (existing.mesh.material as THREE.MeshBasicMaterial).opacity = SANCTUARY_MESH_CONFIG.opacity;
         return existing;
     }
 
     // Create new tile
-    const mesh = createSanctuaryTileMesh(gridX, gridZ);
+    const mesh = createTileMesh(gridX, gridZ, SANCTUARY_MESH_CONFIG);
     scene.add(mesh);
 
     const tile: SanctuaryTile = {
@@ -111,20 +108,10 @@ export function processSanctuaryTiles(
     const tilesToRemove: string[] = [];
 
     sanctuaryTiles.forEach((tile, key) => {
-        const elapsed = now - tile.createdAt;
-
-        // Check if tile has expired
-        if (elapsed >= tile.duration) {
+        // Handle expiration and fade
+        if (updateTileFade(tile, now, SANCTUARY_PROCESS_CONFIG)) {
             tilesToRemove.push(key);
             return;
-        }
-
-        // Update visual opacity based on remaining time
-        const remaining = tile.duration - elapsed;
-        const fadeStart = tile.duration * 0.3;  // Start fading at 30% duration remaining
-        if (remaining < fadeStart) {
-            const fadeProgress = remaining / fadeStart;
-            (tile.mesh.material as THREE.MeshBasicMaterial).opacity = 0.4 * fadeProgress;
         }
 
         // Check for heal tick
@@ -138,11 +125,7 @@ export function processSanctuaryTiles(
                 const unitG = unitsRef[unit.id];
                 if (!unitG) return;
 
-                // Check if unit is on this grid cell
-                const unitGridX = Math.floor(unitG.position.x);
-                const unitGridZ = Math.floor(unitG.position.z);
-
-                if (unitGridX === tile.x && unitGridZ === tile.z) {
+                if (isUnitOnTile(unitG.position.x, unitG.position.z, tile.x, tile.z)) {
                     const data = getUnitStats(unit);
                     const maxHp = data.maxHp;
 
@@ -163,16 +146,7 @@ export function processSanctuaryTiles(
         }
     });
 
-    // Remove expired tiles
-    tilesToRemove.forEach(key => {
-        const tile = sanctuaryTiles.get(key);
-        if (tile) {
-            scene.remove(tile.mesh);
-            tile.mesh.geometry.dispose();
-            (tile.mesh.material as THREE.MeshBasicMaterial).dispose();
-            sanctuaryTiles.delete(key);
-        }
-    });
+    removeExpiredTiles(sanctuaryTiles, tilesToRemove, scene);
 }
 
 /**
@@ -180,10 +154,5 @@ export function processSanctuaryTiles(
  * Called on game restart.
  */
 export function clearSanctuaryTiles(sanctuaryTiles: Map<string, SanctuaryTile>, scene: THREE.Scene): void {
-    sanctuaryTiles.forEach(tile => {
-        scene.remove(tile.mesh);
-        tile.mesh.geometry.dispose();
-        (tile.mesh.material as THREE.MeshBasicMaterial).dispose();
-    });
-    sanctuaryTiles.clear();
+    clearAllTiles(sanctuaryTiles, scene);
 }

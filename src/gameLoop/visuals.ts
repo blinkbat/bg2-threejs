@@ -5,7 +5,7 @@
 import * as THREE from "three";
 import type { Unit, DamageText, UnitGroup, FogTexture } from "../core/types";
 import { GRID_SIZE, FOG_SCALE, FLASH_DURATION, COLORS, POISON_TINT_STRENGTH } from "../core/constants";
-import { hasPoisonEffect } from "../combat/combatMath";
+import { hasStatusEffect } from "../combat/combatMath";
 import { updateVisibility } from "../ai/pathfinding";
 import { getCurrentArea } from "../game/areas";
 import { disposeTexturedMesh } from "../rendering/disposal";
@@ -60,7 +60,7 @@ export function updateHitFlash(
 
         // Get the target color (original or poison-tinted) - reuse _targetColor
         const unit = unitsState.find(u => u.id === Number(id));
-        const isPoisoned = unit ? hasPoisonEffect(unit) : false;
+        const isPoisoned = unit ? hasStatusEffect(unit, "poison") : false;
         if (isPoisoned) {
             _targetColor.copy(originalColor).lerp(_poisonColor, POISON_TINT_STRENGTH);
         } else {
@@ -93,7 +93,7 @@ export function updatePoisonVisuals(
         // Skip if currently flashing (hit flash will handle the color)
         if (hitFlashRef[unit.id] !== undefined) continue;
 
-        const isPoisoned = hasPoisonEffect(unit);
+        const isPoisoned = hasStatusEffect(unit, "poison");
 
         if (isPoisoned) {
             // Apply green poison tint - reuse _tempColor

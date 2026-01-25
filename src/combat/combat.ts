@@ -6,10 +6,11 @@ import * as THREE from "three";
 import type { DamageText, UnitGroup, Unit } from "../core/types";
 import { PROJECTILE_CONFIG, COLORS, RING_EXPAND_DURATION } from "../core/constants";
 import { getUnitRadius, isInRange } from "../rendering/range";
+import { distanceToPoint } from "../game/geometry";
 import { soundFns } from "../audio/sound";
 import { cleanupUnitState } from "../ai/movement";
 import { cleanupEnemyKiteCooldown } from "../game/enemyState";
-import { logDefeated, applyPoison, applySlowed, hasShieldedEffect } from "./combatMath";
+import { logDefeated, applyPoison, applySlowed, hasStatusEffect } from "./combatMath";
 import { tryKillBark } from "./barks";
 import { getNextUnitId } from "../core/unitIds";
 import { ENEMY_STATS } from "../game/units";
@@ -183,7 +184,7 @@ export function getAliveUnitsInRange(
 
         const unitRadius = getUnitRadius(unit);
         if (isInRange(x, z, g.position.x, g.position.z, unitRadius, range)) {
-            const dist = Math.hypot(g.position.x - x, g.position.z - z);
+            const dist = distanceToPoint(g.position, x, z);
             results.push({ unit, group: g, dist });
         }
     }
@@ -312,7 +313,7 @@ export function applyDamageToUnit(
         if (u.id !== targetId) return u;
         let updated = { ...u, hp: newHp };
         // Shielded units are immune to poison
-        if (poison && !hasShieldedEffect(u)) {
+        if (poison && !hasStatusEffect(u, "shielded")) {
             updated = applyPoison(updated, poison.sourceId, now, poison.damagePerTick);
         }
         // Apply slow debuff
@@ -385,6 +386,28 @@ export function spawnDamageNumber(
     mesh.position.set(x, 1.5, z);
     scene.add(mesh);
     damageTexts.push({ mesh, life: 1000 });
+}
+
+/**
+ * Show damage visual effects - hit flash, damage number, and log message.
+ * Consolidates the common pattern of: hitFlashRef[id] = now + spawnDamageNumber + addLog
+ */
+export function showDamageVisual(
+    scene: THREE.Scene,
+    unitId: number,
+    unitX: number,
+    unitZ: number,
+    damage: number,
+    color: string,
+    hitFlashRef: Record<number, number>,
+    damageTexts: DamageText[],
+    addLog: (text: string, color?: string) => void,
+    logMessage: string,
+    now: number
+): void {
+    hitFlashRef[unitId] = now;
+    spawnDamageNumber(scene, unitX, unitZ, damage, color, damageTexts);
+    addLog(logMessage, color);
 }
 
 /**

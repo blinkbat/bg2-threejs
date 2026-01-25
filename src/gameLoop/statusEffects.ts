@@ -6,7 +6,8 @@ import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText } from "../core/types";
 import { COLORS } from "../core/constants";
 import { getUnitStats } from "../game/units";
-import { spawnDamageNumber, handleUnitDefeat } from "../combat/combat";
+import { handleUnitDefeat, showDamageVisual } from "../combat/combat";
+import { isUnitAlive } from "../combat/combatMath";
 
 // =============================================================================
 // STATUS EFFECT PROCESSING
@@ -24,7 +25,7 @@ export function processStatusEffects(
     defeatedThisFrame: Set<number>
 ): void {
     unitsState.forEach(unit => {
-        if (unit.hp <= 0 || defeatedThisFrame.has(unit.id)) return;
+        if (!isUnitAlive(unit, defeatedThisFrame)) return;
         if (!unit.statusEffects || unit.statusEffects.length === 0) return;
 
         const unitG = unitsRef[unit.id];
@@ -63,9 +64,7 @@ export function processStatusEffects(
                         };
                     }));
 
-                    hitFlashRef[unit.id] = now;
-                    spawnDamageNumber(scene, unitG.position.x, unitG.position.z, dmg, COLORS.poisonText, damageTexts);
-                    addLog(`${data.name} takes ${dmg} poison damage.`, COLORS.poisonText);
+                    showDamageVisual(scene, unit.id, unitG.position.x, unitG.position.z, dmg, COLORS.poisonText, hitFlashRef, damageTexts, addLog, `${data.name} takes ${dmg} poison damage.`, now);
 
                     if (wasDefeated) {
                         defeatedThisFrame.add(unit.id);
@@ -99,9 +98,7 @@ export function processStatusEffects(
                         };
                     }));
 
-                    hitFlashRef[unit.id] = now;
-                    spawnDamageNumber(scene, unitG.position.x, unitG.position.z, dmg, "#9b59b6", damageTexts);  // Purple for qi drain
-                    addLog(`${data.name} loses ${dmg} HP from Qi drain.`, "#9b59b6");
+                    showDamageVisual(scene, unit.id, unitG.position.x, unitG.position.z, dmg, "#9b59b6", hitFlashRef, damageTexts, addLog, `${data.name} loses ${dmg} HP from Qi drain.`, now);
 
                     if (wasDefeated) {
                         defeatedThisFrame.add(unit.id);

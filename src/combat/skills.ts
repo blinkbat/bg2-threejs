@@ -6,13 +6,15 @@ import * as THREE from "three";
 import type { Unit, Skill, UnitGroup, Projectile, StatusEffect, MagicMissileProjectile, TrapProjectile, SanctuaryTile, AcidTile } from "../core/types";
 import { COLORS, BUFF_TICK_INTERVAL, TRAP_FLIGHT_DURATION, TRAP_ARC_HEIGHT, TRAP_MESH_SIZE, SANCTUARY_HEAL_PER_TICK, QI_DRAIN_DURATION, QI_DRAIN_TICK_INTERVAL } from "../core/constants";
 import { UNIT_DATA, getUnitStats } from "../game/units";
-import { rollDamage, rollChance, calculateDamage, rollHit, getEffectiveArmor, hasShieldedEffect, hasStunnedEffect, hasPoisonEffect, logHit, logMiss, logHeal, logPoisoned, logCast, logTaunt, logTauntMiss, logBuff, logStunned, logCleanse, logTrapThrown, isBlockedByFrontShield } from "./combatMath";
+import { rollDamage, rollChance, calculateDamage, rollHit, getEffectiveArmor, hasStatusEffect, logHit, logMiss, logHeal, logPoisoned, logCast, logTaunt, logTauntMiss, logBuff, logStunned, logCleanse, logTrapThrown, isBlockedByFrontShield } from "./combatMath";
 import { ENEMY_STATS } from "../game/units";
 import { tryHealBark, trySpellBark } from "./barks";
 import { getUnitRadius, isInRange } from "../rendering/range";
+import { distanceToPoint } from "../game/geometry";
 import { soundFns } from "../audio/sound";
 import { createProjectile, getProjectileSpeed, applyDamageToUnit, createAnimatedRing, type DamageContext } from "./combat";
 import { createSanctuaryTile } from "../gameLoop/sanctuaryTiles";
+import { updateUnitWith } from "../core/stateUtils";
 
 export interface SkillExecutionContext {
     scene: THREE.Scene;
@@ -56,7 +58,7 @@ function findClosestUnit(
     for (const unit of units) {
         const g = unitsRef[unit.id];
         if (!g) continue;
-        const d = Math.hypot(g.position.x - targetX, g.position.z - targetZ);
+        const d = distanceToPoint(g.position, targetX, targetZ);
         if (d < closestDist) {
             closestDist = d;
             closest = { unit, group: g };
@@ -92,7 +94,7 @@ function consumeSkill(ctx: SkillExecutionContext, casterId: number, skill: Skill
 
     // Check if caster is shielded - doubles cooldowns
     const caster = unitsStateRef.current.find(u => u.id === casterId);
-    const cooldownMultiplier = caster && hasShieldedEffect(caster) ? 2 : 1;
+    const cooldownMultiplier = caster && hasStatusEffect(caster, "shielded") ? 2 : 1;
 
     const effectiveCooldown = skill.cooldown * cooldownMultiplier;
     const cooldownEnd = now + effectiveCooldown;
@@ -107,7 +109,7 @@ function consumeSkill(ctx: SkillExecutionContext, casterId: number, skill: Skill
     }));
 
     // Deduct mana (clamped to 0 minimum)
-    setUnits(prev => prev.map(u => u.id === casterId ? { ...u, mana: Math.max(0, (u.mana ?? 0) - skill.manaCost) } : u));
+    updateUnitWith(setUnits, casterId, u => ({ mana: Math.max(0, (u.mana ?? 0) - skill.manaCost) }));
 
     // Bark on mana-costing spell (damage spells only)
     if (skill.manaCost > 0 && skill.type === "damage") {
@@ -180,7 +182,7 @@ export function executeHealSkill(
     const healAmount = rollDamage(skill.value[0], skill.value[1]);
     const targetData = UNIT_DATA[targetAlly.id];
     const healTargetId = targetAlly.id;
-    setUnits(prev => prev.map(u => u.id === healTargetId ? { ...u, hp: Math.min(targetData.maxHp, u.hp + healAmount) } : u));
+    updateUnitWith(setUnits, healTargetId, u => ({ hp: Math.min(targetData.maxHp, u.hp + healAmount) }));
 
     addLog(logHeal(UNIT_DATA[casterId].name, skill.name, targetData.name, healAmount), COLORS.hpHigh);
     soundFns.playHeal();
@@ -507,7 +509,7 @@ export function executeCleanseSkill(
     const now = Date.now();
 
     // Check if ally actually needs cleansing (has poison or no immunity yet)
-    const hasPoisonNow = hasPoisonEffect(targetAlly);
+    const hasPoisonNow = hasStatusEffect(targetAlly, "poison");
     const alreadyCleansed = targetAlly.statusEffects?.some(e => e.type === "cleansed") ?? false;
 
     if (!hasPoisonNow && alreadyCleansed) {
@@ -756,7 +758,7 @@ export function executeDebuffSkill(
     }
 
     // Check if target is already stunned
-    if (hasStunnedEffect(targetEnemy)) {
+    if (hasStatusEffect(targetEnemy, "stunned")) {
         addLog(`${UNIT_DATA[casterId].name}: Target is already stunned!`, COLORS.logNeutral);
         return false;
     }
@@ -863,7 +865,7 @@ export function executeMagicWaveSkill(
         if (!enemyG) return;
 
         // Distance from target click position
-        const distToTarget = Math.hypot(enemyG.position.x - targetX, enemyG.position.z - targetZ);
+        const distToTarget = distanceToPoint(enemyG.position, targetX, targetZ);
         if (distToTarget <= aoeRadius + 1) {  // Slight buffer for targeting
             enemiesNearTarget.push({ unit: enemy, group: enemyG, dist: distToTarget });
         }

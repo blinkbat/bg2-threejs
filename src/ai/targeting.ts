@@ -6,6 +6,7 @@ import { GRID_SIZE } from "../core/constants";
 import { findPath, isPassable } from "./pathfinding";
 import { getEnemyKiteCooldown, setEnemyKiteCooldown, setEnemyKitingUntil } from "../game/enemyState";
 import { getDirectionAndDistance } from "../combat/combatMath";
+import { distanceToPoint } from "../game/geometry";
 import type { Unit, UnitGroup, EnemyStats } from "../core/types";
 
 // =============================================================================
@@ -42,7 +43,7 @@ function findNearestPlayer(
         if (player.team !== "player" || player.hp <= 0) continue;
         const pg = unitsRef[player.id];
         if (!pg) continue;
-        const dist = Math.hypot(pg.position.x - fromX, pg.position.z - fromZ);
+        const dist = distanceToPoint(pg.position, fromX, fromZ);
         if (dist < nearestPlayerDist) {
             nearestPlayerDist = dist;
             nearestPlayerG = pg;

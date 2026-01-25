@@ -6,7 +6,8 @@ import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, Projectile, EnemyStats, MagicMissileProjectile, TrapProjectile, StatusEffect } from "../core/types";
 import { HIT_DETECTION_RADIUS, COLORS, BUFF_TICK_INTERVAL } from "../core/constants";
 import { getUnitStats } from "../game/units";
-import { calculateDamage, calculateDistance, getDirectionAndDistance, rollHit, shouldApplyPoison, getEffectiveArmor, logHit, logLifestealHit, logMiss, logPoisoned, logAoeHit, logAoeMiss, getDamageColor, logTrapTriggered, isBlockedByFrontShield } from "../combat/combatMath";
+import { calculateDamage, getDirectionAndDistance, rollHit, shouldApplyPoison, getEffectiveArmor, logHit, logLifestealHit, logMiss, logPoisoned, logAoeHit, logAoeMiss, getDamageColor, logTrapTriggered, isBlockedByFrontShield } from "../combat/combatMath";
+import { distance } from "../game/geometry";
 import { ENEMY_STATS } from "../game/units";
 import { applyDamageToUnit, animateExpandingMesh, spawnDamageNumber, type DamageContext } from "../combat/combat";
 import { soundFns } from "../audio/sound";
@@ -106,7 +107,7 @@ export function updateProjectiles(
                 unitsState.filter(u => (hpTracker[u.id] ?? u.hp) > 0 && !defeatedThisFrame.has(u.id)).forEach(target => {
                     const tg = unitsRef[target.id];
                     if (!tg) return;
-                    const targetDist = calculateDistance(tg.position.x, tg.position.z, targetPos.x, targetPos.z);
+                    const targetDist = distance(tg.position.x, tg.position.z, targetPos.x, targetPos.z);
                     if (targetDist <= aoeRadius) {
                         const targetData = getUnitStats(target);
                         const currentHp = hpTracker[target.id] ?? target.hp;
@@ -353,7 +354,7 @@ export function updateProjectiles(
                 const enemyG = unitsRef[enemy.id];
                 if (!enemyG) continue;
 
-                const dist = calculateDistance(
+                const dist = distance(
                     enemyG.position.x, enemyG.position.z,
                     trapProj.targetPos.x, trapProj.targetPos.z
                 );
@@ -366,7 +367,7 @@ export function updateProjectiles(
                         const targetG = unitsRef[target.id];
                         if (!targetG) return;
 
-                        const targetDist = calculateDistance(
+                        const targetDist = distance(
                             targetG.position.x, targetG.position.z,
                             trapProj.targetPos.x, trapProj.targetPos.z
                         );

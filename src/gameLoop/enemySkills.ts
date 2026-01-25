@@ -6,7 +6,8 @@ import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, EnemyStats, EnemySkill, EnemyHealSkill } from "../core/types";
 import { COLORS, SWIPE_ANIMATE_DURATION } from "../core/constants";
 import { getUnitStats } from "../game/units";
-import { calculateDamage, calculateDistance, rollHit, getEffectiveArmor, logAoeHit, logAoeMiss } from "../combat/combatMath";
+import { calculateDamage, rollHit, getEffectiveArmor, logAoeHit, logAoeMiss } from "../combat/combatMath";
+import { distance } from "../game/geometry";
 import { applyDamageToUnit, animateExpandingMesh, getAliveUnitsInRange, spawnDamageNumber, type DamageContext } from "../combat/combat";
 import { soundFns } from "../audio/sound";
 
@@ -118,7 +119,7 @@ export function executeEnemyHeal(
         const allyG = unitsRef[ally.id];
         if (!allyG) continue;
 
-        const dist = calculateDistance(g.position.x, g.position.z, allyG.position.x, allyG.position.z);
+        const dist = distance(g.position.x, g.position.z, allyG.position.x, allyG.position.z);
         if (dist > skill.range) continue;
 
         const allyStats = getUnitStats(ally) as EnemyStats;
