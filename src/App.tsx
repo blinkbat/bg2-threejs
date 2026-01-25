@@ -49,7 +49,6 @@ import {
     updateShieldFacing,
     processAcidTiles,
     processSanctuaryTiles,
-    clearSanctuaryTiles
 } from "./gameLoop";
 import type { AcidTile } from "./core/types";
 

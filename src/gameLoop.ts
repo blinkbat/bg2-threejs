@@ -13,7 +13,7 @@ import {
 } from "./ai/unitAI";
 import { getUnitStats, getBasicAttackSkill, getAttackRange, ENEMY_STATS } from "./game/units";
 import type { ActionQueue } from "./input";
-import { getNextUnitId, initializeUnitIdCounter } from "./core/unitIds";
+import { getNextUnitId } from "./core/unitIds";
 import { calculateDamage, rollHit, shouldApplyPoison, shouldApplySlow, hasStunnedEffect, hasPinnedEffect, hasSlowedEffect, getEffectiveArmor, getEffectiveDamage, logHit, logLifestealHit, logMiss, logPoisoned, logSlowed } from "./combat/combatMath";
 import { createProjectile, getProjectileSpeed, applyDamageToUnit, getAliveUnitsInRange, spawnDamageNumber, type DamageContext } from "./combat/combat";
 import { soundFns } from "./audio/sound";
