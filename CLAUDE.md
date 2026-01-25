@@ -1,5 +1,6 @@
 # Instructions
 
+- When beginning a new session, review the structure of the directories and files.
 - Do not duplicate code. Reference existing files/functions instead of rewriting them.
 - Use existing utilities and helpers already in the codebase.
 - Scan for places where existing logic might be before starting work. 
