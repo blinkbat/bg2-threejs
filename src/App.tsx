@@ -1046,6 +1046,21 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         );
     };
 
+    // Debug warp to any area
+    const handleWarpToArea = (areaId: AreaId) => {
+        // Extract player states to persist (HP, mana, status effects)
+        const playerUnits = unitsStateRef.current.filter(u => u.team === "player");
+        const persistedState: PersistedPlayer[] = playerUnits.map(u => ({
+            id: u.id,
+            hp: u.hp,
+            mana: u.mana,
+            statusEffects: u.statusEffects
+        }));
+
+        // Use default spawn point for debug warps
+        onAreaTransition(persistedState, areaId, DEFAULT_SPAWN_POINT);
+    };
+
     return (
         <div style={{ width: "100%", height: "100vh", position: "relative", cursor: targetingMode ? "crosshair" : "default" }}>
             <div ref={containerRef} style={{ width: "100%", height: "100%", filter: paused ? "saturate(0.4) brightness(0.85)" : "none", transition: "filter 0.2s" }} />
@@ -1113,7 +1128,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
             <div style={{ position: "absolute", top: 10, right: 10, color: "#888", fontSize: 11, fontFamily: "monospace", opacity: 0.6 }}>
                 {fps} fps
             </div>
-            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onShowHelp={onShowHelp} onRestart={onRestart} debug={debug} onToggleDebug={() => setDebug(d => !d)} />
+            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onShowHelp={onShowHelp} onRestart={onRestart} debug={debug} onToggleDebug={() => setDebug(d => !d)} onWarpToArea={handleWarpToArea} />
             <CombatLog log={combatLog} />
             <PartyBar
                 units={units}

@@ -314,6 +314,101 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         treeMeshes.push(foliage);
     });
 
+    // Decorations - columns, broken walls, etc.
+    if (area.decorations) {
+        area.decorations.forEach(dec => {
+            const size = dec.size ?? 1;
+
+            if (dec.type === "column") {
+                // Full standing column
+                const columnRadius = 0.3 * size;
+                const columnHeight = 2.5 * size;
+                const column = new THREE.Mesh(
+                    new THREE.CylinderGeometry(columnRadius, columnRadius * 1.1, columnHeight, 12),
+                    new THREE.MeshStandardMaterial({ color: "#8b8b7a", metalness: 0.1, roughness: 0.9 })
+                );
+                column.position.set(dec.x, columnHeight / 2, dec.z);
+                column.name = "decoration";
+                scene.add(column);
+
+                // Column base
+                const base = new THREE.Mesh(
+                    new THREE.CylinderGeometry(columnRadius * 1.4, columnRadius * 1.5, 0.2, 12),
+                    new THREE.MeshStandardMaterial({ color: "#7a7a6a", metalness: 0.1, roughness: 0.9 })
+                );
+                base.position.set(dec.x, 0.1, dec.z);
+                scene.add(base);
+
+                // Column capital (top)
+                const capital = new THREE.Mesh(
+                    new THREE.CylinderGeometry(columnRadius * 1.3, columnRadius, 0.25, 12),
+                    new THREE.MeshStandardMaterial({ color: "#9a9a8a", metalness: 0.1, roughness: 0.9 })
+                );
+                capital.position.set(dec.x, columnHeight, dec.z);
+                scene.add(capital);
+            } else if (dec.type === "broken_column") {
+                // Broken/fallen column - shorter with debris
+                const columnRadius = 0.3 * size;
+                const columnHeight = (0.8 + Math.random() * 0.8) * size;  // Random broken height
+                const column = new THREE.Mesh(
+                    new THREE.CylinderGeometry(columnRadius * 0.9, columnRadius * 1.1, columnHeight, 12),
+                    new THREE.MeshStandardMaterial({ color: "#7a7a6a", metalness: 0.1, roughness: 0.95 })
+                );
+                column.position.set(dec.x, columnHeight / 2, dec.z);
+                column.name = "decoration";
+                scene.add(column);
+
+                // Column base (crumbled)
+                const base = new THREE.Mesh(
+                    new THREE.CylinderGeometry(columnRadius * 1.3, columnRadius * 1.5, 0.15, 8),
+                    new THREE.MeshStandardMaterial({ color: "#6a6a5a", metalness: 0.1, roughness: 0.95 })
+                );
+                base.position.set(dec.x, 0.075, dec.z);
+                scene.add(base);
+
+                // Fallen debris pieces
+                for (let i = 0; i < 3; i++) {
+                    const debris = new THREE.Mesh(
+                        new THREE.BoxGeometry(0.2 + Math.random() * 0.2, 0.15, 0.2 + Math.random() * 0.2),
+                        new THREE.MeshStandardMaterial({ color: "#6a6a5a", metalness: 0.1, roughness: 0.95 })
+                    );
+                    const angle = Math.random() * Math.PI * 2;
+                    const dist = 0.4 + Math.random() * 0.4;
+                    debris.position.set(dec.x + Math.cos(angle) * dist, 0.075, dec.z + Math.sin(angle) * dist);
+                    debris.rotation.y = Math.random() * Math.PI;
+                    scene.add(debris);
+                }
+            } else if (dec.type === "broken_wall") {
+                // Broken wall segment
+                const wallLength = (1.5 + Math.random() * 1) * size;
+                const wallHeight = (0.8 + Math.random() * 1.2) * size;
+                const wallThick = 0.4 * size;
+
+                const wall = new THREE.Mesh(
+                    new THREE.BoxGeometry(wallLength, wallHeight, wallThick),
+                    new THREE.MeshStandardMaterial({ color: "#5a5a4a", metalness: 0.1, roughness: 0.95 })
+                );
+                wall.position.set(dec.x, wallHeight / 2, dec.z);
+                wall.rotation.y = dec.rotation ?? 0;
+                wall.name = "decoration";
+                scene.add(wall);
+
+                // Rubble at base
+                for (let i = 0; i < 4; i++) {
+                    const rubble = new THREE.Mesh(
+                        new THREE.BoxGeometry(0.15 + Math.random() * 0.25, 0.1 + Math.random() * 0.15, 0.15 + Math.random() * 0.25),
+                        new THREE.MeshStandardMaterial({ color: "#4a4a3a", metalness: 0.1, roughness: 0.95 })
+                    );
+                    const offsetX = (Math.random() - 0.5) * wallLength;
+                    const offsetZ = (Math.random() - 0.5) * 0.8;
+                    rubble.position.set(dec.x + offsetX, 0.1, dec.z + offsetZ);
+                    rubble.rotation.y = Math.random() * Math.PI;
+                    scene.add(rubble);
+                }
+            }
+        });
+    }
+
     // Walls - with transparent support for unit occlusion
     const wallMeshes: THREE.Mesh[] = [];
     computed.mergedObstacles.forEach((o, i) => {

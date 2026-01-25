@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { toggleMute, isMuted } from "../audio/sound";
+import { AREAS, type AreaId } from "../game/areas";
 
 interface HUDProps {
     areaName: string;
@@ -11,9 +12,10 @@ interface HUDProps {
     onRestart: () => void;
     debug: boolean;
     onToggleDebug: () => void;
+    onWarpToArea?: (areaId: AreaId) => void;
 }
 
-export function HUD({ areaName, areaFlavor, alivePlayers, paused, onTogglePause, onShowHelp, onRestart, debug, onToggleDebug }: HUDProps) {
+export function HUD({ areaName, areaFlavor, alivePlayers, paused, onTogglePause, onShowHelp, onRestart, debug, onToggleDebug, onWarpToArea }: HUDProps) {
     const [muted, setMuted] = useState(isMuted());
 
     const handleToggleMute = () => {
@@ -22,6 +24,12 @@ export function HUD({ areaName, areaFlavor, alivePlayers, paused, onTogglePause,
     };
 
     const isDefeat = alivePlayers === 0;
+
+    // Get all available areas for the debug warp menu
+    const areaList = Object.entries(AREAS).map(([id, data]) => ({
+        id: id as AreaId,
+        name: data.name
+    }));
 
     return (
         <div className="hud glass-panel-light">
@@ -48,6 +56,20 @@ export function HUD({ areaName, areaFlavor, alivePlayers, paused, onTogglePause,
                     Debug
                 </button>
             </div>
+            {debug && onWarpToArea && (
+                <div className="debug-warp-menu">
+                    <span className="debug-label">Warp:</span>
+                    {areaList.map(area => (
+                        <button
+                            key={area.id}
+                            className={`btn btn-warp ${areaName === area.name ? "active" : ""}`}
+                            onClick={() => onWarpToArea(area.id)}
+                        >
+                            {area.name}
+                        </button>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }
