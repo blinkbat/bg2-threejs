@@ -562,14 +562,19 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         unitMeshes[unit.id] = box;
         unitOriginalColors[unit.id] = new THREE.Color(data.color);
 
+        // Determine fly height early (needed for shadow positioning)
+        const isFlying = !isPlayer && 'flying' in data && data.flying;
+        const flyHeight = isFlying ? 1.2 : 0;
+
         // Unit shadow - simple dark circle under unit
+        // For flying units, offset shadow down so it stays on the ground
         const shadowRadius = boxW * 0.6;
         const shadow = new THREE.Mesh(
             new THREE.CircleGeometry(shadowRadius, 16),
             new THREE.MeshBasicMaterial({ color: "#000000", transparent: true, opacity: 0.3, side: THREE.DoubleSide })
         );
         shadow.rotation.x = -Math.PI / 2;
-        shadow.position.y = 0.004;
+        shadow.position.y = 0.004 - flyHeight;
         group.add(shadow);
 
         // All units get subtle innate light (enemies dimmer than players)
@@ -605,8 +610,9 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
 
         maxHp[unit.id] = data.maxHp;
 
-        group.position.set(unit.x, 0, unit.z);
-        group.userData = { unitId: unit.id, targetX: unit.x, targetZ: unit.z, attackTarget: null };
+        // Set position (flyHeight determined earlier for shadow)
+        group.position.set(unit.x, flyHeight, unit.z);
+        group.userData = { unitId: unit.id, targetX: unit.x, targetZ: unit.z, attackTarget: null, flyHeight };
         scene.add(group);
         unitGroups[unit.id] = group as UnitGroup;
     });
@@ -686,14 +692,19 @@ export function addUnitToScene(
     unitMeshes[unit.id] = box;
     unitOriginalColors[unit.id] = new THREE.Color(data.color);
 
+    // Determine fly height early (needed for shadow positioning)
+    const isFlying = !isPlayer && 'flying' in data && data.flying;
+    const flyHeight = isFlying ? 1.2 : 0;
+
     // Unit shadow - simple dark circle under unit
+    // For flying units, offset shadow down so it stays on the ground
     const shadowRadius = boxW * 0.6;
     const shadow = new THREE.Mesh(
         new THREE.CircleGeometry(shadowRadius, 16),
         new THREE.MeshBasicMaterial({ color: "#000000", transparent: true, opacity: 0.3, side: THREE.DoubleSide })
     );
     shadow.rotation.x = -Math.PI / 2;
-    shadow.position.y = 0.004;
+    shadow.position.y = 0.004 - flyHeight;
     group.add(shadow);
 
     // All units get subtle innate light (enemies dimmer than players)
@@ -729,8 +740,9 @@ export function addUnitToScene(
 
     maxHp[unit.id] = data.maxHp;
 
-    group.position.set(unit.x, 0, unit.z);
-    group.userData = { unitId: unit.id, targetX: unit.x, targetZ: unit.z, attackTarget: null };
+    // Set position (flyHeight determined earlier for shadow)
+    group.position.set(unit.x, flyHeight, unit.z);
+    group.userData = { unitId: unit.id, targetX: unit.x, targetZ: unit.z, attackTarget: null, flyHeight };
     scene.add(group);
     unitGroups[unit.id] = group as UnitGroup;
 }

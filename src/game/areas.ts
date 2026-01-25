@@ -585,18 +585,12 @@ export const RUINS_AREA: AreaData = {
         { x: 23, z: 32, w: 4, h: 13, color: "#4a4a3a" }
     ],
     enemySpawns: [
-        // Kobolds guarding the ruins
-        { x: 15, z: 15, type: "kobold" },
-        { x: 35, z: 15, type: "kobold" },
-        { x: 15, z: 35, type: "kobold" },
-        { x: 35, z: 35, type: "kobold" },
-        // Archers on elevated positions
-        { x: 25, z: 10, type: "kobold_archer" },
-        { x: 25, z: 40, type: "kobold_archer" },
-        // Witch doctor in the inner sanctum
-        { x: 25, z: 25, type: "kobold_witch_doctor" },
-        // Ogre guardian
-        { x: 25, z: 30, type: "ogre" }
+        // Bats - haunting the fallen temple
+        { x: 12, z: 12, type: "bat" },
+        { x: 38, z: 12, type: "bat" },
+        { x: 12, z: 38, type: "bat" },
+        { x: 38, z: 38, type: "bat" },
+        { x: 25, z: 25, type: "bat" },
     ],
     transitions: [
         // West entrance from forest

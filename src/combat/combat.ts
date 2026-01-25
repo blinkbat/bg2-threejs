@@ -350,6 +350,7 @@ export function applyDamageToUnit(
 
 /**
  * Spawn a floating damage number at the given position
+ * @param isHeal - If true, shows + prefix instead of - prefix
  */
 export function spawnDamageNumber(
     scene: THREE.Scene,
@@ -357,7 +358,8 @@ export function spawnDamageNumber(
     z: number,
     damage: number,
     color: string,
-    damageTexts: DamageText[]
+    damageTexts: DamageText[],
+    isHeal: boolean = false
 ): void {
     const canvas = document.createElement("canvas");
     canvas.width = 64;
@@ -366,7 +368,8 @@ export function spawnDamageNumber(
     ctx.font = "bold 24px monospace";
     ctx.fillStyle = color;
     ctx.textAlign = "center";
-    ctx.fillText(`-${damage}`, 32, 24);
+    const prefix = isHeal ? "+" : "-";
+    ctx.fillText(`${prefix}${damage}`, 32, 24);
 
     const texture = new THREE.CanvasTexture(canvas);
     const mesh = new THREE.Mesh(

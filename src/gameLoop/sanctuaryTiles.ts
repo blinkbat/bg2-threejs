@@ -155,7 +155,7 @@ export function processSanctuaryTiles(
                             return { ...u, hp: Math.min(maxHp, u.hp + healAmount) };
                         }));
 
-                        spawnDamageNumber(scene, unitG.position.x, unitG.position.z, healAmount, COLORS.sanctuaryText, damageTexts);
+                        spawnDamageNumber(scene, unitG.position.x, unitG.position.z, healAmount, COLORS.sanctuaryText, damageTexts, true);
                         addLog(`${data.name} is healed for ${healAmount} by Sanctuary.`, COLORS.sanctuaryText);
                     }
                 }

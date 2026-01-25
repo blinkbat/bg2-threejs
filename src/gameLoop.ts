@@ -15,7 +15,7 @@ import { getUnitStats, getBasicAttackSkill, getAttackRange, ENEMY_STATS } from "
 import type { ActionQueue } from "./input";
 import { getNextUnitId, initializeUnitIdCounter } from "./core/unitIds";
 import { calculateDamage, rollHit, shouldApplyPoison, shouldApplySlow, hasStunnedEffect, hasPinnedEffect, hasSlowedEffect, getEffectiveArmor, getEffectiveDamage, logHit, logMiss, logPoisoned, logSlowed } from "./combat/combatMath";
-import { createProjectile, getProjectileSpeed, applyDamageToUnit, getAliveUnitsInRange, type DamageContext } from "./combat/combat";
+import { createProjectile, getProjectileSpeed, applyDamageToUnit, getAliveUnitsInRange, spawnDamageNumber, type DamageContext } from "./combat/combat";
 import { soundFns } from "./audio/sound";
 import { isEnemyKiting, clearEnemyKiting, hasBroodMotherScreeched, markBroodMotherScreeched } from "./game/enemyState";
 import { findPath } from "./ai/pathfinding";
@@ -455,6 +455,22 @@ export function updateUnitAI(
                             }
                             if (willSlow) {
                                 addLog(logSlowed(targetData.name), "#5599ff");
+                            }
+
+                            // Lifesteal: heal attacker for percentage of damage dealt
+                            const lifesteal = (data as EnemyStats).lifesteal;
+                            if (lifesteal && lifesteal > 0) {
+                                const healAmount = Math.floor(dmg * lifesteal);
+                                if (healAmount > 0) {
+                                    const newHp = Math.min(unit.hp + healAmount, data.maxHp);
+                                    const actualHeal = newHp - unit.hp;
+                                    if (actualHeal > 0) {
+                                        setUnits(prev => prev.map(u =>
+                                            u.id === unit.id ? { ...u, hp: newHp } : u
+                                        ));
+                                        spawnDamageNumber(scene, g.position.x, g.position.z, actualHeal, COLORS.logHeal, damageTexts, true);
+                                    }
+                                }
                             }
                         } else {
                             soundFns.playMiss();

@@ -4,7 +4,7 @@ import * as THREE from "three";
 // TYPE DEFINITIONS
 // =============================================================================
 
-export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba" | "acid_slug";
+export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba" | "acid_slug" | "bat";
 
 // =============================================================================
 // STATUS EFFECTS
@@ -125,6 +125,10 @@ export interface EnemyStats {
     acidAura?: boolean;        // Periodically creates acid around itself
     acidAuraCooldown?: number; // ms between aura acid creation
     acidAuraRadius?: number;   // Radius in grid cells for aura
+    // Optional flying behavior (floats above ground)
+    flying?: boolean;
+    // Optional lifesteal (heals for percentage of damage dealt, 0-1)
+    lifesteal?: number;
 }
 
 export interface EnemySpawnSkill {

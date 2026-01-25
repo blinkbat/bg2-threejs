@@ -291,6 +291,21 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         acidAura: true,    // Periodically creates acid around itself
         acidAuraCooldown: 3000,  // 3 seconds between aura creation
         acidAuraRadius: 1.5      // 1.5 grid cells around itself
+    },
+    bat: {
+        name: "Vampire Bat",
+        hp: 35,
+        maxHp: 35,
+        damage: [3, 8],
+        accuracy: 70,
+        armor: 0,
+        color: "#2a1a2a",  // Dark purple-black
+        aggroRange: 10,    // Good vision in the dark
+        attackCooldown: 1200,  // Fast attacks
+        size: 1,         
+        moveSpeed: 1.2,    // Fast flyer
+        flying: true,      // Floats above ground
+        lifesteal: 0.5     // Heals for 50% of damage dealt
     }
 };
 

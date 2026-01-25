@@ -145,7 +145,7 @@ export function executeEnemyHeal(
     ));
 
     // Spawn heal number (green)
-    spawnDamageNumber(scene, bestTarget.group.position.x, bestTarget.group.position.z, actualHeal, "#22c55e", damageTexts);
+    spawnDamageNumber(scene, bestTarget.group.position.x, bestTarget.group.position.z, actualHeal, "#22c55e", damageTexts, true);
 
     // Visual effect - purple healing ring on target
     const ring = new THREE.Mesh(

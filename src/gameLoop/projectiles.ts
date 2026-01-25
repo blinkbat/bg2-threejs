@@ -7,7 +7,7 @@ import type { Unit, UnitGroup, DamageText, Projectile, EnemyStats, MagicMissileP
 import { HIT_DETECTION_RADIUS, COLORS, BUFF_TICK_INTERVAL } from "../core/constants";
 import { getUnitStats } from "../game/units";
 import { calculateDamage, calculateDistance, getDirectionAndDistance, rollHit, shouldApplyPoison, getEffectiveArmor, logHit, logMiss, logPoisoned, logAoeHit, logAoeMiss, getDamageColor, logTrapTriggered } from "../combat/combatMath";
-import { applyDamageToUnit, animateExpandingMesh, type DamageContext } from "../combat/combat";
+import { applyDamageToUnit, animateExpandingMesh, spawnDamageNumber, type DamageContext } from "../combat/combat";
 import { soundFns } from "../audio/sound";
 import { disposeBasicMesh } from "../rendering/disposal";
 
@@ -439,6 +439,27 @@ export function updateProjectiles(
 
                 if (willPoison) {
                     addLog(logPoisoned(targetData.name), COLORS.poisonText);
+                }
+
+                // Lifesteal: heal attacker for percentage of damage dealt
+                if (attackerUnit.team === "enemy") {
+                    const lifesteal = (attackerData as EnemyStats).lifesteal;
+                    if (lifesteal && lifesteal > 0) {
+                        const attackerG = unitsRef[attackerUnit.id];
+                        if (attackerG) {
+                            const healAmount = Math.floor(dmg * lifesteal);
+                            if (healAmount > 0) {
+                                const newHp = Math.min(attackerUnit.hp + healAmount, attackerData.maxHp);
+                                const actualHeal = newHp - attackerUnit.hp;
+                                if (actualHeal > 0) {
+                                    setUnits(prev => prev.map(u =>
+                                        u.id === attackerUnit.id ? { ...u, hp: newHp } : u
+                                    ));
+                                    spawnDamageNumber(scene, attackerG.position.x, attackerG.position.z, actualHeal, COLORS.logHeal, damageTexts, true);
+                                }
+                            }
+                        }
+                    }
                 }
             } else {
                 soundFns.playMiss();
