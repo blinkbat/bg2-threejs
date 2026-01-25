@@ -3,7 +3,7 @@
 // =============================================================================
 
 import * as THREE from "three";
-import { GRID_SIZE } from "../core/constants";
+import { GRID_SIZE, FOG_SCALE } from "../core/constants";
 import { getCurrentArea, getComputedAreaData, type AreaTransition } from "../game/areas";
 import { getUnitStats } from "../game/units";
 import type { Unit, UnitGroup, FogTexture } from "../core/types";
@@ -476,16 +476,16 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(i, 0.002, 0), new THREE.Vector3(i, 0.002, GRID_SIZE)]), gridMat));
     }
 
-    // Fog of war
+    // Fog of war (scaled resolution for smoother edges with linear filtering)
     const fogCanvas = document.createElement("canvas");
-    fogCanvas.width = GRID_SIZE;
-    fogCanvas.height = GRID_SIZE;
+    fogCanvas.width = GRID_SIZE * FOG_SCALE;
+    fogCanvas.height = GRID_SIZE * FOG_SCALE;
     const fogCtx = fogCanvas.getContext("2d")!;
     fogCtx.fillStyle = "#000";
-    fogCtx.fillRect(0, 0, GRID_SIZE, GRID_SIZE);
+    fogCtx.fillRect(0, 0, GRID_SIZE * FOG_SCALE, GRID_SIZE * FOG_SCALE);
     const fogTextureObj = new THREE.CanvasTexture(fogCanvas);
-    fogTextureObj.magFilter = THREE.NearestFilter;
-    fogTextureObj.minFilter = THREE.NearestFilter;
+    fogTextureObj.magFilter = THREE.LinearFilter;
+    fogTextureObj.minFilter = THREE.LinearFilter;
     const fogTexture: FogTexture = { canvas: fogCanvas, ctx: fogCtx, texture: fogTextureObj };
 
     const fogMesh = new THREE.Mesh(

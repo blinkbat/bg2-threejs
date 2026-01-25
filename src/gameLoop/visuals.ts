@@ -4,7 +4,7 @@
 
 import * as THREE from "three";
 import type { Unit, DamageText, UnitGroup, FogTexture } from "../core/types";
-import { GRID_SIZE, FLASH_DURATION, COLORS, POISON_TINT_STRENGTH } from "../core/constants";
+import { GRID_SIZE, FOG_SCALE, FLASH_DURATION, COLORS, POISON_TINT_STRENGTH } from "../core/constants";
 import { hasPoisonEffect } from "../combat/combatMath";
 import { updateVisibility } from "../ai/pathfinding";
 import { getCurrentArea } from "../game/areas";
@@ -160,7 +160,7 @@ export function updateFogOfWar(
 
         const { ctx, texture } = fogTexture;
 
-        ctx.clearRect(0, 0, GRID_SIZE, GRID_SIZE);
+        ctx.clearRect(0, 0, GRID_SIZE * FOG_SCALE, GRID_SIZE * FOG_SCALE);
 
         // Simple fog rendering without expensive distance calculations
         // Use fixed alpha values - the texture filtering provides some softness
@@ -169,9 +169,9 @@ export function updateFogOfWar(
                 const vis = visibility[x][z];
                 if (vis === 2) continue;  // Visible - no fog
 
-                // Simple alpha: seen = 0.4, unexplored = 0.9
-                ctx.fillStyle = vis === 1 ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,0.9)";
-                ctx.fillRect(x, z, 1, 1);
+                // Simple alpha: seen = 0.4, unexplored = 1.0
+                ctx.fillStyle = vis === 1 ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,1)";
+                ctx.fillRect(x * FOG_SCALE, z * FOG_SCALE, FOG_SCALE, FOG_SCALE);
             }
         }
 

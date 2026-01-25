@@ -3,6 +3,7 @@
 // =============================================================================
 
 export const GRID_SIZE = 50;
+export const FOG_SCALE = 4;  // Higher = sharper fog edges with linear filtering
 export const ATTACK_RANGE = 1.8;
 export const MOVE_SPEED = 0.05;
 export const DEFAULT_UNIT_RADIUS = 0.7;
