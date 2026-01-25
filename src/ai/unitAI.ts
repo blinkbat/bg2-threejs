@@ -132,6 +132,7 @@ export interface TargetingContext {
     now: number;
     defeatedThisFrame: Set<number>;
     aggroRange: number;
+    hasFrontShield?: boolean;  // Front-shielded enemies reacquire targets immediately
 }
 
 /**
@@ -250,10 +251,57 @@ export function acquireTarget(ctx: TargetingContext, targetId: number): boolean 
 }
 
 /**
+ * Find the unit that recently damaged this enemy (for front-shielded enemies).
+ * Returns the unit ID if they're still alive and in aggro range.
+ */
+function findRecentDamageSource(ctx: TargetingContext): number | null {
+    const { g, unitsRef, unitsState, defeatedThisFrame, aggroRange, now } = ctx;
+    const damageSource = g.userData.lastDamageSource;
+
+    // Only consider damage from last 2 seconds (recent attack)
+    if (!damageSource || (now - damageSource.time) > 2000) {
+        return null;
+    }
+
+    // Find the player closest to the damage source position
+    // (Since we track position, not ID, find closest player to that spot)
+    // Use larger radius since players move around while attacking
+    let closestId: number | null = null;
+    let closestDist = 4.0;  // Must be within 4 units of the tracked position
+
+    for (const player of unitsState) {
+        if (player.team !== "player" || player.hp <= 0) continue;
+        if (defeatedThisFrame.has(player.id)) continue;
+
+        const pg = unitsRef[player.id];
+        if (!pg) continue;
+
+        // Check if this player is near the damage source position
+        const distToSource = Math.hypot(
+            pg.position.x - damageSource.x,
+            pg.position.z - damageSource.z
+        );
+
+        // And also in aggro range from the enemy (extended for flankers)
+        const distToEnemy = Math.hypot(
+            pg.position.x - g.position.x,
+            pg.position.z - g.position.z
+        );
+
+        if (distToSource < closestDist && distToEnemy <= aggroRange * 2) {
+            closestDist = distToSource;
+            closestId = player.id;
+        }
+    }
+
+    return closestId;
+}
+
+/**
  * Run the targeting phase - validate current target or find a new one.
  */
 export function runTargetingPhase(ctx: TargetingContext): void {
-    const { unit, g, pathsRef, now } = ctx;
+    const { unit, g, pathsRef, now, hasFrontShield } = ctx;
     const isPlayer = unit.team === "player";
     const shouldAutoTarget = isPlayer ? unit.aiEnabled : true;
 
@@ -280,6 +328,30 @@ export function runTargetingPhase(ctx: TargetingContext): void {
         // Clear alerted flag once they've acquired a target (or tried to)
         g.userData.alerted = false;
         return;
+    }
+
+    // Front-shielded enemies (like Undead Knight) are aggressive about targeting
+    // They're slow to turn so they need to lock onto attackers ASAP
+    if (hasFrontShield && !isPlayer) {
+        // ALWAYS check for recent damage source - switch targets if someone hit us
+        // This helps the knight respond to flankers
+        const damageSourceTarget = findRecentDamageSource(ctx);
+        if (damageSourceTarget !== null && damageSourceTarget !== g.userData.attackTarget) {
+            // Switch to whoever is attacking us
+            acquireTarget(ctx, damageSourceTarget);
+            recordTargetScan(unit.id, now);
+            return;
+        }
+
+        // If we don't have a valid target, find one immediately (bypass scan cooldown)
+        if (!targetStillValid && !recentlyGaveUp(unit.id, now)) {
+            const nearest = findNearestTarget(ctx);
+            if (nearest !== null) {
+                acquireTarget(ctx, nearest);
+                recordTargetScan(unit.id, now);
+                return;
+            }
+        }
     }
 
     // Determine if we should look for a new target

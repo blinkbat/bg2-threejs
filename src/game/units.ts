@@ -328,7 +328,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         armor: 2,          // Heavy armor
         color: "#2a3a4a",  // Dark steel blue
         aggroRange: 8,
-        attackCooldown: 2500,  // Slow heavy swings
+        attackCooldown: 3500,  // Slow heavy swings
         size: 1.6,         // Large
         moveSpeed: 0.35,   // Very slow movement
         frontShield: true, // Blocks all damage from the front

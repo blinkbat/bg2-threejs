@@ -117,9 +117,10 @@ export function updateUnitAI(
 
     // Phase 1: Targeting - find and validate targets
     const aggroRange = isPlayer ? 12 : (data as { aggroRange: number }).aggroRange;
+    const hasFrontShield = !isPlayer && (data as EnemyStats).frontShield === true;
     const targetingCtx: TargetingContext = {
         unit, g, unitsRef, unitsState, visibility, pathsRef, moveStartRef,
-        now, defeatedThisFrame, aggroRange
+        now, defeatedThisFrame, aggroRange, hasFrontShield
     };
     runTargetingPhase(targetingCtx);
 
