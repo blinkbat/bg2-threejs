@@ -4,7 +4,7 @@ import * as THREE from "three";
 // TYPE DEFINITIONS
 // =============================================================================
 
-export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba" | "acid_slug" | "bat";
+export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba" | "acid_slug" | "bat" | "undead_knight";
 
 // =============================================================================
 // STATUS EFFECTS
@@ -34,6 +34,7 @@ export interface Unit {
     statusEffects?: StatusEffect[];  // Active status effects
     spawnedBy?: number;  // ID of the unit that spawned this one (for broodlings)
     splitCount?: number;  // For amoebas - how many times this lineage has split (affects size)
+    facing?: number;  // Direction unit is facing in radians (for front-shielded enemies)
 }
 
 export interface Skill {
@@ -129,6 +130,10 @@ export interface EnemyStats {
     flying?: boolean;
     // Optional lifesteal (heals for percentage of damage dealt, 0-1)
     lifesteal?: number;
+    // Optional front shield - blocks all damage from the front
+    frontShield?: boolean;
+    // Turn speed multiplier (default 1.0, lower = slower turning)
+    turnSpeed?: number;
 }
 
 export interface EnemySpawnSkill {
@@ -213,6 +218,7 @@ export interface UnitGroup extends THREE.Group {
         attackTarget: number | null;
         alerted?: boolean;  // Set when enemy is hit - makes them seek nearest player
         lastHitTime?: number;  // Timestamp when unit last took damage (for kiting AI)
+        lastDamageSource?: { x: number; z: number; time: number };  // Position of last attacker (for shield facing)
     };
 }
 

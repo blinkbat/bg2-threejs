@@ -214,6 +214,7 @@ export interface DamageOptions {
     attackerName?: string;  // For bark system - name of the player unit dealing damage
     hitMessage?: { text: string; color: string };  // Log hit message before defeat message
     targetUnit?: Unit;  // Full unit data for special mechanics (e.g., amoeba split)
+    attackerPosition?: { x: number; z: number };  // Position of attacker (for shield facing)
 }
 
 /**
@@ -230,7 +231,7 @@ export function applyDamageToUnit(
     options: DamageOptions = {}
 ): number {
     const { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame } = ctx;
-    const { poison, slow, color = COLORS.damageEnemy, skipDefeatTracking = false, attackerName, hitMessage, targetUnit } = options;
+    const { poison, slow, color = COLORS.damageEnemy, skipDefeatTracking = false, attackerName, hitMessage, targetUnit, attackerPosition } = options;
 
     const newHp = Math.max(0, currentHp - damage);
 
@@ -327,6 +328,11 @@ export function applyDamageToUnit(
 
     // Track when this unit last took damage (for AI kiting decisions)
     targetGroup.userData.lastHitTime = now;
+
+    // Track damage source position (for shield facing - knight turns toward attackers)
+    if (attackerPosition) {
+        targetGroup.userData.lastDamageSource = { x: attackerPosition.x, z: attackerPosition.z, time: now };
+    }
 
     // Log hit message before defeat message (if provided)
     if (hitMessage) {

@@ -6,7 +6,8 @@ import * as THREE from "three";
 import type { Unit, Skill, UnitGroup, Projectile, StatusEffect, MagicMissileProjectile, TrapProjectile, SanctuaryTile, AcidTile } from "../core/types";
 import { COLORS, BUFF_TICK_INTERVAL, TRAP_FLIGHT_DURATION, TRAP_ARC_HEIGHT, TRAP_MESH_SIZE, SANCTUARY_HEAL_PER_TICK } from "../core/constants";
 import { UNIT_DATA, getUnitStats } from "../game/units";
-import { rollDamage, rollChance, calculateDamage, rollHit, getEffectiveArmor, hasShieldedEffect, hasStunnedEffect, hasPoisonEffect, logHit, logMiss, logHeal, logPoisoned, logCast, logTaunt, logTauntMiss, logBuff, logStunned, logCleanse, logTrapThrown } from "./combatMath";
+import { rollDamage, rollChance, calculateDamage, rollHit, getEffectiveArmor, hasShieldedEffect, hasStunnedEffect, hasPoisonEffect, logHit, logMiss, logHeal, logPoisoned, logCast, logTaunt, logTauntMiss, logBuff, logStunned, logCleanse, logTrapThrown, isBlockedByFrontShield } from "./combatMath";
+import { ENEMY_STATS } from "../game/units";
 import { tryHealBark, trySpellBark } from "./barks";
 import { getUnitRadius, isInRange } from "../rendering/range";
 import { soundFns } from "../audio/sound";
@@ -234,6 +235,18 @@ export function executeMeleeSkill(
     const targetData = getUnitStats(targetEnemy);
     const targetId = targetEnemy.id;
 
+    // Check for front-shield block (undead knight etc.)
+    if (targetEnemy.enemyType) {
+        const enemyStats = ENEMY_STATS[targetEnemy.enemyType];
+        if (enemyStats.frontShield && targetEnemy.facing !== undefined) {
+            if (isBlockedByFrontShield(casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, targetEnemy.facing)) {
+                soundFns.playMiss();
+                addLog(`${casterData.name}'s ${skill.name} is blocked by ${targetData.name}'s shield!`, "#4488ff");
+                return true;
+            }
+        }
+    }
+
     // Roll to hit
     if (rollHit(casterData.accuracy)) {
         const dmg = calculateDamage(skill.value[0], skill.value[1], getEffectiveArmor(targetEnemy, targetData.armor));
@@ -249,7 +262,8 @@ export function executeMeleeSkill(
             poison: willPoison ? { sourceId: casterId } : undefined,
             attackerName: casterData.name,
             hitMessage: { text: logHit(casterData.name, skill.name, targetData.name, dmg), color: COLORS.damagePlayer },
-            targetUnit: targetEnemy
+            targetUnit: targetEnemy,
+            attackerPosition: { x: casterG.position.x, z: casterG.position.z }
         });
 
         soundFns.playHit();
@@ -518,6 +532,16 @@ export function executeFlurrySkill(
 
         const targetData = getUnitStats(target);
 
+        // Check for front-shield block
+        if (target.enemyType) {
+            const enemyStats = ENEMY_STATS[target.enemyType];
+            if (enemyStats.frontShield && target.facing !== undefined) {
+                if (isBlockedByFrontShield(casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, target.facing)) {
+                    continue;  // Skip this hit - blocked by shield
+                }
+            }
+        }
+
         if (rollHit(casterData.accuracy)) {
             const dmg = calculateDamage(skill.value[0], skill.value[1], getEffectiveArmor(target, targetData.armor));
 
@@ -526,7 +550,8 @@ export function executeFlurrySkill(
             applyDamageToUnit(dmgCtx, target.id, targetG, currentHp, dmg, targetData.name, {
                 color: COLORS.damagePlayer,
                 attackerName: casterData.name,
-                targetUnit: target
+                targetUnit: target,
+                attackerPosition: { x: casterG.position.x, z: casterG.position.z }
             });
 
             // Update local HP tracker
@@ -600,7 +625,6 @@ export function executeRangedSkill(
         speed: getProjectileSpeed("ranged")
     });
 
-    addLog(`${casterData.name} shoots at ${getUnitStats(targetEnemy).name}!`, COLORS.damageNeutral);
     soundFns.playAttack();
 
     return true;
@@ -650,6 +674,18 @@ export function executeDebuffSkill(
     const casterData = UNIT_DATA[casterId];
     const targetData = getUnitStats(targetEnemy);
     const targetId = targetEnemy.id;
+
+    // Check for front-shield block
+    if (targetEnemy.enemyType) {
+        const enemyStats = ENEMY_STATS[targetEnemy.enemyType];
+        if (enemyStats.frontShield && targetEnemy.facing !== undefined) {
+            if (isBlockedByFrontShield(casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, targetEnemy.facing)) {
+                soundFns.playMiss();
+                addLog(`${casterData.name}'s ${skill.name} is blocked by ${targetData.name}'s shield!`, "#4488ff");
+                return true;
+            }
+        }
+    }
 
     // Roll to hit
     if (rollHit(casterData.accuracy)) {

@@ -591,6 +591,8 @@ export const RUINS_AREA: AreaData = {
         { x: 12, z: 38, type: "bat" },
         { x: 38, z: 38, type: "bat" },
         { x: 25, z: 25, type: "bat" },
+        // Undead Knight - guarding the inner sanctum
+        { x: 35, z: 25, type: "undead_knight" },
     ],
     transitions: [
         // West entrance from forest

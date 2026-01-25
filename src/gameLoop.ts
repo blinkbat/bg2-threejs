@@ -14,7 +14,7 @@ import {
 import { getUnitStats, getBasicAttackSkill, getAttackRange, ENEMY_STATS } from "./game/units";
 import type { ActionQueue } from "./input";
 import { getNextUnitId, initializeUnitIdCounter } from "./core/unitIds";
-import { calculateDamage, rollHit, shouldApplyPoison, shouldApplySlow, hasStunnedEffect, hasPinnedEffect, hasSlowedEffect, getEffectiveArmor, getEffectiveDamage, logHit, logMiss, logPoisoned, logSlowed } from "./combat/combatMath";
+import { calculateDamage, rollHit, shouldApplyPoison, shouldApplySlow, hasStunnedEffect, hasPinnedEffect, hasSlowedEffect, getEffectiveArmor, getEffectiveDamage, logHit, logLifestealHit, logMiss, logPoisoned, logSlowed } from "./combat/combatMath";
 import { createProjectile, getProjectileSpeed, applyDamageToUnit, getAliveUnitsInRange, spawnDamageNumber, type DamageContext } from "./combat/combat";
 import { soundFns } from "./audio/sound";
 import { isEnemyKiting, clearEnemyKiting, hasBroodMotherScreeched, markBroodMotherScreeched } from "./game/enemyState";
@@ -440,12 +440,29 @@ export function updateUnitAI(
                             const willPoison = shouldApplyPoison(data as EnemyStats);
                             const willSlow = shouldApplySlow(data as EnemyStats);
                             const poisonDmg = willPoison && 'poisonDamage' in data ? (data as EnemyStats).poisonDamage : undefined;
+                            const lifesteal = (data as EnemyStats).lifesteal;
+
+                            // Calculate lifesteal heal amount upfront for log message
+                            let actualHeal = 0;
+                            if (lifesteal && lifesteal > 0) {
+                                const healAmount = Math.floor(dmg * lifesteal);
+                                if (healAmount > 0) {
+                                    const newHp = Math.min(unit.hp + healAmount, data.maxHp);
+                                    actualHeal = newHp - unit.hp;
+                                }
+                            }
+
+                            // Custom log for lifesteal attacks
+                            const hitText = lifesteal && actualHeal > 0
+                                ? logLifestealHit(data.name, targetData.name, dmg, actualHeal)
+                                : logHit(data.name, "Attack", targetData.name, dmg);
+
                             const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
                             applyDamageToUnit(dmgCtx, targetU.id, targetG, targetU.hp, dmg, targetData.name, {
                                 color: COLORS.damageEnemy,
                                 poison: willPoison ? { sourceId: unit.id, damagePerTick: poisonDmg } : undefined,
                                 slow: willSlow ? { sourceId: unit.id } : undefined,
-                                hitMessage: { text: logHit(data.name, "Attack", targetData.name, dmg), color: COLORS.damageEnemy },
+                                hitMessage: { text: hitText, color: COLORS.damageEnemy },
                                 targetUnit: targetU
                             });
 
@@ -457,20 +474,12 @@ export function updateUnitAI(
                                 addLog(logSlowed(targetData.name), "#5599ff");
                             }
 
-                            // Lifesteal: heal attacker for percentage of damage dealt
-                            const lifesteal = (data as EnemyStats).lifesteal;
-                            if (lifesteal && lifesteal > 0) {
-                                const healAmount = Math.floor(dmg * lifesteal);
-                                if (healAmount > 0) {
-                                    const newHp = Math.min(unit.hp + healAmount, data.maxHp);
-                                    const actualHeal = newHp - unit.hp;
-                                    if (actualHeal > 0) {
-                                        setUnits(prev => prev.map(u =>
-                                            u.id === unit.id ? { ...u, hp: newHp } : u
-                                        ));
-                                        spawnDamageNumber(scene, g.position.x, g.position.z, actualHeal, COLORS.logHeal, damageTexts, true);
-                                    }
-                                }
+                            // Apply lifesteal heal
+                            if (actualHeal > 0) {
+                                setUnits(prev => prev.map(u =>
+                                    u.id === unit.id ? { ...u, hp: Math.min(unit.hp + actualHeal, data.maxHp) } : u
+                                ));
+                                spawnDamageNumber(scene, g.position.x, g.position.z, actualHeal, COLORS.logHeal, damageTexts, true);
                             }
                         } else {
                             soundFns.playMiss();
@@ -585,4 +594,118 @@ export function updateHpBarPositions(
     }
 
     return { positions, scale: 10 / zoomLevel };
+}
+
+// =============================================================================
+// SHIELD FACING UPDATE
+// =============================================================================
+
+// Turn speed in radians per frame (at 60fps)
+const TURN_SPEED_STATIONARY = 0.25;  // Fast turn when standing still
+const TURN_SPEED_MOVING = 0.08;      // Slower turn when moving
+const DAMAGE_SOURCE_PRIORITY_TIME = 2000;  // ms - prioritize damage source for 2 seconds
+
+/**
+ * Update shield facing for front-shielded enemies.
+ * They rotate toward damage sources (when hit recently) or their target.
+ * Turn speed is faster when stationary, slower when moving.
+ */
+export function updateShieldFacing(
+    unitsState: Unit[],
+    unitsRef: Record<number, UnitGroup>,
+    shieldIndicators: Record<number, THREE.Mesh>,
+    setUnits: React.Dispatch<React.SetStateAction<Unit[]>>
+): void {
+    const facingUpdates: { id: number; facing: number }[] = [];
+    const now = Date.now();
+
+    for (const unit of unitsState) {
+        if (unit.team === "player" || unit.hp <= 0) continue;
+
+        const data = getUnitStats(unit) as EnemyStats;
+        if (!data.frontShield) continue;
+
+        const g = unitsRef[unit.id];
+        const shieldMesh = shieldIndicators[unit.id];
+        if (!g || !shieldMesh) continue;
+
+        // Get current facing (default to 0 if not set)
+        let currentFacing = unit.facing ?? 0;
+
+        // Determine target position - prioritize recent damage source
+        let targetX: number;
+        let targetZ: number;
+        const damageSource = g.userData.lastDamageSource;
+
+        if (damageSource && (now - damageSource.time) < DAMAGE_SOURCE_PRIORITY_TIME) {
+            // Face toward where damage came from
+            targetX = damageSource.x;
+            targetZ = damageSource.z;
+        } else if (g.userData.attackTarget !== null) {
+            // Face attack target
+            const targetG = unitsRef[g.userData.attackTarget];
+            if (targetG) {
+                targetX = targetG.position.x;
+                targetZ = targetG.position.z;
+            } else {
+                targetX = g.userData.targetX;
+                targetZ = g.userData.targetZ;
+            }
+        } else {
+            // Face movement target
+            targetX = g.userData.targetX;
+            targetZ = g.userData.targetZ;
+        }
+
+        const dx = targetX - g.position.x;
+        const dz = targetZ - g.position.z;
+        const dist = Math.hypot(dx, dz);
+
+        if (dist > 0.1) {
+            // Calculate target angle (atan2 gives angle from positive X axis)
+            const targetAngle = Math.atan2(dx, dz);
+
+            // Calculate shortest rotation direction
+            let angleDiff = targetAngle - currentFacing;
+
+            // Normalize to -PI to PI
+            while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+            while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+
+            // Determine if unit is moving (check if position differs from movement target)
+            const moveDistX = Math.abs(g.userData.targetX - g.position.x);
+            const moveDistZ = Math.abs(g.userData.targetZ - g.position.z);
+            const isMoving = moveDistX > 0.2 || moveDistZ > 0.2;
+
+            // Apply turn speed - faster when stationary, slower when moving
+            const baseTurnSpeed = isMoving ? TURN_SPEED_MOVING : TURN_SPEED_STATIONARY;
+            const turnSpeed = baseTurnSpeed * (data.turnSpeed ?? 1);
+
+            // Rotate toward target
+            if (Math.abs(angleDiff) < turnSpeed) {
+                currentFacing = targetAngle;
+            } else {
+                currentFacing += turnSpeed * Math.sign(angleDiff);
+            }
+
+            // Normalize result
+            while (currentFacing > Math.PI) currentFacing -= Math.PI * 2;
+            while (currentFacing < -Math.PI) currentFacing += Math.PI * 2;
+
+            facingUpdates.push({ id: unit.id, facing: currentFacing });
+        }
+
+        // Update shield mesh rotation to match blocking direction
+        // The CircleGeometry thetaStart=-PI/2 creates a half-disc pointing +X in local coords
+        // After rotation.x=-PI/2, it needs rotation.z offset to align with atan2 facing angles
+        shieldMesh.rotation.z = currentFacing - Math.PI / 2;
+    }
+
+    // Batch update unit facing values
+    if (facingUpdates.length > 0) {
+        setUnits(prev => prev.map(u => {
+            const update = facingUpdates.find(f => f.id === u.id);
+            return update ? { ...u, facing: update.facing } : u;
+        }));
+    }
 }

@@ -133,7 +133,7 @@ export const SKILLS: Record<string, Skill> = {
         cooldown: 15000,
         type: "sanctuary",
         targetType: "aoe",
-        range: 8,
+        range: 4,
         aoeRadius: 2.5,  // Radius of effect
         value: [3, 3]  // Heal per tick (uses SANCTUARY_HEAL_PER_TICK from constants)
     }
@@ -294,18 +294,33 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     bat: {
         name: "Vampire Bat",
-        hp: 35,
-        maxHp: 35,
-        damage: [3, 8],
+        hp: 20,
+        maxHp: 20,
+        damage: [3, 6 ],
         accuracy: 70,
         armor: 0,
         color: "#2a1a2a",  // Dark purple-black
         aggroRange: 10,    // Good vision in the dark
         attackCooldown: 1200,  // Fast attacks
-        size: 1,         
+        size: 1,
         moveSpeed: 1.2,    // Fast flyer
         flying: true,      // Floats above ground
         lifesteal: 0.5     // Heals for 50% of damage dealt
+    },
+    undead_knight: {
+        name: "Undead Knight",
+        hp: 120,
+        maxHp: 120,
+        damage: [8, 18],
+        accuracy: 65,
+        armor: 2,          // Heavy armor
+        color: "#2a3a4a",  // Dark steel blue
+        aggroRange: 8,
+        attackCooldown: 2500,  // Slow heavy swings
+        size: 1.6,         // Large
+        moveSpeed: 0.35,   // Very slow movement
+        frontShield: true, // Blocks all damage from the front
+        turnSpeed: 0.15    // Turns very slowly (15% of normal)
     }
 };
 

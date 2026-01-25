@@ -211,6 +211,18 @@ function SkillTooltip({ skill, isShielded }: { skill: Skill; isShielded: boolean
     } else if (skill.type === "flurry") {
         lines.push({ label: "Damage", value: `${skill.value[0]}-${skill.value[1]} × ${skill.hitCount ?? 5}` });
         lines.push({ label: "Targets", value: `Up to ${skill.hitCount ?? 5} nearby` });
+    } else if (skill.type === "debuff") {
+        const durationSec = Math.round(skill.value[0] / 1000);
+        lines.push({ label: "Duration", value: `${durationSec}s`, color: COLORS.stunnedText });
+        if (skill.stunChance) {
+            lines.push({ label: "Stun chance", value: `${skill.stunChance}%`, color: COLORS.stunnedText });
+        }
+    } else if (skill.type === "trap") {
+        const durationSec = Math.round(skill.value[0] / 1000);
+        lines.push({ label: "Pin duration", value: `${durationSec}s`, color: "#c0392b" });
+    } else if (skill.type === "sanctuary") {
+        lines.push({ label: "Heal/tick", value: `${skill.value[0]}`, color: COLORS.hpHigh });
+        lines.push({ label: "Effect", value: "Dispels acid", color: "#9acd32" });
     }
 
     // Range

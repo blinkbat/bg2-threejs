@@ -26,6 +26,38 @@ export function getDirectionAndDistance(
     return { dx: dx / dist, dz: dz / dist, dist };
 }
 
+/**
+ * Check if an attack is blocked by a front shield.
+ * Returns true if the attack is from the front (within 90 degrees of facing).
+ * @param attackerX - Attacker's X position
+ * @param attackerZ - Attacker's Z position
+ * @param targetX - Target's X position
+ * @param targetZ - Target's Z position
+ * @param targetFacing - Target's facing direction in radians (0 = +Z direction)
+ */
+export function isBlockedByFrontShield(
+    attackerX: number, attackerZ: number,
+    targetX: number, targetZ: number,
+    targetFacing: number
+): boolean {
+    // Direction from target to attacker (where the attack is coming from)
+    const dx = attackerX - targetX;
+    const dz = attackerZ - targetZ;
+
+    // Angle from target to attacker
+    const attackAngle = Math.atan2(dx, dz);
+
+    // Calculate angle difference
+    let angleDiff = attackAngle - targetFacing;
+
+    // Normalize to -PI to PI
+    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+    while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+
+    // If angle difference is within 90 degrees (PI/2), attack is from the front
+    return Math.abs(angleDiff) < Math.PI / 2;
+}
+
 // =============================================================================
 // GRID UTILITIES
 // =============================================================================
@@ -275,6 +307,11 @@ export function hasEnoughMana(unit: Unit, manaCost: number): boolean {
 /** "{unit}'s {skill} hits {target} for {dmg} damage!" */
 export function logHit(attackerName: string, skillName: string, targetName: string, damage: number): string {
     return `${attackerName}'s ${skillName} hits ${targetName} for ${damage} damage!`;
+}
+
+/** "{unit} bites {target} for {dmg} damage, draining {heal} life!" - for lifesteal attacks */
+export function logLifestealHit(attackerName: string, targetName: string, damage: number, healAmount: number): string {
+    return `${attackerName} bites ${targetName} for ${damage} damage, draining ${healAmount} life!`;
 }
 
 /** "{unit}'s {skill} misses {target}." */

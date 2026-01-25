@@ -6,7 +6,8 @@ import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, Projectile, EnemyStats, MagicMissileProjectile, TrapProjectile, StatusEffect } from "../core/types";
 import { HIT_DETECTION_RADIUS, COLORS, BUFF_TICK_INTERVAL } from "../core/constants";
 import { getUnitStats } from "../game/units";
-import { calculateDamage, calculateDistance, getDirectionAndDistance, rollHit, shouldApplyPoison, getEffectiveArmor, logHit, logMiss, logPoisoned, logAoeHit, logAoeMiss, getDamageColor, logTrapTriggered } from "../combat/combatMath";
+import { calculateDamage, calculateDistance, getDirectionAndDistance, rollHit, shouldApplyPoison, getEffectiveArmor, logHit, logLifestealHit, logMiss, logPoisoned, logAoeHit, logAoeMiss, getDamageColor, logTrapTriggered, isBlockedByFrontShield } from "../combat/combatMath";
+import { ENEMY_STATS } from "../game/units";
 import { applyDamageToUnit, animateExpandingMesh, spawnDamageNumber, type DamageContext } from "../combat/combat";
 import { soundFns } from "../audio/sound";
 import { disposeBasicMesh } from "../rendering/disposal";
@@ -207,23 +208,44 @@ export function updateProjectiles(
             // Hit detection
             if (dist < HIT_DETECTION_RADIUS) {
                 let dmgDealt = 0;
+                let shieldBlocked = false;
+
                 if (targetUnit && targetG) {
-                    // Hit an enemy - use tracked HP to handle multiple hits in same frame
-                    const targetData = getUnitStats(targetUnit);
-                    const currentHp = hpTracker[targetUnit.id] ?? targetUnit.hp;
-                    dmgDealt = calculateDamage(mmProj.damage[0], mmProj.damage[1], getEffectiveArmor(targetUnit, targetData.armor));
+                    // Check for front-shield block (player attacking shielded enemy)
+                    // Magic missiles only have 50% chance to be blocked by shield
+                    if (attackerUnit.team === "player" && targetUnit.enemyType) {
+                        const enemyStats = ENEMY_STATS[targetUnit.enemyType];
+                        if (enemyStats.frontShield && targetUnit.facing !== undefined) {
+                            const attackerG = unitsRef[mmProj.attackerId];
+                            if (attackerG && isBlockedByFrontShield(attackerG.position.x, attackerG.position.z, targetG.position.x, targetG.position.z, targetUnit.facing)) {
+                                // 50% chance to block magic projectiles
+                                if (Math.random() < 0.5) {
+                                    shieldBlocked = true;
+                                }
+                            }
+                        }
+                    }
 
-                    const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
-                    applyDamageToUnit(dmgCtx, targetUnit.id, targetG, currentHp, dmgDealt, targetData.name, {
-                        color: "#9966ff",
-                        attackerName: attackerUnit.team === "player" ? getUnitStats(attackerUnit).name : undefined,
-                        targetUnit: targetUnit
-                    });
+                    if (!shieldBlocked) {
+                        // Hit an enemy - use tracked HP to handle multiple hits in same frame
+                        const targetData = getUnitStats(targetUnit);
+                        const currentHp = hpTracker[targetUnit.id] ?? targetUnit.hp;
+                        dmgDealt = calculateDamage(mmProj.damage[0], mmProj.damage[1], getEffectiveArmor(targetUnit, targetData.armor));
 
-                    // Update local HP tracker for subsequent projectiles in same frame
-                    hpTracker[targetUnit.id] = Math.max(0, currentHp - dmgDealt);
+                        const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
+                        const mmAttackerG = unitsRef[mmProj.attackerId];
+                        applyDamageToUnit(dmgCtx, targetUnit.id, targetG, currentHp, dmgDealt, targetData.name, {
+                            color: "#9966ff",
+                            attackerName: attackerUnit.team === "player" ? getUnitStats(attackerUnit).name : undefined,
+                            targetUnit: targetUnit,
+                            attackerPosition: mmAttackerG ? { x: mmAttackerG.position.x, z: mmAttackerG.position.z } : undefined
+                        });
 
-                    soundFns.playHit();
+                        // Update local HP tracker for subsequent projectiles in same frame
+                        hpTracker[targetUnit.id] = Math.max(0, currentHp - dmgDealt);
+
+                        soundFns.playHit();
+                    }
                 }
 
                 // Track volley stats for aggregated logging (attackerUnit already validated above)
@@ -415,10 +437,24 @@ export function updateProjectiles(
             const attackerData = getUnitStats(attackerUnit);
             const targetData = getUnitStats(targetUnit);
             const logColor = getDamageColor(targetUnit.team);
+            const attackerG = unitsRef[attackerUnit.id];
 
             // Aggro enemies targeted by player projectiles (even on miss - arrow flew by their head!)
             if (attackerUnit.team === "player") {
                 aggroOnHit(targetUnit, proj.attackerId, unitsRef);
+            }
+
+            // Check for front-shield block (player attacking shielded enemy)
+            if (attackerUnit.team === "player" && targetUnit.enemyType) {
+                const enemyStats = ENEMY_STATS[targetUnit.enemyType];
+                if (enemyStats.frontShield && targetUnit.facing !== undefined) {
+                    if (attackerG && isBlockedByFrontShield(attackerG.position.x, attackerG.position.z, targetG.position.x, targetG.position.z, targetUnit.facing)) {
+                        soundFns.playMiss();
+                        addLog(`${attackerData.name}'s attack is blocked by ${targetData.name}'s shield!`, "#4488ff");
+                        disposeProjectile(scene, proj);
+                        return false;
+                    }
+                }
             }
 
             if (rollHit(attackerData.accuracy)) {
@@ -426,13 +462,30 @@ export function updateProjectiles(
                 const willPoison = attackerUnit.team === "enemy" && shouldApplyPoison(attackerData as EnemyStats);
                 const poisonDmg = willPoison && 'poisonDamage' in attackerData ? (attackerData as EnemyStats).poisonDamage : undefined;
 
+                // Calculate lifesteal upfront for log message
+                let actualHeal = 0;
+                const lifesteal = attackerUnit.team === "enemy" ? (attackerData as EnemyStats).lifesteal : undefined;
+                if (lifesteal && lifesteal > 0) {
+                    const healAmount = Math.floor(dmg * lifesteal);
+                    if (healAmount > 0) {
+                        const newHp = Math.min(attackerUnit.hp + healAmount, attackerData.maxHp);
+                        actualHeal = newHp - attackerUnit.hp;
+                    }
+                }
+
+                // Custom log for lifesteal attacks
+                const hitText = lifesteal && actualHeal > 0
+                    ? logLifestealHit(attackerData.name, targetData.name, dmg, actualHeal)
+                    : logHit(attackerData.name, "Attack", targetData.name, dmg);
+
                 const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
                 applyDamageToUnit(dmgCtx, targetUnit.id, targetG, targetUnit.hp, dmg, targetData.name, {
                     color: logColor,
                     poison: willPoison ? { sourceId: attackerUnit.id, damagePerTick: poisonDmg } : undefined,
                     attackerName: attackerUnit.team === "player" ? attackerData.name : undefined,
-                    hitMessage: { text: logHit(attackerData.name, "Attack", targetData.name, dmg), color: logColor },
-                    targetUnit: targetUnit
+                    hitMessage: { text: hitText, color: logColor },
+                    targetUnit: targetUnit,
+                    attackerPosition: attackerG ? { x: attackerG.position.x, z: attackerG.position.z } : undefined
                 });
 
                 soundFns.playHit();
@@ -441,25 +494,12 @@ export function updateProjectiles(
                     addLog(logPoisoned(targetData.name), COLORS.poisonText);
                 }
 
-                // Lifesteal: heal attacker for percentage of damage dealt
-                if (attackerUnit.team === "enemy") {
-                    const lifesteal = (attackerData as EnemyStats).lifesteal;
-                    if (lifesteal && lifesteal > 0) {
-                        const attackerG = unitsRef[attackerUnit.id];
-                        if (attackerG) {
-                            const healAmount = Math.floor(dmg * lifesteal);
-                            if (healAmount > 0) {
-                                const newHp = Math.min(attackerUnit.hp + healAmount, attackerData.maxHp);
-                                const actualHeal = newHp - attackerUnit.hp;
-                                if (actualHeal > 0) {
-                                    setUnits(prev => prev.map(u =>
-                                        u.id === attackerUnit.id ? { ...u, hp: newHp } : u
-                                    ));
-                                    spawnDamageNumber(scene, attackerG.position.x, attackerG.position.z, actualHeal, COLORS.logHeal, damageTexts, true);
-                                }
-                            }
-                        }
-                    }
+                // Apply lifesteal heal
+                if (actualHeal > 0 && attackerG) {
+                    setUnits(prev => prev.map(u =>
+                        u.id === attackerUnit.id ? { ...u, hp: Math.min(attackerUnit.hp + actualHeal, attackerData.maxHp) } : u
+                    ));
+                    spawnDamageNumber(scene, attackerG.position.x, attackerG.position.z, actualHeal, COLORS.logHeal, damageTexts, true);
                 }
             } else {
                 soundFns.playMiss();

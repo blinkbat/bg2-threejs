@@ -46,6 +46,7 @@ import {
     updateSwingAnimations,
     processStatusEffects,
     updatePoisonVisuals,
+    updateShieldFacing,
     processAcidTiles,
     processSanctuaryTiles,
     clearSanctuaryTiles
@@ -90,6 +91,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
     const unitsRef = useRef<Record<number, UnitGroup>>({});
     const selectRingsRef = useRef<Record<number, THREE.Mesh>>({});
     const targetRingsRef = useRef<Record<number, THREE.Mesh>>({});
+    const shieldIndicatorsRef = useRef<Record<number, THREE.Mesh>>({});
     const targetRingTimers = useRef<Record<number, number>>({});  // Track when target was set for fade
     const maxHpRef = useRef<Record<number, number>>({});
     const moveMarkerRef = useRef<THREE.Mesh | null>(null);
@@ -313,7 +315,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         sanctuaryTilesRef.current.clear();  // Clear sanctuary tiles
 
         const sceneRefs = createScene(containerRef.current, units);
-        const { scene, camera, renderer, flames, candleMeshes, candleLights, fogTexture, fogMesh, moveMarker, rangeIndicator, aoeIndicator, unitGroups, selectRings, targetRings, unitMeshes, unitOriginalColors, maxHp, wallMeshes, treeMeshes, doorMeshes, waterMesh } = sceneRefs;
+        const { scene, camera, renderer, flames, candleMeshes, candleLights, fogTexture, fogMesh, moveMarker, rangeIndicator, aoeIndicator, unitGroups, selectRings, targetRings, shieldIndicators, unitMeshes, unitOriginalColors, maxHp, wallMeshes, treeMeshes, doorMeshes, waterMesh } = sceneRefs;
 
         sceneRef.current = scene;
         cameraRef.current = camera;
@@ -326,6 +328,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         unitsRef.current = unitGroups;
         selectRingsRef.current = selectRings;
         targetRingsRef.current = targetRings;
+        shieldIndicatorsRef.current = shieldIndicators;
         unitMeshRef.current = unitMeshes;
         unitOriginalColorRef.current = unitOriginalColors;
         maxHpRef.current = maxHp;
@@ -836,6 +839,9 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
 
                 // Update poison visuals (green tint for poisoned units)
                 updatePoisonVisuals(unitsStateRef.current, unitMeshRef.current, unitOriginalColorRef.current, hitFlashRef.current);
+
+                // Update shield facing for front-shielded enemies
+                updateShieldFacing(unitsStateRef.current, unitsRef.current, shieldIndicatorsRef.current, setUnits);
             }
 
             const currentUnits = unitsStateRef.current;
@@ -864,6 +870,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                             unitsRef.current,
                             selectRingsRef.current,
                             targetRingsRef.current,
+                            shieldIndicatorsRef.current,
                             unitMeshRef.current,
                             unitOriginalColorRef.current,
                             maxHpRef.current

@@ -41,6 +41,7 @@ export interface SceneRefs {
     unitGroups: Record<number, UnitGroup>;
     selectRings: Record<number, THREE.Mesh>;
     targetRings: Record<number, THREE.Mesh>;  // Red rings for targeted enemies
+    shieldIndicators: Record<number, THREE.Mesh>;  // Front shield facing indicators
     unitMeshes: Record<number, THREE.Mesh>;
     unitOriginalColors: Record<number, THREE.Color>;
     maxHp: Record<number, number>;
@@ -427,12 +428,10 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     const doorMeshes: DoorMesh[] = [];
     area.transitions.forEach(transition => {
         // Create a subtle transparent portal
-        // Door dimensions: w is always the wide part (parallel to wall), h is the thin part (perpendicular)
-        // For north/south facing doors: width along X, depth along Z
-        // For east/west facing doors: width along Z, depth along X
-        const isNorthSouth = transition.direction === "north" || transition.direction === "south";
-        const doorWidth = isNorthSouth ? transition.w : transition.h;
-        const doorDepth = isNorthSouth ? transition.h : transition.w;
+        // Door dimensions: w is X extent, h is Z extent (always)
+        // BoxGeometry(width=X, height=Y, depth=Z)
+        const doorWidth = transition.w;
+        const doorDepth = transition.h;
 
         // Transparent portal box
         const doorMat = new THREE.MeshBasicMaterial({
@@ -533,6 +532,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     const unitGroups: Record<number, UnitGroup> = {};
     const selectRings: Record<number, THREE.Mesh> = {};
     const targetRings: Record<number, THREE.Mesh> = {};  // Red rings for targeted enemies
+    const shieldIndicators: Record<number, THREE.Mesh> = {};  // Front shield facing indicators
     const unitMeshes: Record<number, THREE.Mesh> = {};
     const unitOriginalColors: Record<number, THREE.Color> = {};
     const maxHp: Record<number, number> = {};
@@ -606,6 +606,25 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
             targetRing.visible = false;
             group.add(targetRing);
             targetRings[unit.id] = targetRing;
+
+            // Front shield indicator - half-disc showing protected direction
+            if ('frontShield' in data && data.frontShield) {
+                const shieldRadius = size * 0.7;
+                // CircleGeometry with thetaStart and thetaLength creates a sector
+                // thetaStart = -PI/2 (pointing forward), thetaLength = PI (180 degrees = half circle)
+                const shieldGeom = new THREE.CircleGeometry(shieldRadius, 16, -Math.PI / 2, Math.PI);
+                const shieldMat = new THREE.MeshBasicMaterial({
+                    color: "#4488ff",
+                    transparent: true,
+                    opacity: 0.4,
+                    side: THREE.DoubleSide
+                });
+                const shieldDisc = new THREE.Mesh(shieldGeom, shieldMat);
+                shieldDisc.rotation.x = -Math.PI / 2;
+                shieldDisc.position.y = 0.02;
+                group.add(shieldDisc);
+                shieldIndicators[unit.id] = shieldDisc;
+            }
         }
 
         maxHp[unit.id] = data.maxHp;
@@ -632,6 +651,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         unitGroups,
         selectRings,
         targetRings,
+        shieldIndicators,
         unitMeshes,
         unitOriginalColors,
         maxHp,
@@ -665,6 +685,7 @@ export function addUnitToScene(
     unitGroups: Record<number, UnitGroup>,
     selectRings: Record<number, THREE.Mesh>,
     targetRings: Record<number, THREE.Mesh>,
+    shieldIndicators: Record<number, THREE.Mesh>,
     unitMeshes: Record<number, THREE.Mesh>,
     unitOriginalColors: Record<number, THREE.Color>,
     maxHp: Record<number, number>
@@ -736,6 +757,23 @@ export function addUnitToScene(
         targetRing.visible = false;
         group.add(targetRing);
         targetRings[unit.id] = targetRing;
+
+        // Front shield indicator - half-disc showing protected direction
+        if ('frontShield' in data && data.frontShield) {
+            const shieldRadius = size * 0.7;
+            const shieldGeom = new THREE.CircleGeometry(shieldRadius, 16, -Math.PI / 2, Math.PI);
+            const shieldMat = new THREE.MeshBasicMaterial({
+                color: "#4488ff",
+                transparent: true,
+                opacity: 0.4,
+                side: THREE.DoubleSide
+            });
+            const shieldDisc = new THREE.Mesh(shieldGeom, shieldMat);
+            shieldDisc.rotation.x = -Math.PI / 2;
+            shieldDisc.position.y = 0.02;
+            group.add(shieldDisc);
+            shieldIndicators[unit.id] = shieldDisc;
+        }
     }
 
     maxHp[unit.id] = data.maxHp;
