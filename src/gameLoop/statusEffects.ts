@@ -72,6 +72,42 @@ export function processStatusEffects(
                         handleUnitDefeat(unit.id, unitG, unitsRef, addLog, data.name);
                     }
                 }
+            } else if (effect.type === "qi_drain") {
+                // Qi Drain - self-damage over time from Qi Focus
+                if (now - effect.lastTick >= effect.tickInterval) {
+                    const dmg = effect.damagePerTick;
+                    let wasDefeated = false;
+
+                    setUnits(prev => prev.map(u => {
+                        if (u.id !== unit.id) return u;
+
+                        const newHp = Math.max(0, u.hp - dmg);
+                        wasDefeated = newHp <= 0;
+
+                        const updatedEffects = (u.statusEffects || []).map(e => {
+                            if (e.type === "qi_drain") {
+                                const newDuration = e.duration - effect.tickInterval;
+                                return { ...e, duration: newDuration, lastTick: now };
+                            }
+                            return e;
+                        }).filter(e => e.duration > 0);
+
+                        return {
+                            ...u,
+                            hp: newHp,
+                            statusEffects: updatedEffects.length > 0 ? updatedEffects : undefined
+                        };
+                    }));
+
+                    hitFlashRef[unit.id] = now;
+                    spawnDamageNumber(scene, unitG.position.x, unitG.position.z, dmg, "#9b59b6", damageTexts);  // Purple for qi drain
+                    addLog(`${data.name} loses ${dmg} HP from Qi drain.`, "#9b59b6");
+
+                    if (wasDefeated) {
+                        defeatedThisFrame.add(unit.id);
+                        handleUnitDefeat(unit.id, unitG, unitsRef, addLog, data.name);
+                    }
+                }
             } else if (effect.type === "shielded" || effect.type === "stunned" || effect.type === "cleansed" || effect.type === "pinned" || effect.type === "slowed") {
                 // Shielded/stunned/cleansed/pinned/slowed buff - tick down duration at fixed interval (like poison)
                 if (now - effect.lastTick >= effect.tickInterval) {

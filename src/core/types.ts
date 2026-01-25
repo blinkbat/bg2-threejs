@@ -10,7 +10,7 @@ export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "og
 // STATUS EFFECTS
 // =============================================================================
 
-export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed";
+export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed" | "qi_drain";
 
 export interface StatusEffect {
     type: StatusEffectType;
@@ -43,7 +43,7 @@ export interface Skill {
     flavor?: string;       // Flavor text for tooltip
     manaCost: number;
     cooldown: number;  // ms
-    type: "damage" | "heal" | "buff" | "taunt" | "flurry" | "debuff" | "trap" | "sanctuary";
+    type: "damage" | "heal" | "buff" | "taunt" | "flurry" | "debuff" | "trap" | "sanctuary" | "mana_transfer";
     targetType: "enemy" | "ally" | "self" | "aoe";
     range: number;
     aoeRadius?: number;
@@ -52,6 +52,7 @@ export interface Skill {
     poisonChance?: number;  // 0-100 percent chance to apply poison on hit
     hitCount?: number;  // Number of hits for flurry-type skills
     stunChance?: number;  // 0-100 percent chance to apply stun on hit
+    selfDamage?: [number, number];  // Damage range to apply to caster (for Qi Focus)
 }
 
 export interface UnitData {

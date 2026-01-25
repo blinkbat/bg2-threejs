@@ -4,7 +4,7 @@
 
 import * as THREE from "three";
 import type { Unit, Skill, UnitGroup, Projectile, StatusEffect, MagicMissileProjectile, TrapProjectile, SanctuaryTile, AcidTile } from "../core/types";
-import { COLORS, BUFF_TICK_INTERVAL, TRAP_FLIGHT_DURATION, TRAP_ARC_HEIGHT, TRAP_MESH_SIZE, SANCTUARY_HEAL_PER_TICK } from "../core/constants";
+import { COLORS, BUFF_TICK_INTERVAL, TRAP_FLIGHT_DURATION, TRAP_ARC_HEIGHT, TRAP_MESH_SIZE, SANCTUARY_HEAL_PER_TICK, QI_DRAIN_DURATION, QI_DRAIN_TICK_INTERVAL } from "../core/constants";
 import { UNIT_DATA, getUnitStats } from "../game/units";
 import { rollDamage, rollChance, calculateDamage, rollHit, getEffectiveArmor, hasShieldedEffect, hasStunnedEffect, hasPoisonEffect, logHit, logMiss, logHeal, logPoisoned, logCast, logTaunt, logTauntMiss, logBuff, logStunned, logCleanse, logTrapThrown, isBlockedByFrontShield } from "./combatMath";
 import { ENEMY_STATS } from "../game/units";
@@ -191,6 +191,99 @@ export function executeHealSkill(
     if (targetG && mesh) {
         (mesh.material as THREE.MeshStandardMaterial).color.set("#22ff22");
         hitFlashRef.current[healTargetId] = Date.now();
+    }
+
+    return true;
+}
+
+/**
+ * Execute a mana transfer skill (like Qi Focus) - give mana to ally, take self-damage over time
+ */
+export function executeManaTransferSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill,
+    targetX: number,
+    targetZ: number
+): boolean {
+    const { unitsStateRef, unitsRef, unitMeshRef, hitFlashRef, setUnits, addLog } = ctx;
+
+    // Find closest ally to target position
+    const closest = findClosestTargetByTeam(unitsStateRef.current, unitsRef.current, "player", targetX, targetZ);
+
+    if (!closest) {
+        addLog(`${UNIT_DATA[casterId].name}: No ally at that location!`, COLORS.logNeutral);
+        return false;
+    }
+
+    const { unit: targetAlly, group: targetG } = closest;
+    const casterG = unitsRef.current[casterId];
+    const caster = unitsStateRef.current.find(u => u.id === casterId);
+
+    if (!casterG || !caster) return false;
+
+    // Check range
+    if (!isInRange(casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, 0, skill.range + 0.5)) {
+        addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, COLORS.logNeutral);
+        return false;
+    }
+
+    // Check if target is at full mana
+    const targetData = UNIT_DATA[targetAlly.id];
+    if ((targetAlly.mana ?? 0) >= (targetData.maxMana ?? 0)) {
+        addLog(`${UNIT_DATA[casterId].name}: ${targetData.name} is at full mana!`, COLORS.logNeutral);
+        return false;
+    }
+
+    // Check if caster has enough HP for the self-damage (minimum: low end of damage range)
+    const selfDamageMin = skill.selfDamage?.[0] ?? 20;
+    if (caster.hp <= selfDamageMin) {
+        addLog(`${UNIT_DATA[casterId].name}: Not enough life force!`, COLORS.logNeutral);
+        return false;
+    }
+
+    consumeSkill(ctx, casterId, skill);
+
+    const now = Date.now();
+    const casterData = UNIT_DATA[casterId];
+
+    // Give mana to ally
+    const manaAmount = rollDamage(skill.value[0], skill.value[1]);
+    const actualMana = Math.min(manaAmount, (targetData.maxMana ?? 0) - (targetAlly.mana ?? 0));
+    const healTargetId = targetAlly.id;
+
+    // Calculate self-damage (total damage over the duration)
+    const totalSelfDamage = rollDamage(skill.selfDamage?.[0] ?? 20, skill.selfDamage?.[1] ?? 30);
+    const damagePerTick = Math.ceil(totalSelfDamage / (QI_DRAIN_DURATION / QI_DRAIN_TICK_INTERVAL));
+
+    // Apply mana to target and qi_drain effect to caster
+    setUnits(prev => prev.map(u => {
+        if (u.id === healTargetId) {
+            return { ...u, mana: Math.min(targetData.maxMana ?? 0, (u.mana ?? 0) + actualMana) };
+        }
+        if (u.id === casterId) {
+            const existingEffects = u.statusEffects || [];
+            const qiDrainEffect: StatusEffect = {
+                type: "qi_drain",
+                duration: QI_DRAIN_DURATION,
+                tickInterval: QI_DRAIN_TICK_INTERVAL,
+                lastTick: now,
+                damagePerTick: damagePerTick,
+                sourceId: casterId
+            };
+            return { ...u, statusEffects: [...existingEffects, qiDrainEffect] };
+        }
+        return u;
+    }));
+
+    addLog(`${casterData.name}'s ${skill.name} restores ${actualMana} mana to ${targetData.name}!`, COLORS.mana);
+    soundFns.playHeal();
+
+    // Visual effect - blue flash on target (mana color)
+    const mesh = unitMeshRef.current[healTargetId];
+    if (targetG && mesh) {
+        (mesh.material as THREE.MeshStandardMaterial).color.set("#3498db");
+        hitFlashRef.current[healTargetId] = now;
     }
 
     return true;
@@ -1021,6 +1114,8 @@ export function executeSkill(
         return executeTrapSkill(ctx, casterId, skill, targetX, targetZ);
     } else if (skill.type === "sanctuary" && skill.targetType === "aoe") {
         return executeSanctuarySkill(ctx, casterId, skill, targetX, targetZ);
+    } else if (skill.type === "mana_transfer" && skill.targetType === "ally") {
+        return executeManaTransferSkill(ctx, casterId, skill, targetX, targetZ);
     }
 
     return false;

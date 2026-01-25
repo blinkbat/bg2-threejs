@@ -223,6 +223,11 @@ function SkillTooltip({ skill, isShielded }: { skill: Skill; isShielded: boolean
     } else if (skill.type === "sanctuary") {
         lines.push({ label: "Heal/tick", value: `${skill.value[0]}`, color: COLORS.hpHigh });
         lines.push({ label: "Effect", value: "Dispels acid", color: "#9acd32" });
+    } else if (skill.type === "mana_transfer") {
+        lines.push({ label: "Mana given", value: `${skill.value[0]}-${skill.value[1]}`, color: COLORS.mana });
+        if (skill.selfDamage) {
+            lines.push({ label: "HP cost", value: `${skill.selfDamage[0]}-${skill.selfDamage[1]} over time`, color: COLORS.damageEnemy });
+        }
     }
 
     // Range

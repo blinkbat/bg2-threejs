@@ -27,7 +27,7 @@ export const SKILLS: Record<string, Skill> = {
         cooldown: 4000,
         type: "heal",
         targetType: "ally",
-        range: 8,
+        range: 10,
         value: [8, 12]
     },
     poisonDagger: {
@@ -92,8 +92,8 @@ export const SKILLS: Record<string, Skill> = {
         name: "Cleanse",
         description: "Purify an ally, removing poison and granting immunity to poison for 30 seconds.",
         flavor: "Where light touches, no venom may linger.",
-        manaCost: 8,
-        cooldown: 4000,
+        manaCost: 4,
+        cooldown: 3000,
         type: "buff",
         targetType: "ally",
         range: 8,
@@ -136,6 +136,18 @@ export const SKILLS: Record<string, Skill> = {
         range: 4,
         aoeRadius: 2.5,  // Radius of effect
         value: [3, 3]  // Heal per tick (uses SANCTUARY_HEAL_PER_TICK from constants)
+    },
+    qiFocus: {
+        name: "Qi Focus",
+        description: "Channel your life force to restore an ally's mana, at the cost of your own vitality.",
+        flavor: "\"The body is but a vessel for the spirit's gift.\" - Master Shen",
+        manaCost: 0,
+        cooldown: 8000,
+        type: "mana_transfer",
+        targetType: "ally",
+        range: 6,
+        value: [10, 14],  // Mana to give
+        selfDamage: [20, 30]  // HP cost to caster over time
     }
 };
 
@@ -144,11 +156,11 @@ export const SKILLS: Record<string, Skill> = {
 // =============================================================================
 
 export const UNIT_DATA: Record<number, UnitData> = {
-    1: { name: "Barbarian", class: "Barbarian", hp: 50, maxHp: 50, mana: 25, maxMana: 25, damage: [3, 6], accuracy: 70, armor: 2, color: "#c0392b", skills: [SKILLS.warcry, SKILLS.stunningBlow], items: ["Axe"], attackCooldown: 2000 },
-    2: { name: "Paladin", class: "Paladin", hp: 45, maxHp: 45, mana: 35, maxMana: 35, damage: [2, 5], accuracy: 65, armor: 3, color: "#f1c40f", skills: [SKILLS.raiseShield, SKILLS.sanctuary], items: ["Mace"], attackCooldown: 2500 },
+    1: { name: "Barbarian", class: "Barbarian", hp: 50, maxHp: 50, mana: 25, maxMana: 25, damage: [4, 8], accuracy: 70, armor: 2, color: "#c0392b", skills: [SKILLS.warcry, SKILLS.stunningBlow], items: ["Axe"], attackCooldown: 2000 },
+    2: { name: "Paladin", class: "Paladin", hp: 45, maxHp: 45, mana: 35, maxMana: 35, damage: [3, 6], accuracy: 65, armor: 3, color: "#f1c40f", skills: [SKILLS.raiseShield, SKILLS.sanctuary], items: ["Mace"], attackCooldown: 2500 },
     3: { name: "Thief", class: "Thief", hp: 25, maxHp: 25, mana: 30, maxMana: 30, damage: [2, 4], accuracy: 75, armor: 1, color: "#8e44ad", skills: [SKILLS.poisonDagger, SKILLS.caltrops], items: ["Bow"], range: 7, projectileColor: "#a0522d", attackCooldown: 1500 },
-    4: { name: "Wizard", class: "Wizard", hp: 18, maxHp: 18, mana: 80, maxMana: 80, damage: [3, 5], accuracy: 60, armor: 0, color: "#3498db", skills: [SKILLS.fireball, SKILLS.magicWave], items: ["Staff"], range: 8, projectileColor: "#ff6600", attackCooldown: 3000 },
-    5: { name: "Monk", class: "Monk", hp: 35, maxHp: 35, mana: 30, maxMana: 30, damage: [2, 5], accuracy: 70, armor: 1, color: "#27ae60", skills: [SKILLS.flurryOfFists], items: ["Fists"], attackCooldown: 1800 },
+    4: { name: "Wizard", class: "Wizard", hp: 18, maxHp: 18, mana: 80, maxMana: 80, damage: [1, 5], accuracy: 60, armor: 0, color: "#3498db", skills: [SKILLS.fireball, SKILLS.magicWave], items: ["Staff"], range: 8, projectileColor: "#ff6600", attackCooldown: 3000 },
+    5: { name: "Monk", class: "Monk", hp: 35, maxHp: 35, mana: 30, maxMana: 30, damage: [2, 5], accuracy: 70, armor: 1, color: "#27ae60", skills: [SKILLS.flurryOfFists, SKILLS.qiFocus], items: ["Fists"], attackCooldown: 1800 },
     6: { name: "Cleric", class: "Cleric", hp: 30, maxHp: 30, mana: 60, maxMana: 60, damage: [2, 4], accuracy: 60, armor: 2, color: "#ecf0f1", skills: [SKILLS.heal, SKILLS.cleanse], items: ["Staff"], range: 6, projectileColor: "#ffffaa", attackCooldown: 2500 },
 };
 

@@ -1099,6 +1099,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                     <div className="enemy-tooltip" style={{ left: hoveredEnemy.x + 12, top: hoveredEnemy.y - 10 }}>
                         <div className="enemy-tooltip-name">{stats.name}</div>
                         <div className="enemy-tooltip-status" style={{ color: statusColor }}>{status}</div>
+                        {debug && <div className="enemy-tooltip-status" style={{ color: "#888" }}>{enemy.hp}/{stats.maxHp} HP</div>}
                     </div>
                 );
             })()}

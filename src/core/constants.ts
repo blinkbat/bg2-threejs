@@ -29,6 +29,10 @@ export const SLOW_DURATION = 10000;        // 10 seconds
 export const SLOW_COOLDOWN_MULT = 1.5;     // 1.5x cooldowns when slowed
 export const SLOW_MOVE_MULT = 0.5;         // 0.5x move speed when slowed
 
+// Status Effects - Qi Drain (self-damage from Qi Focus)
+export const QI_DRAIN_DURATION = 10000;    // 10 seconds
+export const QI_DRAIN_TICK_INTERVAL = 1000; // tick every 1 second
+
 // Acid Tiles - Ground hazard from acid slugs
 export const ACID_TILE_DURATION = 8000;    // 8 seconds per tile
 export const ACID_TICK_INTERVAL = 1000;    // Damage every 1 second
