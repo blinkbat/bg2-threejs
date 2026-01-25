@@ -130,6 +130,101 @@ export function isPassable(x: number, z: number): boolean {
     return isWithinGrid(x, z) && !isBlocked(x, z);
 }
 
+/**
+ * Find the nearest passable position to a target position.
+ * Searches in expanding squares around the target.
+ */
+export function findNearestPassable(targetX: number, targetZ: number, maxRadius: number = 5): { x: number; z: number } | null {
+    // Check target first
+    const cellX = Math.floor(targetX);
+    const cellZ = Math.floor(targetZ);
+    if (isPassable(cellX, cellZ)) {
+        return { x: targetX, z: targetZ };
+    }
+
+    // Search in expanding squares
+    for (let radius = 1; radius <= maxRadius; radius++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+            for (let dz = -radius; dz <= radius; dz++) {
+                // Only check cells on the edge of the square
+                if (Math.abs(dx) !== radius && Math.abs(dz) !== radius) continue;
+
+                const checkX = cellX + dx;
+                const checkZ = cellZ + dz;
+                if (isPassable(checkX, checkZ)) {
+                    return { x: checkX + 0.5, z: checkZ + 0.5 };
+                }
+            }
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Find passable spawn positions for multiple units around a spawn point.
+ * Spreads units in a grid pattern, finding nearest passable cell for each.
+ */
+export function findSpawnPositions(
+    spawnX: number,
+    spawnZ: number,
+    count: number,
+    spacing: number = 1.5
+): { x: number; z: number }[] {
+    const positions: { x: number; z: number }[] = [];
+    const usedCells = new Set<string>();
+
+    for (let i = 0; i < count; i++) {
+        // Calculate ideal position in a 3-wide grid
+        const idealX = spawnX + (i % 3) * spacing - spacing;
+        const idealZ = spawnZ + Math.floor(i / 3) * spacing;
+
+        // Find nearest passable position
+        let found = false;
+        const cellX = Math.floor(idealX);
+        const cellZ = Math.floor(idealZ);
+        const cellKey = `${cellX},${cellZ}`;
+
+        // Check ideal position first
+        if (isPassable(cellX, cellZ) && !usedCells.has(cellKey)) {
+            positions.push({ x: idealX, z: idealZ });
+            usedCells.add(cellKey);
+            found = true;
+        }
+
+        // Search for nearby passable cell if ideal is blocked
+        if (!found) {
+            for (let radius = 1; radius <= 5; radius++) {
+                if (found) break;
+                for (let dx = -radius; dx <= radius; dx++) {
+                    if (found) break;
+                    for (let dz = -radius; dz <= radius; dz++) {
+                        if (Math.abs(dx) !== radius && Math.abs(dz) !== radius) continue;
+
+                        const checkX = cellX + dx;
+                        const checkZ = cellZ + dz;
+                        const key = `${checkX},${checkZ}`;
+
+                        if (isPassable(checkX, checkZ) && !usedCells.has(key)) {
+                            positions.push({ x: checkX + 0.5, z: checkZ + 0.5 });
+                            usedCells.add(key);
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fallback to spawn point if nothing found
+        if (!found) {
+            positions.push({ x: spawnX, z: spawnZ });
+        }
+    }
+
+    return positions;
+}
+
 // =============================================================================
 // FOG OF WAR - Bresenham LOS, visibility states: 0=unseen, 1=seen, 2=visible
 // =============================================================================

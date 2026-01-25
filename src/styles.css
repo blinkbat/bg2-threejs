@@ -888,6 +888,42 @@ html, body, #root {
     gap: 8px;
 }
 
+.debug-warp-menu {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+}
+
+.debug-label {
+    font-size: 11px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-right: 4px;
+}
+
+.btn-warp {
+    font-size: 11px;
+    padding: 4px 8px;
+    background: rgba(100, 100, 100, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.btn-warp:hover {
+    background: rgba(120, 120, 120, 0.4);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.btn-warp.active {
+    background: rgba(80, 120, 80, 0.4);
+    border-color: rgba(100, 200, 100, 0.3);
+    color: #9f9;
+}
+
 /* -----------------------------------------------------------------------------
    COMBAT LOG
    ----------------------------------------------------------------------------- */

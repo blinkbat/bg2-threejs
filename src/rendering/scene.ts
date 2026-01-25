@@ -47,6 +47,8 @@ export interface SceneRefs {
     maxHp: Record<number, number>;
     wallMeshes: THREE.Mesh[];
     treeMeshes: THREE.Mesh[];  // Tree foliage meshes for transparency
+    columnMeshes: THREE.Mesh[];  // Column meshes for transparency
+    columnGroups: THREE.Mesh[][];  // Groups of column parts (body, base, capital) that fade together
     doorMeshes: DoorMesh[];
     waterMesh: THREE.Mesh | null;  // Water for coast
 }
@@ -316,37 +318,45 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     });
 
     // Decorations - columns, broken walls, etc.
+    const columnMeshes: THREE.Mesh[] = [];
+    const columnGroups: THREE.Mesh[][] = [];  // Groups of column parts that fade together
     if (area.decorations) {
         area.decorations.forEach(dec => {
             const size = dec.size ?? 1;
 
             if (dec.type === "column") {
-                // Full standing column
+                // Full standing column - track for transparency
                 const columnRadius = 0.3 * size;
                 const columnHeight = 2.5 * size;
                 const column = new THREE.Mesh(
                     new THREE.CylinderGeometry(columnRadius, columnRadius * 1.1, columnHeight, 12),
-                    new THREE.MeshStandardMaterial({ color: "#8b8b7a", metalness: 0.1, roughness: 0.9 })
+                    new THREE.MeshStandardMaterial({ color: "#8b8b7a", metalness: 0.1, roughness: 0.9, transparent: true })
                 );
                 column.position.set(dec.x, columnHeight / 2, dec.z);
                 column.name = "decoration";
                 scene.add(column);
+                columnMeshes.push(column);
 
                 // Column base
                 const base = new THREE.Mesh(
                     new THREE.CylinderGeometry(columnRadius * 1.4, columnRadius * 1.5, 0.2, 12),
-                    new THREE.MeshStandardMaterial({ color: "#7a7a6a", metalness: 0.1, roughness: 0.9 })
+                    new THREE.MeshStandardMaterial({ color: "#7a7a6a", metalness: 0.1, roughness: 0.9, transparent: true })
                 );
                 base.position.set(dec.x, 0.1, dec.z);
                 scene.add(base);
+                columnMeshes.push(base);
 
                 // Column capital (top)
                 const capital = new THREE.Mesh(
                     new THREE.CylinderGeometry(columnRadius * 1.3, columnRadius, 0.25, 12),
-                    new THREE.MeshStandardMaterial({ color: "#9a9a8a", metalness: 0.1, roughness: 0.9 })
+                    new THREE.MeshStandardMaterial({ color: "#9a9a8a", metalness: 0.1, roughness: 0.9, transparent: true })
                 );
                 capital.position.set(dec.x, columnHeight, dec.z);
                 scene.add(capital);
+                columnMeshes.push(capital);
+
+                // Group all parts of this column together for synchronized transparency
+                columnGroups.push([column, base, capital]);
             } else if (dec.type === "broken_column") {
                 // Broken/fallen column - shorter with debris
                 const columnRadius = 0.3 * size;
@@ -657,6 +667,8 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         maxHp,
         wallMeshes,
         treeMeshes,
+        columnMeshes,
+        columnGroups,
         doorMeshes,
         waterMesh,
     };
@@ -824,7 +836,7 @@ let wallCheckFrame = 0;
 let cachedOccludingMeshes = new Set<THREE.Mesh>();
 
 /**
- * Update wall, tree, and candle transparency based on unit occlusion.
+ * Update wall, tree, column, and candle transparency based on unit occlusion.
  * Objects between the camera and any unit become semi-transparent.
  * Ray-box intersection tests are throttled to every 3rd frame for performance.
  */
@@ -834,6 +846,8 @@ export function updateWallTransparency(
     unitGroups: Record<number, UnitGroup>,
     unitsState: Unit[],
     treeMeshes?: THREE.Mesh[],
+    columnMeshes?: THREE.Mesh[],
+    columnGroups?: THREE.Mesh[][],
     candleMeshes?: THREE.Mesh[],
     flameMeshes?: THREE.Mesh[]
 ): void {
@@ -872,6 +886,42 @@ export function updateWallTransparency(
             // Check trees if provided
             if (treeMeshes) {
                 for (const mesh of treeMeshes) {
+                    if (cachedOccludingMeshes.has(mesh)) continue;
+                    _meshBox.setFromObject(mesh);
+                    if (_ray.intersectBox(_meshBox, _intersection)) {
+                        if (_cameraPos.distanceTo(_intersection) < distToUnit) {
+                            cachedOccludingMeshes.add(mesh);
+                        }
+                    }
+                }
+            }
+
+            // Check columns if provided - use groups so all parts fade together
+            if (columnGroups) {
+                for (const group of columnGroups) {
+                    // Skip if already marked
+                    if (group.some(mesh => cachedOccludingMeshes.has(mesh))) continue;
+                    // Check if any part of the column is occluding
+                    let groupOccludes = false;
+                    for (const mesh of group) {
+                        _meshBox.setFromObject(mesh);
+                        if (_ray.intersectBox(_meshBox, _intersection)) {
+                            if (_cameraPos.distanceTo(_intersection) < distToUnit) {
+                                groupOccludes = true;
+                                break;
+                            }
+                        }
+                    }
+                    // If any part occludes, mark ALL parts of the column
+                    if (groupOccludes) {
+                        for (const mesh of group) {
+                            cachedOccludingMeshes.add(mesh);
+                        }
+                    }
+                }
+            } else if (columnMeshes) {
+                // Fallback: check individual meshes if no groups provided
+                for (const mesh of columnMeshes) {
                     if (cachedOccludingMeshes.has(mesh)) continue;
                     _meshBox.setFromObject(mesh);
                     if (_ray.intersectBox(_meshBox, _intersection)) {
@@ -928,6 +978,16 @@ export function updateWallTransparency(
     // Update tree opacities if provided
     if (treeMeshes) {
         for (const mesh of treeMeshes) {
+            const mat = mesh.material as THREE.MeshStandardMaterial;
+            const targetOpacity = cachedOccludingMeshes.has(mesh) ? WALL_OPACITY_OCCLUDING : WALL_OPACITY_NORMAL;
+            mat.opacity += (targetOpacity - mat.opacity) * WALL_OPACITY_LERP_SPEED;
+            if (Math.abs(mat.opacity - targetOpacity) < 0.01) mat.opacity = targetOpacity;
+        }
+    }
+
+    // Update column opacities if provided
+    if (columnMeshes) {
+        for (const mesh of columnMeshes) {
             const mat = mesh.material as THREE.MeshStandardMaterial;
             const targetOpacity = cachedOccludingMeshes.has(mesh) ? WALL_OPACITY_OCCLUDING : WALL_OPACITY_NORMAL;
             mat.opacity += (targetOpacity - mat.opacity) * WALL_OPACITY_LERP_SPEED;

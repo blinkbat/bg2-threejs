@@ -77,6 +77,7 @@ export interface AreaData {
     ambientLight: number;        // Ambient light intensity
     directionalLight: number;    // Directional light intensity
     hasFogOfWar: boolean;
+    defaultSpawn: { x: number; z: number };  // Default spawn point for debug warps
 }
 
 export interface ComputedAreaData {
@@ -286,6 +287,7 @@ export const DUNGEON_AREA: AreaData = {
     ambientLight: 0.15,
     directionalLight: 0.25,
     hasFogOfWar: true,
+    defaultSpawn: { x: 6, z: 6 },  // Center of spawn room
     rooms: [
         { x: 1, z: 1, w: 12, h: 12 },      // Room A - player spawn (SW)
         { x: 1, z: 36, w: 12, h: 12 },     // Room B - NW
@@ -383,18 +385,42 @@ export const FIELD_AREA: AreaData = {
     flavor: "Something skitters in the shadows between the trees.",
     gridSize: GRID_SIZE,
     backgroundColor: "#87CEEB",  // Sky blue
-    groundColor: "#228B22",      // Forest green
+    groundColor: "#2d5a27",      // Forest green (matches floor tiles)
     ambientLight: 0.5,           // Bright outdoor lighting
     directionalLight: 0.8,
     hasFogOfWar: true,            // Fog of war like dungeon
+    defaultSpawn: { x: 25, z: 25 },  // Center of forest
     rooms: [
         // Single large open area
         { x: 1, z: 1, w: 48, h: 48 }
     ],
     hallways: [],  // No hallways - open field
     roomFloors: [
-        // Main grass floor
-        { x: 1, z: 1, w: 48, h: 48, color: "#2d5a27" }
+        // Tiled grass floor - subtle color variations (similar value/vibrancy)
+        // Row 1 (z: 1-12)
+        { x: 1, z: 1, w: 16, h: 12, color: "#2d5a27" },
+        { x: 17, z: 1, w: 16, h: 12, color: "#325d2c" },
+        { x: 33, z: 1, w: 16, h: 12, color: "#2a5830" },
+        // Row 2 (z: 13-24)
+        { x: 1, z: 13, w: 12, h: 12, color: "#305b2a" },
+        { x: 13, z: 13, w: 6, h: 5, color: "#4a4035" },    // Dirt patch
+        { x: 13, z: 18, w: 10, h: 6, color: "#2d5a27" },
+        { x: 19, z: 13, w: 14, h: 5, color: "#2a5830" },
+        { x: 23, z: 18, w: 10, h: 6, color: "#2f5c29" },
+        { x: 33, z: 13, w: 5, h: 5, color: "#453a30" },    // Dirt patch
+        { x: 38, z: 13, w: 11, h: 12, color: "#2d5a27" },
+        { x: 33, z: 18, w: 5, h: 6, color: "#325d2c" },
+        // Row 3 (z: 25-36)
+        { x: 1, z: 25, w: 16, h: 12, color: "#2a5830" },
+        { x: 17, z: 25, w: 16, h: 12, color: "#2d5a27" },
+        { x: 33, z: 25, w: 7, h: 5, color: "#4a4035" },    // Dirt patch
+        { x: 40, z: 25, w: 9, h: 12, color: "#305b2a" },
+        { x: 33, z: 30, w: 7, h: 7, color: "#2a5830" },
+        // Row 4 (z: 37-48)
+        { x: 1, z: 37, w: 20, h: 12, color: "#2d5a27" },
+        { x: 21, z: 37, w: 7, h: 5, color: "#453a30" },    // Dirt patch
+        { x: 28, z: 37, w: 21, h: 12, color: "#325d2c" },
+        { x: 21, z: 42, w: 7, h: 7, color: "#2f5c29" },
     ],
     enemySpawns: [
         // Brood Mothers scattered in the forest
@@ -481,12 +507,12 @@ export const FIELD_AREA: AreaData = {
         // South side (sparse near door area)
         { x: 14, z: 46, size: 0.7 },
         { x: 34, z: 46, size: 0.8 },
-        // GIANT TREES - ancient forest sentinels
-        { x: 6, z: 15, size: 2.5 },    // West side giant
-        { x: 42, z: 28, size: 2.8 },   // East side giant
-        { x: 15, z: 35, size: 2.3 },   // Southwest giant
-        { x: 38, z: 15, size: 2.6 },   // Northeast giant
-        { x: 25, z: 25, size: 3.0 },   // Center giant - the biggest
+        // GIANT TREES - ancient forest sentinels (reduced sizes)
+        { x: 6, z: 15, size: 1.8 },    // West side giant
+        { x: 42, z: 28, size: 1.9 },   // East side giant
+        { x: 15, z: 35, size: 1.7 },   // Southwest giant
+        { x: 38, z: 15, size: 1.8 },   // Northeast giant
+        { x: 25, z: 25, size: 2.0 },   // Center giant - the biggest
     ]
 };
 
@@ -500,19 +526,42 @@ export const COAST_AREA: AreaData = {
     ambientLight: 0.6,
     directionalLight: 0.9,
     hasFogOfWar: true,
+    defaultSpawn: { x: 25, z: 12 },  // Near water's edge
     rooms: [
         // Full area - water is visual only (no walls)
         { x: 1, z: 1, w: 48, h: 48 }
     ],
     hallways: [],
     roomFloors: [
-        // Sandy beach - gradient from dry to wet sand
-        { x: 1, z: 40, w: 48, h: 9, color: "#d4c4a8" },   // Dry sand (north)
-        { x: 1, z: 22, w: 48, h: 18, color: "#c2b280" },  // Mid sand (expanded)
-        { x: 1, z: 10, w: 48, h: 12, color: "#a89968" },  // Wet sand (near water)
-        // Shoreline visual - reduced water
-        { x: 1, z: 5, w: 48, h: 5, color: "#5f9ea0" },    // Shallow water (smaller)
-        { x: 1, z: 1, w: 48, h: 4, color: "#4682b4" }     // Deep water (smaller)
+        // Non-overlapping tiles from south to north
+        // Water (z: 1-9)
+        { x: 1, z: 1, w: 48, h: 4, color: "#4682b4" },    // Deep water
+        { x: 1, z: 5, w: 48, h: 5, color: "#5f9ea0" },    // Shallow water
+        // Wet sand (z: 10-21)
+        { x: 1, z: 10, w: 48, h: 12, color: "#a89968" },
+        // Mid sand (z: 22-39)
+        { x: 1, z: 22, w: 48, h: 18, color: "#c2b280" },
+        // Dry sand and grass patches (z: 40-49) - non-overlapping
+        { x: 1, z: 40, w: 2, h: 9, color: "#d4c4a8" },    // Sand west edge
+        { x: 3, z: 40, w: 8, h: 5, color: "#d4c4a8" },    // Sand under grass
+        { x: 3, z: 45, w: 8, h: 4, color: "#8ab07a" },    // Grass west
+        { x: 11, z: 40, w: 3, h: 2, color: "#d4c4a8" },   // Sand gap
+        { x: 11, z: 42, w: 3, h: 7, color: "#d4c4a8" },   // Sand
+        { x: 14, z: 40, w: 5, h: 2, color: "#d4c4a8" },   // Sand
+        { x: 14, z: 42, w: 5, h: 4, color: "#7a9a6a" },   // Grass small
+        { x: 14, z: 46, w: 6, h: 3, color: "#d4c4a8" },   // Sand
+        { x: 19, z: 40, w: 1, h: 6, color: "#d4c4a8" },   // Sand strip
+        { x: 20, z: 40, w: 10, h: 6, color: "#d4c4a8" },  // Sand
+        { x: 20, z: 46, w: 10, h: 3, color: "#7a9a6a" },  // Grass center
+        { x: 30, z: 40, w: 2, h: 3, color: "#d4c4a8" },   // Sand
+        { x: 30, z: 43, w: 2, h: 6, color: "#d4c4a8" },   // Sand
+        { x: 32, z: 40, w: 4, h: 3, color: "#d4c4a8" },   // Sand
+        { x: 32, z: 43, w: 4, h: 3, color: "#8ab07a" },   // Grass small
+        { x: 32, z: 46, w: 6, h: 3, color: "#d4c4a8" },   // Sand
+        { x: 36, z: 40, w: 2, h: 4, color: "#d4c4a8" },   // Sand
+        { x: 38, z: 40, w: 10, h: 4, color: "#d4c4a8" },  // Sand under grass
+        { x: 38, z: 44, w: 10, h: 5, color: "#9ac08a" },  // Grass east
+        { x: 48, z: 40, w: 1, h: 9, color: "#d4c4a8" },   // Sand east edge
     ],
     enemySpawns: [
         { x: 15, z: 42, type: "giant_amoeba" },
@@ -533,19 +582,20 @@ export const COAST_AREA: AreaData = {
     ],
     chests: [],
     trees: [
-        // Palm trees scattered along the beach
-        { x: 5, z: 42, size: 1.2 },
-        { x: 12, z: 44, size: 1.0 },
-        { x: 18, z: 41, size: 1.3 },
-        { x: 32, z: 43, size: 1.1 },
-        { x: 40, z: 42, size: 1.2 },
-        { x: 46, z: 45, size: 0.9 },
-        // Mid beach
-        { x: 8, z: 30, size: 1.0 },
-        { x: 42, z: 32, size: 1.1 },
-        // Near water's edge (party spawn area)
-        { x: 18, z: 20, size: 1.1 },
-        { x: 32, z: 19, size: 1.0 },
+        // Palm trees scattered on sandy areas (away from water)
+        { x: 5, z: 44, size: 1.2 },
+        { x: 12, z: 46, size: 1.0 },
+        { x: 18, z: 43, size: 1.3 },
+        { x: 32, z: 45, size: 1.1 },
+        { x: 40, z: 44, size: 1.2 },
+        { x: 46, z: 47, size: 0.9 },
+        // Mid-north beach (sandy area)
+        { x: 8, z: 38, size: 1.0 },
+        { x: 42, z: 40, size: 1.1 },
+        { x: 25, z: 42, size: 1.0 },
+        // Along the grassy inland edge
+        { x: 15, z: 47, size: 1.1 },
+        { x: 35, z: 48, size: 1.0 },
     ]
 };
 
@@ -559,6 +609,7 @@ export const RUINS_AREA: AreaData = {
     ambientLight: 0.4,
     directionalLight: 0.6,
     hasFogOfWar: true,
+    defaultSpawn: { x: 3, z: 25 },  // In the entrance hallway
     rooms: [
         // Main temple floor - large open area
         { x: 5, z: 5, w: 40, h: 40 },

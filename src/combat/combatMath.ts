@@ -347,9 +347,9 @@ export function logCast(casterName: string, skillName: string): string {
 /** "{unit}'s {skill} hits {count} target(s) for {damage} total damage!" */
 export function logAoeHit(casterName: string, skillName: string, hitCount: number, totalDamage?: number): string {
     if (totalDamage !== undefined) {
-        return `${casterName}'s ${skillName} hits ${hitCount} target${hitCount !== 1 ? 's' : ''} for ${totalDamage} total damage!`;
+        return `${casterName}'s ${skillName} hits ${hitCount} time${hitCount !== 1 ? 's' : ''} for ${totalDamage} total damage!`;
     }
-    return `${casterName}'s ${skillName} hits ${hitCount} target${hitCount !== 1 ? 's' : ''}!`;
+    return `${casterName}'s ${skillName} hits ${hitCount} time${hitCount !== 1 ? 's' : ''}!`;
 }
 
 /** "{unit}'s {skill} misses!" (for AOE that hits nothing) */

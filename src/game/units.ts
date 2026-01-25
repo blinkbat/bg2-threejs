@@ -129,7 +129,7 @@ export const SKILLS: Record<string, Skill> = {
         name: "Sanctuary",
         description: "Consecrate the ground, dispelling hazards and creating holy tiles that heal allies over time.",
         flavor: "\"Stand fast, for this ground is sacred now.\" - Paladin Aldric",
-        manaCost: 18,
+        manaCost: 20,
         cooldown: 15000,
         type: "sanctuary",
         targetType: "aoe",
@@ -227,6 +227,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         armor: 3,
         color: "#556B2F",
         aggroRange: 8,
+        moveSpeed: 0.4,  // Slow movement
         attackCooldown: 3000,
         size: 2.0,
         skill: {
@@ -269,7 +270,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         size: 0.6,  // Small
         range: 1.0,  // Short melee range - they're small
         poisonChance: 20,  // 20% chance to apply weak poison on hit
-        poisonDamage: 1,  // Weak poison - only 1 damage per tick
+        poisonDamage: 1,  // Weak poison
         moveSpeed: 1.8  // 50% faster than normal
     },
     giant_amoeba: {

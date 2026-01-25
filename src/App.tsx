@@ -16,7 +16,7 @@ import { getCurrentArea, setCurrentArea, AREAS, DEFAULT_STARTING_AREA, DEFAULT_S
 import { UNIT_DATA, ENEMY_STATS, getBasicAttackSkill } from "./game/units";
 import { createScene, updateCamera, updateWallTransparency, updateTreeFogVisibility, updateLightLOD, addUnitToScene, updateWater, type DoorMesh } from "./rendering/scene";
 import { soundFns } from "./audio/sound";
-import { updateDynamicObstacles } from "./ai/pathfinding";
+import { updateDynamicObstacles, findSpawnPositions } from "./ai/pathfinding";
 import { updateUnitCache } from "./ai/unitAI";
 import { resetAllBroodMotherScreeches } from "./game/enemyState";
 
@@ -125,6 +125,8 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
     const aoeIndicatorRef = useRef<THREE.Mesh | null>(null);
     const wallMeshesRef = useRef<THREE.Mesh[]>([]);
     const treeMeshesRef = useRef<THREE.Mesh[]>([]);
+    const columnMeshesRef = useRef<THREE.Mesh[]>([]);
+    const columnGroupsRef = useRef<THREE.Mesh[][]>([]);
     const doorMeshesRef = useRef<DoorMesh[]>([]);
     const waterMeshRef = useRef<THREE.Mesh | null>(null);
     const debugGridRef = useRef<THREE.Group | null>(null);
@@ -143,13 +145,17 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         const playerIds = Object.keys(UNIT_DATA).map(Number);
         const spawn = spawnPoint ?? DEFAULT_SPAWN_POINT;
 
+        // Find passable spawn positions so units don't get stuck in walls
+        const spawnPositions = findSpawnPositions(spawn.x, spawn.z, playerIds.length);
+
         const players: Unit[] = playerIds.map((id, i) => {
             const data = UNIT_DATA[id];
             const persisted = persistedPlayers?.find(p => p.id === id);
+            const pos = spawnPositions[i] ?? { x: spawn.x, z: spawn.z };
             return {
                 id,
-                x: spawn.x + (i % 3) * 1.5 - 1.5,
-                z: spawn.z + Math.floor(i / 3) * 1.5,
+                x: pos.x,
+                z: pos.z,
                 hp: persisted?.hp ?? data.hp,
                 mana: persisted?.mana ?? data.mana,
                 team: "player" as const,
@@ -314,7 +320,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         sanctuaryTilesRef.current.clear();  // Clear sanctuary tiles
 
         const sceneRefs = createScene(containerRef.current, units);
-        const { scene, camera, renderer, flames, candleMeshes, candleLights, fogTexture, fogMesh, moveMarker, rangeIndicator, aoeIndicator, unitGroups, selectRings, targetRings, shieldIndicators, unitMeshes, unitOriginalColors, maxHp, wallMeshes, treeMeshes, doorMeshes, waterMesh } = sceneRefs;
+        const { scene, camera, renderer, flames, candleMeshes, candleLights, fogTexture, fogMesh, moveMarker, rangeIndicator, aoeIndicator, unitGroups, selectRings, targetRings, shieldIndicators, unitMeshes, unitOriginalColors, maxHp, wallMeshes, treeMeshes, columnMeshes, columnGroups, doorMeshes, waterMesh } = sceneRefs;
 
         sceneRef.current = scene;
         cameraRef.current = camera;
@@ -333,6 +339,8 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         maxHpRef.current = maxHp;
         wallMeshesRef.current = wallMeshes;
         treeMeshesRef.current = treeMeshes;
+        columnMeshesRef.current = columnMeshes;
+        columnGroupsRef.current = columnGroups;
         doorMeshesRef.current = doorMeshes;
         waterMeshRef.current = waterMesh;
         units.forEach(unit => { pathsRef.current[unit.id] = []; });
@@ -952,7 +960,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
             setHpBarPositions(updateHpBarPositions(currentUnits, unitsRef.current, camera, rect, zoomLevel.current));
 
             // Update wall, tree, and candle transparency for occluded units
-            updateWallTransparency(camera, wallMeshesRef.current, unitsRef.current, currentUnits, treeMeshesRef.current, candleMeshes, flames);
+            updateWallTransparency(camera, wallMeshesRef.current, unitsRef.current, currentUnits, treeMeshesRef.current, columnMeshesRef.current, columnGroupsRef.current, candleMeshes, flames);
 
             // Light LOD - disable distant room lights to save GPU
             updateLightLOD(candleLights, cameraOffset.current);
@@ -1063,8 +1071,9 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
             statusEffects: u.statusEffects
         }));
 
-        // Use default spawn point for debug warps
-        onAreaTransition(persistedState, areaId, DEFAULT_SPAWN_POINT);
+        // Use the area's default spawn point for debug warps
+        const targetArea = AREAS[areaId];
+        onAreaTransition(persistedState, areaId, targetArea.defaultSpawn);
     };
 
     return (
