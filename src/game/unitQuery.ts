@@ -3,7 +3,7 @@
 // =============================================================================
 
 import type { Unit, UnitGroup } from "../core/types";
-import { distanceToPoint, distanceBetween } from "./geometry";
+import { distanceToPoint } from "./geometry";
 
 /**
  * Find the nearest unit matching a filter condition.
