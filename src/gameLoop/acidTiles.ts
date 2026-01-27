@@ -102,7 +102,9 @@ export function processAcidTiles(
 
     acidTiles.forEach((tile, key) => {
         // Accumulate time since last tick (pause-safe delta)
-        const delta = now - tile.lastUpdateTime;
+        // Cap delta to prevent pause/unpause from causing instant multi-ticks
+        const rawDelta = now - tile.lastUpdateTime;
+        const delta = Math.min(rawDelta, 100); // Max 100ms per frame
         tile.timeSinceTick += delta;
 
         // Handle expiration and fade (also updates lastUpdateTime)

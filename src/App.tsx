@@ -178,7 +178,9 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                 team: "enemy" as const,
                 enemyType: spawn.type,
                 target: null,
-                aiEnabled: true
+                aiEnabled: true,
+                // Initialize facing for front-shielded enemies (face south by default)
+                ...(stats.frontShield && { facing: 0 })
             };
         });
 

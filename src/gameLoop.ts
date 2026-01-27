@@ -4,7 +4,7 @@
 
 import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation, EnemyStats, EnemySpawnSkill } from "./core/types";
-import { COLORS, SKILL_SINGLE_TARGET_CHANCE, SLOW_COOLDOWN_MULT, SLOW_MOVE_MULT } from "./core/constants";
+import { COLORS, SKILL_SINGLE_TARGET_CHANCE, SLOW_COOLDOWN_MULT, SLOW_MOVE_MULT, ACID_AURA_COOLDOWN, ACID_AURA_RADIUS } from "./core/constants";
 import { getUnitRadius, isInRange } from "./rendering/range";
 import { tryKite, type KiteContext } from "./ai/targeting";
 import {
@@ -219,9 +219,9 @@ export function updateUnitAI(
             // Acid aura when stationary
             if (slugData.acidAura && !movedCell) {
                 const auraCooldownKey = `${unit.id}-acidAura`;
-                const auraCooldownEnd = skillCooldowns[auraCooldownKey]?.end || 0;
-                const auraCooldown = slugData.acidAuraCooldown || 3000;
-                const auraRadius = slugData.acidAuraRadius || 1.5;
+                const auraCooldownEnd = skillCooldowns[auraCooldownKey]?.end ?? 0;
+                const auraCooldown = slugData.acidAuraCooldown ?? ACID_AURA_COOLDOWN;
+                const auraRadius = slugData.acidAuraRadius ?? ACID_AURA_RADIUS;
 
                 if (now >= auraCooldownEnd) {
                     const centerX = newGridX;
@@ -463,7 +463,7 @@ export function updateUnitAI(
 
                         if (rollHit(data.accuracy)) {
                             const effectiveDamage = getEffectiveDamage(unit, data.damage as [number, number]);
-                            const dmg = calculateDamage(effectiveDamage[0], effectiveDamage[1], getEffectiveArmor(targetU, targetData.armor));
+                            const dmg = calculateDamage(effectiveDamage[0], effectiveDamage[1], getEffectiveArmor(targetU, targetData.armor), "physical");
                             const willPoison = shouldApplyPoison(data as EnemyStats);
                             const willSlow = shouldApplySlow(data as EnemyStats);
                             const poisonDmg = willPoison && 'poisonDamage' in data ? (data as EnemyStats).poisonDamage : undefined;
@@ -552,9 +552,9 @@ export function updateUnitAI(
         // Acid aura - periodically create acid around self when NOT moving
         if (enemyStats.acidAura && !movedCell) {
             const auraCooldownKey = `${unit.id}-acidAura`;
-            const auraCooldownEnd = skillCooldowns[auraCooldownKey]?.end || 0;
-            const auraCooldown = enemyStats.acidAuraCooldown || 3000;
-            const auraRadius = enemyStats.acidAuraRadius || 1.5;
+            const auraCooldownEnd = skillCooldowns[auraCooldownKey]?.end ?? 0;
+            const auraCooldown = enemyStats.acidAuraCooldown ?? ACID_AURA_COOLDOWN;
+            const auraRadius = enemyStats.acidAuraRadius ?? ACID_AURA_RADIUS;
 
             if (now >= auraCooldownEnd) {
                 // Create acid tiles in radius around slug

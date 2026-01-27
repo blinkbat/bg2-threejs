@@ -52,7 +52,7 @@ export interface Skill {
     range: number;
     aoeRadius?: number;
     value: [number, number];  // damage/heal range, or taunt chance for taunt skills
-    damageType?: DamageType;  // Type of damage - armor only reduces physical (default: physical)
+    damageType: DamageType;  // Type of damage - armor only reduces physical
     projectileColor?: string;
     poisonChance?: number;  // 0-100 percent chance to apply poison on hit
     hitCount?: number;  // Number of hits for flurry-type skills
@@ -85,7 +85,7 @@ export interface EnemySkill {
     damage: [number, number];
     maxTargets: number;    // how many units it can hit
     range: number;         // activation range
-    damageType?: DamageType;  // Type of damage - armor only reduces physical (default: physical)
+    damageType: DamageType;  // Type of damage - armor only reduces physical
 }
 
 export interface EnemyHealSkill {
@@ -124,8 +124,8 @@ export interface EnemyStats {
     kiteTrigger?: number;    // Distance at which kiting triggers (melee range)
     // Optional spawn skill for spawner enemies (like Brood Mother)
     spawnSkill?: EnemySpawnSkill;
-    // Optional movement speed multiplier (default 1.0)
-    moveSpeed?: number;
+    // Movement speed multiplier (1.0 = normal speed)
+    moveSpeed: number;
     // Optional max split count for splitting enemies (like Giant Amoeba)
     maxSplitCount?: number;
     // Optional acid trail for acid slug enemies
@@ -161,7 +161,7 @@ export interface EnemyChargeAttack {
     damage: [number, number];
     crossWidth: number;      // Width of cross arms in grid cells
     crossLength: number;     // Length of cross arms in grid cells
-    damageType?: DamageType;  // Type of damage - armor only reduces physical (default: physical)
+    damageType: DamageType;  // Type of damage - armor only reduces physical
 }
 
 export interface Room {
@@ -260,6 +260,7 @@ export interface AoeProjectile extends BaseProjectile {
     targetPos: { x: number; z: number };
     aoeRadius: number;
     damage: [number, number];
+    damageType: DamageType;
 }
 
 export interface MagicMissileProjectile extends BaseProjectile {
@@ -267,6 +268,7 @@ export interface MagicMissileProjectile extends BaseProjectile {
     targetId: number;          // -1 if no enemy target (position-based)
     targetPos?: { x: number; z: number };  // Used when targetId is -1
     damage: [number, number];
+    damageType: DamageType;
     // Zig-zag properties
     zigzagOffset: number;      // Current lateral offset
     zigzagDirection: number;   // 1 or -1

@@ -131,7 +131,7 @@ export function startChargeAttack(
         lastUpdateTime: now,
         chargeTime: chargeAttack.chargeTime,
         damage: chargeAttack.damage,
-        damageType: chargeAttack.damageType ?? "physical",
+        damageType: chargeAttack.damageType,
         crossWidth: chargeAttack.crossWidth,
         crossLength: chargeAttack.crossLength,
         centerX,
@@ -180,7 +180,9 @@ export function processChargeAttacks(
         }
 
         // Accumulate elapsed time using delta (pause-safe)
-        const delta = now - charge.lastUpdateTime;
+        // Cap delta to prevent pause/unpause from causing instant charge completion
+        const rawDelta = now - charge.lastUpdateTime;
+        const delta = Math.min(rawDelta, 100); // Max 100ms per frame (~10fps minimum)
         charge.elapsedTime += delta;
         charge.lastUpdateTime = now;
 

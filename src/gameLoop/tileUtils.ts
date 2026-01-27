@@ -76,7 +76,9 @@ export function updateTileFade<T extends BaseTile>(
     config: TileProcessConfig
 ): boolean {
     // Accumulate elapsed time using delta (pause-safe)
-    const delta = now - tile.lastUpdateTime;
+    // Cap delta to prevent pause/unpause from causing instant expiration
+    const rawDelta = now - tile.lastUpdateTime;
+    const delta = Math.min(rawDelta, 100); // Max 100ms per frame
     tile.elapsedTime += delta;
     tile.lastUpdateTime = now;
 

@@ -74,7 +74,7 @@ export const rollHit = (accuracy: number): boolean =>
  * Armor only reduces physical damage - magic bypasses armor entirely.
  * Always returns at least 1 damage.
  */
-export function calculateDamage(rawMin: number, rawMax: number, armor: number, damageType: DamageType = "physical"): number {
+export function calculateDamage(rawMin: number, rawMax: number, armor: number, damageType: DamageType): number {
     const rolled = rollDamage(rawMin, rawMax);
     // Only physical damage is reduced by armor
     if (damageType === "physical") {
@@ -88,7 +88,7 @@ export function calculateDamage(rawMin: number, rawMax: number, armor: number, d
  * Armor only reduces physical damage - magic bypasses armor entirely.
  * Always returns at least 1 damage.
  */
-export function applyArmor(rawDamage: number, armor: number, damageType: DamageType = "physical"): number {
+export function applyArmor(rawDamage: number, armor: number, damageType: DamageType): number {
     // Only physical damage is reduced by armor
     if (damageType === "physical") {
         return Math.max(1, rawDamage - armor);

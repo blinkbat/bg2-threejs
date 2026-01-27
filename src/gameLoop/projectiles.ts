@@ -124,7 +124,7 @@ export function updateProjectiles(
                     if (targetDist <= aoeRadius) {
                         const targetData = getUnitStats(target);
                         const currentHp = hpTracker[target.id] ?? target.hp;
-                        const dmg = calculateDamage(damage[0], damage[1], getEffectiveArmor(target, targetData.armor));
+                        const dmg = calculateDamage(damage[0], damage[1], getEffectiveArmor(target, targetData.armor), proj.damageType);
 
                         const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
                         applyDamageToUnit(dmgCtx, target.id, tg, currentHp, dmg, targetData.name, {
@@ -247,7 +247,7 @@ export function updateProjectiles(
 
                         // Skip if target already dead (killed by another projectile this frame)
                         if (currentHp > 0) {
-                            dmgDealt = calculateDamage(mmProj.damage[0], mmProj.damage[1], getEffectiveArmor(targetUnit, targetData.armor));
+                            dmgDealt = calculateDamage(mmProj.damage[0], mmProj.damage[1], getEffectiveArmor(targetUnit, targetData.armor), mmProj.damageType);
 
                             const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
                             const mmAttackerG = unitsRef[mmProj.attackerId];

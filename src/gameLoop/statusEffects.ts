@@ -35,7 +35,9 @@ export function processStatusEffects(
 
         unit.statusEffects.forEach(effect => {
             // Calculate delta time for pause-safe accumulation
-            const delta = now - effect.lastUpdateTime;
+            // Cap delta to prevent pause/unpause from causing instant multi-ticks
+            const rawDelta = now - effect.lastUpdateTime;
+            const delta = Math.min(rawDelta, 100); // Max 100ms per frame
             const newTimeSinceTick = effect.timeSinceTick + delta;
 
             if (effect.type === "poison") {

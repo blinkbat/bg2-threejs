@@ -83,7 +83,7 @@ export function executeEnemySwipe(
         const targetData = getUnitStats(target);
 
         if (rollHit(enemyData.accuracy)) {
-            const dmg = calculateDamage(skill.damage[0], skill.damage[1], getEffectiveArmor(target, targetData.armor), skill.damageType ?? "physical");
+            const dmg = calculateDamage(skill.damage[0], skill.damage[1], getEffectiveArmor(target, targetData.armor), skill.damageType);
             applyDamageToUnit(dmgCtx, target.id, tg, currentHp, dmg, targetData.name, { color: COLORS.damageEnemy, targetUnit: target });
             hpTracker[target.id] = Math.max(0, currentHp - dmg);
             hitCount++;

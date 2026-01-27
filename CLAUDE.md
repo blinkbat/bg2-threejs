@@ -1,9 +1,33 @@
-# Instructions
+# Session Protocol
 
-- When beginning a new session, review the structure of the directories and files.
-- Scan for places where existing logic might be before starting work. 
-- Do not duplicate code. Reference existing files/functions instead of rewriting them.
-- Use existing utilities and helpers already in the codebase.
-- Use existing libraries whenever possible instead of writing redundant code.
-- Use the knowledge gained from scanning relevant files to implement solutions the "right way".
-- Make sure type safety is airtight for all solutions, without hacks. If a type needs to be expanded, do so.
+## Phase 1: Orientation (Always First)
+1. Map the directory structure and file organization
+2. Identify existing utilities, helpers, and shared logic
+3. Locate relevant type definitions and interfaces
+
+## Phase 2: Implementation Constraints
+
+### Code Reuse (Highest Priority)
+- Search for existing implementations before writing new code
+- Import and reference existing functions—never rewrite them
+- Prefer established libraries over custom implementations
+
+### Type Safety (Strict)
+- All types must be explicit and complete
+- No `undefined` defaults or optional properties unless explicitly specified
+- Expand existing types when necessary rather than using escape hatches (`any`, `as`, `!`)
+- If required values are unknown, ask—do not assume
+
+### Style
+- Use `"` for strings, not `'`
+- Use 4-space indentation
+
+## Absolutely Do Not
+- Duplicate logic that exists elsewhere in the codebase
+- Introduce new dependencies when existing ones suffice
+- Use type hacks (`any`, `unknown` casts, non-null assertions) to bypass errors
+- Assume default/optional values without confirmation
+- Invent utilities when they already exist—you didn't look hard enough
+- Write "placeholder" or "TODO" implementations
+- Guess at architecture patterns—match what's already there
+- Add runtime checks for things the type system can assure

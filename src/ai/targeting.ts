@@ -2,7 +2,7 @@
 // TARGETING - Target acquisition, kiting behavior for ranged enemies
 // =============================================================================
 
-import { GRID_SIZE } from "../core/constants";
+import { GRID_SIZE, DEFAULT_KITE_DISTANCE, DEFAULT_KITE_COOLDOWN } from "../core/constants";
 import { findPath, isPassable } from "./pathfinding";
 import { getEnemyKiteCooldown, setEnemyKiteCooldown, setEnemyKitingUntil } from "../game/enemyState";
 import { getDirectionAndDistance } from "../combat/combatMath";
@@ -137,9 +137,10 @@ export function tryKite(ctx: KiteContext, enemyData: EnemyStats): KiteResult {
     }
 
     // Calculate kiting parameters
-    const kiteDistance = enemyData.kiteDistance || 3;
+    const kiteDistance = enemyData.kiteDistance ?? DEFAULT_KITE_DISTANCE;
     // Shorter cooldown if recently hit - more desperate to escape
-    const kiteCooldown = recentlyHit ? (enemyData.kiteCooldown || 4000) / 2 : (enemyData.kiteCooldown || 4000);
+    const baseKiteCooldown = enemyData.kiteCooldown ?? DEFAULT_KITE_COOLDOWN;
+    const kiteCooldown = recentlyHit ? baseKiteCooldown / 2 : baseKiteCooldown;
 
     // Try to find a retreat path
     const { path } = findRetreatPath(g, nearestPlayerG.position.x, nearestPlayerG.position.z, kiteDistance);

@@ -7,6 +7,7 @@ export const FOG_SCALE = 4;  // Higher = sharper fog edges with linear filtering
 export const ATTACK_RANGE = 1.8;
 export const MOVE_SPEED = 0.05;
 export const DEFAULT_UNIT_RADIUS = 0.7;
+export const DEFAULT_MOVE_SPEED = 1.0;  // Normal movement speed multiplier
 export const VISION_RADIUS = 10;
 export const PAN_SPEED = 0.4;
 
@@ -72,6 +73,10 @@ export const PROJECTILE_CONFIG = {
 export const TARGET_SCAN_INTERVAL = 500;   // ms between target scans
 export const UNREACHABLE_COOLDOWN = 5000;  // Don't retry unreachable target for 5 seconds
 export const SKILL_SINGLE_TARGET_CHANCE = 0.3; // 30% chance to use skill on single target
+
+// AI Kiting
+export const DEFAULT_KITE_DISTANCE = 3;    // Grid cells to retreat
+export const DEFAULT_KITE_COOLDOWN = 4000; // ms between kite attempts
 
 // Pathfinding - Stuck Detection
 export const STUCK_REALLY_STUCK_MS = 1000;     // Time threshold for "really stuck" (moved < 0.2 in 1s)

@@ -1,5 +1,6 @@
 import type { UnitData, EnemyStats, EnemyType, Unit, Skill } from "../core/types";
 import { DEFAULT_SPAWN_POINT } from "./areas";
+import { DEFAULT_MOVE_SPEED } from "../core/constants";
 
 // =============================================================================
 // SKILLS
@@ -29,7 +30,8 @@ export const SKILLS: Record<string, Skill> = {
         type: "heal",
         targetType: "ally",
         range: 10,
-        value: [8, 12]
+        value: [8, 12],
+        damageType: "holy"
     },
     poisonDagger: {
         name: "Poison Dagger",
@@ -53,7 +55,8 @@ export const SKILLS: Record<string, Skill> = {
         type: "taunt",
         targetType: "self",  // centered on caster
         range: 6,  // taunt radius
-        value: [80, 80]  // 80% chance to taunt each enemy
+        value: [80, 80],  // 80% chance to taunt each enemy
+        damageType: "physical"
     },
     raiseShield: {
         name: "Raise Shield",
@@ -64,7 +67,8 @@ export const SKILLS: Record<string, Skill> = {
         type: "buff",
         targetType: "self",
         range: 0,
-        value: [20000, 20000]  // duration in ms (20 seconds)
+        value: [20000, 20000],  // duration in ms (20 seconds)
+        damageType: "physical"
     },
     flurryOfFists: {
         name: "Flurry of Fists",
@@ -101,7 +105,8 @@ export const SKILLS: Record<string, Skill> = {
         type: "buff",
         targetType: "ally",
         range: 8,
-        value: [30000, 30000]  // duration in ms (30 seconds)
+        value: [30000, 30000],  // duration in ms (30 seconds)
+        damageType: "holy"
     },
     magicWave: {
         name: "Magic Wave",
@@ -128,7 +133,8 @@ export const SKILLS: Record<string, Skill> = {
         targetType: "aoe",  // Position-targeted
         range: 8,
         aoeRadius: 2,  // Trigger and effect radius
-        value: [10000, 10000]  // Pinned duration in ms (10 seconds)
+        value: [10000, 10000],  // Pinned duration in ms (10 seconds)
+        damageType: "physical"
     },
     sanctuary: {
         name: "Sanctuary",
@@ -140,7 +146,8 @@ export const SKILLS: Record<string, Skill> = {
         targetType: "aoe",
         range: 4,
         aoeRadius: 2.5,  // Radius of effect
-        value: [3, 3]  // Heal per tick (uses SANCTUARY_HEAL_PER_TICK from constants)
+        value: [3, 3],  // Heal per tick (uses SANCTUARY_HEAL_PER_TICK from constants)
+        damageType: "holy"
     },
     qiFocus: {
         name: "Qi Focus",
@@ -152,7 +159,8 @@ export const SKILLS: Record<string, Skill> = {
         targetType: "ally",
         range: 6,
         value: [10, 14],  // Mana to give
-        selfDamage: [20, 30]  // HP cost to caster over time
+        selfDamage: [20, 30],  // HP cost to caster over time
+        damageType: "physical"
     }
 };
 
@@ -180,7 +188,8 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         armor: 0,
         color: "#8B4513",
         aggroRange: 6,
-        attackCooldown: 2000
+        attackCooldown: 2000,
+        moveSpeed: DEFAULT_MOVE_SPEED
     },
     kobold_archer: {
         name: "Kobold Archer",
@@ -195,6 +204,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         range: 6,
         projectileColor: "#8B4513",
         poisonChance: 35,  // 35% chance to poison on hit
+        moveSpeed: DEFAULT_MOVE_SPEED,
         // Kiting behavior - retreat when players get close
         kiteTrigger: 4,      // Start kiting when player within this range
         kiteDistance: 4,     // How far to retreat
@@ -212,6 +222,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         attackCooldown: 3000,
         range: 5,
         projectileColor: "#9932CC",  // Dark orchid
+        moveSpeed: DEFAULT_MOVE_SPEED,
         healSkill: {
             name: "Dark Mending",
             cooldown: 8000,  // 8 seconds
@@ -285,7 +296,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         maxHp: 55,
         damage: [6, 10],
         accuracy: 60,
-        armor: 1,
+        armor: 0,
         color: "#3cb371",  // Medium sea green - translucent blob
         aggroRange: 6,
         attackCooldown: 2000,
@@ -300,7 +311,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         maxHp: 120,
         damage: [3, 9],
         accuracy: 70,
-        armor: 0,
+        armor: 1,
         color: "#9acd32",  // Yellow-green - acidic
         aggroRange: 7,
         attackCooldown: 1800,
@@ -317,14 +328,14 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         maxHp: 25,
         damage: [3, 7],
         accuracy: 70,
-        armor: 0,
+        armor: 1,
         color: "#2a1a2a",  // Dark purple-black
         aggroRange: 10,    // Good vision in the dark
         attackCooldown: 1200,  // Fast attacks
         size: 1,
-        moveSpeed: 1.4,    // Fast flyer
+        moveSpeed: 1.4,    // Fast flyer (140% normal speed)
         flying: true,      // Floats above ground
-        lifesteal: 0.7     // Heals for 70% of damage dealt
+        lifesteal: 0.5     // Heals for 50% of damage dealt
     },
     undead_knight: {
         name: "Undead Knight",
@@ -343,8 +354,8 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     ancient_construct: {
         name: "Ancient Construct",
-        hp: 500,
-        maxHp: 500,
+        hp: 300,
+        maxHp: 300,
         damage: [10, 16],
         accuracy: 70,
         armor: 3,          // Heavy armor (magic bypasses)

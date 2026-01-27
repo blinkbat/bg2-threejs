@@ -143,6 +143,7 @@ export function executeAoeSkill(
         speed: getProjectileSpeed("aoe"),
         aoeRadius: skill.aoeRadius!,
         damage: skill.value,
+        damageType: skill.damageType,
         targetPos: { x: targetX, z: targetZ }
     });
 
@@ -345,7 +346,7 @@ export function executeMeleeSkill(
 
     // Roll to hit
     if (rollHit(casterData.accuracy)) {
-        const dmg = calculateDamage(skill.value[0], skill.value[1], getEffectiveArmor(targetEnemy, targetData.armor), skill.damageType ?? "physical");
+        const dmg = calculateDamage(skill.value[0], skill.value[1], getEffectiveArmor(targetEnemy, targetData.armor), skill.damageType);
         const willPoison = skill.poisonChance ? rollChance(skill.poisonChance) : false;
 
         // Read fresh HP from current state to avoid stale data race condition
@@ -651,7 +652,7 @@ export function executeFlurrySkill(
         }
 
         if (rollHit(casterData.accuracy)) {
-            const dmg = calculateDamage(skill.value[0], skill.value[1], getEffectiveArmor(target, targetData.armor), skill.damageType ?? "physical");
+            const dmg = calculateDamage(skill.value[0], skill.value[1], getEffectiveArmor(target, targetData.armor), skill.damageType);
 
             // Use tracked HP, not stale snapshot
             const currentHp = hpTracker[target.id];
@@ -935,6 +936,7 @@ export function executeMagicWaveSkill(
             targetId: targetId,
             speed: 0.07,
             damage: skill.value,
+            damageType: skill.damageType ?? "chaos",
             zigzagOffset: 0,
             zigzagDirection: i % 2 === 0 ? 1 : -1,
             zigzagPhase: i * 0.25 + Math.random() * 0.2,
