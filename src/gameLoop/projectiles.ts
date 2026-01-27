@@ -244,21 +244,26 @@ export function updateProjectiles(
                         // Hit an enemy - use tracked HP to handle multiple hits in same frame
                         const targetData = getUnitStats(targetUnit);
                         const currentHp = hpTracker[targetUnit.id] ?? targetUnit.hp;
-                        dmgDealt = calculateDamage(mmProj.damage[0], mmProj.damage[1], getEffectiveArmor(targetUnit, targetData.armor));
 
-                        const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
-                        const mmAttackerG = unitsRef[mmProj.attackerId];
-                        applyDamageToUnit(dmgCtx, targetUnit.id, targetG, currentHp, dmgDealt, targetData.name, {
-                            color: "#9966ff",
-                            attackerName: attackerUnit.team === "player" ? getUnitStats(attackerUnit).name : undefined,
-                            targetUnit: targetUnit,
-                            attackerPosition: mmAttackerG ? { x: mmAttackerG.position.x, z: mmAttackerG.position.z } : undefined
-                        });
+                        // Skip if target already dead (killed by another projectile this frame)
+                        if (currentHp > 0) {
+                            dmgDealt = calculateDamage(mmProj.damage[0], mmProj.damage[1], getEffectiveArmor(targetUnit, targetData.armor));
 
-                        // Update local HP tracker for subsequent projectiles in same frame
-                        hpTracker[targetUnit.id] = Math.max(0, currentHp - dmgDealt);
+                            const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
+                            const mmAttackerG = unitsRef[mmProj.attackerId];
+                            applyDamageToUnit(dmgCtx, targetUnit.id, targetG, currentHp, dmgDealt, targetData.name, {
+                                color: "#9966ff",
+                                attackerName: attackerUnit.team === "player" ? getUnitStats(attackerUnit).name : undefined,
+                                targetUnit: targetUnit,
+                                attackerPosition: mmAttackerG ? { x: mmAttackerG.position.x, z: mmAttackerG.position.z } : undefined
+                            });
 
-                        soundFns.playHit();
+                            // Update local HP tracker for subsequent projectiles in same frame
+                            hpTracker[targetUnit.id] = Math.max(0, currentHp - dmgDealt);
+
+                            soundFns.playHit();
+                        }
+                        // else: target already dead, don't apply damage (fizzle)
                     }
                 }
 
@@ -482,20 +487,13 @@ export function updateProjectiles(
                 const willPoison = attackerUnit.team === "enemy" && shouldApplyPoison(attackerData as EnemyStats);
                 const poisonDmg = willPoison && 'poisonDamage' in attackerData ? (attackerData as EnemyStats).poisonDamage : undefined;
 
-                // Calculate lifesteal upfront for log message
-                let actualHeal = 0;
+                // Calculate lifesteal heal amount for log message
                 const lifesteal = attackerUnit.team === "enemy" ? (attackerData as EnemyStats).lifesteal : undefined;
-                if (lifesteal && lifesteal > 0) {
-                    const healAmount = Math.floor(dmg * lifesteal);
-                    if (healAmount > 0) {
-                        const newHp = Math.min(attackerUnit.hp + healAmount, attackerData.maxHp);
-                        actualHeal = newHp - attackerUnit.hp;
-                    }
-                }
+                const healAmount = lifesteal && lifesteal > 0 ? Math.floor(dmg * lifesteal) : 0;
 
                 // Custom log for lifesteal attacks
-                const hitText = lifesteal && actualHeal > 0
-                    ? logLifestealHit(attackerData.name, targetData.name, dmg, actualHeal)
+                const hitText = healAmount > 0
+                    ? logLifestealHit(attackerData.name, targetData.name, dmg, healAmount)
                     : logHit(attackerData.name, "Attack", targetData.name, dmg);
 
                 const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
@@ -514,12 +512,13 @@ export function updateProjectiles(
                     addLog(logPoisoned(targetData.name), COLORS.poisonText);
                 }
 
-                // Apply lifesteal heal
-                if (actualHeal > 0 && attackerG) {
-                    setUnits(prev => prev.map(u =>
-                        u.id === attackerUnit.id ? { ...u, hp: Math.min(attackerUnit.hp + actualHeal, attackerData.maxHp) } : u
-                    ));
-                    spawnDamageNumber(scene, attackerG.position.x, attackerG.position.z, actualHeal, COLORS.logHeal, damageTexts, true);
+                // Apply lifesteal heal using fresh state to avoid race condition
+                if (healAmount > 0 && attackerG) {
+                    setUnits(prev => prev.map(u => {
+                        if (u.id !== attackerUnit.id) return u;
+                        return { ...u, hp: Math.min(u.hp + healAmount, attackerData.maxHp) };
+                    }));
+                    spawnDamageNumber(scene, attackerG.position.x, attackerG.position.z, healAmount, COLORS.logHeal, damageTexts, true);
                 }
             } else {
                 soundFns.playMiss();

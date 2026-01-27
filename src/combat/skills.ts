@@ -348,12 +348,21 @@ export function executeMeleeSkill(
         const dmg = calculateDamage(skill.value[0], skill.value[1], getEffectiveArmor(targetEnemy, targetData.armor), skill.damageType ?? "physical");
         const willPoison = skill.poisonChance ? rollChance(skill.poisonChance) : false;
 
+        // Read fresh HP from current state to avoid stale data race condition
+        const freshTarget = unitsStateRef.current.find(u => u.id === targetId);
+        const currentHp = freshTarget?.hp ?? targetEnemy.hp;
+
+        // Skip if target was already defeated this frame
+        if (currentHp <= 0 || defeatedThisFrame.has(targetId)) {
+            return true; // Skill consumed but target already dead
+        }
+
         // Use shared defeatedThisFrame from context
         const dmgCtx: DamageContext = {
             scene, damageTexts: damageTexts.current, hitFlashRef: hitFlashRef.current,
             unitsRef: unitsRef.current, setUnits, addLog, now, defeatedThisFrame
         };
-        applyDamageToUnit(dmgCtx, targetId, targetG, targetEnemy.hp, dmg, targetData.name, {
+        applyDamageToUnit(dmgCtx, targetId, targetG, currentHp, dmg, targetData.name, {
             color: COLORS.damagePlayer,
             poison: willPoison ? { sourceId: casterId } : undefined,
             attackerName: casterData.name,
@@ -625,8 +634,9 @@ export function executeFlurrySkill(
         const targetIdx = i % enemiesInRange.length;
         const { unit: target, group: targetG } = enemiesInRange[targetIdx];
 
-        // Skip if already defeated this frame
+        // Skip if already defeated this frame or HP already at 0 in tracker
         if (defeatedThisFrame.has(target.id)) continue;
+        if (hpTracker[target.id] <= 0) continue;
 
         const targetData = getUnitStats(target);
 

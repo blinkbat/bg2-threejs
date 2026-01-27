@@ -18,6 +18,7 @@ import {
 import { getUnitRadius } from "../rendering/range";
 import { clampToGrid, distanceBetween } from "../game/geometry";
 import { getAttackRange, ENEMY_STATS } from "../game/units";
+import { isUnitAlive } from "../combat/combatMath";
 import type { Unit, UnitGroup } from "../core/types";
 
 // =============================================================================
@@ -148,7 +149,7 @@ export function validateCurrentTarget(
         return { valid: false, targetUnit: undefined };
     }
     const targetUnit = unitsState.find(u => u.id === currentTarget);
-    const valid = targetUnit !== undefined && targetUnit.hp > 0 && !defeatedThisFrame.has(currentTarget);
+    const valid = targetUnit !== undefined && isUnitAlive(targetUnit, defeatedThisFrame);
     return { valid, targetUnit };
 }
 

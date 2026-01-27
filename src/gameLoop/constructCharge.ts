@@ -6,8 +6,8 @@ import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, EnemyChargeAttack, EnemyStats, DamageType } from "../core/types";
 import { COLORS } from "../core/constants";
 import { getUnitStats } from "../game/units";
-import { calculateDamage, rollHit, getEffectiveArmor, logAoeHit } from "../combat/combatMath";
-import { applyDamageToUnit, spawnDamageNumber, type DamageContext } from "../combat/combat";
+import { calculateDamage, rollHit, getEffectiveArmor, logAoeHit, isUnitAlive } from "../combat/combatMath";
+import { applyDamageToUnit, type DamageContext } from "../combat/combat";
 import { soundFns } from "../audio/sound";
 import { disposeBasicMesh } from "../rendering/disposal";
 
@@ -52,7 +52,6 @@ function createCrossMeshes(
     crossLength: number
 ): THREE.Mesh[] {
     const meshes: THREE.Mesh[] = [];
-    const tileSize = 1;
     const halfWidth = Math.floor(crossWidth / 2);
 
     // Create tiles for the cross pattern
@@ -259,7 +258,7 @@ function executeChargeAttack(
     let totalDamage = 0;
 
     unitsState.forEach(target => {
-        if (target.team !== "player" || target.hp <= 0 || defeatedThisFrame.has(target.id)) return;
+        if (target.team !== "player" || !isUnitAlive(target, defeatedThisFrame)) return;
 
         const tg = unitsRef[target.id];
         if (!tg) return;
@@ -279,7 +278,7 @@ function executeChargeAttack(
             if (rollHit(enemyData.accuracy)) {
                 const dmg = calculateDamage(charge.damage[0], charge.damage[1], getEffectiveArmor(target, targetData.armor), charge.damageType);
                 applyDamageToUnit(dmgCtx, target.id, tg, target.hp, dmg, targetData.name, {
-                    color: "#ff2200",
+                    color: COLORS.damageEnemy,
                     targetUnit: target
                 });
                 hitCount++;
@@ -294,7 +293,7 @@ function executeChargeAttack(
     // Play sound and log
     soundFns.playHit();
     if (hitCount > 0) {
-        addLog(logAoeHit(enemyData.name, charge.skillName, hitCount, totalDamage), "#ff2200");
+        addLog(logAoeHit(enemyData.name, charge.skillName, hitCount, totalDamage), COLORS.damageEnemy);
     } else {
         addLog(`${enemyData.name}'s ${charge.skillName} hits nothing!`, COLORS.logNeutral);
     }

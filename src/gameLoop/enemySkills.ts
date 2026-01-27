@@ -68,22 +68,31 @@ export function executeEnemySwipe(
     soundFns.playHit();
 
     // Deal damage to all targets
+    // Use hpTracker to handle multiple hits in same frame correctly
+    const hpTracker: Record<number, number> = {};
+    hitTargets.forEach(({ unit }) => { hpTracker[unit.id] = unit.hp; });
+
     let hitCount = 0;
     let totalDamage = 0;
     const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
     hitTargets.forEach(({ unit: target, group: tg }) => {
+        // Skip if already defeated this frame
+        const currentHp = hpTracker[target.id] ?? target.hp;
+        if (currentHp <= 0 || defeatedThisFrame.has(target.id)) return;
+
         const targetData = getUnitStats(target);
 
         if (rollHit(enemyData.accuracy)) {
             const dmg = calculateDamage(skill.damage[0], skill.damage[1], getEffectiveArmor(target, targetData.armor), skill.damageType ?? "physical");
-            applyDamageToUnit(dmgCtx, target.id, tg, target.hp, dmg, targetData.name, { color: "#ff4444", targetUnit: target });
+            applyDamageToUnit(dmgCtx, target.id, tg, currentHp, dmg, targetData.name, { color: COLORS.damageEnemy, targetUnit: target });
+            hpTracker[target.id] = Math.max(0, currentHp - dmg);
             hitCount++;
             totalDamage += dmg;
         }
     });
 
     if (hitCount > 0) {
-        addLog(logAoeHit(enemyData.name, skill.name, hitCount, totalDamage), "#ff4444");
+        addLog(logAoeHit(enemyData.name, skill.name, hitCount, totalDamage), COLORS.damageEnemy);
     } else {
         addLog(logAoeMiss(enemyData.name, skill.name), COLORS.logNeutral);
     }
@@ -137,16 +146,21 @@ export function executeEnemyHeal(
 
     const healAmount = Math.floor(Math.random() * (skill.heal[1] - skill.heal[0] + 1)) + skill.heal[0];
     const targetStats = getUnitStats(bestTarget.unit) as EnemyStats;
-    const newHp = Math.min(bestTarget.unit.hp + healAmount, targetStats.maxHp);
-    const actualHeal = newHp - bestTarget.unit.hp;
+    const targetId = bestTarget.unit.id;
+    const maxHp = targetStats.maxHp;
 
-    // Apply heal
-    setUnits(prev => prev.map(u =>
-        u.id === bestTarget!.unit.id ? { ...u, hp: newHp } : u
-    ));
+    // Estimate heal for visual (actual heal uses fresh state inside callback)
+    const estimatedHeal = Math.min(healAmount, maxHp - bestTarget.unit.hp);
 
-    // Spawn heal number (green)
-    spawnDamageNumber(scene, bestTarget.group.position.x, bestTarget.group.position.z, actualHeal, "#22c55e", damageTexts, true);
+    // Apply heal using fresh state to avoid stale HP race condition
+    setUnits(prev => prev.map(u => {
+        if (u.id !== targetId) return u;
+        if (u.hp <= 0) return u; // Don't heal dead units
+        return { ...u, hp: Math.min(u.hp + healAmount, maxHp) };
+    }));
+
+    // Spawn heal number (green) - uses snapshot estimate
+    spawnDamageNumber(scene, bestTarget.group.position.x, bestTarget.group.position.z, estimatedHeal, "#22c55e", damageTexts, true);
 
     // Visual effect - purple healing ring on target
     const ring = new THREE.Mesh(
@@ -159,7 +173,7 @@ export function executeEnemyHeal(
     animateExpandingMesh(scene, ring, { maxScale: 1.5, baseRadius: 0.4, duration: 300 });
 
     soundFns.playHeal();
-    addLog(`${enemyData.name} heals ${targetStats.name} for ${actualHeal}!`, "#9932CC");
+    addLog(`${enemyData.name} heals ${targetStats.name} for ${estimatedHeal}!`, "#9932CC");
 
     return true;
 }

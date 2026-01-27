@@ -14,7 +14,7 @@ import {
 import { getUnitStats, getBasicAttackSkill, getAttackRange, ENEMY_STATS } from "./game/units";
 import type { ActionQueue } from "./input";
 import { getNextUnitId } from "./core/unitIds";
-import { calculateDamage, rollHit, shouldApplyPoison, shouldApplySlow, hasStatusEffect, getEffectiveArmor, getEffectiveDamage, logHit, logLifestealHit, logMiss, logPoisoned, logSlowed } from "./combat/combatMath";
+import { calculateDamage, rollHit, shouldApplyPoison, shouldApplySlow, hasStatusEffect, getEffectiveArmor, getEffectiveDamage, logHit, logLifestealHit, logMiss, logPoisoned, logSlowed, isUnitAlive } from "./combat/combatMath";
 import { createProjectile, getProjectileSpeed, applyDamageToUnit, getAliveUnitsInRange, spawnDamageNumber, type DamageContext } from "./combat/combat";
 import { soundFns } from "./audio/sound";
 import { isEnemyKiting, clearEnemyKiting, hasBroodMotherScreeched, markBroodMotherScreeched } from "./game/enemyState";
@@ -345,7 +345,7 @@ export function updateUnitAI(
         const targetG = unitsRef[g.userData.attackTarget];
         const targetU = unitsState.find(u => u.id === g.userData.attackTarget);
 
-        if (targetG && targetU && targetU.hp > 0) {
+        if (targetG && targetU && isUnitAlive(targetU, defeatedThisFrame)) {
             targetX = targetG.position.x;
             targetZ = targetG.position.z;
             const unitRange = getAttackRange(unit);
@@ -469,19 +469,12 @@ export function updateUnitAI(
                             const poisonDmg = willPoison && 'poisonDamage' in data ? (data as EnemyStats).poisonDamage : undefined;
                             const lifesteal = (data as EnemyStats).lifesteal;
 
-                            // Calculate lifesteal heal amount upfront for log message
-                            let actualHeal = 0;
-                            if (lifesteal && lifesteal > 0) {
-                                const healAmount = Math.floor(dmg * lifesteal);
-                                if (healAmount > 0) {
-                                    const newHp = Math.min(unit.hp + healAmount, data.maxHp);
-                                    actualHeal = newHp - unit.hp;
-                                }
-                            }
+                            // Calculate lifesteal heal amount for log message (estimate based on current snapshot)
+                            const healAmount = lifesteal && lifesteal > 0 ? Math.floor(dmg * lifesteal) : 0;
 
                             // Custom log for lifesteal attacks
-                            const hitText = lifesteal && actualHeal > 0
-                                ? logLifestealHit(data.name, targetData.name, dmg, actualHeal)
+                            const hitText = healAmount > 0
+                                ? logLifestealHit(data.name, targetData.name, dmg, healAmount)
                                 : logHit(data.name, "Attack", targetData.name, dmg);
 
                             const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
@@ -501,12 +494,14 @@ export function updateUnitAI(
                                 addLog(logSlowed(targetData.name), "#5599ff");
                             }
 
-                            // Apply lifesteal heal
-                            if (actualHeal > 0) {
-                                setUnits(prev => prev.map(u =>
-                                    u.id === unit.id ? { ...u, hp: Math.min(unit.hp + actualHeal, data.maxHp) } : u
-                                ));
-                                spawnDamageNumber(scene, g.position.x, g.position.z, actualHeal, COLORS.logHeal, damageTexts, true);
+                            // Apply lifesteal heal using fresh state to avoid race condition
+                            if (healAmount > 0) {
+                                setUnits(prev => prev.map(u => {
+                                    if (u.id !== unit.id) return u;
+                                    // Calculate actual heal from fresh HP state
+                                    return { ...u, hp: Math.min(u.hp + healAmount, data.maxHp) };
+                                }));
+                                spawnDamageNumber(scene, g.position.x, g.position.z, healAmount, COLORS.logHeal, damageTexts, true);
                             }
                         } else {
                             soundFns.playMiss();
@@ -660,8 +655,8 @@ export function updateShieldFacing(
         let currentFacing = unit.facing ?? 0;
 
         // Determine target position - prioritize recent damage source
-        let targetX: number;
-        let targetZ: number;
+        let targetX: number | undefined;
+        let targetZ: number | undefined;
         const damageSource = g.userData.lastDamageSource;
 
         if (damageSource && (now - damageSource.time) < DAMAGE_SOURCE_PRIORITY_TIME) {
@@ -674,14 +669,19 @@ export function updateShieldFacing(
             if (targetG) {
                 targetX = targetG.position.x;
                 targetZ = targetG.position.z;
-            } else {
+            } else if (g.userData.targetX !== undefined && g.userData.targetZ !== undefined) {
                 targetX = g.userData.targetX;
                 targetZ = g.userData.targetZ;
             }
-        } else {
+        } else if (g.userData.targetX !== undefined && g.userData.targetZ !== undefined) {
             // Face movement target
             targetX = g.userData.targetX;
             targetZ = g.userData.targetZ;
+        }
+
+        // Skip if no valid target position (prevents NaN calculations)
+        if (targetX === undefined || targetZ === undefined) {
+            continue;
         }
 
         const dx = targetX - g.position.x;

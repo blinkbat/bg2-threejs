@@ -134,18 +134,22 @@ export function processSanctuaryTiles(
                 if (isUnitOnTile(unitG.position.x, unitG.position.z, tile.x, tile.z)) {
                     const data = getUnitStats(unit);
                     const maxHp = data.maxHp;
+                    const healPerTick = tile.healPerTick;
 
-                    // Only heal if not at max HP
-                    if (unit.hp < maxHp) {
-                        const healAmount = Math.min(tile.healPerTick, maxHp - unit.hp);
+                    // Calculate actual heal inside setUnits to use fresh HP state
+                    // This ensures proper ordering with poison/other damage in same frame
+                    setUnits(prev => prev.map(u => {
+                        if (u.id !== unit.id) return u;
+                        if (u.hp >= maxHp || u.hp <= 0) return u; // Already at max or dead
+                        const actualHeal = Math.min(healPerTick, maxHp - u.hp);
+                        return { ...u, hp: u.hp + actualHeal };
+                    }));
 
-                        setUnits(prev => prev.map(u => {
-                            if (u.id !== unit.id) return u;
-                            return { ...u, hp: Math.min(maxHp, u.hp + healAmount) };
-                        }));
-
-                        spawnDamageNumber(scene, unitG.position.x, unitG.position.z, healAmount, COLORS.sanctuaryText, damageTexts, true);
-                        addLog(`${data.name} is healed for ${healAmount} by Sanctuary.`, COLORS.sanctuaryText);
+                    // Show visual based on snapshot check (may slightly mismatch actual heal)
+                    if (unit.hp < maxHp && unit.hp > 0) {
+                        const estimatedHeal = Math.min(healPerTick, maxHp - unit.hp);
+                        spawnDamageNumber(scene, unitG.position.x, unitG.position.z, estimatedHeal, COLORS.sanctuaryText, damageTexts, true);
+                        addLog(`${data.name} is healed for ${estimatedHeal} by Sanctuary.`, COLORS.sanctuaryText);
                     }
                 }
             });

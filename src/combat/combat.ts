@@ -10,7 +10,7 @@ import { distanceToPoint } from "../game/geometry";
 import { soundFns } from "../audio/sound";
 import { cleanupUnitState } from "../ai/movement";
 import { cleanupEnemyKiteCooldown } from "../game/enemyState";
-import { logDefeated, applyPoison, applySlowed, hasStatusEffect } from "./combatMath";
+import { logDefeated, applyPoison, applySlowed, hasStatusEffect, isUnitAlive } from "./combatMath";
 import { tryKillBark } from "./barks";
 import { getNextUnitId } from "../core/unitIds";
 import { ENEMY_STATS } from "../game/units";
@@ -176,8 +176,7 @@ export function getAliveUnitsInRange(
     const results: { unit: Unit; group: UnitGroup; dist: number }[] = [];
 
     for (const unit of units) {
-        if (unit.team !== team || unit.hp <= 0) continue;
-        if (defeatedThisFrame?.has(unit.id)) continue;
+        if (unit.team !== team || !isUnitAlive(unit, defeatedThisFrame)) continue;
 
         const g = unitsRef[unit.id];
         if (!g) continue;
