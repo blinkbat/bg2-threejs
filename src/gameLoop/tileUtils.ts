@@ -9,12 +9,13 @@ import { disposeBasicMesh } from "../rendering/disposal";
 // TYPES
 // =============================================================================
 
-/** Base interface for all tile types */
+/** Base interface for all tile types (pause-safe with delta time accumulation) */
 export interface BaseTile {
     mesh: THREE.Mesh;
     x: number;
     z: number;
-    createdAt: number;
+    elapsedTime: number;     // Accumulated elapsed time
+    lastUpdateTime: number;  // For delta calculation
     duration: number;
 }
 
@@ -65,7 +66,8 @@ export function createTileMesh(x: number, z: number, config: TileMeshConfig): TH
 // =============================================================================
 
 /**
- * Update tile opacity based on remaining time (fade effect).
+ * Update tile elapsed time using delta accumulation (pause-safe).
+ * Also updates opacity based on remaining time (fade effect).
  * Returns true if tile has expired and should be removed.
  */
 export function updateTileFade<T extends BaseTile>(
@@ -73,15 +75,18 @@ export function updateTileFade<T extends BaseTile>(
     now: number,
     config: TileProcessConfig
 ): boolean {
-    const elapsed = now - tile.createdAt;
+    // Accumulate elapsed time using delta (pause-safe)
+    const delta = now - tile.lastUpdateTime;
+    tile.elapsedTime += delta;
+    tile.lastUpdateTime = now;
 
     // Check if expired
-    if (elapsed >= tile.duration) {
+    if (tile.elapsedTime >= tile.duration) {
         return true;
     }
 
     // Update opacity based on remaining time
-    const remaining = tile.duration - elapsed;
+    const remaining = tile.duration - tile.elapsedTime;
     const fadeStart = tile.duration * config.fadeStartPercent;
     if (remaining < fadeStart) {
         const fadeProgress = remaining / fadeStart;

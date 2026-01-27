@@ -269,7 +269,8 @@ export function executeManaTransferSkill(
                 type: "qi_drain",
                 duration: QI_DRAIN_DURATION,
                 tickInterval: QI_DRAIN_TICK_INTERVAL,
-                lastTick: now,
+                timeSinceTick: 0,
+                lastUpdateTime: now,
                 damagePerTick: damagePerTick,
                 sourceId: casterId
             };
@@ -344,7 +345,7 @@ export function executeMeleeSkill(
 
     // Roll to hit
     if (rollHit(casterData.accuracy)) {
-        const dmg = calculateDamage(skill.value[0], skill.value[1], getEffectiveArmor(targetEnemy, targetData.armor));
+        const dmg = calculateDamage(skill.value[0], skill.value[1], getEffectiveArmor(targetEnemy, targetData.armor), skill.damageType ?? "physical");
         const willPoison = skill.poisonChance ? rollChance(skill.poisonChance) : false;
 
         // Use shared defeatedThisFrame from context
@@ -460,7 +461,8 @@ export function executeBuffSkill(
             type: "shielded",
             duration,
             tickInterval: BUFF_TICK_INTERVAL,
-            lastTick: now,
+            timeSinceTick: 0,
+            lastUpdateTime: now,
             damagePerTick: 0,
             sourceId: casterId
         };
@@ -536,7 +538,8 @@ export function executeCleanseSkill(
             type: "cleansed",
             duration,
             tickInterval: BUFF_TICK_INTERVAL,
-            lastTick: now,
+            timeSinceTick: 0,
+            lastUpdateTime: now,
             damagePerTick: 0,
             sourceId: casterId
         };
@@ -638,7 +641,7 @@ export function executeFlurrySkill(
         }
 
         if (rollHit(casterData.accuracy)) {
-            const dmg = calculateDamage(skill.value[0], skill.value[1], getEffectiveArmor(target, targetData.armor));
+            const dmg = calculateDamage(skill.value[0], skill.value[1], getEffectiveArmor(target, targetData.armor), skill.damageType ?? "physical");
 
             // Use tracked HP, not stale snapshot
             const currentHp = hpTracker[target.id];
@@ -801,7 +804,8 @@ export function executeDebuffSkill(
                     type: "stunned",
                     duration: stunDuration,
                     tickInterval: BUFF_TICK_INTERVAL,
-                    lastTick: now,
+                    timeSinceTick: 0,
+                    lastUpdateTime: now,
                     damagePerTick: 0,
                     sourceId: casterId
                 };
@@ -975,7 +979,7 @@ export function executeTrapSkill(
     trapMesh.position.set(casterG.position.x, 0.5, casterG.position.z);
     scene.add(trapMesh);
 
-    // Create trap projectile with arc trajectory
+    // Create trap projectile with arc trajectory (pause-safe timing)
     const trapProjectile: TrapProjectile = {
         type: "trap",
         mesh: trapMesh,
@@ -986,7 +990,8 @@ export function executeTrapSkill(
         pinnedDuration: skill.value[0],
         startX: casterG.position.x,
         startZ: casterG.position.z,
-        startTime: now,
+        elapsedTime: 0,
+        lastUpdateTime: now,
         flightDuration: TRAP_FLIGHT_DURATION,
         arcHeight: TRAP_ARC_HEIGHT,
         isLanded: false

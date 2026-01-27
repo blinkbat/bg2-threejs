@@ -3,7 +3,7 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitGroup, DamageText, Projectile, EnemyStats, MagicMissileProjectile, TrapProjectile, StatusEffect } from "../core/types";
+import type { Unit, UnitGroup, DamageText, Projectile, EnemyStats, MagicMissileProjectile, TrapProjectile, StatusEffect, DamageType, UnitData } from "../core/types";
 import { HIT_DETECTION_RADIUS, COLORS, BUFF_TICK_INTERVAL } from "../core/constants";
 import { getUnitStats } from "../game/units";
 import { calculateDamage, getDirectionAndDistance, rollHit, shouldApplyPoison, getEffectiveArmor, logHit, logLifestealHit, logMiss, logPoisoned, logAoeHit, logAoeMiss, getDamageColor, logTrapTriggered, isBlockedByFrontShield } from "../combat/combatMath";
@@ -12,6 +12,19 @@ import { ENEMY_STATS } from "../game/units";
 import { applyDamageToUnit, animateExpandingMesh, spawnDamageNumber, type DamageContext } from "../combat/combat";
 import { soundFns } from "../audio/sound";
 import { disposeBasicMesh } from "../rendering/disposal";
+
+// =============================================================================
+// DAMAGE TYPE HELPERS
+// =============================================================================
+
+/** Get the damage type for a unit's basic attack based on class */
+function getBasicAttackDamageType(unit: Unit, unitData: UnitData | EnemyStats): DamageType {
+    if (unit.team === "player" && "class" in unitData) {
+        if (unitData.class === "Wizard") return "chaos";
+        if (unitData.class === "Cleric") return "holy";
+    }
+    return "physical";
+}
 
 // =============================================================================
 // MAGIC WAVE VOLLEY TRACKING
@@ -310,11 +323,15 @@ export function updateProjectiles(
         // Trap projectile (like Caltrops) - arc trajectory then wait for trigger
         if (proj.type === "trap") {
             const trapProj = proj as TrapProjectile;
-            const elapsed = now - trapProj.startTime;
+
+            // Accumulate elapsed time using delta (pause-safe)
+            const delta = now - trapProj.lastUpdateTime;
+            trapProj.elapsedTime += delta;
+            trapProj.lastUpdateTime = now;
 
             if (!trapProj.isLanded) {
                 // Arc trajectory during flight
-                const t = Math.min(1, elapsed / trapProj.flightDuration);
+                const t = Math.min(1, trapProj.elapsedTime / trapProj.flightDuration);
 
                 // Parabolic arc: lerp x/z, parabola for y
                 const startX = trapProj.startX;
@@ -378,7 +395,8 @@ export function updateProjectiles(
                                 type: "pinned",
                                 duration: trapProj.pinnedDuration,
                                 tickInterval: BUFF_TICK_INTERVAL,
-                                lastTick: now,
+                                timeSinceTick: 0,
+                                lastUpdateTime: now,
                                 damagePerTick: 0,
                                 sourceId: trapProj.attackerId
                             };
@@ -459,7 +477,8 @@ export function updateProjectiles(
             }
 
             if (rollHit(attackerData.accuracy)) {
-                const dmg = calculateDamage(attackerData.damage[0], attackerData.damage[1], getEffectiveArmor(targetUnit, targetData.armor));
+                const dmgType = getBasicAttackDamageType(attackerUnit, attackerData);
+                const dmg = calculateDamage(attackerData.damage[0], attackerData.damage[1], getEffectiveArmor(targetUnit, targetData.armor), dmgType);
                 const willPoison = attackerUnit.team === "enemy" && shouldApplyPoison(attackerData as EnemyStats);
                 const poisonDmg = willPoison && 'poisonDamage' in attackerData ? (attackerData as EnemyStats).poisonDamage : undefined;
 

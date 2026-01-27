@@ -27,9 +27,11 @@ export { updateProjectiles } from "./gameLoop/projectiles";
 export { spawnSwingIndicator, updateSwingAnimations } from "./gameLoop/swingAnimations";
 export { processAcidTiles, createAcidTile, clearAcidTiles } from "./gameLoop/acidTiles";
 export { processSanctuaryTiles, createSanctuaryTile, clearSanctuaryTiles } from "./gameLoop/sanctuaryTiles";
+export { processChargeAttacks, clearChargeAttacks, isUnitCharging } from "./gameLoop/constructCharge";
 import { executeEnemySwipe, executeEnemyHeal } from "./gameLoop/enemySkills";
 import { spawnSwingIndicator } from "./gameLoop/swingAnimations";
 import { createAcidTile } from "./gameLoop/acidTiles";
+import { isUnitCharging, startChargeAttack } from "./gameLoop/constructCharge";
 
 // Re-export unit ID utilities for backwards compatibility
 export { getNextUnitId, initializeUnitIdCounter } from "./core/unitIds";
@@ -97,6 +99,11 @@ export function updateUnitAI(
         return;
     }
 
+    // Skip all actions if unit is charging a charge attack
+    if (!isPlayer && isUnitCharging(unit.id)) {
+        return;
+    }
+
     // Check if enemy is actively kiting - skip targeting and continue retreat
     if (!isPlayer && isEnemyKiting(unit.id, now)) {
         // Check if kite path is complete
@@ -118,9 +125,10 @@ export function updateUnitAI(
     // Phase 1: Targeting - find and validate targets
     const aggroRange = isPlayer ? 12 : (data as { aggroRange: number }).aggroRange;
     const hasFrontShield = !isPlayer && (data as EnemyStats).frontShield === true;
+    const hasAggressiveTargeting = !isPlayer && (data as EnemyStats).aggressiveTargeting === true;
     const targetingCtx: TargetingContext = {
         unit, g, unitsRef, unitsState, visibility, pathsRef, moveStartRef,
-        now, defeatedThisFrame, aggroRange, hasFrontShield
+        now, defeatedThisFrame, aggroRange, hasFrontShield, hasAggressiveTargeting
     };
     runTargetingPhase(targetingCtx);
 
@@ -364,6 +372,24 @@ export function updateUnitAI(
                 }
 
                 if (now >= cooldownEnd && !skipAttackForAcidAura) {
+                    // Check if enemy has a charge attack and it's ready
+                    if (!isPlayer && 'chargeAttack' in data && data.chargeAttack) {
+                        const chargeAttack = data.chargeAttack;
+                        const chargeKey = `${unit.id}-${chargeAttack.name}`;
+                        const chargeCooldownEnd = skillCooldowns[chargeKey]?.end || 0;
+
+                        if (now >= chargeCooldownEnd) {
+                            // Start the charge attack
+                            startChargeAttack(scene, unit, g, chargeAttack, now, addLog);
+                            const cooldownMult = hasStatusEffect(unit, "slowed") ? SLOW_COOLDOWN_MULT : 1;
+                            setSkillCooldowns(prev => ({
+                                ...prev,
+                                [chargeKey]: { end: now + chargeAttack.cooldown * cooldownMult, duration: chargeAttack.cooldown }
+                            }));
+                            return;
+                        }
+                    }
+
                     // Check if enemy has a skill and it's ready
                     if (!isPlayer && 'skill' in data && data.skill) {
                         const skill = data.skill;

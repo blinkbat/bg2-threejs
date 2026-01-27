@@ -49,6 +49,8 @@ import {
     updateShieldFacing,
     processAcidTiles,
     processSanctuaryTiles,
+    processChargeAttacks,
+    clearChargeAttacks,
 } from "./gameLoop";
 import type { AcidTile } from "./core/types";
 
@@ -318,6 +320,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         Object.keys(pathsRef.current).forEach(k => delete pathsRef.current[Number(k)]);
         acidTilesRef.current.clear();  // Clear acid tiles (meshes will be in old scene)
         sanctuaryTilesRef.current.clear();  // Clear sanctuary tiles
+        clearChargeAttacks();  // Clear charge attacks (meshes will be in old scene)
 
         const sceneRefs = createScene(containerRef.current, units);
         const { scene, camera, renderer, flames, candleMeshes, candleLights, fogTexture, fogMesh, moveMarker, rangeIndicator, aoeIndicator, unitGroups, selectRings, targetRings, shieldIndicators, unitMeshes, unitOriginalColors, maxHp, wallMeshes, treeMeshes, columnMeshes, columnGroups, doorMeshes, waterMesh } = sceneRefs;
@@ -839,6 +842,19 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                     setUnits,
                     addLog,
                     now
+                );
+
+                // Process charge attacks (boss charge-up mechanics)
+                processChargeAttacks(
+                    scene,
+                    unitsStateRef.current,
+                    unitsRef.current,
+                    damageTexts.current,
+                    hitFlashRef.current,
+                    setUnits,
+                    addLog,
+                    now,
+                    defeatedThisFrame
                 );
 
                 // Hit flash effect

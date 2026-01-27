@@ -17,6 +17,7 @@ export const SKILLS: Record<string, Skill> = {
         range: 10,
         aoeRadius: 2.5,
         value: [8, 14],
+        damageType: "fire",
         projectileColor: "#ff4400"
     },
     heal: {
@@ -40,6 +41,7 @@ export const SKILLS: Record<string, Skill> = {
         targetType: "enemy",
         range: 1.8,  // melee range
         value: [4, 8],
+        damageType: "physical",
         poisonChance: 85  // 85% chance to poison
     },
     warcry: {
@@ -74,6 +76,7 @@ export const SKILLS: Record<string, Skill> = {
         targetType: "self",  // centered on caster
         range: 2.5,  // melee range for targets
         value: [2, 4],  // low damage per hit
+        damageType: "physical",
         hitCount: 5
     },
     stunningBlow: {
@@ -86,6 +89,7 @@ export const SKILLS: Record<string, Skill> = {
         targetType: "enemy",
         range: 1.8,  // melee range
         value: [5000, 5000],  // stun duration in ms (5 seconds)
+        damageType: "physical",
         stunChance: 75  // 75% chance to stun
     },
     cleanse: {
@@ -110,6 +114,7 @@ export const SKILLS: Record<string, Skill> = {
         range: 10,
         aoeRadius: 3,  // Visual indicator radius
         value: [2, 4],  // damage per missile
+        damageType: "chaos",
         hitCount: 8,  // 8 missiles
         projectileColor: "#9966ff"  // Purple arcane color
     },
@@ -235,7 +240,8 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
             cooldown: 10000,  // 10 seconds
             damage: [9, 16],
             maxTargets: 3,
-            range: 2.5
+            range: 2.5,
+            damageType: "physical"
         }
     },
     brood_mother: {
@@ -334,6 +340,29 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         moveSpeed: 0.35,   // Very slow movement
         frontShield: true, // Blocks all damage from the front
         turnSpeed: 0.15    // Turns very slowly (15% of normal)
+    },
+    ancient_construct: {
+        name: "Ancient Construct",
+        hp: 500,
+        maxHp: 500,
+        damage: [10, 16],
+        accuracy: 70,
+        armor: 3,          // Heavy armor (magic bypasses)
+        color: "#8b7355",  // Bronze/stone color
+        aggroRange: 12,
+        attackCooldown: 2500,
+        size: 2.5,         // Large boss
+        moveSpeed: 0.6,    // Moderately slow
+        aggressiveTargeting: true,  // Immediately retargets to damage sources
+        chargeAttack: {
+            name: "Cataclysm",
+            cooldown: 18000,   // 18 seconds between charges
+            chargeTime: 5000,  // 5 seconds to charge
+            damage: [25, 40],  // High damage
+            crossWidth: 3,     // 3 tiles wide
+            crossLength: 6,    // 6 tiles long in each direction
+            damageType: "chaos"
+        }
     }
 };
 
@@ -459,6 +488,10 @@ export function createInitialUnits(): Unit[] {
 // Generate a "basic attack" pseudo-skill for display in UI
 export function getBasicAttackSkill(unitId: number): Skill {
     const data = UNIT_DATA[unitId];
+    // Determine damage type based on class
+    const damageType = data.class === "Wizard" ? "chaos" as const
+        : data.class === "Cleric" ? "holy" as const
+        : "physical" as const;
     return {
         name: "Attack",
         manaCost: 0,
@@ -467,6 +500,7 @@ export function getBasicAttackSkill(unitId: number): Skill {
         targetType: "enemy",
         range: data.range ?? 1.8,
         value: data.damage,
+        damageType,
     };
 }
 

@@ -34,9 +34,13 @@ export function processStatusEffects(
         const data = getUnitStats(unit);
 
         unit.statusEffects.forEach(effect => {
+            // Calculate delta time for pause-safe accumulation
+            const delta = now - effect.lastUpdateTime;
+            const newTimeSinceTick = effect.timeSinceTick + delta;
+
             if (effect.type === "poison") {
-                // Check if it's time for a tick
-                if (now - effect.lastTick >= effect.tickInterval) {
+                // Check if it's time for a tick (using accumulated time)
+                if (newTimeSinceTick >= effect.tickInterval) {
                     // Deal poison damage
                     const dmg = effect.damagePerTick;
                     // Track whether unit was defeated for post-update handling
@@ -52,9 +56,9 @@ export function processStatusEffects(
                         const updatedEffects = (u.statusEffects || []).map(e => {
                             if (e.type === "poison") {
                                 const newDuration = e.duration - effect.tickInterval;
-                                return { ...e, duration: newDuration, lastTick: now };
+                                return { ...e, duration: newDuration, timeSinceTick: 0, lastUpdateTime: now };
                             }
-                            return e;
+                            return { ...e, lastUpdateTime: now };
                         }).filter(e => e.duration > 0);
 
                         return {
@@ -70,10 +74,22 @@ export function processStatusEffects(
                         defeatedThisFrame.add(unit.id);
                         handleUnitDefeat(unit.id, unitG, unitsRef, addLog, data.name);
                     }
+                } else {
+                    // Update lastUpdateTime even when not ticking
+                    setUnits(prev => prev.map(u => {
+                        if (u.id !== unit.id) return u;
+                        const updatedEffects = (u.statusEffects || []).map(e => {
+                            if (e.type === "poison") {
+                                return { ...e, timeSinceTick: newTimeSinceTick, lastUpdateTime: now };
+                            }
+                            return e;
+                        });
+                        return { ...u, statusEffects: updatedEffects };
+                    }));
                 }
             } else if (effect.type === "qi_drain") {
                 // Qi Drain - self-damage over time from Qi Focus
-                if (now - effect.lastTick >= effect.tickInterval) {
+                if (newTimeSinceTick >= effect.tickInterval) {
                     const dmg = effect.damagePerTick;
                     let wasDefeated = false;
 
@@ -86,9 +102,9 @@ export function processStatusEffects(
                         const updatedEffects = (u.statusEffects || []).map(e => {
                             if (e.type === "qi_drain") {
                                 const newDuration = e.duration - effect.tickInterval;
-                                return { ...e, duration: newDuration, lastTick: now };
+                                return { ...e, duration: newDuration, timeSinceTick: 0, lastUpdateTime: now };
                             }
-                            return e;
+                            return { ...e, lastUpdateTime: now };
                         }).filter(e => e.duration > 0);
 
                         return {
@@ -104,25 +120,49 @@ export function processStatusEffects(
                         defeatedThisFrame.add(unit.id);
                         handleUnitDefeat(unit.id, unitG, unitsRef, addLog, data.name);
                     }
+                } else {
+                    // Update lastUpdateTime even when not ticking
+                    setUnits(prev => prev.map(u => {
+                        if (u.id !== unit.id) return u;
+                        const updatedEffects = (u.statusEffects || []).map(e => {
+                            if (e.type === "qi_drain") {
+                                return { ...e, timeSinceTick: newTimeSinceTick, lastUpdateTime: now };
+                            }
+                            return e;
+                        });
+                        return { ...u, statusEffects: updatedEffects };
+                    }));
                 }
             } else if (effect.type === "shielded" || effect.type === "stunned" || effect.type === "cleansed" || effect.type === "pinned" || effect.type === "slowed") {
-                // Shielded/stunned/cleansed/pinned/slowed buff - tick down duration at fixed interval (like poison)
-                if (now - effect.lastTick >= effect.tickInterval) {
+                // Shielded/stunned/cleansed/pinned/slowed buff - tick down duration at fixed interval
+                if (newTimeSinceTick >= effect.tickInterval) {
                     setUnits(prev => prev.map(u => {
                         if (u.id !== unit.id) return u;
 
                         const updatedEffects = (u.statusEffects || []).map(e => {
                             if (e.type === effect.type) {
                                 const newDuration = e.duration - e.tickInterval;
-                                return { ...e, duration: newDuration, lastTick: now };
+                                return { ...e, duration: newDuration, timeSinceTick: 0, lastUpdateTime: now };
                             }
-                            return e;
+                            return { ...e, lastUpdateTime: now };
                         }).filter(e => e.duration > 0);
 
                         return {
                             ...u,
                             statusEffects: updatedEffects.length > 0 ? updatedEffects : undefined
                         };
+                    }));
+                } else {
+                    // Update lastUpdateTime even when not ticking
+                    setUnits(prev => prev.map(u => {
+                        if (u.id !== unit.id) return u;
+                        const updatedEffects = (u.statusEffects || []).map(e => {
+                            if (e.type === effect.type) {
+                                return { ...e, timeSinceTick: newTimeSinceTick, lastUpdateTime: now };
+                            }
+                            return e;
+                        });
+                        return { ...u, statusEffects: updatedEffects };
                     }));
                 }
             }

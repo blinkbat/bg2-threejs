@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import Tippy from "@tippyjs/react";
-import type { Unit, Skill, StatusEffect } from "../core/types";
+import type { Unit, Skill, StatusEffect, DamageType } from "../core/types";
 import { UNIT_DATA, getAllSkills } from "../game/units";
 import { getHpPercentage, getHpColor, getMana, hasStatusEffect, getEffectiveArmor } from "../combat/combatMath";
 import { COLORS } from "../core/constants";
@@ -173,6 +173,19 @@ function StatusTab({ unit, data, onToggleAI, unitId }: { unit: Unit; data: typeo
     );
 }
 
+/** Get color and display name for a damage type */
+function getDamageTypeInfo(type: DamageType | undefined): { color: string; name: string } {
+    switch (type) {
+        case "fire": return { color: COLORS.dmgFire, name: "Fire" };
+        case "cold": return { color: COLORS.dmgCold, name: "Cold" };
+        case "lightning": return { color: COLORS.dmgLightning, name: "Lightning" };
+        case "chaos": return { color: COLORS.dmgChaos, name: "Chaos" };
+        case "holy": return { color: COLORS.dmgHoly, name: "Holy" };
+        case "physical":
+        default: return { color: COLORS.dmgPhysical, name: "Physical" };
+    }
+}
+
 function SkillTooltip({ skill, isShielded }: { skill: Skill; isShielded: boolean }) {
     const isRanged = skill.range > 2;
     const baseCooldown = skill.cooldown / 1000;
@@ -183,12 +196,15 @@ function SkillTooltip({ skill, isShielded }: { skill: Skill; isShielded: boolean
 
     // Damage/heal/effect value
     if (skill.type === "damage") {
+        const dmgInfo = getDamageTypeInfo(skill.damageType);
         // Magic Missile shows damage per missile and missile count
         if (skill.hitCount) {
-            lines.push({ label: "Damage", value: `${skill.value[0]}-${skill.value[1]} × ${skill.hitCount}` });
+            lines.push({ label: "Damage", value: `${skill.value[0]}-${skill.value[1]} × ${skill.hitCount}`, color: dmgInfo.color });
+            lines.push({ label: "Type", value: dmgInfo.name, color: dmgInfo.color });
             lines.push({ label: "Missiles", value: `${skill.hitCount} (up to ${skill.hitCount} targets)`, color: "#9966ff" });
         } else {
-            lines.push({ label: "Damage", value: `${skill.value[0]}-${skill.value[1]}` });
+            lines.push({ label: "Damage", value: `${skill.value[0]}-${skill.value[1]}`, color: dmgInfo.color });
+            lines.push({ label: "Type", value: dmgInfo.name, color: dmgInfo.color });
         }
     } else if (skill.type === "heal") {
         lines.push({ label: "Heal", value: `${skill.value[0]}-${skill.value[1]}`, color: COLORS.hpHigh });
@@ -209,7 +225,9 @@ function SkillTooltip({ skill, isShielded }: { skill: Skill; isShielded: boolean
             lines.push({ label: "Duration", value: `${durationSec}s`, color: COLORS.shieldedText });
         }
     } else if (skill.type === "flurry") {
-        lines.push({ label: "Damage", value: `${skill.value[0]}-${skill.value[1]} × ${skill.hitCount ?? 5}` });
+        const dmgInfo = getDamageTypeInfo(skill.damageType);
+        lines.push({ label: "Damage", value: `${skill.value[0]}-${skill.value[1]} × ${skill.hitCount ?? 5}`, color: dmgInfo.color });
+        lines.push({ label: "Type", value: dmgInfo.name, color: dmgInfo.color });
         lines.push({ label: "Targets", value: `Up to ${skill.hitCount ?? 5} nearby` });
     } else if (skill.type === "debuff") {
         const durationSec = Math.round(skill.value[0] / 1000);

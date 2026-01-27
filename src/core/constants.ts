@@ -138,4 +138,12 @@ export const COLORS = {
     logSuccess: "#4ade80",
     logNeutral: "#888",
     logHeal: "#7cba7c",
+
+    // Damage types
+    dmgPhysical: "#c0c0c0",    // Silver/grey - physical damage
+    dmgFire: "#ff6b35",        // Orange-red - fire damage
+    dmgCold: "#5dade2",        // Ice blue - cold damage
+    dmgLightning: "#f4d03f",   // Yellow - lightning damage
+    dmgChaos: "#9b59b6",       // Purple - chaos/arcane damage
+    dmgHoly: "#f1c40f",        // Golden - holy damage
 };

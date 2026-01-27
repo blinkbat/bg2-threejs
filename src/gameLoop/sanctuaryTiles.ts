@@ -62,7 +62,8 @@ export function createSanctuaryTile(
     // If tile already exists, refresh its duration
     const existing = sanctuaryTiles.get(key);
     if (existing) {
-        existing.createdAt = now;
+        existing.elapsedTime = 0;
+        existing.lastUpdateTime = now;
         existing.duration = SANCTUARY_TILE_DURATION;
         (existing.mesh.material as THREE.MeshBasicMaterial).opacity = SANCTUARY_MESH_CONFIG.opacity;
         return existing;
@@ -76,9 +77,10 @@ export function createSanctuaryTile(
         mesh,
         x: gridX,
         z: gridZ,
-        createdAt: now,
+        elapsedTime: 0,
+        lastUpdateTime: now,
         duration: SANCTUARY_TILE_DURATION,
-        lastHealTick: now,
+        timeSinceTick: 0,
         sourceId,
         healPerTick
     };
@@ -108,15 +110,19 @@ export function processSanctuaryTiles(
     const tilesToRemove: string[] = [];
 
     sanctuaryTiles.forEach((tile, key) => {
-        // Handle expiration and fade
+        // Accumulate time since last tick (pause-safe delta)
+        const delta = now - tile.lastUpdateTime;
+        tile.timeSinceTick += delta;
+
+        // Handle expiration and fade (also updates lastUpdateTime)
         if (updateTileFade(tile, now, SANCTUARY_PROCESS_CONFIG)) {
             tilesToRemove.push(key);
             return;
         }
 
         // Check for heal tick
-        if (now - tile.lastHealTick >= SANCTUARY_TICK_INTERVAL) {
-            tile.lastHealTick = now;
+        if (tile.timeSinceTick >= SANCTUARY_TICK_INTERVAL) {
+            tile.timeSinceTick = 0;
 
             // Find player units standing on this tile
             unitsState.forEach(unit => {

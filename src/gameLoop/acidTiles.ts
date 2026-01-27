@@ -52,7 +52,8 @@ export function createAcidTile(
     // If tile already exists, refresh its duration
     const existing = acidTiles.get(key);
     if (existing) {
-        existing.createdAt = now;
+        existing.elapsedTime = 0;
+        existing.lastUpdateTime = now;
         existing.duration = ACID_TILE_DURATION;
         (existing.mesh.material as THREE.MeshBasicMaterial).opacity = ACID_MESH_CONFIG.opacity;
         return existing;
@@ -66,9 +67,10 @@ export function createAcidTile(
         mesh,
         x: gridX,
         z: gridZ,
-        createdAt: now,
+        elapsedTime: 0,
+        lastUpdateTime: now,
         duration: ACID_TILE_DURATION,
-        lastDamageTick: now,
+        timeSinceTick: 0,
         sourceId
     };
 
@@ -99,15 +101,19 @@ export function processAcidTiles(
     const tilesToRemove: string[] = [];
 
     acidTiles.forEach((tile, key) => {
-        // Handle expiration and fade
+        // Accumulate time since last tick (pause-safe delta)
+        const delta = now - tile.lastUpdateTime;
+        tile.timeSinceTick += delta;
+
+        // Handle expiration and fade (also updates lastUpdateTime)
         if (updateTileFade(tile, now, ACID_PROCESS_CONFIG)) {
             tilesToRemove.push(key);
             return;
         }
 
         // Check for damage tick
-        if (now - tile.lastDamageTick >= ACID_TICK_INTERVAL) {
-            tile.lastDamageTick = now;
+        if (tile.timeSinceTick >= ACID_TICK_INTERVAL) {
+            tile.timeSinceTick = 0;
 
             // Find units standing on this tile (acid slugs are immune)
             unitsState.forEach(unit => {

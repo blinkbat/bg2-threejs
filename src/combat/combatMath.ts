@@ -2,7 +2,7 @@
 // COMBAT MATH - Unified damage calculation and combat utilities
 // =============================================================================
 
-import type { Unit, UnitData, EnemyStats, StatusEffect, StatusEffectType } from "../core/types";
+import type { Unit, UnitData, EnemyStats, StatusEffect, StatusEffectType, DamageType } from "../core/types";
 import { POISON_DURATION, POISON_TICK_INTERVAL, POISON_DAMAGE_PER_TICK, SLOW_DURATION, BUFF_TICK_INTERVAL, COLORS } from "../core/constants";
 
 // =============================================================================
@@ -71,19 +71,29 @@ export const rollHit = (accuracy: number): boolean =>
 
 /**
  * Calculate final damage after armor reduction.
+ * Armor only reduces physical damage - magic bypasses armor entirely.
  * Always returns at least 1 damage.
  */
-export function calculateDamage(rawMin: number, rawMax: number, armor: number): number {
+export function calculateDamage(rawMin: number, rawMax: number, armor: number, damageType: DamageType = "physical"): number {
     const rolled = rollDamage(rawMin, rawMax);
-    return Math.max(1, rolled - armor);
+    // Only physical damage is reduced by armor
+    if (damageType === "physical") {
+        return Math.max(1, rolled - armor);
+    }
+    return rolled;
 }
 
 /**
  * Calculate damage from a pre-rolled value (when you've already rolled).
+ * Armor only reduces physical damage - magic bypasses armor entirely.
  * Always returns at least 1 damage.
  */
-export function applyArmor(rawDamage: number, armor: number): number {
-    return Math.max(1, rawDamage - armor);
+export function applyArmor(rawDamage: number, armor: number, damageType: DamageType = "physical"): number {
+    // Only physical damage is reduced by armor
+    if (damageType === "physical") {
+        return Math.max(1, rawDamage - armor);
+    }
+    return rawDamage;
 }
 
 /**
@@ -116,7 +126,7 @@ export function applyPoison(unit: Unit, sourceId: number, now: number, customDam
             ...unit,
             statusEffects: existingEffects.map(e =>
                 e.type === "poison"
-                    ? { ...e, duration: POISON_DURATION, lastTick: now, damagePerTick: Math.max(e.damagePerTick, damage) }
+                    ? { ...e, duration: POISON_DURATION, timeSinceTick: 0, lastUpdateTime: now, damagePerTick: Math.max(e.damagePerTick, damage) }
                     : e
             )
         };
@@ -126,7 +136,8 @@ export function applyPoison(unit: Unit, sourceId: number, now: number, customDam
             type: "poison",
             duration: POISON_DURATION,
             tickInterval: POISON_TICK_INTERVAL,
-            lastTick: now,
+            timeSinceTick: 0,
+            lastUpdateTime: now,
             damagePerTick: damage,
             sourceId
         };
@@ -167,7 +178,7 @@ export function applySlowed(unit: Unit, sourceId: number, now: number): Unit {
             ...unit,
             statusEffects: existingEffects.map(e =>
                 e.type === "slowed"
-                    ? { ...e, duration: SLOW_DURATION, lastTick: now }
+                    ? { ...e, duration: SLOW_DURATION, timeSinceTick: 0, lastUpdateTime: now }
                     : e
             )
         };
@@ -178,7 +189,8 @@ export function applySlowed(unit: Unit, sourceId: number, now: number): Unit {
         type: "slowed",
         duration: SLOW_DURATION,
         tickInterval: BUFF_TICK_INTERVAL,
-        lastTick: now,
+        timeSinceTick: 0,
+        lastUpdateTime: now,
         damagePerTick: 0,  // Slow doesn't deal damage
         sourceId
     };

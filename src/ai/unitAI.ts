@@ -133,6 +133,7 @@ export interface TargetingContext {
     defeatedThisFrame: Set<number>;
     aggroRange: number;
     hasFrontShield?: boolean;  // Front-shielded enemies reacquire targets immediately
+    hasAggressiveTargeting?: boolean;  // Boss enemies that aggressively retarget
 }
 
 /**
@@ -330,11 +331,11 @@ export function runTargetingPhase(ctx: TargetingContext): void {
         return;
     }
 
-    // Front-shielded enemies (like Undead Knight) are aggressive about targeting
-    // They're slow to turn so they need to lock onto attackers ASAP
-    if (hasFrontShield && !isPlayer) {
+    // Aggressive targeting - front-shielded enemies and bosses with aggressiveTargeting
+    // They immediately retarget to damage sources and bypass scan cooldowns
+    const isAggressive = (hasFrontShield || ctx.hasAggressiveTargeting) && !isPlayer;
+    if (isAggressive) {
         // ALWAYS check for recent damage source - switch targets if someone hit us
-        // This helps the knight respond to flankers
         const damageSourceTarget = findRecentDamageSource(ctx);
         if (damageSourceTarget !== null && damageSourceTarget !== g.userData.attackTarget) {
             // Switch to whoever is attacking us

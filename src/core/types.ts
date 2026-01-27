@@ -4,7 +4,7 @@ import * as THREE from "three";
 // TYPE DEFINITIONS
 // =============================================================================
 
-export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba" | "acid_slug" | "bat" | "undead_knight";
+export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba" | "acid_slug" | "bat" | "undead_knight" | "ancient_construct";
 
 // =============================================================================
 // STATUS EFFECTS
@@ -12,13 +12,17 @@ export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "og
 
 export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed" | "qi_drain";
 
+// Damage types - armor only reduces physical damage
+export type DamageType = "physical" | "fire" | "cold" | "lightning" | "chaos" | "holy";
+
 export interface StatusEffect {
     type: StatusEffectType;
-    duration: number;      // remaining duration in ms
-    tickInterval: number;  // ms between damage ticks
-    lastTick: number;      // timestamp of last tick
-    damagePerTick: number; // damage dealt each tick
-    sourceId: number;      // who applied the effect
+    duration: number;         // remaining duration in ms
+    tickInterval: number;     // ms between damage ticks
+    timeSinceTick: number;    // accumulated time since last tick (pause-safe)
+    lastUpdateTime: number;   // last frame timestamp for delta calculation
+    damagePerTick: number;    // damage dealt each tick
+    sourceId: number;         // who applied the effect
 }
 
 export interface Unit {
@@ -48,6 +52,7 @@ export interface Skill {
     range: number;
     aoeRadius?: number;
     value: [number, number];  // damage/heal range, or taunt chance for taunt skills
+    damageType?: DamageType;  // Type of damage - armor only reduces physical (default: physical)
     projectileColor?: string;
     poisonChance?: number;  // 0-100 percent chance to apply poison on hit
     hitCount?: number;  // Number of hits for flurry-type skills
@@ -80,6 +85,7 @@ export interface EnemySkill {
     damage: [number, number];
     maxTargets: number;    // how many units it can hit
     range: number;         // activation range
+    damageType?: DamageType;  // Type of damage - armor only reduces physical (default: physical)
 }
 
 export interface EnemyHealSkill {
@@ -135,6 +141,10 @@ export interface EnemyStats {
     frontShield?: boolean;
     // Turn speed multiplier (default 1.0, lower = slower turning)
     turnSpeed?: number;
+    // Optional charge attack - boss winds up a large attack with visual warning
+    chargeAttack?: EnemyChargeAttack;
+    // Aggressive targeting - immediately retargets to damage sources, bypasses scan cooldowns
+    aggressiveTargeting?: boolean;
 }
 
 export interface EnemySpawnSkill {
@@ -142,6 +152,16 @@ export interface EnemySpawnSkill {
     cooldown: number;        // ms between spawns
     maxSpawns: number;       // Maximum active spawns at once
     spawnRange: number;      // How far from the spawner to place the spawn
+}
+
+export interface EnemyChargeAttack {
+    name: string;
+    cooldown: number;        // ms between charge attacks
+    chargeTime: number;      // ms to charge before attack fires
+    damage: [number, number];
+    crossWidth: number;      // Width of cross arms in grid cells
+    crossLength: number;     // Length of cross arms in grid cells
+    damageType?: DamageType;  // Type of damage - armor only reduces physical (default: physical)
 }
 
 export interface Room {
@@ -266,13 +286,14 @@ export interface TrapProjectile extends BaseProjectile {
     targetPos: { x: number; z: number };
     aoeRadius: number;
     pinnedDuration: number;  // Duration of pinned effect in ms
-    // Arc trajectory properties
+    // Arc trajectory properties (pause-safe with delta time accumulation)
     startX: number;
     startZ: number;
-    startTime: number;
-    flightDuration: number;  // ms for the arc flight
-    arcHeight: number;       // Peak height of the arc
-    isLanded: boolean;       // Whether trap has landed and is active
+    elapsedTime: number;      // Accumulated flight time (pause-safe)
+    lastUpdateTime: number;   // Last frame timestamp for delta calculation
+    flightDuration: number;   // ms for the arc flight
+    arcHeight: number;        // Peak height of the arc
+    isLanded: boolean;        // Whether trap has landed and is active
 }
 
 export type Projectile = BasicProjectile | AoeProjectile | MagicMissileProjectile | TrapProjectile;
@@ -282,10 +303,11 @@ export interface AcidTile {
     mesh: THREE.Mesh;
     x: number;           // Grid cell X
     z: number;           // Grid cell Z
-    createdAt: number;   // Timestamp
-    duration: number;    // Total duration in ms
-    lastDamageTick: number;  // When damage was last applied
-    sourceId: number;    // ID of the slug that created it
+    elapsedTime: number;     // Accumulated elapsed time (pause-safe)
+    lastUpdateTime: number;  // Last frame timestamp for delta calculation
+    duration: number;        // Total duration in ms
+    timeSinceTick: number;   // Accumulated time since last damage tick (pause-safe)
+    sourceId: number;        // ID of the slug that created it
 }
 
 // Sanctuary tile - healing ground created by Paladin
@@ -293,11 +315,12 @@ export interface SanctuaryTile {
     mesh: THREE.Mesh;
     x: number;           // Grid cell X
     z: number;           // Grid cell Z
-    createdAt: number;   // Timestamp
-    duration: number;    // Total duration in ms
-    lastHealTick: number;  // When healing was last applied
-    sourceId: number;    // ID of the unit that created it
-    healPerTick: number; // How much to heal each tick
+    elapsedTime: number;     // Accumulated elapsed time (pause-safe)
+    lastUpdateTime: number;  // Last frame timestamp for delta calculation
+    duration: number;        // Total duration in ms
+    timeSinceTick: number;   // Accumulated time since last heal tick (pause-safe)
+    sourceId: number;        // ID of the unit that created it
+    healPerTick: number;     // How much to heal each tick
 }
 
 // =============================================================================
