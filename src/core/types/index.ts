@@ -5,3 +5,4 @@
 export * from "./units";
 export * from "./combat";
 export * from "./world";
+export * from "./items";

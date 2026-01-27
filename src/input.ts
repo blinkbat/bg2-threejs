@@ -56,7 +56,8 @@ export interface InputSetters {
 // Note: attacks are just skills now - no separate "attack" type
 export type QueuedAction =
     | { type: "skill"; skill: Skill; targetX: number; targetZ: number }
-    | { type: "move"; targetX: number; targetZ: number };
+    | { type: "move"; targetX: number; targetZ: number }
+    | { type: "consumable"; itemId: string };
 
 // Map from unitId to their queued action
 export type ActionQueue = Record<number, QueuedAction>;
@@ -202,7 +203,8 @@ export function processActionQueue(
     pausedRef: React.MutableRefObject<boolean>,
     skillCtx: SkillExecutionContext,
     setUnits: React.Dispatch<React.SetStateAction<Unit[]>>,
-    setQueuedActions: React.Dispatch<React.SetStateAction<{ unitId: number; skillName: string }[]>>
+    setQueuedActions: React.Dispatch<React.SetStateAction<{ unitId: number; skillName: string }[]>>,
+    onConsumeItem?: (unitId: number, itemId: string) => boolean
 ): void {
     if (pausedRef.current) return;
 
@@ -231,6 +233,27 @@ export function processActionQueue(
             // Move can execute immediately
             executeMove(unitsRef, pathsRef, moveStartRef, setUnits, [{ id: unitId, x: action.targetX, z: action.targetZ }]);
             executedUnits.push(unitId);
+        } else if (action.type === "consumable") {
+            const user = skillCtx.unitsStateRef.current.find(u => u.id === unitId);
+            // Remove if user died
+            if (!user || user.hp <= 0) {
+                executedUnits.push(unitId);
+                continue;
+            }
+            // Keep in queue if on cooldown - will be processed next frame
+            const cooldownEnd = actionCooldownRef.current[unitId] || 0;
+            if (now < cooldownEnd) {
+                continue; // Don't remove, will try again next frame
+            }
+            // Execute consumable via callback
+            if (onConsumeItem) {
+                const success = onConsumeItem(unitId, action.itemId);
+                if (success) {
+                    executedUnits.push(unitId);
+                }
+            } else {
+                executedUnits.push(unitId); // Remove if no handler
+            }
         }
     }
 

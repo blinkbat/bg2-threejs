@@ -14,6 +14,11 @@ import type { Unit, Skill, CombatLogEntry, SelectionBox, DamageText, UnitGroup, 
 import { blocked } from "./game/dungeon";
 import { getCurrentArea, setCurrentArea, AREAS, DEFAULT_STARTING_AREA, DEFAULT_SPAWN_POINT, type AreaId, type AreaTransition } from "./game/areas";
 import { UNIT_DATA, ENEMY_STATS, getBasicAttackSkill } from "./game/units";
+import { initializeEquipmentState, getPartyInventory, setPartyInventory } from "./game/equipmentState";
+import { removeFromInventory } from "./game/equipment";
+import { getItem } from "./game/items";
+import { isConsumable } from "./core/types";
+import { getEffectiveMaxHp } from "./game/units";
 import { createScene, updateCamera, updateWallTransparency, updateTreeFogVisibility, updateLightLOD, addUnitToScene, updateWater, type DoorMesh } from "./rendering/scene";
 import { soundFns } from "./audio/sound";
 import { updateDynamicObstacles, findSpawnPositions } from "./ai/pathfinding";
@@ -312,6 +317,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         resetFogCache();
         resetAllBroodMotherScreeches();
         resetBarks();
+        initializeEquipmentState();
 
         // Clear local refs that persist between game sessions
         zoomLevel.current = 12;
@@ -375,7 +381,8 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                 pausedRef,
                 skillCtx,
                 setUnits,
-                setQueuedActions
+                setQueuedActions,
+                executeConsumable
             );
         };
         processActionQueueRef.current = doProcessQueue;
@@ -1078,6 +1085,80 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         );
     };
 
+    // Execute consumable - called by processActionQueue, returns true if successful
+    const executeConsumable = (unitId: number, itemId: string): boolean => {
+        const item = getItem(itemId);
+        if (!item || !isConsumable(item)) return false;
+
+        const targetUnit = unitsStateRef.current.find(u => u.id === unitId);
+        if (!targetUnit || targetUnit.hp <= 0) return false;
+
+        // Check if effect would be wasted
+        if (item.effect === "heal") {
+            const maxHp = getEffectiveMaxHp(unitId);
+            if (targetUnit.hp >= maxHp) return false; // Already full
+            const newHp = Math.min(maxHp, targetUnit.hp + item.value);
+            const healed = newHp - targetUnit.hp;
+            setUnits(prev => prev.map(u => u.id === unitId ? { ...u, hp: newHp } : u));
+            addLog(`${UNIT_DATA[unitId].name} uses ${item.name}, restoring ${healed} HP.`, "#22c55e");
+        } else if (item.effect === "mana") {
+            const maxMana = UNIT_DATA[unitId].maxMana ?? 0;
+            const currentMana = targetUnit.mana ?? 0;
+            if (currentMana >= maxMana) return false; // Already full
+            const newMana = Math.min(maxMana, currentMana + item.value);
+            const restored = newMana - currentMana;
+            setUnits(prev => prev.map(u => u.id === unitId ? { ...u, mana: newMana } : u));
+            addLog(`${UNIT_DATA[unitId].name} uses ${item.name}, restoring ${restored} Mana.`, "#3b82f6");
+        }
+
+        // Play sound
+        if (item.sound === "gulp") {
+            soundFns.playGulp();
+        } else if (item.sound === "crunch") {
+            soundFns.playCrunch();
+        }
+
+        // Remove from inventory
+        const inventory = getPartyInventory();
+        const newInventory = removeFromInventory(inventory, itemId, 1);
+        setPartyInventory(newInventory);
+
+        // Set cooldown (shared with skills)
+        actionCooldownRef.current[unitId] = Date.now() + item.cooldown;
+
+        return true;
+    };
+
+    // Use consumable handler - queues the consumable action
+    const handleUseConsumable = (itemId: string, targetUnitId: number) => {
+        const item = getItem(itemId);
+        if (!item || !isConsumable(item)) return;
+
+        const targetUnit = units.find(u => u.id === targetUnitId);
+        if (!targetUnit || targetUnit.hp <= 0) return;
+
+        // Check if on cooldown or paused - queue if so
+        const now = Date.now();
+        const cooldownEnd = actionCooldownRef.current[targetUnitId] || 0;
+        const onCooldown = now < cooldownEnd;
+
+        if (paused || onCooldown) {
+            // Queue the consumable (per-unit queue, last action wins)
+            actionQueueRef.current[targetUnitId] = { type: "consumable", itemId };
+            // Update UI state
+            setQueuedActions(prev => [
+                ...prev.filter(q => q.unitId !== targetUnitId),
+                { unitId: targetUnitId, skillName: item.name }
+            ]);
+            const reason = paused ? "queued" : "on cooldown";
+            addLog(`${UNIT_DATA[targetUnitId].name} prepares ${item.name}... (${reason})`, "#888");
+            return;
+        }
+
+        // Execute immediately
+        executeConsumable(targetUnitId, itemId);
+    };
+
     // Debug warp to any area
     const handleWarpToArea = (areaId: AreaId) => {
         // Extract player states to persist (HP, mana, status effects)
@@ -1193,7 +1274,8 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                 skillCooldowns={skillCooldowns}
                 paused={paused}
                 queuedSkills={queuedActions.filter(q => q.unitId === selectedIds[0]).map(q => q.skillName)}
-                // unitCooldownEnd={actionCooldownRef.current[selectedIds[0]] || 0}
+                onUseConsumable={handleUseConsumable}
+                consumableCooldownEnd={actionCooldownRef.current[selectedIds[0]] || 0}
             />}
         </div>
     );

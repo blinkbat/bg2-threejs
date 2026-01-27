@@ -5,7 +5,7 @@
 import * as THREE from "three";
 import type { Unit, Skill, UnitGroup, Projectile, StatusEffect, MagicMissileProjectile, TrapProjectile, SanctuaryTile, AcidTile } from "../core/types";
 import { COLORS, BUFF_TICK_INTERVAL, TRAP_FLIGHT_DURATION, TRAP_ARC_HEIGHT, TRAP_MESH_SIZE, SANCTUARY_HEAL_PER_TICK, QI_DRAIN_DURATION, QI_DRAIN_TICK_INTERVAL } from "../core/constants";
-import { UNIT_DATA, getUnitStats } from "../game/units";
+import { UNIT_DATA, getUnitStats, getEffectiveUnitData } from "../game/units";
 import { rollDamage, rollChance, calculateDamage, rollHit, getEffectiveArmor, hasStatusEffect, logHit, logMiss, logHeal, logPoisoned, logCast, logTaunt, logTauntMiss, logBuff, logStunned, logCleanse, logTrapThrown, isBlockedByFrontShield } from "./combatMath";
 import { ENEMY_STATS } from "../game/units";
 import { tryHealBark, trySpellBark } from "./barks";
@@ -721,10 +721,11 @@ export function executeRangedSkill(
 
     consumeSkill(ctx, casterId, skill);
 
-    const casterData = UNIT_DATA[casterId];
+    // Use effective data to get equipment-derived projectile color
+    const effectiveData = getEffectiveUnitData(casterId);
 
     // Create projectile toward target
-    const projectile = createProjectile(scene, "ranged", casterG.position.x, casterG.position.z, casterData.projectileColor);
+    const projectile = createProjectile(scene, "ranged", casterG.position.x, casterG.position.z, effectiveData.projectileColor);
 
     projectilesRef.current.push({
         type: "basic",
@@ -1111,8 +1112,9 @@ export function executeSkill(
     } else if (skill.type === "damage" && skill.targetType === "enemy") {
         // Check if this is a ranged skill (basic attack for ranged units)
         // Melee range is typically <= 2, ranged is > 2
-        const casterData = UNIT_DATA[casterId];
-        const isRanged = casterData.range && casterData.range > 2;
+        // Use effective stats to get equipment-derived range
+        const effectiveData = getEffectiveUnitData(casterId);
+        const isRanged = effectiveData.range && effectiveData.range > 2;
 
         // For basic attacks (name === "Attack"), use ranged if unit has range
         if (skill.name === "Attack" && isRanged) {

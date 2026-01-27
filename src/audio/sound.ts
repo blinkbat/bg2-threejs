@@ -527,6 +527,95 @@ const playMagicWave = () => {
     noise3.stop(ctx.currentTime + duration);
 };
 
+// Gulp - liquid drinking sound
+const playGulp = () => {
+    if (muted) return;
+    const ctx = getAudioCtx();
+
+    // Bubble/glug tone - descending with wobble
+    const glug = ctx.createOscillator();
+    const glugGain = ctx.createGain();
+    const glugFilter = ctx.createBiquadFilter();
+    glug.type = "sine";
+    glug.frequency.setValueAtTime(400, ctx.currentTime);
+    glug.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.08);
+    glug.frequency.exponentialRampToValueAtTime(350, ctx.currentTime + 0.12);
+    glug.frequency.exponentialRampToValueAtTime(150, ctx.currentTime + 0.2);
+    glugFilter.type = "lowpass";
+    glugFilter.frequency.setValueAtTime(600, ctx.currentTime);
+    glugGain.gain.setValueAtTime(0.2, ctx.currentTime);
+    glugGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
+    glug.connect(glugFilter);
+    glugFilter.connect(glugGain);
+    glugGain.connect(ctx.destination);
+    glug.start();
+    glug.stop(ctx.currentTime + 0.22);
+
+    // Second glug - slightly higher
+    const glug2 = ctx.createOscillator();
+    const glug2Gain = ctx.createGain();
+    const glug2Filter = ctx.createBiquadFilter();
+    glug2.type = "sine";
+    glug2.frequency.setValueAtTime(450, ctx.currentTime + 0.1);
+    glug2.frequency.exponentialRampToValueAtTime(180, ctx.currentTime + 0.22);
+    glug2Filter.type = "lowpass";
+    glug2Filter.frequency.setValueAtTime(700, ctx.currentTime);
+    glug2Gain.gain.setValueAtTime(0, ctx.currentTime);
+    glug2Gain.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 0.1);
+    glug2Gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+    glug2.connect(glug2Filter);
+    glug2Filter.connect(glug2Gain);
+    glug2Gain.connect(ctx.destination);
+    glug2.start();
+    glug2.stop(ctx.currentTime + 0.25);
+};
+
+// Crunch - food eating sound
+const playCrunch = () => {
+    if (muted) return;
+    const ctx = getAudioCtx();
+
+    // Crunchy noise burst
+    const bufferSize = ctx.sampleRate * 0.15;
+    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const output = noiseBuffer.getChannelData(0);
+    // Bitcrushed crackle texture
+    const crushRate = 8;
+    let holdValue = 0;
+    for (let i = 0; i < bufferSize; i++) {
+        if (i % crushRate === 0) {
+            holdValue = Math.random() * 2 - 1;
+        }
+        output[i] = holdValue * Math.exp(-i / (bufferSize * 0.4));
+    }
+    const noise = ctx.createBufferSource();
+    noise.buffer = noiseBuffer;
+    const noiseFilter = ctx.createBiquadFilter();
+    noiseFilter.type = "bandpass";
+    noiseFilter.frequency.setValueAtTime(2000, ctx.currentTime);
+    noiseFilter.Q.setValueAtTime(1, ctx.currentTime);
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.25, ctx.currentTime);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+    noise.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    noise.start();
+
+    // Low crunch tone
+    const crunch = ctx.createOscillator();
+    const crunchGain = ctx.createGain();
+    crunch.type = "sawtooth";
+    crunch.frequency.setValueAtTime(200, ctx.currentTime);
+    crunch.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + 0.1);
+    crunchGain.gain.setValueAtTime(0.15, ctx.currentTime);
+    crunchGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+    crunch.connect(crunchGain);
+    crunchGain.connect(ctx.destination);
+    crunch.start();
+    crunch.stop(ctx.currentTime + 0.12);
+};
+
 export const soundFns = {
     playMove: () => playTone(800, 0.06, 0.12, "square", undefined, 3000),
     playAttack: () => playTone(440, 0.08, 0.15, "square", 330, 2500),
@@ -541,4 +630,6 @@ export const soundFns = {
     playBroodMotherScreech,
     playMagicWave,
     playGush,
+    playGulp,
+    playCrunch,
 };

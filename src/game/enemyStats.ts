@@ -110,7 +110,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         armor: 0,
         color: "#5c3a38",  // Lighter brown-red
         aggroRange: 4,  // Limited LOS - relies on mother's sight
-        attackCooldown: 800,  // Fast attacks
+        attackCooldown: 1000,  // Fast attacks
         size: 0.6,  // Small
         range: 1.0,  // Short melee range - they're small
         poisonChance: 20,  // 20% chance to apply weak poison on hit

@@ -3,11 +3,11 @@ import { DEFAULT_SPAWN_POINT } from "./areas";
 
 // Re-export from split modules for backwards compatibility
 export { SKILLS } from "./skills";
-export { UNIT_DATA, getBasicAttackSkill, getAllSkills } from "./playerUnits";
+export { UNIT_DATA, getBasicAttackSkill, getAllSkills, getEffectiveUnitData, getEffectiveMaxHp, getEffectiveArmor as getPlayerEffectiveArmor } from "./playerUnits";
 export { ENEMY_STATS } from "./enemyStats";
 
 // Import for local use
-import { UNIT_DATA } from "./playerUnits";
+import { UNIT_DATA, getEffectiveUnitData } from "./playerUnits";
 import { ENEMY_STATS } from "./enemyStats";
 
 // =============================================================================
@@ -17,10 +17,14 @@ import { ENEMY_STATS } from "./enemyStats";
 /** Default melee attack range (used when unit has no range specified) */
 export const DEFAULT_MELEE_RANGE = 1.8;
 
-/** Get stats for any unit (player or enemy) */
+/**
+ * Get stats for any unit (player or enemy).
+ * For player units, returns effective stats with equipment applied.
+ */
 export function getUnitStats(unit: Unit): UnitData | EnemyStats {
     if (unit.team === "player") {
-        return UNIT_DATA[unit.id];
+        // Return effective stats including equipment bonuses
+        return getEffectiveUnitData(unit.id);
     }
     // Safely handle missing enemyType - fallback to kobold stats
     if (!unit.enemyType) return ENEMY_STATS.kobold;

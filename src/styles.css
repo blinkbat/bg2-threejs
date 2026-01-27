@@ -212,6 +212,274 @@ html, body, #root {
     gap: 10px;
 }
 
+/* Equipment slots */
+.equipment-slot {
+    background: #1a1a2a;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border: 1px solid #333;
+}
+
+.equipment-slot.empty {
+    border-color: #222;
+}
+
+.equipment-slot.disabled {
+    opacity: 0.5;
+    border-color: #222;
+}
+
+.equipment-slot-label {
+    color: #888;
+    font-size: 11px;
+    text-transform: uppercase;
+}
+
+.equipment-slot-item {
+    color: #ddd;
+}
+
+.equipment-slot.empty .equipment-slot-item {
+    color: #555;
+    font-style: italic;
+}
+
+.equipment-slot.disabled .equipment-slot-item {
+    color: #555;
+    font-style: italic;
+}
+
+/* Inventory Panel */
+.inventory-panel {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    min-width: 200px;
+    max-width: 400px;
+    z-index: 100;
+}
+
+.inventory-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    border-bottom: 1px solid #333;
+    font-size: 12px;
+    text-transform: uppercase;
+    color: #888;
+}
+
+.inventory-cooldown {
+    color: #f59e0b;
+    font-weight: bold;
+}
+
+.inventory-items {
+    display: flex;
+    gap: 8px;
+    padding: 10px;
+    flex-wrap: wrap;
+}
+
+.inventory-item {
+    background: #1a1a2a;
+    padding: 8px 12px;
+    border-radius: 4px;
+    border: 1px solid #444;
+    cursor: pointer;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.inventory-item:hover:not(.disabled) {
+    border-color: #22c55e;
+    background: #1a2a1a;
+}
+
+.inventory-item.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.inventory-item.wasted {
+    border-color: #666;
+}
+
+.inventory-item.wasted:hover {
+    border-color: #666;
+    background: #1a1a2a;
+}
+
+.inventory-item-name {
+    color: #ddd;
+    font-size: 13px;
+}
+
+.inventory-item-qty {
+    color: #888;
+    font-size: 11px;
+}
+
+/* Consumable Tooltip */
+.consumable-tooltip {
+    padding: 8px;
+    font-size: 12px;
+    max-width: 220px;
+}
+
+.consumable-tooltip-desc {
+    color: #aaa;
+    margin-bottom: 8px;
+    font-style: italic;
+}
+
+.consumable-tooltip-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 4px;
+}
+
+.consumable-tooltip-label {
+    color: #888;
+}
+
+.consumable-tooltip-value {
+    font-weight: bold;
+}
+
+.consumable-tooltip-target {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #333;
+    color: #aaa;
+}
+
+.consumable-tooltip-warning {
+    color: #f59e0b;
+}
+
+/* Equipment Tooltips */
+.equipment-tooltip {
+    padding: 8px;
+    font-size: 12px;
+    max-width: 220px;
+}
+
+.equipment-tooltip-desc {
+    color: #aaa;
+    margin-bottom: 8px;
+    font-style: italic;
+}
+
+.equipment-tooltip-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.equipment-tooltip-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.equipment-tooltip-label {
+    color: #888;
+}
+
+.equipment-tooltip-value {
+    font-weight: bold;
+    text-transform: capitalize;
+}
+
+/* Inventory Tab (in unit panel) */
+.inventory-item-row {
+    background: #1a1a2a;
+    padding: 10px 12px;
+    border-radius: 4px;
+    border: 1px solid #22c55e;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    transition: border-color 0.15s, background 0.15s;
+    position: relative;
+}
+
+.inventory-item-row:hover:not(.disabled):not(.wasted) {
+    border-color: #4ade80;
+    background: #1a2a1a;
+}
+
+.inventory-item-row.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    border-color: #333;
+}
+
+.inventory-item-row.wasted {
+    border-color: #666;
+    cursor: not-allowed;
+}
+
+.inventory-item-row.queued {
+    border-color: #f59e0b;
+    background: rgba(245, 158, 11, 0.1);
+}
+
+.inventory-item-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.inventory-item-row .inventory-item-name {
+    font-weight: bold;
+    color: #22c55e;
+    font-size: 13px;
+}
+
+.inventory-item-row.queued .inventory-item-name {
+    color: #f59e0b;
+}
+
+.inventory-item-row.disabled .inventory-item-name {
+    color: #888;
+}
+
+.inventory-item-cooldown {
+    font-size: 11px;
+    color: #888;
+}
+
+.inventory-item-cooldown.queued {
+    color: #f59e0b;
+}
+
+.inventory-item-stats {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.inventory-item-row .inventory-item-effect {
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.inventory-item-row .inventory-item-qty {
+    color: #666;
+    font-size: 11px;
+}
+
 /* -----------------------------------------------------------------------------
    STAT GRID
    ----------------------------------------------------------------------------- */
@@ -728,7 +996,7 @@ html, body, #root {
     position: absolute;
     top: 10px;
     right: 10px;
-    width: 280px;
+    width: 340px;
     overflow: hidden;
 }
 
@@ -894,6 +1162,7 @@ html, body, #root {
     border-top: 1px solid rgba(255, 255, 255, 0.15);
     display: flex;
     flex-wrap: wrap;
+    max-width: 350px;
     gap: 6px;
     align-items: center;
 }
