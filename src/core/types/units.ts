@@ -1,0 +1,164 @@
+// =============================================================================
+// UNIT TYPES - Units, enemies, and status effects
+// =============================================================================
+
+// Enemy type identifiers
+export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba" | "acid_slug" | "bat" | "undead_knight" | "ancient_construct";
+
+// Status effect types
+export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed" | "qi_drain";
+
+export interface StatusEffect {
+    type: StatusEffectType;
+    duration: number;         // remaining duration in ms
+    tickInterval: number;     // ms between damage ticks
+    timeSinceTick: number;    // accumulated time since last tick (pause-safe)
+    lastUpdateTime: number;   // last frame timestamp for delta calculation
+    damagePerTick: number;    // damage dealt each tick
+    sourceId: number;         // who applied the effect
+}
+
+// =============================================================================
+// UNIT DATA
+// =============================================================================
+
+export interface Unit {
+    id: number;
+    x: number;
+    z: number;
+    hp: number;
+    mana?: number;
+    team: "player" | "enemy";
+    enemyType?: EnemyType;  // Only set for enemies
+    target: number | null;
+    aiEnabled: boolean;
+    statusEffects?: StatusEffect[];  // Active status effects
+    spawnedBy?: number;  // ID of the unit that spawned this one (for broodlings)
+    splitCount?: number;  // For amoebas - how many times this lineage has split (affects size)
+    facing?: number;  // Direction unit is facing in radians (for front-shielded enemies)
+}
+
+import type { Skill } from "./combat";
+
+export interface UnitData {
+    name: string;
+    class: string;
+    hp: number;
+    maxHp: number;
+    mana?: number;
+    maxMana?: number;
+    damage: [number, number];
+    accuracy: number;  // hit chance percentage (0-100)
+    armor: number;     // flat damage reduction
+    color: string;
+    skills: Skill[];
+    items: string[];
+    range?: number;
+    projectileColor?: string;
+    attackCooldown: number;  // ms - cooldown for basic attack (also global cooldown)
+    size?: number;  // hitbox size multiplier (default 1)
+}
+
+// =============================================================================
+// ENEMY DATA
+// =============================================================================
+
+import type { DamageType } from "./combat";
+
+export interface EnemySkill {
+    name: string;
+    cooldown: number;      // ms
+    damage: [number, number];
+    maxTargets: number;    // how many units it can hit
+    range: number;         // activation range
+    damageType: DamageType;  // Type of damage - armor only reduces physical
+}
+
+export interface EnemyHealSkill {
+    name: string;
+    cooldown: number;      // ms
+    heal: [number, number];
+    range: number;         // range to find hurt allies
+}
+
+export interface EnemySpawnSkill {
+    spawnType: EnemyType;    // What enemy type to spawn
+    cooldown: number;        // ms between spawns
+    maxSpawns: number;       // Maximum active spawns at once
+    spawnRange: number;      // How far from the spawner to place the spawn
+}
+
+export interface EnemyChargeAttack {
+    name: string;
+    cooldown: number;        // ms between charge attacks
+    chargeTime: number;      // ms to charge before attack fires
+    damage: [number, number];
+    crossWidth: number;      // Width of cross arms in grid cells
+    crossLength: number;     // Length of cross arms in grid cells
+    damageType: DamageType;  // Type of damage - armor only reduces physical
+}
+
+export interface EnemyStats {
+    name: string;
+    hp: number;
+    maxHp: number;
+    damage: [number, number];
+    accuracy: number;
+    armor: number;
+    color: string;
+    aggroRange: number;
+    attackCooldown: number;
+    // Optional for ranged enemies
+    range?: number;
+    projectileColor?: string;
+    // Optional for large enemies
+    size?: number;
+    // Optional status effect on hit
+    poisonChance?: number;  // 0-100 percent chance to apply poison
+    poisonDamage?: number;  // Custom poison damage per tick (default POISON_DAMAGE_PER_TICK)
+    slowChance?: number;    // 0-100 percent chance to apply slow (1.5x cooldowns, 0.5x move speed)
+    // Optional special skill
+    skill?: EnemySkill;
+    // Optional heal skill for support enemies
+    healSkill?: EnemyHealSkill;
+    // Optional kiting behavior for ranged enemies
+    kiteDistance?: number;   // Distance to retreat when player gets too close
+    kiteCooldown?: number;   // Minimum ms between kite attempts
+    kiteTrigger?: number;    // Distance at which kiting triggers (melee range)
+    // Optional spawn skill for spawner enemies (like Brood Mother)
+    spawnSkill?: EnemySpawnSkill;
+    // Movement speed multiplier (1.0 = normal speed)
+    moveSpeed: number;
+    // Optional max split count for splitting enemies (like Giant Amoeba)
+    maxSplitCount?: number;
+    // Optional acid trail for acid slug enemies
+    acidTrail?: boolean;       // Creates acid on grid cells when moving
+    acidAura?: boolean;        // Periodically creates acid around itself
+    acidAuraCooldown?: number; // ms between aura acid creation
+    acidAuraRadius?: number;   // Radius in grid cells for aura
+    // Optional flying behavior (floats above ground)
+    flying?: boolean;
+    // Optional lifesteal (heals for percentage of damage dealt, 0-1)
+    lifesteal?: number;
+    // Optional front shield - blocks all damage from the front
+    frontShield?: boolean;
+    // Turn speed multiplier (default 1.0, lower = slower turning)
+    turnSpeed?: number;
+    // Optional charge attack - boss winds up a large attack with visual warning
+    chargeAttack?: EnemyChargeAttack;
+    // Aggressive targeting - immediately retargets to damage sources, bypasses scan cooldowns
+    aggressiveTargeting?: boolean;
+}
+
+// =============================================================================
+// TYPE GUARDS
+// =============================================================================
+
+/** Check if a unit is on the player team */
+export const isPlayerTeam = (unit: Unit): boolean => unit.team === "player";
+
+/** Check if a unit is on the enemy team */
+export const isEnemyTeam = (unit: Unit): boolean => unit.team === "enemy";
+
+/** Check if an enemy has a front shield (requires EnemyStats) */
+export const hasFrontShield = (stats: EnemyStats): boolean => stats.frontShield === true;

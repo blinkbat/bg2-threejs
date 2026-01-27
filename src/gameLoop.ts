@@ -4,20 +4,18 @@
 
 import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation, EnemyStats, EnemySpawnSkill } from "./core/types";
-import { COLORS, SKILL_SINGLE_TARGET_CHANCE, SLOW_COOLDOWN_MULT, SLOW_MOVE_MULT, ACID_AURA_COOLDOWN, ACID_AURA_RADIUS } from "./core/constants";
+import { SKILL_SINGLE_TARGET_CHANCE, SLOW_COOLDOWN_MULT, SLOW_MOVE_MULT } from "./core/constants";
 import { getUnitRadius, isInRange } from "./rendering/range";
 import { tryKite, type KiteContext } from "./ai/targeting";
 import {
     runTargetingPhase, runPathFollowingPhase, runMovementPhase, recalculatePathIfNeeded,
     type TargetingContext, type PathContext, type MovementContext
 } from "./ai/unitAI";
-import { getUnitStats, getBasicAttackSkill, getAttackRange, ENEMY_STATS } from "./game/units";
+import { getUnitStats, getBasicAttackSkill, getAttackRange } from "./game/units";
 import type { ActionQueue } from "./input";
-import { getNextUnitId } from "./core/unitIds";
-import { calculateDamage, rollHit, shouldApplyPoison, shouldApplySlow, hasStatusEffect, getEffectiveArmor, getEffectiveDamage, logHit, logLifestealHit, logMiss, logPoisoned, logSlowed, isUnitAlive } from "./combat/combatMath";
-import { createProjectile, getProjectileSpeed, applyDamageToUnit, getAliveUnitsInRange, spawnDamageNumber, type DamageContext } from "./combat/combat";
-import { soundFns } from "./audio/sound";
-import { isEnemyKiting, clearEnemyKiting, hasBroodMotherScreeched, markBroodMotherScreeched } from "./game/enemyState";
+import { hasStatusEffect, isUnitAlive } from "./combat/combatMath";
+import { getAliveUnitsInRange } from "./combat/combat";
+import { isEnemyKiting, clearEnemyKiting } from "./game/enemyState";
 import { findPath } from "./ai/pathfinding";
 
 // Re-export from split modules
@@ -29,9 +27,10 @@ export { processAcidTiles, createAcidTile, clearAcidTiles } from "./gameLoop/aci
 export { processSanctuaryTiles, createSanctuaryTile, clearSanctuaryTiles } from "./gameLoop/sanctuaryTiles";
 export { processChargeAttacks, clearChargeAttacks, isUnitCharging } from "./gameLoop/constructCharge";
 import { executeEnemySwipe, executeEnemyHeal } from "./gameLoop/enemySkills";
-import { spawnSwingIndicator } from "./gameLoop/swingAnimations";
-import { createAcidTile } from "./gameLoop/acidTiles";
-import { isUnitCharging, startChargeAttack } from "./gameLoop/constructCharge";
+import { executeEnemyBasicAttack } from "./gameLoop/enemyAttack";
+import { createAcidTile, tryCreateAcidAura } from "./gameLoop/acidTiles";
+import { isUnitCharging } from "./gameLoop/constructCharge";
+import { trySpawnMinion, tryStartChargeAttack } from "./gameLoop/enemyBehaviors";
 
 // Re-export unit ID utilities for backwards compatibility
 export { getNextUnitId, initializeUnitIdCounter } from "./core/unitIds";
@@ -217,31 +216,11 @@ export function updateUnitAI(
             }
 
             // Acid aura when stationary
-            if (slugData.acidAura && !movedCell) {
-                const auraCooldownKey = `${unit.id}-acidAura`;
-                const auraCooldownEnd = skillCooldowns[auraCooldownKey]?.end ?? 0;
-                const auraCooldown = slugData.acidAuraCooldown ?? ACID_AURA_COOLDOWN;
-                const auraRadius = slugData.acidAuraRadius ?? ACID_AURA_RADIUS;
-
-                if (now >= auraCooldownEnd) {
-                    const centerX = newGridX;
-                    const centerZ = newGridZ;
-                    const radiusCells = Math.ceil(auraRadius);
-
-                    for (let dx = -radiusCells; dx <= radiusCells; dx++) {
-                        for (let dz = -radiusCells; dz <= radiusCells; dz++) {
-                            const dist = Math.sqrt(dx * dx + dz * dz);
-                            if (dist <= auraRadius) {
-                                createAcidTile(scene, acidTilesRef, centerX + dx, centerZ + dz, unit.id, now);
-                            }
-                        }
-                    }
-
-                    setSkillCooldowns(prev => ({
-                        ...prev,
-                        [auraCooldownKey]: { end: now + auraCooldown, duration: auraCooldown }
-                    }));
-                }
+            if (!movedCell) {
+                tryCreateAcidAura(slugData, {
+                    scene, acidTiles: acidTilesRef, skillCooldowns, setSkillCooldowns,
+                    unitId: unit.id, centerX: newGridX, centerZ: newGridZ, now
+                });
             }
 
             return;  // Skip normal attack behavior
@@ -273,70 +252,10 @@ export function updateUnitAI(
 
     // Phase 1.7: Enemy spawn check - spawner enemies (Brood Mother) spawn minions when they see players
     if (!isPlayer && 'spawnSkill' in data && data.spawnSkill) {
-        const spawnSkill = data.spawnSkill as EnemySpawnSkill;
-        const spawnCooldownKey = `${unit.id}-spawn`;
-        const spawnCooldownEnd = skillCooldowns[spawnCooldownKey]?.end || 0;
-
-        // Check if any player is visible (within aggro range)
-        const spawnEnemyData = data as EnemyStats;
-        const playerInSight = unitsState.some(u => {
-            if (u.team !== "player" || u.hp <= 0) return false;
-            const playerG = unitsRef[u.id];
-            if (!playerG) return false;
-            const dx = playerG.position.x - g.position.x;
-            const dz = playerG.position.z - g.position.z;
-            return Math.sqrt(dx * dx + dz * dz) <= spawnEnemyData.aggroRange;
+        trySpawnMinion({
+            unit, g, enemyStats: data as EnemyStats, spawnSkill: data.spawnSkill as EnemySpawnSkill,
+            unitsState, unitsRef, skillCooldowns, setSkillCooldowns, setUnits, addLog, now
         });
-
-        // Play Brood Mother screech on first sight of player
-        if (playerInSight && unit.enemyType === "brood_mother" && !hasBroodMotherScreeched(unit.id)) {
-            markBroodMotherScreeched(unit.id);
-            soundFns.playBroodMotherScreech();
-            addLog("The Brood Mother lets out a piercing screech!", "#cc6600");
-        }
-
-        if (playerInSight && now >= spawnCooldownEnd) {
-            // Count current spawns from this unit
-            const currentSpawns = unitsState.filter(u => u.spawnedBy === unit.id && u.hp > 0).length;
-
-            if (currentSpawns < spawnSkill.maxSpawns) {
-                // Spawn a new minion
-                const spawnAngle = Math.random() * Math.PI * 2;
-                const spawnX = g.position.x + Math.cos(spawnAngle) * spawnSkill.spawnRange;
-                const spawnZ = g.position.z + Math.sin(spawnAngle) * spawnSkill.spawnRange;
-
-                // Create the spawned unit with unique ID from counter
-                const newId = getNextUnitId();
-                const spawnedUnit: Unit = {
-                    id: newId,
-                    x: spawnX,
-                    z: spawnZ,
-                    hp: ENEMY_STATS[spawnSkill.spawnType].maxHp,
-                    team: "enemy",
-                    enemyType: spawnSkill.spawnType,
-                    target: null,
-                    aiEnabled: true,
-                    spawnedBy: unit.id
-                };
-
-                // Add the unit to state
-                setUnits(prev => [...prev, spawnedUnit]);
-
-                // Play screech sound for broodling spawns
-                if (spawnSkill.spawnType === "broodling") {
-                    soundFns.playScreech();
-                }
-
-                // Log the spawn
-                addLog(`${spawnEnemyData.name} spawns a ${ENEMY_STATS[spawnSkill.spawnType].name}!`, "#cc6600");
-
-                // Set cooldown
-                setSkillCooldowns(prev => ({
-                    ...prev,
-                    [spawnCooldownKey]: { end: now + spawnSkill.cooldown, duration: spawnSkill.cooldown }
-                }));
-            }
-        }
     }
 
     let targetX = g.position.x, targetZ = g.position.z;
@@ -374,18 +293,10 @@ export function updateUnitAI(
                 if (now >= cooldownEnd && !skipAttackForAcidAura) {
                     // Check if enemy has a charge attack and it's ready
                     if (!isPlayer && 'chargeAttack' in data && data.chargeAttack) {
-                        const chargeAttack = data.chargeAttack;
-                        const chargeKey = `${unit.id}-${chargeAttack.name}`;
-                        const chargeCooldownEnd = skillCooldowns[chargeKey]?.end || 0;
-
-                        if (now >= chargeCooldownEnd) {
-                            // Start the charge attack
-                            startChargeAttack(scene, unit, g, chargeAttack, now, addLog);
-                            const cooldownMult = hasStatusEffect(unit, "slowed") ? SLOW_COOLDOWN_MULT : 1;
-                            setSkillCooldowns(prev => ({
-                                ...prev,
-                                [chargeKey]: { end: now + chargeAttack.cooldown * cooldownMult, duration: chargeAttack.cooldown }
-                            }));
+                        if (tryStartChargeAttack({
+                            unit, g, chargeAttack: data.chargeAttack, scene,
+                            skillCooldowns, setSkillCooldowns, addLog, now
+                        })) {
                             return;
                         }
                     }
@@ -450,64 +361,12 @@ export function updateUnitAI(
                     const attackCooldownEnd = now + data.attackCooldown * cooldownMult;
                     actionCooldownRef[unit.id] = attackCooldownEnd;
 
-                    // Check if enemy is ranged (has projectile color)
-                    const isRangedEnemy = 'projectileColor' in data && data.projectileColor;
-                    if (isRangedEnemy) {
-                        const projectile = createProjectile(scene, "enemy", g.position.x, g.position.z, data.projectileColor as string);
-                        projectilesRef.push({ type: "basic", mesh: projectile, targetId: targetU.id, attackerId: unit.id, speed: getProjectileSpeed("enemy") });
-                        soundFns.playAttack();
-                    } else {
-                        // Melee attack
-                        const targetData = getUnitStats(targetU);
-                        spawnSwingIndicator(scene, g, targetG, false, swingAnimations, now);
-
-                        if (rollHit(data.accuracy)) {
-                            const effectiveDamage = getEffectiveDamage(unit, data.damage as [number, number]);
-                            const dmg = calculateDamage(effectiveDamage[0], effectiveDamage[1], getEffectiveArmor(targetU, targetData.armor), "physical");
-                            const willPoison = shouldApplyPoison(data as EnemyStats);
-                            const willSlow = shouldApplySlow(data as EnemyStats);
-                            const poisonDmg = willPoison && 'poisonDamage' in data ? (data as EnemyStats).poisonDamage : undefined;
-                            const lifesteal = (data as EnemyStats).lifesteal;
-
-                            // Calculate lifesteal heal amount for log message (estimate based on current snapshot)
-                            const healAmount = lifesteal && lifesteal > 0 ? Math.floor(dmg * lifesteal) : 0;
-
-                            // Custom log for lifesteal attacks
-                            const hitText = healAmount > 0
-                                ? logLifestealHit(data.name, targetData.name, dmg, healAmount)
-                                : logHit(data.name, "Attack", targetData.name, dmg);
-
-                            const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
-                            applyDamageToUnit(dmgCtx, targetU.id, targetG, targetU.hp, dmg, targetData.name, {
-                                color: COLORS.damageEnemy,
-                                poison: willPoison ? { sourceId: unit.id, damagePerTick: poisonDmg } : undefined,
-                                slow: willSlow ? { sourceId: unit.id } : undefined,
-                                hitMessage: { text: hitText, color: COLORS.damageEnemy },
-                                targetUnit: targetU
-                            });
-
-                            soundFns.playHit();
-                            if (willPoison) {
-                                addLog(logPoisoned(targetData.name), COLORS.poisonText);
-                            }
-                            if (willSlow) {
-                                addLog(logSlowed(targetData.name), "#5599ff");
-                            }
-
-                            // Apply lifesteal heal using fresh state to avoid race condition
-                            if (healAmount > 0) {
-                                setUnits(prev => prev.map(u => {
-                                    if (u.id !== unit.id) return u;
-                                    // Calculate actual heal from fresh HP state
-                                    return { ...u, hp: Math.min(u.hp + healAmount, data.maxHp) };
-                                }));
-                                spawnDamageNumber(scene, g.position.x, g.position.z, healAmount, COLORS.logHeal, damageTexts, true);
-                            }
-                        } else {
-                            soundFns.playMiss();
-                            addLog(logMiss(data.name, "Attack", targetData.name), COLORS.logNeutral);
-                        }
-                    }
+                    // Execute enemy basic attack (ranged or melee)
+                    executeEnemyBasicAttack({
+                        scene, attacker: unit, attackerG: g, target: targetU, targetG,
+                        attackerStats: data as EnemyStats, damageTexts, hitFlashRef, unitsRef,
+                        setUnits, addLog, now, defeatedThisFrame, swingAnimations, projectilesRef
+                    });
                 }
                 return;
             } else {
@@ -550,33 +409,11 @@ export function updateUnitAI(
         }
 
         // Acid aura - periodically create acid around self when NOT moving
-        if (enemyStats.acidAura && !movedCell) {
-            const auraCooldownKey = `${unit.id}-acidAura`;
-            const auraCooldownEnd = skillCooldowns[auraCooldownKey]?.end ?? 0;
-            const auraCooldown = enemyStats.acidAuraCooldown ?? ACID_AURA_COOLDOWN;
-            const auraRadius = enemyStats.acidAuraRadius ?? ACID_AURA_RADIUS;
-
-            if (now >= auraCooldownEnd) {
-                // Create acid tiles in radius around slug
-                const centerX = newGridX;
-                const centerZ = newGridZ;
-                const radiusCells = Math.ceil(auraRadius);
-
-                for (let dx = -radiusCells; dx <= radiusCells; dx++) {
-                    for (let dz = -radiusCells; dz <= radiusCells; dz++) {
-                        const dist = Math.sqrt(dx * dx + dz * dz);
-                        if (dist <= auraRadius) {
-                            createAcidTile(scene, acidTilesRef, centerX + dx, centerZ + dz, unit.id, now);
-                        }
-                    }
-                }
-
-                // Set cooldown
-                setSkillCooldowns(prev => ({
-                    ...prev,
-                    [auraCooldownKey]: { end: now + auraCooldown, duration: auraCooldown }
-                }));
-            }
+        if (!movedCell) {
+            tryCreateAcidAura(enemyStats, {
+                scene, acidTiles: acidTilesRef, skillCooldowns, setSkillCooldowns,
+                unitId: unit.id, centerX: newGridX, centerZ: newGridZ, now
+            });
         }
     }
 }

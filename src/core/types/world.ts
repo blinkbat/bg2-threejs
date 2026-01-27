@@ -1,0 +1,98 @@
+import * as THREE from "three";
+
+// =============================================================================
+// WORLD TYPES - Map, tiles, rendering, pathfinding
+// =============================================================================
+
+export interface Room {
+    x: number;
+    z: number;
+    w: number;
+    h: number;
+}
+
+export interface CandlePosition {
+    x: number;
+    z: number;
+    dx: number;
+    dz: number;
+}
+
+export interface MergedObstacle {
+    x: number;
+    z: number;
+    w: number;
+    h: number;
+}
+
+export interface PathNode {
+    x: number;
+    z: number;
+    g: number;
+    h: number;
+    parent: PathNode | null;
+}
+
+// =============================================================================
+// RENDERING
+// =============================================================================
+
+export interface SelectionBox {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+}
+
+export interface HpBar {
+    bg: THREE.Mesh;
+    fill: THREE.Mesh;
+    maxHp: number;
+}
+
+export interface FogTexture {
+    canvas: HTMLCanvasElement;
+    ctx: CanvasRenderingContext2D;
+    texture: THREE.CanvasTexture;
+}
+
+export interface UnitGroup extends THREE.Group {
+    userData: {
+        unitId: number;
+        targetX: number;
+        targetZ: number;
+        attackTarget: number | null;
+        alerted?: boolean;  // Set when enemy is hit - makes them seek nearest player
+        lastHitTime?: number;  // Timestamp when unit last took damage (for kiting AI)
+        lastDamageSource?: { x: number; z: number; time: number };  // Position of last attacker (for shield facing)
+    };
+}
+
+// =============================================================================
+// GROUND TILES
+// =============================================================================
+
+// Acid tile - ground hazard created by acid slugs
+export interface AcidTile {
+    mesh: THREE.Mesh;
+    x: number;           // Grid cell X
+    z: number;           // Grid cell Z
+    elapsedTime: number;     // Accumulated elapsed time (pause-safe)
+    lastUpdateTime: number;  // Last frame timestamp for delta calculation
+    duration: number;        // Total duration in ms
+    timeSinceTick: number;   // Accumulated time since last damage tick (pause-safe)
+    sourceId: number;        // ID of the slug that created it
+}
+
+// Sanctuary tile - healing ground created by Paladin
+export interface SanctuaryTile {
+    mesh: THREE.Mesh;
+    x: number;           // Grid cell X
+    z: number;           // Grid cell Z
+    elapsedTime: number;     // Accumulated elapsed time (pause-safe)
+    lastUpdateTime: number;  // Last frame timestamp for delta calculation
+    duration: number;        // Total duration in ms
+    timeSinceTick: number;   // Accumulated time since last heal tick (pause-safe)
+    sourceId: number;        // ID of the unit that created it
+    healPerTick: number;     // How much to heal each tick
+}

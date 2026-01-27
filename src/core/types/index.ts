@@ -1,5 +1,7 @@
 // =============================================================================
-// TYPE EXPORTS - Re-export from split modules for backwards compatibility
+// TYPE EXPORTS - Re-export all types from split modules
 // =============================================================================
 
-export * from "./types/index";
+export * from "./units";
+export * from "./combat";
+export * from "./world";

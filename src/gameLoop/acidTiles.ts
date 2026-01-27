@@ -4,7 +4,8 @@
 
 import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, AcidTile } from "../core/types";
-import { COLORS, ACID_TILE_DURATION, ACID_TICK_INTERVAL, ACID_DAMAGE_PER_TICK, ACID_MAX_TILES } from "../core/constants";
+import { COLORS, ACID_TILE_DURATION, ACID_TICK_INTERVAL, ACID_DAMAGE_PER_TICK, ACID_MAX_TILES, ACID_AURA_COOLDOWN, ACID_AURA_RADIUS } from "../core/constants";
+import type { EnemyStats } from "../core/types";
 import { getUnitStats } from "../game/units";
 import { handleUnitDefeat, showDamageVisual } from "../combat/combat";
 import { createTileMesh, updateTileFade, removeExpiredTiles, clearAllTiles, getTileKey, isUnitOnTile, type TileProcessConfig } from "./tileUtils";
@@ -157,4 +158,57 @@ export function processAcidTiles(
  */
 export function clearAcidTiles(acidTiles: Map<string, AcidTile>, scene: THREE.Scene): void {
     clearAllTiles(acidTiles, scene);
+}
+
+// =============================================================================
+// ACID AURA - Periodic acid creation around stationary acid-aura enemies
+// =============================================================================
+
+export interface AcidAuraContext {
+    scene: THREE.Scene;
+    acidTiles: Map<string, AcidTile>;
+    skillCooldowns: Record<string, { end: number; duration: number }>;
+    setSkillCooldowns: React.Dispatch<React.SetStateAction<Record<string, { end: number; duration: number }>>>;
+    unitId: number;
+    centerX: number;
+    centerZ: number;
+    now: number;
+}
+
+/**
+ * Try to create acid aura tiles around a stationary acid-aura enemy.
+ * Handles cooldown checking and tile creation in a radius.
+ * @param stats - Enemy stats (must have acidAura: true)
+ * @param ctx - Context with scene, tiles, cooldowns, position, and timing
+ * @returns true if aura was created, false if on cooldown
+ */
+export function tryCreateAcidAura(stats: EnemyStats, ctx: AcidAuraContext): boolean {
+    if (!stats.acidAura) return false;
+
+    const auraCooldownKey = `${ctx.unitId}-acidAura`;
+    const auraCooldownEnd = ctx.skillCooldowns[auraCooldownKey]?.end ?? 0;
+
+    if (ctx.now < auraCooldownEnd) return false;
+
+    const auraCooldown = stats.acidAuraCooldown ?? ACID_AURA_COOLDOWN;
+    const auraRadius = stats.acidAuraRadius ?? ACID_AURA_RADIUS;
+    const radiusCells = Math.ceil(auraRadius);
+
+    // Create acid tiles in radius
+    for (let dx = -radiusCells; dx <= radiusCells; dx++) {
+        for (let dz = -radiusCells; dz <= radiusCells; dz++) {
+            const dist = Math.sqrt(dx * dx + dz * dz);
+            if (dist <= auraRadius) {
+                createAcidTile(ctx.scene, ctx.acidTiles, ctx.centerX + dx, ctx.centerZ + dz, ctx.unitId, ctx.now);
+            }
+        }
+    }
+
+    // Set cooldown
+    ctx.setSkillCooldowns(prev => ({
+        ...prev,
+        [auraCooldownKey]: { end: ctx.now + auraCooldown, duration: auraCooldown }
+    }));
+
+    return true;
 }

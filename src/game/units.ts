@@ -1,383 +1,23 @@
-import type { UnitData, EnemyStats, EnemyType, Unit, Skill } from "../core/types";
+import type { UnitData, EnemyStats, Unit } from "../core/types";
 import { DEFAULT_SPAWN_POINT } from "./areas";
-import { DEFAULT_MOVE_SPEED } from "../core/constants";
+
+// Re-export from split modules for backwards compatibility
+export { SKILLS } from "./skills";
+export { UNIT_DATA, getBasicAttackSkill, getAllSkills } from "./playerUnits";
+export { ENEMY_STATS } from "./enemyStats";
+
+// Import for local use
+import { UNIT_DATA } from "./playerUnits";
+import { ENEMY_STATS } from "./enemyStats";
 
 // =============================================================================
-// SKILLS
+// SHARED HELPERS
 // =============================================================================
 
-export const SKILLS: Record<string, Skill> = {
-    fireball: {
-        name: "Fireball",
-        description: "Hurl a ball of fire that explodes on impact, damaging all units in the area.",
-        flavor: "No foe heard the final incantation, for all that was left were cinders.",
-        manaCost: 15,
-        cooldown: 5000,
-        type: "damage",
-        targetType: "aoe",
-        range: 10,
-        aoeRadius: 2.5,
-        value: [8, 14],
-        damageType: "fire",
-        projectileColor: "#ff4400"
-    },
-    heal: {
-        name: "Prayer",
-        description: "Restore health to an ally.",
-        flavor: "Deeper than any salve, purer than any potion.",
-        manaCost: 6,
-        cooldown: 4000,
-        type: "heal",
-        targetType: "ally",
-        range: 10,
-        value: [8, 12],
-        damageType: "holy"
-    },
-    poisonDagger: {
-        name: "Poison Dagger",
-        description: "A quick strike with a venomous blade that may poison the target.",
-        flavor: "True power does not echo -- it whispers.",
-        manaCost: 8,
-        cooldown: 6000,
-        type: "damage",
-        targetType: "enemy",
-        range: 1.8,  // melee range
-        value: [4, 8],
-        damageType: "physical",
-        poisonChance: 85  // 85% chance to poison
-    },
-    warcry: {
-        name: "Warcry",
-        description: "Let out a mighty shout that forces nearby enemies to attack you.",
-        flavor: "When the dust cleared, only Kvel of the North was visible over the slain dead.",
-        manaCost: 10,
-        cooldown: 12000,
-        type: "taunt",
-        targetType: "self",  // centered on caster
-        range: 6,  // taunt radius
-        value: [80, 80],  // 80% chance to taunt each enemy
-        damageType: "physical"
-    },
-    raiseShield: {
-        name: "Raise Shield",
-        description: "Adopt a defensive stance, doubling armor but slowing your attacks.",
-        flavor: "\"Our fortress is gone, so I will be thy palisade. To me!\" - Torin the Golden",
-        manaCost: 5,
-        cooldown: 2500,  // Same as Paladin's attackCooldown (5s while shielded)
-        type: "buff",
-        targetType: "self",
-        range: 0,
-        value: [20000, 20000],  // duration in ms (20 seconds)
-        damageType: "physical"
-    },
-    flurryOfFists: {
-        name: "Flurry of Fists",
-        description: "Unleash 5 rapid strikes on nearby enemies.",
-        flavor: "The imps never saw it coming -- then they never saw anything again.",
-        manaCost: 8,
-        cooldown: 4000,
-        type: "flurry",
-        targetType: "self",  // centered on caster
-        range: 2.5,  // melee range for targets
-        value: [2, 4],  // low damage per hit
-        damageType: "physical",
-        hitCount: 5
-    },
-    stunningBlow: {
-        name: "Stunning Blow",
-        description: "A powerful strike that stuns the target, preventing them from acting for 5 seconds.",
-        flavor: "Seems even the senseless can get the sense beaten out of them.",
-        manaCost: 12,
-        cooldown: 3000,
-        type: "debuff",
-        targetType: "enemy",
-        range: 1.8,  // melee range
-        value: [5000, 5000],  // stun duration in ms (5 seconds)
-        damageType: "physical",
-        stunChance: 75  // 75% chance to stun
-    },
-    cleanse: {
-        name: "Cleanse",
-        description: "Purify an ally, removing poison and granting immunity to poison for 30 seconds.",
-        flavor: "Where light touches, no venom may linger.",
-        manaCost: 4,
-        cooldown: 3000,
-        type: "buff",
-        targetType: "ally",
-        range: 8,
-        value: [30000, 30000],  // duration in ms (30 seconds)
-        damageType: "holy"
-    },
-    magicWave: {
-        name: "Magic Wave",
-        description: "Launch 8 arcane missiles that fan out towards a target area.",
-        flavor: "\"Running will only make it worse!\" - Archmage Konen",
-        manaCost: 20,
-        cooldown: 7000,
-        type: "damage",
-        targetType: "aoe",  // Can target any position like fireball
-        range: 10,
-        aoeRadius: 3,  // Visual indicator radius
-        value: [2, 4],  // damage per missile
-        damageType: "chaos",
-        hitCount: 8,  // 8 missiles
-        projectileColor: "#9966ff"  // Purple arcane color
-    },
-    caltrops: {
-        name: "Caltrops",
-        description: "Throw a spiked trap that pins all enemies in a small area for 10 seconds when triggered.",
-        flavor: "A single step spells doom for the unwary.",
-        manaCost: 15,
-        cooldown: 5000,
-        type: "trap",
-        targetType: "aoe",  // Position-targeted
-        range: 8,
-        aoeRadius: 2,  // Trigger and effect radius
-        value: [10000, 10000],  // Pinned duration in ms (10 seconds)
-        damageType: "physical"
-    },
-    sanctuary: {
-        name: "Sanctuary",
-        description: "Consecrate the ground, dispelling hazards and creating holy tiles that heal allies over time.",
-        flavor: "\"Stand fast, for this ground is sacred now.\" - Paladin Aldric",
-        manaCost: 20,
-        cooldown: 15000,
-        type: "sanctuary",
-        targetType: "aoe",
-        range: 4,
-        aoeRadius: 2.5,  // Radius of effect
-        value: [3, 3],  // Heal per tick (uses SANCTUARY_HEAL_PER_TICK from constants)
-        damageType: "holy"
-    },
-    qiFocus: {
-        name: "Qi Focus",
-        description: "Channel your life force to restore an ally's mana, at the cost of your own vitality.",
-        flavor: "\"The body is but a vessel for the spirit's gift.\" - Master Shen",
-        manaCost: 0,
-        cooldown: 8000,
-        type: "mana_transfer",
-        targetType: "ally",
-        range: 6,
-        value: [10, 14],  // Mana to give
-        selfDamage: [20, 30],  // HP cost to caster over time
-        damageType: "physical"
-    }
-};
+/** Default melee attack range (used when unit has no range specified) */
+export const DEFAULT_MELEE_RANGE = 1.8;
 
-// =============================================================================
-// UNIT DATA - Simple party, no complex D&D logic yet
-// =============================================================================
-
-export const UNIT_DATA: Record<number, UnitData> = {
-    1: { name: "Barbarian", class: "Barbarian", hp: 50, maxHp: 50, mana: 25, maxMana: 25, damage: [4, 8], accuracy: 70, armor: 2, color: "#c0392b", skills: [SKILLS.warcry, SKILLS.stunningBlow], items: ["Axe"], attackCooldown: 2000 },
-    2: { name: "Paladin", class: "Paladin", hp: 45, maxHp: 45, mana: 35, maxMana: 35, damage: [3, 6], accuracy: 65, armor: 3, color: "#f1c40f", skills: [SKILLS.raiseShield, SKILLS.sanctuary], items: ["Mace"], attackCooldown: 2500 },
-    3: { name: "Thief", class: "Thief", hp: 25, maxHp: 25, mana: 30, maxMana: 30, damage: [2, 4], accuracy: 75, armor: 1, color: "#8e44ad", skills: [SKILLS.poisonDagger, SKILLS.caltrops], items: ["Bow"], range: 7, projectileColor: "#a0522d", attackCooldown: 1500 },
-    4: { name: "Wizard", class: "Wizard", hp: 18, maxHp: 18, mana: 80, maxMana: 80, damage: [1, 5], accuracy: 60, armor: 0, color: "#3498db", skills: [SKILLS.fireball, SKILLS.magicWave], items: ["Staff"], range: 8, projectileColor: "#ff6600", attackCooldown: 3000 },
-    5: { name: "Monk", class: "Monk", hp: 35, maxHp: 35, mana: 30, maxMana: 30, damage: [2, 5], accuracy: 70, armor: 1, color: "#27ae60", skills: [SKILLS.flurryOfFists, SKILLS.qiFocus], items: ["Fists"], attackCooldown: 1800 },
-    6: { name: "Cleric", class: "Cleric", hp: 30, maxHp: 30, mana: 60, maxMana: 60, damage: [2, 4], accuracy: 60, armor: 2, color: "#ecf0f1", skills: [SKILLS.heal, SKILLS.cleanse], items: ["Staff"], range: 6, projectileColor: "#ffffaa", attackCooldown: 2500 },
-};
-
-// Enemy stats registry - keyed by EnemyType
-export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
-    kobold: {
-        name: "Kobold",
-        hp: 12,
-        maxHp: 12,
-        damage: [1, 5],
-        accuracy: 50,
-        armor: 0,
-        color: "#8B4513",
-        aggroRange: 6,
-        attackCooldown: 2000,
-        moveSpeed: DEFAULT_MOVE_SPEED
-    },
-    kobold_archer: {
-        name: "Kobold Archer",
-        hp: 10,
-        maxHp: 10,
-        damage: [3, 7],
-        accuracy: 55,
-        armor: 0,
-        color: "#6B4423",
-        aggroRange: 8,
-        attackCooldown: 2500,
-        range: 6,
-        projectileColor: "#8B4513",
-        poisonChance: 35,  // 35% chance to poison on hit
-        moveSpeed: DEFAULT_MOVE_SPEED,
-        // Kiting behavior - retreat when players get close
-        kiteTrigger: 4,      // Start kiting when player within this range
-        kiteDistance: 4,     // How far to retreat
-        kiteCooldown: 3000   // Can only kite every 3 seconds
-    },
-    kobold_witch_doctor: {
-        name: "Kobold Witch Doctor",
-        hp: 14,
-        maxHp: 14,
-        damage: [1, 3],
-        accuracy: 50,
-        armor: 0,
-        color: "#4a0080",  // Purple for magical
-        aggroRange: 8,
-        attackCooldown: 3000,
-        range: 5,
-        projectileColor: "#9932CC",  // Dark orchid
-        moveSpeed: DEFAULT_MOVE_SPEED,
-        healSkill: {
-            name: "Dark Mending",
-            cooldown: 8000,  // 8 seconds
-            heal: [6, 12],
-            range: 6  // Range to find hurt allies
-        },
-        // Kiting behavior - retreat when players get close
-        kiteTrigger: 4,      // Start kiting when player within this range
-        kiteDistance: 5,     // How far to retreat
-        kiteCooldown: 3500   // Can only kite every 3.5 seconds
-    },
-    ogre: {
-        name: "Ogre",
-        hp: 80,
-        maxHp: 80,
-        damage: [6, 10],
-        accuracy: 60,
-        armor: 3,
-        color: "#556B2F",
-        aggroRange: 8,
-        moveSpeed: 0.4,  // Slow movement
-        attackCooldown: 3000,
-        size: 2.0,
-        skill: {
-            name: "Swipe",
-            cooldown: 10000,  // 10 seconds
-            damage: [9, 16],
-            maxTargets: 3,
-            range: 2.5,
-            damageType: "physical"
-        }
-    },
-    brood_mother: {
-        name: "Brood Mother",
-        hp: 45,
-        maxHp: 45,
-        damage: [3, 8],
-        accuracy: 55,
-        armor: 2,
-        color: "#4a2c2a",  // Dark brownish-red (spider-like)
-        aggroRange: 12,  // Good LOS - sees you from far
-        attackCooldown: 2500,
-        size: 1.5,  // Medium size
-        moveSpeed: 0.5,  // 50% slower than normal - lumbering
-        spawnSkill: {
-            spawnType: "broodling",
-            cooldown: 4000,  // Spawn every 4 seconds when in combat
-            maxSpawns: 3,    // Max 3 broodlings at once
-            spawnRange: 1.5  // Spawn nearby
-        }
-    },
-    broodling: {
-        name: "Broodling",
-        hp: 5,
-        maxHp: 5,
-        damage: [1, 2],  // Low damage
-        accuracy: 65,
-        armor: 0,
-        color: "#5c3a38",  // Lighter brown-red
-        aggroRange: 4,  // Limited LOS - relies on mother's sight
-        attackCooldown: 800,  // Fast attacks
-        size: 0.6,  // Small
-        range: 1.0,  // Short melee range - they're small
-        poisonChance: 20,  // 20% chance to apply weak poison on hit
-        poisonDamage: 1,  // Weak poison
-        moveSpeed: 1.8  // 50% faster than normal
-    },
-    giant_amoeba: {
-        name: "Giant Amoeba",
-        hp: 55,
-        maxHp: 55,
-        damage: [6, 10],
-        accuracy: 60,
-        armor: 0,
-        color: "#3cb371",  // Medium sea green - translucent blob
-        aggroRange: 6,
-        attackCooldown: 2000,
-        size: 2.0,  // Large - decreases with each split
-        moveSpeed: 0.7,  // Slightly slower, it's a blob
-        maxSplitCount: 3,  // Can split up to 3 times (4 generations total)
-        slowChance: 40  // 40% chance to slow on hit (1.5x cooldowns, 0.5x move speed for 10s)
-    },
-    acid_slug: {
-        name: "Acid Slug",
-        hp: 120,
-        maxHp: 120,
-        damage: [3, 9],
-        accuracy: 70,
-        armor: 1,
-        color: "#9acd32",  // Yellow-green - acidic
-        aggroRange: 7,
-        attackCooldown: 1800,
-        size: 1.0,
-        moveSpeed: 0.5,    // Slow - it's a slug
-        acidTrail: true,   // Leaves acid on cells it moves through
-        acidAura: true,    // Periodically creates acid around itself
-        acidAuraCooldown: 3000,  // 3 seconds between aura creation
-        acidAuraRadius: 1.5      // 1.5 grid cells around itself
-    },
-    bat: {
-        name: "Vampire Bat",
-        hp: 25,
-        maxHp: 25,
-        damage: [3, 7],
-        accuracy: 70,
-        armor: 1,
-        color: "#2a1a2a",  // Dark purple-black
-        aggroRange: 10,    // Good vision in the dark
-        attackCooldown: 1200,  // Fast attacks
-        size: 1,
-        moveSpeed: 1.4,    // Fast flyer (140% normal speed)
-        flying: true,      // Floats above ground
-        lifesteal: 0.5     // Heals for 50% of damage dealt
-    },
-    undead_knight: {
-        name: "Undead Knight",
-        hp: 120,
-        maxHp: 120,
-        damage: [8, 18],
-        accuracy: 65,
-        armor: 2,          // Heavy armor
-        color: "#2a3a4a",  // Dark steel blue
-        aggroRange: 8,
-        attackCooldown: 3500,  // Slow heavy swings
-        size: 1.6,         // Large
-        moveSpeed: 0.35,   // Very slow movement
-        frontShield: true, // Blocks all damage from the front
-        turnSpeed: 0.15    // Turns very slowly (15% of normal)
-    },
-    ancient_construct: {
-        name: "Ancient Construct",
-        hp: 300,
-        maxHp: 300,
-        damage: [10, 16],
-        accuracy: 70,
-        armor: 3,          // Heavy armor (magic bypasses)
-        color: "#8b7355",  // Bronze/stone color
-        aggroRange: 12,
-        attackCooldown: 2500,
-        size: 2.5,         // Large boss
-        moveSpeed: 0.6,    // Moderately slow
-        aggressiveTargeting: true,  // Immediately retargets to damage sources
-        chargeAttack: {
-            name: "Cataclysm",
-            cooldown: 18000,   // 18 seconds between charges
-            chargeTime: 5000,  // 5 seconds to charge
-            damage: [25, 40],  // High damage
-            crossWidth: 3,     // 3 tiles wide
-            crossLength: 6,    // 6 tiles long in each direction
-            damageType: "chaos"
-        }
-    }
-};
-
-// Helper to get stats for any unit
+/** Get stats for any unit (player or enemy) */
 export function getUnitStats(unit: Unit): UnitData | EnemyStats {
     if (unit.team === "player") {
         return UNIT_DATA[unit.id];
@@ -386,6 +26,16 @@ export function getUnitStats(unit: Unit): UnitData | EnemyStats {
     if (!unit.enemyType) return ENEMY_STATS.kobold;
     return ENEMY_STATS[unit.enemyType];
 }
+
+/** Get the attack range for any unit (player or enemy) */
+export function getAttackRange(unit: Unit): number {
+    const stats = getUnitStats(unit);
+    return stats.range ?? DEFAULT_MELEE_RANGE;
+}
+
+// =============================================================================
+// SPAWN LOCATIONS
+// =============================================================================
 
 // Ogre spawn - center of the map (great hall, now 16x16 at x:16-31, z:16-31)
 const ogreSpawn = { x: 24.5, z: 24.5 };
@@ -432,7 +82,11 @@ const witchDoctorSpawns = [
     { x: 43.5, z: 8.5 },
 ];
 
-// Helper to create initial units
+// =============================================================================
+// INITIAL UNIT CREATION
+// =============================================================================
+
+/** Create initial units for the default dungeon map */
 export function createInitialUnits(): Unit[] {
     return [
         // Player units (starting at spawn point - water's edge on coast)
@@ -494,41 +148,4 @@ export function createInitialUnits(): Unit[] {
             aiEnabled: true
         },
     ];
-}
-
-// Generate a "basic attack" pseudo-skill for display in UI
-export function getBasicAttackSkill(unitId: number): Skill {
-    const data = UNIT_DATA[unitId];
-    // Determine damage type based on class
-    const damageType = data.class === "Wizard" ? "chaos" as const
-        : data.class === "Cleric" ? "holy" as const
-        : "physical" as const;
-    return {
-        name: "Attack",
-        manaCost: 0,
-        cooldown: data.attackCooldown,
-        type: "damage",
-        targetType: "enemy",
-        range: data.range ?? 1.8,
-        value: data.damage,
-        damageType,
-    };
-}
-
-// Get all skills for a unit (basic attack + special skills)
-export function getAllSkills(unitId: number): Skill[] {
-    const data = UNIT_DATA[unitId];
-    return [getBasicAttackSkill(unitId), ...data.skills];
-}
-
-// Default melee attack range (used when unit has no range specified)
-export const DEFAULT_MELEE_RANGE = 1.8;
-
-/**
- * Get the attack range for any unit (player or enemy).
- * Returns the unit's range if specified, or DEFAULT_MELEE_RANGE for melee units.
- */
-export function getAttackRange(unit: Unit): number {
-    const stats = getUnitStats(unit);
-    return stats.range ?? DEFAULT_MELEE_RANGE;
 }
