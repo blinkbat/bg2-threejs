@@ -16,7 +16,8 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         color: "#8B4513",
         aggroRange: 6,
         attackCooldown: 2000,
-        moveSpeed: DEFAULT_MOVE_SPEED
+        moveSpeed: DEFAULT_MOVE_SPEED,
+        expReward: 5
     },
     kobold_archer: {
         name: "Kobold Archer",
@@ -32,6 +33,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         projectileColor: "#8B4513",
         poisonChance: 35,  // 35% chance to poison on hit
         moveSpeed: DEFAULT_MOVE_SPEED,
+        expReward: 8,
         // Kiting behavior - retreat when players get close
         kiteTrigger: 4,      // Start kiting when player within this range
         kiteDistance: 4,     // How far to retreat
@@ -50,6 +52,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         range: 5,
         projectileColor: "#9932CC",  // Dark orchid
         moveSpeed: DEFAULT_MOVE_SPEED,
+        expReward: 12,
         healSkill: {
             name: "Dark Mending",
             cooldown: 8000,  // 8 seconds
@@ -73,6 +76,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         moveSpeed: 0.4,  // Slow movement
         attackCooldown: 3000,
         size: 2.0,
+        expReward: 60,
         skill: {
             name: "Swipe",
             cooldown: 10000,  // 10 seconds
@@ -94,6 +98,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         attackCooldown: 2500,
         size: 1.5,  // Medium size
         moveSpeed: 0.5,  // 50% slower than normal - lumbering
+        expReward: 30,
         spawnSkill: {
             spawnType: "broodling",
             cooldown: 4000,  // Spawn every 4 seconds when in combat
@@ -115,39 +120,43 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         range: 1.0,  // Short melee range - they're small
         poisonChance: 20,  // 20% chance to apply weak poison on hit
         poisonDamage: 1,  // Weak poison
-        moveSpeed: 1.8  // 50% faster than normal
+        moveSpeed: 1.8,  // 50% faster than normal
+        expReward: 2
     },
+    // Beach enemies - starting area, lower stats
     giant_amoeba: {
         name: "Giant Amoeba",
-        hp: 55,
-        maxHp: 55,
-        damage: [6, 10],
-        accuracy: 60,
+        hp: 25,
+        maxHp: 25,
+        damage: [3, 6],
+        accuracy: 55,
         armor: 0,
         color: "#3cb371",  // Medium sea green - translucent blob
         aggroRange: 6,
-        attackCooldown: 2000,
+        attackCooldown: 2200,
         size: 2.0,  // Large - decreases with each split
         moveSpeed: 0.7,  // Slightly slower, it's a blob
         maxSplitCount: 3,  // Can split up to 3 times (4 generations total)
-        slowChance: 40  // 40% chance to slow on hit (1.5x cooldowns, 0.5x move speed for 10s)
+        slowChance: 30,  // 30% chance to slow on hit
+        expReward: 15
     },
     acid_slug: {
         name: "Acid Slug",
-        hp: 120,
-        maxHp: 120,
-        damage: [3, 9],
-        accuracy: 70,
+        hp: 45,
+        maxHp: 45,
+        damage: [2, 5],
+        accuracy: 65,
         armor: 1,
         color: "#9acd32",  // Yellow-green - acidic
         aggroRange: 7,
-        attackCooldown: 1800,
+        attackCooldown: 2000,
         size: 1.0,
         moveSpeed: 0.5,    // Slow - it's a slug
         acidTrail: true,   // Leaves acid on cells it moves through
         acidAura: true,    // Periodically creates acid around itself
-        acidAuraCooldown: 3000,  // 3 seconds between aura creation
-        acidAuraRadius: 1.5      // 1.5 grid cells around itself
+        acidAuraCooldown: 3500,  // 3.5 seconds between aura creation
+        acidAuraRadius: 1.5,     // 1.5 grid cells around itself
+        expReward: 35
     },
     bat: {
         name: "Vampire Bat",
@@ -162,7 +171,8 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         size: 1,
         moveSpeed: 1.4,    // Fast flyer (140% normal speed)
         flying: true,      // Floats above ground
-        lifesteal: 0.5     // Heals for 50% of damage dealt
+        lifesteal: 0.5,    // Heals for 50% of damage dealt
+        expReward: 15
     },
     undead_knight: {
         name: "Undead Knight",
@@ -177,7 +187,8 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         size: 1.6,         // Large
         moveSpeed: 0.35,   // Very slow movement
         frontShield: true, // Blocks all damage from the front
-        turnSpeed: 0.15    // Turns very slowly (15% of normal)
+        turnSpeed: 0.15,   // Turns very slowly (15% of normal)
+        expReward: 75
     },
     ancient_construct: {
         name: "Ancient Construct",
@@ -192,6 +203,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         size: 2.5,         // Large boss
         moveSpeed: 0.6,    // Moderately slow
         aggressiveTargeting: true,  // Immediately retargets to damage sources
+        expReward: 200,
         chargeAttack: {
             name: "Cataclysm",
             cooldown: 18000,   // 18 seconds between charges

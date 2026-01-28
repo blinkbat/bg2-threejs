@@ -349,6 +349,19 @@ export function applyDamageToUnit(
         if (attackerName) {
             tryKillBark(attackerName, addLog);
         }
+        // Award XP to all living player units when an enemy dies
+        if (targetUnit && targetUnit.team === "enemy" && targetUnit.enemyType) {
+            const expReward = ENEMY_STATS[targetUnit.enemyType].expReward;
+            if (expReward > 0) {
+                setUnits(prev => prev.map(u => {
+                    if (u.team === "player" && u.hp > 0) {
+                        return { ...u, exp: (u.exp ?? 0) + expReward };
+                    }
+                    return u;
+                }));
+                addLog(`Party gained ${expReward} XP!`, "#9b59b6");
+            }
+        }
     }
 
     return newHp;

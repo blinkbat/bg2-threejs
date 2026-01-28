@@ -28,6 +28,8 @@ export interface Unit {
     z: number;
     hp: number;
     mana?: number;
+    level?: number;  // Character level (player units only)
+    exp?: number;    // Current experience points (player units only)
     team: "player" | "enemy";
     enemyType?: EnemyType;  // Only set for enemies
     target: number | null;
@@ -108,6 +110,7 @@ export interface EnemyStats {
     color: string;
     aggroRange: number;
     attackCooldown: number;
+    expReward: number;  // Experience points awarded on death
     // Optional for ranged enemies
     range?: number;
     projectileColor?: string;

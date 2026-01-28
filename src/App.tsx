@@ -75,6 +75,8 @@ interface PersistedPlayer {
     id: number;
     hp: number;
     mana?: number;
+    level?: number;
+    exp?: number;
     statusEffects?: Unit["statusEffects"];
 }
 
@@ -165,6 +167,8 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                 z: pos.z,
                 hp: persisted?.hp ?? data.hp,
                 mana: persisted?.mana ?? data.mana,
+                level: persisted?.level ?? 1,
+                exp: persisted?.exp ?? 0,
                 team: "player" as const,
                 target: null,
                 aiEnabled: true,
@@ -395,6 +399,8 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                 id: u.id,
                 hp: u.hp,
                 mana: u.mana,
+                level: u.level,
+                exp: u.exp,
                 statusEffects: u.statusEffects
             }));
 
@@ -1167,6 +1173,8 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
             id: u.id,
             hp: u.hp,
             mana: u.mana,
+            level: u.level,
+            exp: u.exp,
             statusEffects: u.statusEffects
         }));
 

@@ -125,14 +125,42 @@ export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, ski
     );
 }
 
+// XP required to reach each level (index = level, value = total XP needed)
+const XP_REQUIREMENTS = [0, 0, 100, 250, 450, 700, 1000, 1400, 1900, 2500, 3200];
+
+function getXpForLevel(level: number): number {
+    if (level < 1) return 0;
+    if (level >= XP_REQUIREMENTS.length) return XP_REQUIREMENTS[XP_REQUIREMENTS.length - 1] + (level - XP_REQUIREMENTS.length + 1) * 800;
+    return XP_REQUIREMENTS[level];
+}
+
 function StatusTab({ unit, effectiveData, onToggleAI, unitId }: { unit: Unit; effectiveData: typeof UNIT_DATA[number]; onToggleAI: (id: number) => void; unitId: number }) {
     const isShielded = hasStatusEffect(unit, "shielded");
     // Base armor from equipment, doubled if shielded
     const baseArmor = effectiveData.armor;
     const displayArmor = getEffectiveArmor(unit, baseArmor);
 
+    // Level and XP
+    const level = unit.level ?? 1;
+    const currentExp = unit.exp ?? 0;
+    const xpForCurrentLevel = getXpForLevel(level);
+    const xpForNextLevel = getXpForLevel(level + 1);
+    const xpIntoLevel = currentExp - xpForCurrentLevel;
+    const xpNeeded = xpForNextLevel - xpForCurrentLevel;
+    const xpPct = xpNeeded > 0 ? Math.min(100, (xpIntoLevel / xpNeeded) * 100) : 100;
+
     return (
         <div style={{ fontSize: 13 }}>
+            <div className="level-exp-section">
+                <div className="level-badge">Lv {level}</div>
+                <div className="exp-bar-container">
+                    <div className="exp-bar">
+                        <div className="exp-fill" style={{ width: `${xpPct}%` }} />
+                    </div>
+                    <div className="exp-text">{currentExp} / {xpForNextLevel} XP</div>
+                </div>
+            </div>
+
             <div className="stat-grid">
                 <div className="card">
                     <span className="text-muted">Accuracy</span>
