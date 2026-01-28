@@ -22,14 +22,25 @@ export interface StatusEffect {
 // UNIT DATA
 // =============================================================================
 
+// Character stats type
+export interface CharacterStats {
+    strength: number;     // +1 physical damage per 2 points
+    dexterity: number;    // +1% hit chance per 2 points
+    vitality: number;     // +2 HP per point
+    intelligence: number; // +1 MP per point, +1 elemental/chaos damage per 3 points
+    faith: number;        // +1 holy damage per 2 points, +1 healing power per 2 points
+}
+
 export interface Unit {
     id: number;
     x: number;
     z: number;
     hp: number;
     mana?: number;
-    level?: number;  // Character level (player units only)
-    exp?: number;    // Current experience points (player units only)
+    level?: number;       // Character level (player units only)
+    exp?: number;         // Current experience points (player units only)
+    stats?: CharacterStats;  // Allocated stat points (player units only)
+    statPoints?: number;  // Unspent stat points (player units only)
     team: "player" | "enemy";
     enemyType?: EnemyType;  // Only set for enemies
     target: number | null;

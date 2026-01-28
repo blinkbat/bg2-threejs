@@ -926,6 +926,10 @@ html, body, #root {
     border-left-color: #333;
 }
 
+.tippy-box[data-placement^='right'] > .tippy-arrow::before {
+    border-right-color: #333;
+}
+
 /* Enemy hover tooltip */
 .enemy-tooltip {
     position: fixed;
@@ -984,6 +988,150 @@ html, body, #root {
 .effect-duration {
     color: #888;
     font-size: 12px;
+}
+
+/* -----------------------------------------------------------------------------
+   CHARACTER STATS ALLOCATION
+   ----------------------------------------------------------------------------- */
+.stats-section {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #333;
+}
+
+.stats-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.stats-label {
+    font-size: 11px;
+    color: #888;
+    text-transform: uppercase;
+}
+
+.stat-points-badge {
+    background: linear-gradient(135deg, #2d5a27 0%, #1a3a15 100%);
+    color: #4ade80;
+    padding: 3px 10px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: bold;
+    border: 1px solid #4ade8040;
+    animation: stat-pulse 2s ease-in-out infinite;
+}
+
+@keyframes stat-pulse {
+    0%, 100% { box-shadow: 0 0 4px #4ade8040; }
+    50% { box-shadow: 0 0 8px #4ade8060; }
+}
+
+.stat-allocation-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 6px;
+}
+
+.stat-row {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 4px;
+    background: linear-gradient(180deg, rgba(30, 30, 45, 0.6) 0%, rgba(20, 20, 30, 0.8) 100%);
+    border-radius: 6px;
+    border: 1px solid #333;
+    transition: border-color 0.15s, background 0.15s;
+    cursor: default;
+}
+
+.stat-row:hover {
+    border-color: #555;
+    background: linear-gradient(180deg, rgba(40, 40, 55, 0.7) 0%, rgba(25, 25, 35, 0.9) 100%);
+}
+
+.stat-row.has-points {
+    border-color: #4ade8050;
+}
+
+.stat-row.has-points:hover {
+    border-color: #4ade80;
+}
+
+.stat-name {
+    font-weight: bold;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+}
+
+.stat-value {
+    font-size: 16px;
+    font-weight: bold;
+    color: #fff;
+}
+
+.stat-increment-btn {
+    width: 22px;
+    height: 18px;
+    border: none;
+    background: linear-gradient(180deg, #4ade80 0%, #22c55e 100%);
+    color: #000;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 14px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.1s, box-shadow 0.1s;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.stat-increment-btn:hover {
+    transform: scale(1.1);
+    box-shadow: 0 2px 8px rgba(74, 222, 128, 0.4);
+}
+
+.stat-increment-btn:active {
+    transform: scale(0.95);
+}
+
+/* Stat Tooltip */
+.stat-tooltip {
+    font-size: 12px;
+    min-width: 140px;
+}
+
+.stat-tooltip-header {
+    font-weight: bold;
+    font-size: 13px;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #333;
+}
+
+.stat-tooltip-bonuses {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.stat-tooltip-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.stat-tooltip-label {
+    color: #aaa;
+}
+
+.stat-tooltip-rate {
+    color: #4ade80;
+    font-weight: 500;
 }
 
 /* -----------------------------------------------------------------------------

@@ -6,6 +6,7 @@ import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, Projectile, EnemyStats, MagicMissileProjectile, TrapProjectile, StatusEffect, DamageType, UnitData } from "../core/types";
 import { HIT_DETECTION_RADIUS, COLORS, BUFF_TICK_INTERVAL } from "../core/constants";
 import { getUnitStats } from "../game/units";
+import { getIntelligenceMagicDamageBonus, getFaithHolyDamageBonus } from "../game/statBonuses";
 import { calculateDamage, getDirectionAndDistance, rollHit, shouldApplyPoison, getEffectiveArmor, logHit, logLifestealHit, logMiss, logPoisoned, logAoeHit, logAoeMiss, getDamageColor, logTrapTriggered, isBlockedByFrontShield } from "../combat/combatMath";
 import { distance } from "../game/geometry";
 import { ENEMY_STATS } from "../game/units";
@@ -124,7 +125,14 @@ export function updateProjectiles(
                     if (targetDist <= aoeRadius) {
                         const targetData = getUnitStats(target);
                         const currentHp = hpTracker[target.id] ?? target.hp;
-                        const dmg = calculateDamage(damage[0], damage[1], getEffectiveArmor(target, targetData.armor), proj.damageType);
+                        // Apply intelligence bonus for elemental/chaos damage, faith bonus for holy
+                        let statBonus = 0;
+                        if (attackerUnit && (proj.damageType === "fire" || proj.damageType === "cold" || proj.damageType === "lightning" || proj.damageType === "chaos")) {
+                            statBonus = getIntelligenceMagicDamageBonus(attackerUnit);
+                        } else if (attackerUnit && proj.damageType === "holy") {
+                            statBonus = getFaithHolyDamageBonus(attackerUnit);
+                        }
+                        const dmg = calculateDamage(damage[0] + statBonus, damage[1] + statBonus, getEffectiveArmor(target, targetData.armor), proj.damageType);
 
                         const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
                         applyDamageToUnit(dmgCtx, target.id, tg, currentHp, dmg, targetData.name, {
@@ -247,7 +255,14 @@ export function updateProjectiles(
 
                         // Skip if target already dead (killed by another projectile this frame)
                         if (currentHp > 0) {
-                            dmgDealt = calculateDamage(mmProj.damage[0], mmProj.damage[1], getEffectiveArmor(targetUnit, targetData.armor), mmProj.damageType);
+                            // Apply intelligence bonus for elemental/chaos damage
+                            let statBonus = 0;
+                            if (mmProj.damageType === "fire" || mmProj.damageType === "cold" || mmProj.damageType === "lightning" || mmProj.damageType === "chaos") {
+                                statBonus = getIntelligenceMagicDamageBonus(attackerUnit);
+                            } else if (mmProj.damageType === "holy") {
+                                statBonus = getFaithHolyDamageBonus(attackerUnit);
+                            }
+                            dmgDealt = calculateDamage(mmProj.damage[0] + statBonus, mmProj.damage[1] + statBonus, getEffectiveArmor(targetUnit, targetData.armor), mmProj.damageType);
 
                             const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
                             const mmAttackerG = unitsRef[mmProj.attackerId];

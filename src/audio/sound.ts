@@ -570,6 +570,77 @@ const playGulp = () => {
     glug2.stop(ctx.currentTime + 0.25);
 };
 
+// Level Up fanfare - triumphant ascending arpeggio (10s cooldown to prevent overlap)
+let lastLevelUpTime = 0;
+const LEVEL_UP_COOLDOWN = 10000; // 10 seconds
+
+const playLevelUp = () => {
+    if (muted) return;
+
+    // Check cooldown to prevent overlapping fanfares
+    const now = Date.now();
+    if (now - lastLevelUpTime < LEVEL_UP_COOLDOWN) return;
+    lastLevelUpTime = now;
+
+    const ctx = getAudioCtx();
+
+    // Triumphant arpeggio - C major with octave jump
+    const notes = [
+        { freq: 523, time: 0 },      // C5
+        { freq: 659, time: 0.12 },   // E5
+        { freq: 784, time: 0.24 },   // G5
+        { freq: 1047, time: 0.36 },  // C6
+        { freq: 1319, time: 0.5 },   // E6
+        { freq: 1568, time: 0.65 },  // G6
+    ];
+
+    notes.forEach(({ freq, time }) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const filter = ctx.createBiquadFilter();
+
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(freq, ctx.currentTime + time);
+        // Add slight vibrato
+        osc.frequency.linearRampToValueAtTime(freq * 1.02, ctx.currentTime + time + 0.08);
+        osc.frequency.linearRampToValueAtTime(freq, ctx.currentTime + time + 0.15);
+
+        filter.type = "lowpass";
+        filter.frequency.setValueAtTime(4000, ctx.currentTime);
+
+        const startTime = ctx.currentTime + time;
+        gain.gain.setValueAtTime(0, startTime);
+        gain.gain.linearRampToValueAtTime(0.15, startTime + 0.03);
+        gain.gain.exponentialRampToValueAtTime(0.08, startTime + 0.2);
+        gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.4);
+
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(startTime);
+        osc.stop(startTime + 0.45);
+    });
+
+    // Sustained chord at the end
+    const chordNotes = [1047, 1319, 1568]; // C6, E6, G6
+    chordNotes.forEach(freq => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(freq, ctx.currentTime);
+
+        const startTime = ctx.currentTime + 0.7;
+        gain.gain.setValueAtTime(0, startTime);
+        gain.gain.linearRampToValueAtTime(0.1, startTime + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.35);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(startTime);
+        osc.stop(startTime + 0.4);
+    });
+};
+
 // Crunch - food eating sound
 const playCrunch = () => {
     if (muted) return;
@@ -632,4 +703,5 @@ export const soundFns = {
     playGush,
     playGulp,
     playCrunch,
+    playLevelUp,
 };

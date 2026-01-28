@@ -5,7 +5,8 @@
 import * as THREE from "three";
 import type { Unit, Skill, UnitGroup, Projectile, StatusEffect, MagicMissileProjectile, TrapProjectile, SanctuaryTile, AcidTile } from "../core/types";
 import { COLORS, BUFF_TICK_INTERVAL, TRAP_FLIGHT_DURATION, TRAP_ARC_HEIGHT, TRAP_MESH_SIZE, SANCTUARY_HEAL_PER_TICK, QI_DRAIN_DURATION, QI_DRAIN_TICK_INTERVAL } from "../core/constants";
-import { UNIT_DATA, getUnitStats, getEffectiveUnitData } from "../game/units";
+import { UNIT_DATA, getUnitStats, getEffectiveUnitData, getEffectiveMaxHp } from "../game/units";
+import { getFaithHealingBonus, getStrengthDamageBonus, getIntelligenceMagicDamageBonus, getFaithHolyDamageBonus } from "../game/statBonuses";
 import { rollDamage, rollChance, calculateDamage, rollHit, getEffectiveArmor, hasStatusEffect, logHit, logMiss, logHeal, logPoisoned, logCast, logTaunt, logTauntMiss, logBuff, logStunned, logCleanse, logTrapThrown, isBlockedByFrontShield } from "./combatMath";
 import { ENEMY_STATS } from "../game/units";
 import { tryHealBark, trySpellBark } from "./barks";
@@ -172,18 +173,21 @@ export function executeHealSkill(
     }
 
     const { unit: targetAlly, group: targetG } = closest;
-    if (targetAlly.hp >= UNIT_DATA[targetAlly.id].maxHp) {
+    const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
+    const targetMaxHp = getEffectiveMaxHp(targetAlly.id, targetAlly);
+    if (targetAlly.hp >= targetMaxHp) {
         addLog(`${UNIT_DATA[casterId].name}: ${UNIT_DATA[targetAlly.id].name} is at full health!`, COLORS.logNeutral);
         return false;
     }
 
     consumeSkill(ctx, casterId, skill);
 
-    // Apply heal
-    const healAmount = rollDamage(skill.value[0], skill.value[1]);
+    // Apply heal with faith bonus
+    const faithBonus = casterUnit ? getFaithHealingBonus(casterUnit) : 0;
+    const healAmount = rollDamage(skill.value[0], skill.value[1]) + faithBonus;
     const targetData = UNIT_DATA[targetAlly.id];
     const healTargetId = targetAlly.id;
-    updateUnitWith(setUnits, healTargetId, u => ({ hp: Math.min(targetData.maxHp, u.hp + healAmount) }));
+    updateUnitWith(setUnits, healTargetId, u => ({ hp: Math.min(targetMaxHp, u.hp + healAmount) }));
 
     addLog(logHeal(UNIT_DATA[casterId].name, skill.name, targetData.name, healAmount), COLORS.hpHigh);
     soundFns.playHeal();
@@ -346,7 +350,19 @@ export function executeMeleeSkill(
 
     // Roll to hit
     if (rollHit(casterData.accuracy)) {
-        const dmg = calculateDamage(skill.value[0], skill.value[1], getEffectiveArmor(targetEnemy, targetData.armor), skill.damageType);
+        // Apply stat bonuses based on damage type
+        const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
+        let statBonus = 0;
+        if (casterUnit) {
+            if (skill.damageType === "physical") {
+                statBonus = getStrengthDamageBonus(casterUnit);
+            } else if (skill.damageType === "fire" || skill.damageType === "cold" || skill.damageType === "lightning" || skill.damageType === "chaos") {
+                statBonus = getIntelligenceMagicDamageBonus(casterUnit);
+            } else if (skill.damageType === "holy") {
+                statBonus = getFaithHolyDamageBonus(casterUnit);
+            }
+        }
+        const dmg = calculateDamage(skill.value[0] + statBonus, skill.value[1] + statBonus, getEffectiveArmor(targetEnemy, targetData.armor), skill.damageType);
         const willPoison = skill.poisonChance ? rollChance(skill.poisonChance) : false;
 
         // Read fresh HP from current state to avoid stale data race condition
@@ -631,6 +647,19 @@ export function executeFlurrySkill(
     let totalHits = 0;
     let totalDamage = 0;
 
+    // Calculate stat bonus for damage
+    const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
+    let statBonus = 0;
+    if (casterUnit) {
+        if (skill.damageType === "physical") {
+            statBonus = getStrengthDamageBonus(casterUnit);
+        } else if (skill.damageType === "fire" || skill.damageType === "cold" || skill.damageType === "lightning" || skill.damageType === "chaos") {
+            statBonus = getIntelligenceMagicDamageBonus(casterUnit);
+        } else if (skill.damageType === "holy") {
+            statBonus = getFaithHolyDamageBonus(casterUnit);
+        }
+    }
+
     for (let i = 0; i < hitCount; i++) {
         const targetIdx = i % enemiesInRange.length;
         const { unit: target, group: targetG } = enemiesInRange[targetIdx];
@@ -652,7 +681,7 @@ export function executeFlurrySkill(
         }
 
         if (rollHit(casterData.accuracy)) {
-            const dmg = calculateDamage(skill.value[0], skill.value[1], getEffectiveArmor(target, targetData.armor), skill.damageType);
+            const dmg = calculateDamage(skill.value[0] + statBonus, skill.value[1] + statBonus, getEffectiveArmor(target, targetData.armor), skill.damageType);
 
             // Use tracked HP, not stale snapshot
             const currentHp = hpTracker[target.id];

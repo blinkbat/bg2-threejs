@@ -8,7 +8,7 @@ import * as THREE from "three";
 
 // Constants & Types
 import { GRID_SIZE, PAN_SPEED } from "./core/constants";
-import type { Unit, Skill, CombatLogEntry, SelectionBox, DamageText, UnitGroup, FogTexture, Projectile, SwingAnimation, SanctuaryTile } from "./core/types";
+import type { Unit, Skill, CombatLogEntry, SelectionBox, DamageText, UnitGroup, FogTexture, Projectile, SwingAnimation, SanctuaryTile, CharacterStats } from "./core/types";
 
 // Game Logic
 import { blocked } from "./game/dungeon";
@@ -77,6 +77,8 @@ interface PersistedPlayer {
     mana?: number;
     level?: number;
     exp?: number;
+    stats?: CharacterStats;
+    statPoints?: number;
     statusEffects?: Unit["statusEffects"];
 }
 
@@ -157,10 +159,15 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         // Find passable spawn positions so units don't get stuck in walls
         const spawnPositions = findSpawnPositions(spawn.x, spawn.z, playerIds.length);
 
+        // Stagger initial XP so party doesn't all level at once (0, 15, 30, 45, 60, 75)
+        const INITIAL_XP_STAGGER = 15;
+
         const players: Unit[] = playerIds.map((id, i) => {
             const data = UNIT_DATA[id];
             const persisted = persistedPlayers?.find(p => p.id === id);
             const pos = spawnPositions[i] ?? { x: spawn.x, z: spawn.z };
+            // Only apply stagger on fresh start (no persisted data)
+            const initialExp = persisted?.exp ?? (i * INITIAL_XP_STAGGER);
             return {
                 id,
                 x: pos.x,
@@ -168,7 +175,9 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                 hp: persisted?.hp ?? data.hp,
                 mana: persisted?.mana ?? data.mana,
                 level: persisted?.level ?? 1,
-                exp: persisted?.exp ?? 0,
+                exp: initialExp,
+                stats: persisted?.stats,
+                statPoints: persisted?.statPoints,
                 team: "player" as const,
                 target: null,
                 aiEnabled: true,
@@ -401,6 +410,8 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                 mana: u.mana,
                 level: u.level,
                 exp: u.exp,
+                stats: u.stats,
+                statPoints: u.statPoints,
                 statusEffects: u.statusEffects
             }));
 
@@ -1175,6 +1186,8 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
             mana: u.mana,
             level: u.level,
             exp: u.exp,
+            stats: u.stats,
+            statPoints: u.statPoints,
             statusEffects: u.statusEffects
         }));
 
@@ -1284,6 +1297,17 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                 queuedSkills={queuedActions.filter(q => q.unitId === selectedIds[0]).map(q => q.skillName)}
                 onUseConsumable={handleUseConsumable}
                 consumableCooldownEnd={actionCooldownRef.current[selectedIds[0]] || 0}
+                onIncrementStat={(id, stat) => setUnits(prev => prev.map(u => {
+                    if (u.id === id && (u.statPoints ?? 0) > 0) {
+                        const currentStats = u.stats ?? { strength: 0, dexterity: 0, vitality: 0, intelligence: 0, faith: 0 };
+                        return {
+                            ...u,
+                            statPoints: (u.statPoints ?? 0) - 1,
+                            stats: { ...currentStats, [stat]: currentStats[stat] + 1 }
+                        };
+                    }
+                    return u;
+                }))}
             />}
         </div>
     );

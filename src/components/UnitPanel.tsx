@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import Tippy from "@tippyjs/react";
-import type { Unit, Skill, StatusEffect, DamageType, Item } from "../core/types";
+import type { Unit, Skill, StatusEffect, DamageType, Item, CharacterStats } from "../core/types";
 import { isConsumable, isWeapon, isShield, isArmor, isAccessory } from "../core/types";
-import { UNIT_DATA, getAllSkills, getEffectiveUnitData, getEffectiveMaxHp } from "../game/units";
+import { UNIT_DATA, getAllSkills, getEffectiveUnitData, getEffectiveMaxHp, getEffectiveMaxMana, getXpForLevel } from "../game/units";
 import { getHpPercentage, getHpColor, getMana, hasStatusEffect, getEffectiveArmor } from "../combat/combatMath";
 import { COLORS } from "../core/constants";
 import { getCharacterEquipment, getPartyInventory } from "../game/equipmentState";
@@ -20,9 +20,10 @@ interface UnitPanelProps {
     queuedSkills?: string[];
     onUseConsumable?: (itemId: string, targetUnitId: number) => void;
     consumableCooldownEnd?: number;
+    onIncrementStat?: (unitId: number, stat: keyof CharacterStats) => void;
 }
 
-export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, skillCooldowns = {}, paused = false, queuedSkills = [], onUseConsumable, consumableCooldownEnd = 0 }: UnitPanelProps) {
+export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, skillCooldowns = {}, paused = false, queuedSkills = [], onUseConsumable, consumableCooldownEnd = 0, onIncrementStat }: UnitPanelProps) {
     const [, setTick] = useState(0);
     // Use a ref to capture pause time immediately without waiting for state update
     const [pauseTimeState, setPauseTimeState] = useState<number | null>(() => paused ? Date.now() : null);
@@ -41,15 +42,16 @@ export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, ski
     const displayTime = paused ? (pauseTimeState ?? Date.now()) : Date.now();
     const [tab, setTab] = useState("status");
     const data = UNIT_DATA[unitId];
-    const effectiveData = getEffectiveUnitData(unitId);
     const unit = units.find((u: Unit) => u.id === unitId);
     if (!data || !unit) return null;
 
-    const effectiveMaxHp = getEffectiveMaxHp(unitId);
+    const effectiveData = getEffectiveUnitData(unitId, unit);
+    const effectiveMaxHp = getEffectiveMaxHp(unitId, unit);
+    const effectiveMaxMana = getEffectiveMaxMana(unitId, unit);
     const hpPct = getHpPercentage(unit.hp, effectiveMaxHp);
     const hpColor = getHpColor(hpPct);
-    const hasMana = data.maxMana !== undefined && data.maxMana > 0;
-    const manaPct = hasMana ? getHpPercentage(getMana(unit), data.maxMana!) : 0;
+    const hasMana = effectiveMaxMana > 0;
+    const manaPct = hasMana ? getHpPercentage(getMana(unit), effectiveMaxMana) : 0;
 
     const darkenColor = (hex: string, factor: number = 0.4) => {
         const r = parseInt(hex.slice(1, 3), 16);
@@ -77,7 +79,7 @@ export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, ski
                 </div>
                 {hasMana && (
                     <>
-                        <div className="bar-label bar-label-mana">Mana: {Math.max(0, unit.mana ?? 0)} / {data.maxMana}</div>
+                        <div className="bar-label bar-label-mana">Mana: {Math.max(0, unit.mana ?? 0)} / {effectiveMaxMana}</div>
                         <div className="progress-bar">
                             <div className="progress-fill progress-fill-mana" style={{ width: `${Math.max(0, manaPct)}%` }} />
                         </div>
@@ -98,7 +100,7 @@ export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, ski
             </div>
 
             <div className="unit-content">
-                {tab === "status" && <StatusTab unit={unit} effectiveData={effectiveData} onToggleAI={onToggleAI} unitId={unitId} />}
+                {tab === "status" && <StatusTab unit={unit} effectiveData={effectiveData} onToggleAI={onToggleAI} unitId={unitId} onIncrementStat={onIncrementStat} />}
                 {tab === "skills" && (
                     <SkillsTab
                         unitId={unitId}
@@ -125,16 +127,52 @@ export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, ski
     );
 }
 
-// XP required to reach each level (index = level, value = total XP needed)
-const XP_REQUIREMENTS = [0, 0, 100, 250, 450, 700, 1000, 1400, 1900, 2500, 3200];
+const STAT_INFO: Record<keyof CharacterStats, { label: string; name: string; color: string; bonuses: { desc: string; rate: string }[] }> = {
+    strength: {
+        label: "STR",
+        name: "Strength",
+        color: "#e74c3c",
+        bonuses: [{ desc: "Physical Damage", rate: "+1 per 2 pts" }]
+    },
+    dexterity: {
+        label: "DEX",
+        name: "Dexterity",
+        color: "#2ecc71",
+        bonuses: [{ desc: "Hit Chance", rate: "+1% per 2 pts" }]
+    },
+    vitality: {
+        label: "VIT",
+        name: "Vitality",
+        color: "#e67e22",
+        bonuses: [{ desc: "Max HP", rate: "+2 per pt" }]
+    },
+    intelligence: {
+        label: "INT",
+        name: "Intelligence",
+        color: "#9b59b6",
+        bonuses: [
+            { desc: "Max Mana", rate: "+1 per pt" },
+            { desc: "Magic Damage", rate: "+1 per 3 pts" }
+        ]
+    },
+    faith: {
+        label: "FAI",
+        name: "Faith",
+        color: "#f1c40f",
+        bonuses: [
+            { desc: "Holy Damage", rate: "+1 per 2 pts" },
+            { desc: "Healing Power", rate: "+1 per 2 pts" }
+        ]
+    }
+};
 
-function getXpForLevel(level: number): number {
-    if (level < 1) return 0;
-    if (level >= XP_REQUIREMENTS.length) return XP_REQUIREMENTS[XP_REQUIREMENTS.length - 1] + (level - XP_REQUIREMENTS.length + 1) * 800;
-    return XP_REQUIREMENTS[level];
-}
-
-function StatusTab({ unit, effectiveData, onToggleAI, unitId }: { unit: Unit; effectiveData: typeof UNIT_DATA[number]; onToggleAI: (id: number) => void; unitId: number }) {
+function StatusTab({ unit, effectiveData, onToggleAI, unitId, onIncrementStat }: {
+    unit: Unit;
+    effectiveData: typeof UNIT_DATA[number];
+    onToggleAI: (id: number) => void;
+    unitId: number;
+    onIncrementStat?: (unitId: number, stat: keyof CharacterStats) => void;
+}) {
     const isShielded = hasStatusEffect(unit, "shielded");
     // Base armor from equipment, doubled if shielded
     const baseArmor = effectiveData.armor;
@@ -148,6 +186,10 @@ function StatusTab({ unit, effectiveData, onToggleAI, unitId }: { unit: Unit; ef
     const xpIntoLevel = currentExp - xpForCurrentLevel;
     const xpNeeded = xpForNextLevel - xpForCurrentLevel;
     const xpPct = xpNeeded > 0 ? Math.min(100, (xpIntoLevel / xpNeeded) * 100) : 100;
+
+    // Stat points
+    const statPoints = unit.statPoints ?? 0;
+    const stats = unit.stats ?? { strength: 0, dexterity: 0, vitality: 0, intelligence: 0, faith: 0 };
 
     return (
         <div style={{ fontSize: 13 }}>
@@ -176,6 +218,53 @@ function StatusTab({ unit, effectiveData, onToggleAI, unitId }: { unit: Unit; ef
                 <div className="card span-2">
                     <span className="text-muted">Damage</span>
                     <span className="float-right">{effectiveData.damage[0]}-{effectiveData.damage[1]}</span>
+                </div>
+            </div>
+
+            <div className="stats-section">
+                <div className="stats-header">
+                    <span className="stats-label">Stats</span>
+                    {statPoints > 0 && (
+                        <span className="stat-points-badge">{statPoints} pts</span>
+                    )}
+                </div>
+                <div className="stat-allocation-grid">
+                    {(Object.keys(STAT_INFO) as Array<keyof CharacterStats>).map(statKey => {
+                        const info = STAT_INFO[statKey];
+                        const value = stats[statKey];
+                        const canIncrement = statPoints > 0 && onIncrementStat;
+                        return (
+                            <Tippy
+                                key={statKey}
+                                content={
+                                    <div className="stat-tooltip">
+                                        <div className="stat-tooltip-header" style={{ color: info.color }}>{info.name}</div>
+                                        <div className="stat-tooltip-bonuses">
+                                            {info.bonuses.map((bonus, i) => (
+                                                <div key={i} className="stat-tooltip-row">
+                                                    <span className="stat-tooltip-label">{bonus.desc}</span>
+                                                    <span className="stat-tooltip-rate">{bonus.rate}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                }
+                                placement="right"
+                                delay={[150, 0]}
+                            >
+                                <div className={`stat-row ${canIncrement ? "has-points" : ""}`}>
+                                    <span className="stat-name" style={{ color: info.color }}>{info.label}</span>
+                                    <span className="stat-value">{value}</span>
+                                    {canIncrement && (
+                                        <button
+                                            className="stat-increment-btn"
+                                            onClick={() => onIncrementStat(unitId, statKey)}
+                                        >+</button>
+                                    )}
+                                </div>
+                            </Tippy>
+                        );
+                    })}
                 </div>
             </div>
 
@@ -621,10 +710,10 @@ function InventoryTab({
                 let wouldBeWasted = false;
                 if (unitAlive) {
                     if (item.effect === "heal") {
-                        const maxHp = getEffectiveMaxHp(unit.id);
+                        const maxHp = getEffectiveMaxHp(unit.id, unit);
                         wouldBeWasted = unit.hp >= maxHp;
                     } else if (item.effect === "mana") {
-                        const maxMana = UNIT_DATA[unit.id].maxMana ?? 0;
+                        const maxMana = getEffectiveMaxMana(unit.id, unit);
                         wouldBeWasted = (unit.mana ?? 0) >= maxMana;
                     }
                 }

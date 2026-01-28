@@ -13,7 +13,7 @@ import { cleanupEnemyKiteCooldown } from "../game/enemyState";
 import { logDefeated, applyPoison, applySlowed, hasStatusEffect, isUnitAlive } from "./combatMath";
 import { tryKillBark } from "./barks";
 import { getNextUnitId } from "../core/unitIds";
-import { ENEMY_STATS } from "../game/units";
+import { ENEMY_STATS, getXpForLevel } from "../game/units";
 
 // =============================================================================
 // PROJECTILE CREATION
@@ -353,13 +353,41 @@ export function applyDamageToUnit(
         if (targetUnit && targetUnit.team === "enemy" && targetUnit.enemyType) {
             const expReward = ENEMY_STATS[targetUnit.enemyType].expReward;
             if (expReward > 0) {
+                const leveledUp: string[] = [];
                 setUnits(prev => prev.map(u => {
                     if (u.team === "player" && u.hp > 0) {
-                        return { ...u, exp: (u.exp ?? 0) + expReward };
+                        const newExp = (u.exp ?? 0) + expReward;
+                        const currentLevel = u.level ?? 1;
+                        const xpForNext = getXpForLevel(currentLevel + 1);
+
+                        // Check for level-up
+                        if (newExp >= xpForNext) {
+                            leveledUp.push(u.id.toString());
+                            return {
+                                ...u,
+                                exp: newExp,
+                                level: currentLevel + 1,
+                                statPoints: (u.statPoints ?? 0) + 3,
+                                hp: u.hp + 2,
+                                mana: (u.mana ?? 0) + 1,
+                                stats: u.stats ?? {
+                                    strength: 0,
+                                    dexterity: 0,
+                                    vitality: 0,
+                                    intelligence: 0,
+                                    faith: 0
+                                }
+                            };
+                        }
+                        return { ...u, exp: newExp };
                     }
                     return u;
                 }));
                 addLog(`Party gained ${expReward} XP!`, "#9b59b6");
+                if (leveledUp.length > 0) {
+                    addLog(`Level up! +3 stat points available.`, "#ffd700");
+                    soundFns.playLevelUp();
+                }
             }
         }
     }

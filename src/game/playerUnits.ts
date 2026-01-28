@@ -1,4 +1,4 @@
-import type { UnitData, Skill } from "../core/types";
+import type { UnitData, Skill, Unit } from "../core/types";
 import { SKILLS } from "./skills";
 import {
     getEffectivePlayerDamage,
@@ -8,6 +8,25 @@ import {
     getEffectivePlayerArmor,
     getEffectivePlayerBonusMaxHp,
 } from "./equipmentState";
+import {
+    getStrengthDamageBonus,
+    getDexterityAccuracyBonus,
+    getVitalityHpBonus,
+    getIntelligenceMpBonus,
+} from "./statBonuses";
+
+// =============================================================================
+// EXPERIENCE & LEVELING
+// =============================================================================
+
+// XP required to reach each level (index = level, value = total XP needed)
+export const XP_REQUIREMENTS = [0, 0, 100, 250, 450, 700, 1000, 1400, 1900, 2500, 3200];
+
+export function getXpForLevel(level: number): number {
+    if (level < 1) return 0;
+    if (level >= XP_REQUIREMENTS.length) return XP_REQUIREMENTS[XP_REQUIREMENTS.length - 1] + (level - XP_REQUIREMENTS.length + 1) * 800;
+    return XP_REQUIREMENTS[level];
+}
 
 // =============================================================================
 // PLAYER UNIT DATA
@@ -30,14 +49,18 @@ export const UNIT_DATA: Record<number, UnitData> = {
 // =============================================================================
 
 /** Generate a "basic attack" pseudo-skill for display in UI. Uses equipment stats. */
-export function getBasicAttackSkill(unitId: number): Skill {
+export function getBasicAttackSkill(unitId: number, unit?: Unit): Skill {
     const data = UNIT_DATA[unitId];
 
     // Get stats from equipment
-    const damage = getEffectivePlayerDamage(unitId);
+    const baseDamage = getEffectivePlayerDamage(unitId);
     const damageType = getEffectivePlayerDamageType(unitId);
     const range = getEffectivePlayerRange(unitId);
     const projectileColor = getEffectivePlayerProjectileColor(unitId);
+
+    // Apply strength bonus to physical damage only
+    const strengthBonus = unit && damageType === "physical" ? getStrengthDamageBonus(unit) : 0;
+    const damage: [number, number] = [baseDamage[0] + strengthBonus, baseDamage[1] + strengthBonus];
 
     return {
         name: "Attack",
@@ -52,10 +75,18 @@ export function getBasicAttackSkill(unitId: number): Skill {
     };
 }
 
-/** Get effective max HP for a player (base + equipment bonuses) */
-export function getEffectiveMaxHp(unitId: number): number {
+/** Get effective max HP for a player (base + equipment + vitality bonuses) */
+export function getEffectiveMaxHp(unitId: number, unit?: Unit): number {
     const data = UNIT_DATA[unitId];
-    return data.maxHp + getEffectivePlayerBonusMaxHp(unitId);
+    const vitalityBonus = unit ? getVitalityHpBonus(unit) : 0;
+    return data.maxHp + getEffectivePlayerBonusMaxHp(unitId) + vitalityBonus;
+}
+
+/** Get effective max mana for a player (base + intelligence bonus) */
+export function getEffectiveMaxMana(unitId: number, unit?: Unit): number {
+    const data = UNIT_DATA[unitId];
+    const intelligenceBonus = unit ? getIntelligenceMpBonus(unit) : 0;
+    return (data.maxMana ?? 0) + intelligenceBonus;
 }
 
 /** Get effective armor for a player (from equipment) */
@@ -69,20 +100,31 @@ export function getAllSkills(unitId: number): Skill[] {
     return [getBasicAttackSkill(unitId), ...data.skills];
 }
 
-/** Get effective unit data with equipment stats applied */
-export function getEffectiveUnitData(unitId: number): UnitData {
+/** Get effective unit data with equipment and stat bonuses applied */
+export function getEffectiveUnitData(unitId: number, unit?: Unit): UnitData {
     const data = UNIT_DATA[unitId];
-    const damage = getEffectivePlayerDamage(unitId);
+    const baseDamage = getEffectivePlayerDamage(unitId);
+    const damageType = getEffectivePlayerDamageType(unitId);
     const range = getEffectivePlayerRange(unitId);
     const projectileColor = getEffectivePlayerProjectileColor(unitId);
     const armor = getEffectivePlayerArmor(unitId);
     const bonusMaxHp = getEffectivePlayerBonusMaxHp(unitId);
 
+    // Apply stat bonuses
+    const vitalityBonus = unit ? getVitalityHpBonus(unit) : 0;
+    const intelligenceBonus = unit ? getIntelligenceMpBonus(unit) : 0;
+    const dexterityBonus = unit ? getDexterityAccuracyBonus(unit) : 0;
+    const strengthBonus = unit && damageType === "physical" ? getStrengthDamageBonus(unit) : 0;
+
+    const damage: [number, number] = [baseDamage[0] + strengthBonus, baseDamage[1] + strengthBonus];
+
     return {
         ...data,
         damage,
         armor,
-        maxHp: data.maxHp + bonusMaxHp,
+        accuracy: data.accuracy + dexterityBonus,
+        maxHp: data.maxHp + bonusMaxHp + vitalityBonus,
+        maxMana: (data.maxMana ?? 0) + intelligenceBonus,
         range,
         projectileColor,
     };
