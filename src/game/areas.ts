@@ -40,9 +40,18 @@ export interface AreaTransition {
     direction: "north" | "south" | "east" | "west";  // Which way door faces
 }
 
+export interface ChestContents {
+    itemId: string;
+    quantity: number;
+}
+
 export interface ChestLocation {
     x: number;
     z: number;
+    contents: ChestContents[];
+    gold?: number;
+    locked?: boolean;
+    requiredKeyId?: string;  // keyId from KeyItem to unlock
 }
 
 export interface TreeLocation {
@@ -374,7 +383,20 @@ export const DUNGEON_AREA: AreaData = {
         }
     ],
     chests: [
-        { x: 28.5, z: 28.5 }  // In ogre room
+        {
+            x: 28.5,
+            z: 28.5,
+            contents: [
+                { itemId: "smallManaPotion", quantity: 3 },
+                { itemId: "battleaxe", quantity: 1 }
+            ]
+        },
+        {
+            x: 8.5,
+            z: 42.5,
+            contents: [{ itemId: "loafOfBread", quantity: 1 }],
+            gold: 20
+        }
     ],
     trees: []  // No trees in dungeon
 };
@@ -452,7 +474,19 @@ export const FIELD_AREA: AreaData = {
             direction: "east"
         }
     ],
-    chests: [],
+    chests: [
+        {
+            x: 6.5,
+            z: 6.5,
+            contents: [{ itemId: "loafOfBread", quantity: 1 }],
+            gold: 15
+        },
+        {
+            x: 38.5,
+            z: 38.5,
+            contents: [{ itemId: "smallManaPotion", quantity: 1 }]
+        }
+    ],
     trees: [
         // Dense forest scattered around the field
         // Northwest cluster
@@ -580,7 +614,14 @@ export const COAST_AREA: AreaData = {
             direction: "north"
         }
     ],
-    chests: [],
+    chests: [
+        {
+            x: 10.5,
+            z: 18.5,
+            contents: [{ itemId: "stripOfBatJerky", quantity: 1 }],
+            gold: 25
+        }
+    ],
     trees: [
         // Palm trees scattered on sandy areas (away from water)
         { x: 5, z: 44, size: 1.2 },
@@ -662,7 +703,20 @@ export const RUINS_AREA: AreaData = {
         }
     ],
     chests: [
-        { x: 25.5, z: 20.5 }  // Treasure in inner sanctum
+        {
+            x: 25.5,
+            z: 20.5,
+            contents: [
+                { itemId: "stripOfBatJerky", quantity: 3 },
+                { itemId: "sulliedBronzeKey", quantity: 1 }
+            ]
+        },
+        {
+            x: 40.5,
+            z: 38.5,
+            contents: [{ itemId: "smallManaPotion", quantity: 1 }],
+            gold: 30
+        }
     ],
     trees: [
         // Trees growing through cracks in the ruins
@@ -774,7 +828,17 @@ export const SANCTUM_AREA: AreaData = {
         }
     ],
     chests: [
-        { x: 40.5, z: 25.5 }  // Treasure behind the boss
+        {
+            x: 40.5,
+            z: 25.5,
+            contents: [
+                { itemId: "stripOfBatJerky", quantity: 1 },
+                { itemId: "quickfoxRing", quantity: 1 }
+            ],
+            gold: 90,
+            locked: true,
+            requiredKeyId: "bronzeKey"
+        }
     ],
     trees: [],  // No trees in the sanctum
     decorations: [

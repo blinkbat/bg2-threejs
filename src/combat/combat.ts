@@ -156,6 +156,75 @@ export function animateExpandingMesh(
     return dispose;
 }
 
+/**
+ * Create a lightning pillar visual effect - a thin vertical column of white light
+ * that flashes brightly then fades.
+ */
+export function createLightningPillar(
+    scene: THREE.Scene,
+    x: number,
+    z: number,
+    config: {
+        color?: string;
+        duration?: number;
+        radius?: number;
+        height?: number;
+    } = {}
+): void {
+    const {
+        color = "#ffffff",
+        duration = 300,
+        radius = 0.15,
+        height = 8
+    } = config;
+
+    // Create the pillar cylinder
+    const pillar = new THREE.Mesh(
+        new THREE.CylinderGeometry(radius, radius, height, 8),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1.0 })
+    );
+    pillar.position.set(x, height / 2, z);
+    scene.add(pillar);
+
+    // Create a bright glow ring at the base
+    const glow = new THREE.Mesh(
+        new THREE.RingGeometry(0.1, 0.6, 16),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8, side: THREE.DoubleSide })
+    );
+    glow.rotation.x = -Math.PI / 2;
+    glow.position.set(x, 0.15, z);
+    scene.add(glow);
+
+    const startTime = Date.now();
+    let animationId: number | null = null;
+
+    const animate = () => {
+        const elapsed = Date.now() - startTime;
+        const t = Math.min(1, elapsed / duration);
+
+        // Flash bright at start, then fade
+        const flashT = t < 0.2 ? 1 : (1 - (t - 0.2) / 0.8);
+        (pillar.material as THREE.MeshBasicMaterial).opacity = flashT;
+        (glow.material as THREE.MeshBasicMaterial).opacity = flashT * 0.8;
+
+        // Expand glow ring slightly
+        const glowScale = 1 + t * 0.5;
+        glow.scale.set(glowScale, glowScale, 1);
+
+        if (t < 1) {
+            animationId = requestAnimationFrame(animate);
+        } else {
+            scene.remove(pillar);
+            scene.remove(glow);
+            pillar.geometry.dispose();
+            (pillar.material as THREE.MeshBasicMaterial).dispose();
+            glow.geometry.dispose();
+            (glow.material as THREE.MeshBasicMaterial).dispose();
+        }
+    };
+    animationId = requestAnimationFrame(animate);
+}
+
 // =============================================================================
 // TARGET FILTERING
 // =============================================================================
@@ -353,7 +422,7 @@ export function applyDamageToUnit(
         if (targetUnit && targetUnit.team === "enemy" && targetUnit.enemyType) {
             const expReward = ENEMY_STATS[targetUnit.enemyType].expReward;
             if (expReward > 0) {
-                const leveledUp: string[] = [];
+                const leveledUpIds: number[] = [];
                 setUnits(prev => prev.map(u => {
                     if (u.team === "player" && u.hp > 0) {
                         const newExp = (u.exp ?? 0) + expReward;
@@ -362,7 +431,7 @@ export function applyDamageToUnit(
 
                         // Check for level-up
                         if (newExp >= xpForNext) {
-                            leveledUp.push(u.id.toString());
+                            leveledUpIds.push(u.id);
                             return {
                                 ...u,
                                 exp: newExp,
@@ -384,9 +453,22 @@ export function applyDamageToUnit(
                     return u;
                 }));
                 addLog(`Party gained ${expReward} XP!`, "#9b59b6");
-                if (leveledUp.length > 0) {
+                // Level-up effects (must check after setUnits completes)
+                if (leveledUpIds.length > 0) {
                     addLog(`Level up! +3 stat points available.`, "#ffd700");
                     soundFns.playLevelUp();
+                    // Create gold pillar effect for each unit that leveled up
+                    for (const unitId of leveledUpIds) {
+                        const unitGroup = unitsRef[unitId];
+                        if (unitGroup) {
+                            createLightningPillar(scene, unitGroup.position.x, unitGroup.position.z, {
+                                color: "#ffd700",
+                                duration: 600,
+                                radius: 0.3,
+                                height: 10
+                            });
+                        }
+                    }
                 }
             }
         }

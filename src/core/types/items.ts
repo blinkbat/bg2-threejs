@@ -8,7 +8,7 @@ import type { DamageType } from "./combat";
 export type EquipmentSlot = "armor" | "leftHand" | "rightHand" | "accessory1" | "accessory2";
 
 // Item categories
-export type ItemCategory = "weapon" | "shield" | "armor" | "accessory" | "consumable";
+export type ItemCategory = "weapon" | "shield" | "armor" | "accessory" | "consumable" | "key";
 
 // Weapon grip type
 export type WeaponGrip = "oneHand" | "twoHand";
@@ -53,6 +53,13 @@ export interface AccessoryItem extends ItemBase {
     hpRegen?: number;               // HP regenerated per tick (in combat)
     hpRegenInterval?: number;       // Interval in ms for regen tick
     aggroReduction?: number;        // 0-1, reduces enemy targeting priority
+    bonusMoveSpeed?: number;        // 0-1, percentage bonus to move speed (0.1 = +10%)
+}
+
+// Key item - used to unlock chests or doors
+export interface KeyItem extends ItemBase {
+    category: "key";
+    keyId: string;                  // Unique identifier for lock matching
 }
 
 // Consumable sound types
@@ -68,7 +75,7 @@ export interface ConsumableItem extends ItemBase {
 }
 
 // Union type for all items
-export type Item = WeaponItem | ShieldItem | ArmorItem | AccessoryItem | ConsumableItem;
+export type Item = WeaponItem | ShieldItem | ArmorItem | AccessoryItem | ConsumableItem | KeyItem;
 
 // Character equipment state
 export interface CharacterEquipment {
@@ -109,4 +116,8 @@ export function isAccessory(item: Item): item is AccessoryItem {
 
 export function isConsumable(item: Item): item is ConsumableItem {
     return item.category === "consumable";
+}
+
+export function isKey(item: Item): item is KeyItem {
+    return item.category === "key";
 }

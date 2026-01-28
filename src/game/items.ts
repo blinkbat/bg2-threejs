@@ -2,7 +2,7 @@
 // ITEM DEFINITIONS - All game items
 // =============================================================================
 
-import type { Item, WeaponItem, ShieldItem, ArmorItem, AccessoryItem, ConsumableItem } from "../core/types";
+import type { Item, WeaponItem, ShieldItem, ArmorItem, AccessoryItem, ConsumableItem, KeyItem } from "../core/types";
 
 // =============================================================================
 // WEAPONS
@@ -68,6 +68,15 @@ export const WEAPONS: Record<string, WeaponItem> = {
         grip: "oneHand",
         damage: [3, 6],
         damageType: "holy",
+    },
+    battleaxe: {
+        id: "battleaxe",
+        name: "Battleaxe",
+        description: "A heavy axe forged for war. Cleaves through armor.",
+        category: "weapon",
+        grip: "twoHand",
+        damage: [5, 12],
+        damageType: "physical",
     },
 };
 
@@ -140,6 +149,27 @@ export const ACCESSORIES: Record<string, AccessoryItem> = {
         hpRegen: 1,
         hpRegenInterval: 10000,  // 1 HP every 10 seconds
     },
+    quickfoxRing: {
+        id: "quickfoxRing",
+        name: "Quickfox Ring",
+        description: "A silver ring etched with fox motifs. The wearer moves with uncanny swiftness.",
+        category: "accessory",
+        bonusMoveSpeed: 0.1,  // +10% move speed
+    },
+};
+
+// =============================================================================
+// KEYS
+// =============================================================================
+
+export const KEYS: Record<string, KeyItem> = {
+    sulliedBronzeKey: {
+        id: "sulliedBronzeKey",
+        name: "Sullied Bronze Key",
+        description: "An old bronze key, tarnished and pitted with age. It might still open something.",
+        category: "key",
+        keyId: "bronzeKey",
+    },
 };
 
 // =============================================================================
@@ -188,6 +218,7 @@ export const ITEMS: Record<string, Item> = {
     ...SHIELDS,
     ...ARMORS,
     ...ACCESSORIES,
+    ...KEYS,
     ...CONSUMABLES,
 };
 

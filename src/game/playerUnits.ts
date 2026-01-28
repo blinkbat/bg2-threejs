@@ -41,7 +41,7 @@ export const UNIT_DATA: Record<number, UnitData> = {
     3: { name: "Thief", class: "Thief", hp: 16, maxHp: 16, mana: 18, maxMana: 18, damage: [1, 4], accuracy: 75, armor: 0, color: "#8e44ad", skills: [SKILLS.poisonDagger, SKILLS.caltrops], items: [], attackCooldown: 1500 },
     4: { name: "Wizard", class: "Wizard", hp: 12, maxHp: 12, mana: 50, maxMana: 50, damage: [1, 4], accuracy: 60, armor: 0, color: "#3498db", skills: [SKILLS.fireball, SKILLS.magicWave], items: [], attackCooldown: 3000 },
     5: { name: "Monk", class: "Monk", hp: 22, maxHp: 22, mana: 18, maxMana: 18, damage: [1, 4], accuracy: 70, armor: 0, color: "#27ae60", skills: [SKILLS.flurryOfFists, SKILLS.qiFocus], items: [], attackCooldown: 1800 },
-    6: { name: "Cleric", class: "Cleric", hp: 20, maxHp: 20, mana: 40, maxMana: 40, damage: [1, 4], accuracy: 60, armor: 0, color: "#ecf0f1", skills: [SKILLS.heal, SKILLS.cleanse], items: [], attackCooldown: 2500 },
+    6: { name: "Cleric", class: "Cleric", hp: 20, maxHp: 20, mana: 40, maxMana: 40, damage: [1, 4], accuracy: 60, armor: 0, color: "#ecf0f1", skills: [SKILLS.heal, SKILLS.thunder], items: [], attackCooldown: 2500 },
 };
 
 // =============================================================================

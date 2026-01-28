@@ -26,6 +26,12 @@ export interface DoorMesh extends THREE.Mesh {
     };
 }
 
+export interface ChestMeshData {
+    lidPivot: THREE.Group;  // Pivot point for lid rotation
+    buckle: THREE.Mesh;     // Buckle to hide when open
+    chestKey: string;       // "areaId-index" key for tracking
+}
+
 export interface SceneRefs {
     scene: THREE.Scene;
     camera: THREE.OrthographicCamera;
@@ -51,6 +57,7 @@ export interface SceneRefs {
     columnGroups: THREE.Mesh[][];  // Groups of column parts (body, base, capital) that fade together
     doorMeshes: DoorMesh[];
     waterMesh: THREE.Mesh | null;  // Water for coast
+    chestMeshes: ChestMeshData[];  // Chest lid pivots for open/close animation
 }
 
 
@@ -211,7 +218,8 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     });
 
     // Treasure chests from area data
-    area.chests.forEach(chest => {
+    const chestMeshes: ChestMeshData[] = [];
+    area.chests.forEach((chest, index) => {
         const chestGroup = new THREE.Group();
         // Chest body (main box) - dark wood
         const chestBody = new THREE.Mesh(
@@ -220,13 +228,20 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         );
         chestBody.position.y = 0.25;
         chestGroup.add(chestBody);
-        // Chest lid - rounded top effect with slightly lighter wood
+
+        // Lid pivot - positioned at back edge of chest body top for hinge rotation
+        const lidPivot = new THREE.Group();
+        lidPivot.position.set(0, 0.5, -0.3);  // Back edge, top of body
+        chestGroup.add(lidPivot);
+
+        // Chest lid - offset from pivot so it rotates from back edge
         const chestLid = new THREE.Mesh(
             new THREE.BoxGeometry(0.95, 0.25, 0.65),
             new THREE.MeshStandardMaterial({ color: "#6b4423", metalness: 0.2, roughness: 0.7 })
         );
-        chestLid.position.y = 0.625;
-        chestGroup.add(chestLid);
+        chestLid.position.set(0, 0.125, 0.325);  // Offset from pivot point
+        lidPivot.add(chestLid);
+
         // Gold buckle/clasp on front - highly metallic brass/gold
         const buckle = new THREE.Mesh(
             new THREE.BoxGeometry(0.2, 0.2, 0.08),
@@ -234,12 +249,21 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         );
         buckle.position.set(0, 0.4, 0.32);
         chestGroup.add(buckle);
-        // Mark all chest parts as "chest" for raycasting
+
+        // Mark all chest parts as "chest" for raycasting with chest data
+        const chestData = { chestIndex: index, chestX: chest.x, chestZ: chest.z };
         chestBody.name = "chest";
+        chestBody.userData = chestData;
         chestLid.name = "chest";
+        chestLid.userData = chestData;
         buckle.name = "chest";
+        buckle.userData = chestData;
         chestGroup.position.set(chest.x, 0, chest.z);
         scene.add(chestGroup);
+
+        // Store for open/close updates
+        const chestKey = `${area.id}-${index}`;
+        chestMeshes.push({ lidPivot, buckle, chestKey });
     });
 
     // Trees - cylinders for trunk + cone for pyramidal foliage
@@ -671,7 +695,19 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         columnGroups,
         doorMeshes,
         waterMesh,
+        chestMeshes,
     };
+}
+
+/** Update chest open/closed state based on opened chests set */
+export function updateChestStates(chestMeshes: ChestMeshData[], openedChests: Set<string>): void {
+    for (const chest of chestMeshes) {
+        const isOpen = openedChests.has(chest.chestKey);
+        // Rotate lid open (about -110 degrees on X axis) or closed
+        chest.lidPivot.rotation.x = isOpen ? -1.92 : 0;  // ~-110 degrees
+        // Hide buckle when open
+        chest.buckle.visible = !isOpen;
+    }
 }
 
 export function updateCamera(camera: THREE.OrthographicCamera, offset: { x: number; z: number }) {

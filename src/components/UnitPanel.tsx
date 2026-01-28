@@ -382,6 +382,11 @@ function SkillTooltip({ skill, isShielded }: { skill: Skill; isShielded: boolean
         if (skill.selfDamage) {
             lines.push({ label: "HP cost", value: `${skill.selfDamage[0]}-${skill.selfDamage[1]} over time`, color: COLORS.damageEnemy });
         }
+    } else if (skill.type === "smite") {
+        // Instant-hit single-target damage (e.g., Thunder)
+        const dmgInfo = getDamageTypeInfo(skill.damageType);
+        lines.push({ label: "Damage", value: `${skill.value[0]}-${skill.value[1]}`, color: dmgInfo.color });
+        lines.push({ label: "Type", value: dmgInfo.name, color: dmgInfo.color });
     }
 
     // Range

@@ -7,15 +7,17 @@ interface HUDProps {
     areaFlavor: string;
     alivePlayers: number;
     paused: boolean;
+    gold: number;
     onTogglePause: () => void;
     onShowHelp: () => void;
     onRestart: () => void;
     debug: boolean;
     onToggleDebug: () => void;
     onWarpToArea?: (areaId: AreaId) => void;
+    onAddXp?: () => void;
 }
 
-export function HUD({ areaName, areaFlavor, alivePlayers, paused, onTogglePause, onShowHelp, onRestart, debug, onToggleDebug, onWarpToArea }: HUDProps) {
+export function HUD({ areaName, areaFlavor, alivePlayers, paused, gold, onTogglePause, onShowHelp, onRestart, debug, onToggleDebug, onWarpToArea, onAddXp }: HUDProps) {
     const [muted, setMuted] = useState(isMuted());
 
     const handleToggleMute = () => {
@@ -38,6 +40,7 @@ export function HUD({ areaName, areaFlavor, alivePlayers, paused, onTogglePause,
                     {isDefeat ? "Defeat!" : areaName}
                 </div>
                 {!isDefeat && <div className="hud-area-flavor">{areaFlavor}</div>}
+                {gold > 0 && <div className="hud-gold">{gold} gold</div>}
             </div>
             <div className="hud-buttons">
                 <button className={`btn btn-pause ${paused ? "active" : ""}`} onClick={onTogglePause}>
@@ -56,18 +59,27 @@ export function HUD({ areaName, areaFlavor, alivePlayers, paused, onTogglePause,
                     Debug
                 </button>
             </div>
-            {debug && onWarpToArea && (
+            {debug && (
                 <div className="debug-warp-menu">
-                    <span className="debug-label">Warp:</span>
-                    {areaList.map(area => (
-                        <button
-                            key={area.id}
-                            className={`btn btn-warp ${areaName === area.name ? "active" : ""}`}
-                            onClick={() => onWarpToArea(area.id)}
-                        >
-                            {area.name}
+                    {onWarpToArea && (
+                        <>
+                            <span className="debug-label">Warp:</span>
+                            {areaList.map(area => (
+                                <button
+                                    key={area.id}
+                                    className={`btn btn-warp ${areaName === area.name ? "active" : ""}`}
+                                    onClick={() => onWarpToArea(area.id)}
+                                >
+                                    {area.name}
+                                </button>
+                            ))}
+                        </>
+                    )}
+                    {onAddXp && (
+                        <button className="btn btn-warp" onClick={onAddXp}>
+                            +50 XP
                         </button>
-                    ))}
+                    )}
                 </div>
             )}
         </div>

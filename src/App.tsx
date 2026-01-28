@@ -17,9 +17,10 @@ import { UNIT_DATA, ENEMY_STATS, getBasicAttackSkill } from "./game/units";
 import { initializeEquipmentState, getPartyInventory, setPartyInventory } from "./game/equipmentState";
 import { removeFromInventory } from "./game/equipment";
 import { getItem } from "./game/items";
-import { isConsumable } from "./core/types";
+import { isConsumable, isKey } from "./core/types";
+import { addToInventory } from "./game/equipment";
 import { getEffectiveMaxHp } from "./game/units";
-import { createScene, updateCamera, updateWallTransparency, updateTreeFogVisibility, updateLightLOD, addUnitToScene, updateWater, type DoorMesh } from "./rendering/scene";
+import { createScene, updateCamera, updateWallTransparency, updateTreeFogVisibility, updateLightLOD, addUnitToScene, updateWater, updateChestStates, type DoorMesh, type ChestMeshData } from "./rendering/scene";
 import { soundFns } from "./audio/sound";
 import { updateDynamicObstacles, findSpawnPositions } from "./ai/pathfinding";
 import { updateUnitCache } from "./ai/unitAI";
@@ -27,6 +28,8 @@ import { resetAllBroodMotherScreeches } from "./game/enemyState";
 
 // Extracted modules
 import { clearTargetingMode, executeSkill, type SkillExecutionContext } from "./combat/skills";
+import { createLightningPillar } from "./combat/combat";
+import { getXpForLevel } from "./game/playerUnits";
 import { resetBarks } from "./combat/barks";
 import { initializeUnitIdCounter } from "./gameLoop";
 import {
@@ -140,6 +143,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
     const columnGroupsRef = useRef<THREE.Mesh[][]>([]);
     const doorMeshesRef = useRef<DoorMesh[]>([]);
     const waterMeshRef = useRef<THREE.Mesh | null>(null);
+    const chestMeshesRef = useRef<ChestMeshData[]>([]);
     const debugGridRef = useRef<THREE.Group | null>(null);
     const acidTilesRef = useRef<Map<string, AcidTile>>(new Map());
     const sanctuaryTilesRef = useRef<Map<string, SanctuaryTile>>(new Map());
@@ -220,7 +224,9 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
     const [targetingMode, setTargetingMode] = useState<{ casterId: number; skill: Skill } | null>(null);
     const [queuedActions, setQueuedActions] = useState<{ unitId: number; skillName: string }[]>([]);
     const [hoveredEnemy, setHoveredEnemy] = useState<{ id: number; x: number; y: number } | null>(null);
-    const [hoveredChest, setHoveredChest] = useState<{ x: number; y: number } | null>(null);
+    const [hoveredChest, setHoveredChest] = useState<{ x: number; y: number; chestIndex: number; chestX: number; chestZ: number } | null>(null);
+    const [openedChests, setOpenedChests] = useState<Set<string>>(new Set());
+    const [gold, setGold] = useState(0);
     const [hoveredPlayer, setHoveredPlayer] = useState<{ id: number; x: number; y: number } | null>(null);
     const [hoveredDoor, setHoveredDoor] = useState<{ targetArea: string; x: number; y: number } | null>(null);
     const [fps, setFps] = useState(0);
@@ -238,6 +244,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
     const showPanelRef = useRef(showPanel);
     const helpOpenRef = useRef(helpOpen);
     const skillCooldownsRef = useRef(skillCooldowns);
+    const openedChestsRef = useRef(openedChests);
 
     useEffect(() => { selectedRef.current = selectedIds; }, [selectedIds]);
     useEffect(() => { unitsStateRef.current = units; }, [units]);
@@ -246,6 +253,8 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
     useEffect(() => { showPanelRef.current = showPanel; }, [showPanel]);
     useEffect(() => { helpOpenRef.current = helpOpen; }, [helpOpen]);
     useEffect(() => { skillCooldownsRef.current = skillCooldowns; }, [skillCooldowns]);
+    useEffect(() => { openedChestsRef.current = openedChests; }, [openedChests]);
+    useEffect(() => { updateChestStates(chestMeshesRef.current, openedChests); }, [openedChests]);
 
     // Debug grid effect
     useEffect(() => {
@@ -344,7 +353,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         clearChargeAttacks();  // Clear charge attacks (meshes will be in old scene)
 
         const sceneRefs = createScene(containerRef.current, units);
-        const { scene, camera, renderer, flames, candleMeshes, candleLights, fogTexture, fogMesh, moveMarker, rangeIndicator, aoeIndicator, unitGroups, selectRings, targetRings, shieldIndicators, unitMeshes, unitOriginalColors, maxHp, wallMeshes, treeMeshes, columnMeshes, columnGroups, doorMeshes, waterMesh } = sceneRefs;
+        const { scene, camera, renderer, flames, candleMeshes, candleLights, fogTexture, fogMesh, moveMarker, rangeIndicator, aoeIndicator, unitGroups, selectRings, targetRings, shieldIndicators, unitMeshes, unitOriginalColors, maxHp, wallMeshes, treeMeshes, columnMeshes, columnGroups, doorMeshes, waterMesh, chestMeshes } = sceneRefs;
 
         sceneRef.current = scene;
         cameraRef.current = camera;
@@ -367,6 +376,10 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         columnGroupsRef.current = columnGroups;
         doorMeshesRef.current = doorMeshes;
         waterMeshRef.current = waterMesh;
+        chestMeshesRef.current = chestMeshes;
+
+        // Apply initial chest open states
+        updateChestStates(chestMeshes, openedChests);
         units.forEach(unit => { pathsRef.current[unit.id] = []; });
 
         const updateCam = () => updateCamera(camera, cameraOffset.current);
@@ -493,7 +506,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
             raycaster.setFromCamera(mouse, camera);
 
             let foundEnemy: { id: number; x: number; y: number } | null = null;
-            let foundChest: { x: number; y: number } | null = null;
+            let foundChest: { x: number; y: number; chestIndex: number; chestX: number; chestZ: number } | null = null;
             let foundPlayer: { id: number; x: number; y: number } | null = null;
             for (const hit of raycaster.intersectObjects(scene.children, true)) {
                 const unitId = hit.object.userData?.unitId;
@@ -518,8 +531,9 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                     }
                 }
                 // Check for chest hover
-                if (hit.object.name === "chest") {
-                    foundChest = { x: e.clientX, y: e.clientY };
+                if (hit.object.name === "chest" && hit.object.userData?.chestIndex !== undefined) {
+                    const { chestIndex, chestX, chestZ } = hit.object.userData;
+                    foundChest = { x: e.clientX, y: e.clientY, chestIndex, chestX, chestZ };
                     break;
                 }
                 // Check for door hover
@@ -645,6 +659,102 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                 }
             }
 
+            // Check for chest click - loot if nearby
+            for (const h of raycaster.intersectObjects(scene.children, true)) {
+                if (h.object.name === "chest" && h.object.userData?.chestIndex !== undefined) {
+                    const { chestIndex, chestX, chestZ } = h.object.userData;
+                    const area = getCurrentArea();
+                    const chestKey = `${area.id}-${chestIndex}`;
+
+                    // Check if already opened (use ref for fresh value)
+                    if (openedChestsRef.current.has(chestKey)) {
+                        addLog("This chest is empty.", "#888");
+                        return;
+                    }
+
+                    // Check if any alive player is within range
+                    const chestRange = 2.5;
+                    const alivePlayers = unitsStateRef.current.filter(u => u.team === "player" && u.hp > 0);
+                    const playerNearby = alivePlayers.some(player => {
+                        const playerG = unitsRef.current[player.id];
+                        if (!playerG) return false;
+                        const dx = playerG.position.x - chestX;
+                        const dz = playerG.position.z - chestZ;
+                        return Math.sqrt(dx * dx + dz * dz) <= chestRange;
+                    });
+
+                    if (!playerNearby) {
+                        addLog("You need to get closer to open this chest.", "#f59e0b");
+                        return;
+                    }
+
+                    const chest = area.chests[chestIndex];
+                    if (!chest) return;
+
+                    // Check if locked
+                    if (chest.locked && chest.requiredKeyId) {
+                        const inventory = getPartyInventory();
+                        // Find key item in inventory that matches
+                        const hasKey = inventory.items.some(entry => {
+                            const item = getItem(entry.itemId);
+                            return item && isKey(item) && item.keyId === chest.requiredKeyId;
+                        });
+
+                        if (!hasKey) {
+                            addLog("This chest is locked. You need the right key.", "#ef4444");
+                            return;
+                        }
+
+                        // Consume the key
+                        const keyEntry = inventory.items.find(entry => {
+                            const item = getItem(entry.itemId);
+                            return item && isKey(item) && item.keyId === chest.requiredKeyId;
+                        });
+                        if (keyEntry) {
+                            const newInventory = removeFromInventory(inventory, keyEntry.itemId, 1);
+                            setPartyInventory(newInventory);
+                            const keyItem = getItem(keyEntry.itemId);
+                            addLog(`Used ${keyItem?.name ?? "key"} to unlock the chest.`, "#f59e0b");
+                        }
+                    }
+
+                    // Loot the chest
+                    let lootMessages: string[] = [];
+                    let currentInventory = getPartyInventory();
+
+                    // Add gold
+                    if (chest.gold && chest.gold > 0) {
+                        setGold(prev => prev + chest.gold!);
+                        lootMessages.push(`${chest.gold} gold`);
+                    }
+
+                    // Add items
+                    for (const content of chest.contents) {
+                        const item = getItem(content.itemId);
+                        if (item) {
+                            currentInventory = addToInventory(currentInventory, content.itemId, content.quantity);
+                            const qtyStr = content.quantity > 1 ? `${content.quantity}x ` : "";
+                            lootMessages.push(`${qtyStr}${item.name}`);
+                        }
+                    }
+
+                    setPartyInventory(currentInventory);
+
+                    // Mark chest as opened
+                    setOpenedChests(prev => new Set([...prev, chestKey]));
+
+                    // Log what was found
+                    if (lootMessages.length > 0) {
+                        addLog(`Found: ${lootMessages.join(", ")}`, "#4ade80");
+                    } else {
+                        addLog("The chest was empty.", "#888");
+                    }
+
+                    soundFns.playAttack();  // Use attack sound for now as chest open sound
+                    return;
+                }
+            }
+
             // Normal click handling
             for (const h of raycaster.intersectObjects(scene.children, true)) {
                 let o: THREE.Object3D | null = h.object;
@@ -752,10 +862,8 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
             if (didPan.current) return;
             if (targetingModeRef.current) {
                 clearTargetingMode(setTargetingMode, rangeIndicatorRef, aoeIndicatorRef);
-            } else {
-                // Right-click deselects all units
-                setSelectedIds([]);
             }
+            // Right-click no longer deselects - users found it frustrating
         };
 
         renderer.domElement.addEventListener("click", onClick);
@@ -1196,6 +1304,61 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         onAreaTransition(persistedState, areaId, targetArea.defaultSpawn);
     };
 
+    // Debug: Add 50 XP to all living player units
+    const handleAddXp = () => {
+        const scene = sceneRef.current;
+        if (!scene) return;
+
+        const leveledUpIds: number[] = [];
+        setUnits(prev => prev.map(u => {
+            if (u.team === "player" && u.hp > 0) {
+                const newExp = (u.exp ?? 0) + 50;
+                const currentLevel = u.level ?? 1;
+                const xpForNext = getXpForLevel(currentLevel + 1);
+
+                if (newExp >= xpForNext) {
+                    leveledUpIds.push(u.id);
+                    return {
+                        ...u,
+                        exp: newExp,
+                        level: currentLevel + 1,
+                        statPoints: (u.statPoints ?? 0) + 3,
+                        hp: u.hp + 2,
+                        mana: (u.mana ?? 0) + 1,
+                        stats: u.stats ?? {
+                            strength: 0,
+                            dexterity: 0,
+                            vitality: 0,
+                            intelligence: 0,
+                            faith: 0
+                        }
+                    };
+                }
+                return { ...u, exp: newExp };
+            }
+            return u;
+        }));
+
+        addLog("Debug: Party gained 50 XP!", "#9b59b6");
+
+        // Trigger level-up effects after state update
+        if (leveledUpIds.length > 0) {
+            addLog("Level up! +3 stat points available.", "#ffd700");
+            soundFns.playLevelUp();
+            for (const unitId of leveledUpIds) {
+                const unitGroup = unitsRef.current[unitId];
+                if (unitGroup) {
+                    createLightningPillar(scene, unitGroup.position.x, unitGroup.position.z, {
+                        color: "#ffd700",
+                        duration: 600,
+                        radius: 0.3,
+                        height: 10
+                    });
+                }
+            }
+        }
+    };
+
     return (
         <div style={{ width: "100%", height: "100vh", position: "relative", cursor: targetingMode ? "crosshair" : "default" }}>
             <div ref={containerRef} style={{ width: "100%", height: "100%", filter: paused ? "saturate(0.4) brightness(0.85)" : "none", transition: "filter 0.2s" }} />
@@ -1264,7 +1427,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
             <div style={{ position: "absolute", top: 10, right: 10, color: "#888", fontSize: 11, fontFamily: "monospace", opacity: 0.6 }}>
                 {fps} fps
             </div>
-            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onShowHelp={onShowHelp} onRestart={onRestart} debug={debug} onToggleDebug={() => setDebug(d => !d)} onWarpToArea={handleWarpToArea} />
+            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} gold={gold} onTogglePause={handleTogglePause} onShowHelp={onShowHelp} onRestart={onRestart} debug={debug} onToggleDebug={() => setDebug(d => !d)} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} />
             <CombatLog log={combatLog} />
             <PartyBar
                 units={units}

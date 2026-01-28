@@ -55,7 +55,7 @@ export interface InputSetters {
 // Per-unit queued action - only ONE action per unit at a time (last one wins)
 // Note: attacks are just skills now - no separate "attack" type
 export type QueuedAction =
-    | { type: "skill"; skill: Skill; targetX: number; targetZ: number }
+    | { type: "skill"; skill: Skill; targetX: number; targetZ: number; targetId?: number }
     | { type: "move"; targetX: number; targetZ: number }
     | { type: "consumable"; itemId: string };
 
@@ -227,7 +227,7 @@ export function processActionQueue(
             if (now < cooldownEnd) {
                 continue; // Don't remove, will try again next frame
             }
-            executeSkill(skillCtx, unitId, action.skill, action.targetX, action.targetZ);
+            executeSkill(skillCtx, unitId, action.skill, action.targetX, action.targetZ, action.targetId);
             executedUnits.push(unitId);
         } else if (action.type === "move") {
             // Move can execute immediately
@@ -330,7 +330,8 @@ export function queueOrExecuteSkill(
     state: Pick<InputState, "pausedRef">,
     setters: Pick<InputSetters, "setTargetingMode" | "setQueuedActions">,
     skillCtx: SkillExecutionContext,
-    addLog: (text: string, color?: string) => void
+    addLog: (text: string, color?: string) => void,
+    targetId?: number
 ): boolean {
     // Check cooldown
     const now = Date.now();
@@ -340,7 +341,7 @@ export function queueOrExecuteSkill(
     // Queue when paused OR on cooldown - execute immediately otherwise
     if (state.pausedRef.current || onCooldown) {
         // Per-unit queue: new action replaces any previous action for this unit
-        refs.actionQueueRef.current[casterId] = { type: "skill", skill, targetX, targetZ };
+        refs.actionQueueRef.current[casterId] = { type: "skill", skill, targetX, targetZ, targetId };
         // Update UI state (replace any existing queued action for this unit)
         setters.setQueuedActions(prev => [
             ...prev.filter(q => q.unitId !== casterId),
@@ -352,7 +353,7 @@ export function queueOrExecuteSkill(
         return true;
     }
 
-    executeSkill(skillCtx, casterId, skill, targetX, targetZ);
+    executeSkill(skillCtx, casterId, skill, targetX, targetZ, targetId);
     clearTargetingMode(setters.setTargetingMode, refs.rangeIndicatorRef, refs.aoeIndicatorRef);
     return true;
 }
@@ -403,8 +404,8 @@ export function handleTargetingClick(
                     return true;
                 }
 
-                // Use target's center position for the skill
-                return queueOrExecuteSkill(casterId, skill, targetG.position.x, targetG.position.z, refs, state, setters, skillCtx, addLog);
+                // Use target's center position for the skill, pass target ID for tracking
+                return queueOrExecuteSkill(casterId, skill, targetG.position.x, targetG.position.z, refs, state, setters, skillCtx, addLog, targetId);
             }
             return true; // Clicked a dead/invalid unit, consume the click
         }

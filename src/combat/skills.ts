@@ -13,7 +13,7 @@ import { tryHealBark, trySpellBark } from "./barks";
 import { getUnitRadius, isInRange } from "../rendering/range";
 import { distanceToPoint } from "../game/geometry";
 import { soundFns } from "../audio/sound";
-import { createProjectile, getProjectileSpeed, applyDamageToUnit, createAnimatedRing, type DamageContext } from "./combat";
+import { createProjectile, getProjectileSpeed, applyDamageToUnit, createAnimatedRing, createLightningPillar, type DamageContext } from "./combat";
 import { createSanctuaryTile } from "../gameLoop/sanctuaryTiles";
 import { updateUnitWith } from "../core/stateUtils";
 
@@ -393,6 +393,116 @@ export function executeMeleeSkill(
         if (willPoison) {
             addLog(logPoisoned(targetData.name), COLORS.poisonText);
         }
+    } else {
+        soundFns.playMiss();
+        addLog(logMiss(casterData.name, skill.name, targetData.name), COLORS.logNeutral);
+    }
+
+    return true;
+}
+
+/**
+ * Execute a smite skill (like Thunder) - instant-hit ranged damage with visual effect
+ * @param targetUnitId Optional target unit ID - if provided, tracks enemy by ID even if they move
+ */
+export function executeSmiteSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill,
+    targetX: number,
+    targetZ: number,
+    targetUnitId?: number
+): boolean {
+    const { scene, unitsStateRef, unitsRef, hitFlashRef, damageTexts, setUnits, addLog, defeatedThisFrame } = ctx;
+
+    let targetEnemy: Unit | undefined;
+    let targetG: UnitGroup | undefined;
+
+    // If we have a specific target ID, find that enemy (tracks moving targets)
+    if (targetUnitId !== undefined) {
+        targetEnemy = unitsStateRef.current.find(u => u.id === targetUnitId && u.team === "enemy");
+        targetG = unitsRef.current[targetUnitId];
+    }
+
+    // Fall back to position-based search if no target ID or target not found
+    if (!targetEnemy || !targetG) {
+        const closest = findClosestTargetByTeam(unitsStateRef.current, unitsRef.current, "enemy", targetX, targetZ);
+        if (!closest) {
+            addLog(`${UNIT_DATA[casterId].name}: No enemy at that location!`, COLORS.logNeutral);
+            return false;
+        }
+        targetEnemy = closest.unit;
+        targetG = closest.group;
+    }
+
+    const casterG = unitsRef.current[casterId];
+
+    if (!casterG) return false;
+
+    // Check if in range (hitbox-aware)
+    const targetRadius = getUnitRadius(targetEnemy);
+    if (!isInRange(casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, targetRadius, skill.range + 0.5)) {
+        addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, COLORS.logNeutral);
+        return false;
+    }
+
+    const now = Date.now();
+    consumeSkill(ctx, casterId, skill);
+
+    const casterData = UNIT_DATA[casterId];
+    const targetData = getUnitStats(targetEnemy);
+    const targetId = targetEnemy.id;
+
+    // Create lightning pillar visual at target location
+    createLightningPillar(scene, targetG.position.x, targetG.position.z);
+    soundFns.playHit();
+
+    // Check for front-shield block (undead knight etc.)
+    if (targetEnemy.enemyType) {
+        const enemyStats = ENEMY_STATS[targetEnemy.enemyType];
+        if (enemyStats.frontShield && targetEnemy.facing !== undefined) {
+            if (isBlockedByFrontShield(casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, targetEnemy.facing)) {
+                soundFns.playMiss();
+                addLog(`${casterData.name}'s ${skill.name} is blocked by ${targetData.name}'s shield!`, "#4488ff");
+                return true;
+            }
+        }
+    }
+
+    // Roll to hit
+    if (rollHit(casterData.accuracy)) {
+        // Apply stat bonuses based on damage type
+        const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
+        let statBonus = 0;
+        if (casterUnit) {
+            if (skill.damageType === "lightning") {
+                statBonus = getIntelligenceMagicDamageBonus(casterUnit);
+            } else if (skill.damageType === "holy") {
+                statBonus = getFaithHolyDamageBonus(casterUnit);
+            }
+        }
+        const dmg = calculateDamage(skill.value[0] + statBonus, skill.value[1] + statBonus, getEffectiveArmor(targetEnemy, targetData.armor), skill.damageType);
+
+        // Read fresh HP from current state
+        const freshTarget = unitsStateRef.current.find(u => u.id === targetId);
+        const currentHp = freshTarget?.hp ?? targetEnemy.hp;
+
+        // Skip if target was already defeated this frame
+        if (currentHp <= 0 || defeatedThisFrame.has(targetId)) {
+            return true;
+        }
+
+        const dmgCtx: DamageContext = {
+            scene, damageTexts: damageTexts.current, hitFlashRef: hitFlashRef.current,
+            unitsRef: unitsRef.current, setUnits, addLog, now, defeatedThisFrame
+        };
+        applyDamageToUnit(dmgCtx, targetId, targetG, currentHp, dmg, targetData.name, {
+            color: COLORS.damagePlayer,
+            attackerName: casterData.name,
+            hitMessage: { text: logHit(casterData.name, skill.name, targetData.name, dmg), color: COLORS.damagePlayer },
+            targetUnit: targetEnemy,
+            attackerPosition: { x: casterG.position.x, z: casterG.position.z }
+        });
     } else {
         soundFns.playMiss();
         addLog(logMiss(casterData.name, skill.name, targetData.name), COLORS.logNeutral);
@@ -1111,13 +1221,15 @@ export function executeSanctuarySkill(
 
 /**
  * Execute a skill based on its type
+ * @param targetId Optional target unit ID for enemy-targeted skills (tracks moving targets)
  */
 export function executeSkill(
     ctx: SkillExecutionContext,
     casterId: number,
     skill: Skill,
     targetX: number,
-    targetZ: number
+    targetZ: number,
+    targetId?: number
 ): boolean {
     const caster = ctx.unitsStateRef.current.find(u => u.id === casterId);
     const casterG = ctx.unitsRef.current[casterId];
@@ -1166,6 +1278,8 @@ export function executeSkill(
         return executeSanctuarySkill(ctx, casterId, skill, targetX, targetZ);
     } else if (skill.type === "mana_transfer" && skill.targetType === "ally") {
         return executeManaTransferSkill(ctx, casterId, skill, targetX, targetZ);
+    } else if (skill.type === "smite" && skill.targetType === "enemy") {
+        return executeSmiteSkill(ctx, casterId, skill, targetX, targetZ, targetId);
     }
 
     return false;

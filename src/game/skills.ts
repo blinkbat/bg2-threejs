@@ -94,6 +94,18 @@ export const SKILLS: Record<string, Skill> = {
         damageType: "physical",
         stunChance: 75  // 75% chance to stun
     },
+    thunder: {
+        name: "Thunder",
+        description: "Call down a bolt of lightning on a single enemy.",
+        flavor: "The sky answers the faithful.",
+        manaCost: 12,
+        cooldown: 5000,
+        type: "smite",
+        targetType: "enemy",
+        range: 9,
+        value: [10, 16],
+        damageType: "lightning"
+    },
     cleanse: {
         name: "Cleanse",
         description: "Purify an ally, removing poison and granting immunity to poison for 30 seconds.",
