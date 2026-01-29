@@ -11,6 +11,7 @@
 - Search for existing implementations before writing new code
 - Import and reference existing functions—never rewrite them
 - Prefer established libraries over custom implementations
+- When making a change, always think hard about what previous code might be affected. Inspect usages and make sure code is both reused correctly and non-contract-breaking.
 
 ### Type Safety (Strict)
 - All types must be explicit and complete

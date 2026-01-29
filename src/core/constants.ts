@@ -8,6 +8,11 @@ export const ATTACK_RANGE = 1.8;
 export const MOVE_SPEED = 0.05;
 export const DEFAULT_UNIT_RADIUS = 0.7;
 export const DEFAULT_MOVE_SPEED = 1.0;  // Normal movement speed multiplier
+
+// Debug speed multiplier (mutable for debug menu)
+let debugSpeedMultiplier = 1.0;
+export const getDebugSpeedMultiplier = () => debugSpeedMultiplier;
+export const setDebugSpeedMultiplier = (mult: number) => { debugSpeedMultiplier = mult; };
 export const VISION_RADIUS = 10;
 export const PAN_SPEED = 0.4;
 

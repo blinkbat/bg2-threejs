@@ -4,7 +4,7 @@
 
 import * as THREE from "three";
 import { GRID_SIZE, FOG_SCALE } from "../core/constants";
-import { getCurrentArea, getComputedAreaData, type AreaTransition } from "../game/areas";
+import { getCurrentArea, getComputedAreaData, type AreaTransition, type SecretDoor } from "../game/areas";
 import { getUnitStats } from "../game/units";
 import type { Unit, UnitGroup, FogTexture } from "../core/types";
 
@@ -23,6 +23,13 @@ function getEffectiveSize(unit: Unit, baseSize: number): number {
 export interface DoorMesh extends THREE.Mesh {
     userData: {
         transition: AreaTransition;
+    };
+}
+
+export interface SecretDoorMesh extends THREE.Group {
+    userData: {
+        secretDoor: SecretDoor;
+        secretDoorIndex: number;
     };
 }
 
@@ -56,6 +63,7 @@ export interface SceneRefs {
     columnMeshes: THREE.Mesh[];  // Column meshes for transparency
     columnGroups: THREE.Mesh[][];  // Groups of column parts (body, base, capital) that fade together
     doorMeshes: DoorMesh[];
+    secretDoorMeshes: SecretDoorMesh[];  // Hidden doors that reveal caves when clicked
     waterMesh: THREE.Mesh | null;  // Water for coast
     chestMeshes: ChestMeshData[];  // Chest lid pivots for open/close animation
 }
@@ -454,6 +462,8 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         );
         mesh.position.set(o.x + o.w / 2, 1.25, o.z + o.h / 2);
         mesh.name = "obstacle";
+        // Store bounds for secret door wall removal
+        mesh.userData.bounds = { x: o.x, z: o.z, w: o.w, h: o.h };
         scene.add(mesh);
         wallMeshes.push(mesh);
     });
@@ -499,6 +509,67 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         );
         scene.add(doorLight);
     });
+
+    // Secret doors - wall segment with cracks that gets removed when clicked
+    const secretDoorMeshes: SecretDoorMesh[] = [];
+    if (area.secretDoors) {
+        area.secretDoors.forEach((secretDoor, index) => {
+            const group = new THREE.Group() as SecretDoorMesh;
+            const secretDoorData = { secretDoor, secretDoorIndex: index };
+            const { blockingWall } = secretDoor;
+
+            // Create the blocking wall mesh (same style as other walls)
+            const wallMesh = new THREE.Mesh(
+                new THREE.BoxGeometry(blockingWall.w, 2.5, blockingWall.h),
+                new THREE.MeshStandardMaterial({ color: 0x2d3748, metalness: 0.2, roughness: 0.8 })
+            );
+            wallMesh.position.set(
+                blockingWall.x + blockingWall.w / 2,
+                1.25,
+                blockingWall.z + blockingWall.h / 2
+            );
+            wallMesh.name = "secretDoor";
+            wallMesh.userData = secretDoorData;
+            group.add(wallMesh);
+
+            // Create thick crack segments on the north face using thin boxes
+            const crackMat = new THREE.MeshBasicMaterial({ color: "#0a0a0a" });
+            const crackX = blockingWall.x + blockingWall.w / 2;
+            const crackZ = blockingWall.z + blockingWall.h + 0.02;
+
+            // Helper to create a crack segment between two points
+            const makeCrack = (x1: number, y1: number, x2: number, y2: number, thickness = 0.06) => {
+                const dx = x2 - x1;
+                const dy = y2 - y1;
+                const length = Math.sqrt(dx * dx + dy * dy);
+                const angle = Math.atan2(dx, dy);
+
+                const crack = new THREE.Mesh(
+                    new THREE.BoxGeometry(thickness, length, 0.02),
+                    crackMat
+                );
+                crack.position.set((x1 + x2) / 2, (y1 + y2) / 2, crackZ);
+                crack.rotation.z = -angle;
+                return crack;
+            };
+
+            // Main vertical crack (zigzag pattern)
+            group.add(makeCrack(crackX, 0.1, crackX + 0.15, 0.9, 0.08));
+            group.add(makeCrack(crackX + 0.15, 0.9, crackX - 0.1, 1.5, 0.08));
+            group.add(makeCrack(crackX - 0.1, 1.5, crackX + 0.2, 2.2, 0.08));
+
+            // Branch cracks
+            group.add(makeCrack(crackX + 0.15, 0.9, crackX + 0.6, 1.1, 0.05));
+            group.add(makeCrack(crackX + 0.6, 1.1, crackX + 0.9, 1.0, 0.04));
+            group.add(makeCrack(crackX - 0.1, 1.5, crackX - 0.5, 1.7, 0.05));
+            group.add(makeCrack(crackX - 0.5, 1.7, crackX - 0.8, 1.6, 0.04));
+            group.add(makeCrack(crackX + 0.15, 0.9, crackX - 0.4, 0.6, 0.05));
+
+            group.userData = secretDoorData;
+            scene.add(group);
+            secretDoorMeshes.push(group);
+        });
+    }
 
     // Grid lines - subtle, above room floors (darker for forest to show on green grass)
     const gridColor = area.id === "forest" ? "#1a3a1a" : "#444444";
@@ -694,6 +765,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         columnMeshes,
         columnGroups,
         doorMeshes,
+        secretDoorMeshes,
         waterMesh,
         chestMeshes,
     };

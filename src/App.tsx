@@ -7,12 +7,12 @@ import { useState, useRef, useEffect } from "react";
 import * as THREE from "three";
 
 // Constants & Types
-import { GRID_SIZE, PAN_SPEED } from "./core/constants";
+import { GRID_SIZE, PAN_SPEED, setDebugSpeedMultiplier } from "./core/constants";
 import type { Unit, Skill, CombatLogEntry, SelectionBox, DamageText, UnitGroup, FogTexture, Projectile, SwingAnimation, SanctuaryTile, CharacterStats } from "./core/types";
 
 // Game Logic
 import { blocked } from "./game/dungeon";
-import { getCurrentArea, setCurrentArea, AREAS, DEFAULT_STARTING_AREA, DEFAULT_SPAWN_POINT, type AreaId, type AreaTransition } from "./game/areas";
+import { getCurrentArea, setCurrentArea, AREAS, DEFAULT_STARTING_AREA, DEFAULT_SPAWN_POINT, getBlocked, type AreaId, type AreaTransition } from "./game/areas";
 import { UNIT_DATA, ENEMY_STATS, getBasicAttackSkill } from "./game/units";
 import { initializeEquipmentState, getPartyInventory, setPartyInventory } from "./game/equipmentState";
 import { removeFromInventory } from "./game/equipment";
@@ -20,9 +20,9 @@ import { getItem } from "./game/items";
 import { isConsumable, isKey } from "./core/types";
 import { addToInventory } from "./game/equipment";
 import { getEffectiveMaxHp } from "./game/units";
-import { createScene, updateCamera, updateWallTransparency, updateTreeFogVisibility, updateLightLOD, addUnitToScene, updateWater, updateChestStates, type DoorMesh, type ChestMeshData } from "./rendering/scene";
+import { createScene, updateCamera, updateWallTransparency, updateTreeFogVisibility, updateLightLOD, addUnitToScene, updateWater, updateChestStates, type DoorMesh, type ChestMeshData, type SecretDoorMesh } from "./rendering/scene";
 import { soundFns } from "./audio/sound";
-import { updateDynamicObstacles, findSpawnPositions } from "./ai/pathfinding";
+import { updateDynamicObstacles, findSpawnPositions, clearPathCache } from "./ai/pathfinding";
 import { updateUnitCache } from "./ai/unitAI";
 import { resetAllBroodMotherScreeches } from "./game/enemyState";
 
@@ -142,6 +142,8 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
     const columnMeshesRef = useRef<THREE.Mesh[]>([]);
     const columnGroupsRef = useRef<THREE.Mesh[][]>([]);
     const doorMeshesRef = useRef<DoorMesh[]>([]);
+    const hoveredDoorRef = useRef<string | null>(null);
+    const secretDoorMeshesRef = useRef<SecretDoorMesh[]>([]);
     const waterMeshRef = useRef<THREE.Mesh | null>(null);
     const chestMeshesRef = useRef<ChestMeshData[]>([]);
     const debugGridRef = useRef<THREE.Group | null>(null);
@@ -226,11 +228,19 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
     const [hoveredEnemy, setHoveredEnemy] = useState<{ id: number; x: number; y: number } | null>(null);
     const [hoveredChest, setHoveredChest] = useState<{ x: number; y: number; chestIndex: number; chestX: number; chestZ: number } | null>(null);
     const [openedChests, setOpenedChests] = useState<Set<string>>(new Set());
+    const [openedSecretDoors, setOpenedSecretDoors] = useState<Set<string>>(new Set());
     const [gold, setGold] = useState(0);
     const [hoveredPlayer, setHoveredPlayer] = useState<{ id: number; x: number; y: number } | null>(null);
     const [hoveredDoor, setHoveredDoor] = useState<{ targetArea: string; x: number; y: number } | null>(null);
+    const [hoveredSecretDoor, setHoveredSecretDoor] = useState<{ x: number; y: number } | null>(null);
     const [fps, setFps] = useState(0);
     const [debug, setDebug] = useState(false);
+    const [fastMove, setFastMove] = useState(false);
+
+    // Update debug speed multiplier when fastMove changes
+    useEffect(() => {
+        setDebugSpeedMultiplier(fastMove ? 10 : 1);
+    }, [fastMove]);
     // FPS tracking refs
     const fpsFrameCount = useRef(0);
     const fpsLastTime = useRef(Date.now());
@@ -255,6 +265,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
     useEffect(() => { skillCooldownsRef.current = skillCooldowns; }, [skillCooldowns]);
     useEffect(() => { openedChestsRef.current = openedChests; }, [openedChests]);
     useEffect(() => { updateChestStates(chestMeshesRef.current, openedChests); }, [openedChests]);
+    useEffect(() => { hoveredDoorRef.current = hoveredDoor?.targetArea ?? null; }, [hoveredDoor]);
 
     // Debug grid effect
     useEffect(() => {
@@ -353,7 +364,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         clearChargeAttacks();  // Clear charge attacks (meshes will be in old scene)
 
         const sceneRefs = createScene(containerRef.current, units);
-        const { scene, camera, renderer, flames, candleMeshes, candleLights, fogTexture, fogMesh, moveMarker, rangeIndicator, aoeIndicator, unitGroups, selectRings, targetRings, shieldIndicators, unitMeshes, unitOriginalColors, maxHp, wallMeshes, treeMeshes, columnMeshes, columnGroups, doorMeshes, waterMesh, chestMeshes } = sceneRefs;
+        const { scene, camera, renderer, flames, candleMeshes, candleLights, fogTexture, fogMesh, moveMarker, rangeIndicator, aoeIndicator, unitGroups, selectRings, targetRings, shieldIndicators, unitMeshes, unitOriginalColors, maxHp, wallMeshes, treeMeshes, columnMeshes, columnGroups, doorMeshes, secretDoorMeshes, waterMesh, chestMeshes } = sceneRefs;
 
         sceneRef.current = scene;
         cameraRef.current = camera;
@@ -375,6 +386,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         columnMeshesRef.current = columnMeshes;
         columnGroupsRef.current = columnGroups;
         doorMeshesRef.current = doorMeshes;
+        secretDoorMeshesRef.current = secretDoorMeshes;
         waterMeshRef.current = waterMesh;
         chestMeshesRef.current = chestMeshes;
 
@@ -544,13 +556,22 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                     }
                     break;
                 }
+                // Check for secret door hover
+                if (hit.object.name === "secretDoor") {
+                    setHoveredSecretDoor({ x: e.clientX, y: e.clientY });
+                    break;
+                }
             }
             setHoveredEnemy(foundEnemy);
             setHoveredChest(foundChest);
             setHoveredPlayer(foundPlayer);
             // Clear door hover if we didn't find one
-            if (!raycaster.intersectObjects(scene.children, true).some(h => h.object.name === "door")) {
+            const hits = raycaster.intersectObjects(scene.children, true);
+            if (!hits.some(h => h.object.name === "door")) {
                 setHoveredDoor(null);
+            }
+            if (!hits.some(h => h.object.name === "secretDoor")) {
+                setHoveredSecretDoor(null);
             }
         };
 
@@ -755,6 +776,68 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                 }
             }
 
+            // Check for secret door click - reveal hidden cave
+            for (const h of raycaster.intersectObjects(scene.children, true)) {
+                if (h.object.name === "secretDoor" && h.object.userData?.secretDoorIndex !== undefined) {
+                    const { secretDoor, secretDoorIndex } = h.object.userData;
+                    const area = getCurrentArea();
+                    const secretDoorKey = `${area.id}-secret-${secretDoorIndex}`;
+
+                    // Check if already opened
+                    if (openedSecretDoors.has(secretDoorKey)) {
+                        addLog("The passage is already open.", "#888");
+                        return;
+                    }
+
+                    // Check if any alive player is within range
+                    const doorRange = 2.5;
+                    const alivePlayers = unitsStateRef.current.filter(u => u.team === "player" && u.hp > 0);
+                    const playerNearby = alivePlayers.some(player => {
+                        const playerG = unitsRef.current[player.id];
+                        if (!playerG) return false;
+                        const dx = playerG.position.x - (secretDoor.x + 0.5);
+                        const dz = playerG.position.z - (secretDoor.z + 0.5);
+                        return Math.sqrt(dx * dx + dz * dz) <= doorRange;
+                    });
+
+                    if (!playerNearby) {
+                        addLog("You need to get closer to inspect this.", "#f59e0b");
+                        return;
+                    }
+
+                    // Show hint and open the secret door
+                    if (secretDoor.hint) {
+                        addLog(secretDoor.hint, "#4ade80");
+                    }
+
+                    // Mark as opened
+                    setOpenedSecretDoors(prev => new Set([...prev, secretDoorKey]));
+
+                    // Remove the secret door group (wall + cracks) from scene
+                    const meshGroup = secretDoorMeshesRef.current[secretDoorIndex];
+                    if (meshGroup) {
+                        scene.remove(meshGroup);
+                    }
+
+                    // Unblock the wall area for pathfinding
+                    const { blockingWall } = secretDoor;
+                    const blockedGrid = getBlocked();
+                    for (let x = blockingWall.x; x < blockingWall.x + blockingWall.w; x++) {
+                        for (let z = blockingWall.z; z < blockingWall.z + blockingWall.h; z++) {
+                            if (x >= 0 && x < blockedGrid.length && z >= 0 && z < blockedGrid[0].length) {
+                                blockedGrid[x][z] = false;
+                            }
+                        }
+                    }
+
+                    // Clear pathfinding cache since blocked grid changed
+                    clearPathCache();
+
+                    soundFns.playSecretDiscovered();
+                    return;
+                }
+            }
+
             // Normal click handling
             for (const h of raycaster.intersectObjects(scene.children, true)) {
                 let o: THREE.Object3D | null = h.object;
@@ -901,6 +984,14 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
             // Room lights flicker subtly (1 per room, not per candle)
             candleLights.forEach((light, i) => {
                 light.intensity = 12 + Math.sin(now * 0.003 + i * 1.7) * 3 + Math.random() * 1;
+            });
+
+            // Door hover glow effect
+            doorMeshesRef.current.forEach(doorMesh => {
+                const mat = doorMesh.material as THREE.MeshBasicMaterial;
+                const isHovered = doorMesh.userData.transition.targetArea === hoveredDoorRef.current;
+                const targetOpacity = isHovered ? 0.35 : 0.08;
+                mat.opacity += (targetOpacity - mat.opacity) * 0.15;
             });
 
             // Keyboard panning
@@ -1304,15 +1395,15 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         onAreaTransition(persistedState, areaId, targetArea.defaultSpawn);
     };
 
-    // Debug: Add 50 XP to all living player units
-    const handleAddXp = () => {
+    // Debug: Add XP to all living player units
+    const handleAddXp = (amount: number) => {
         const scene = sceneRef.current;
         if (!scene) return;
 
         const leveledUpIds: number[] = [];
         setUnits(prev => prev.map(u => {
             if (u.team === "player" && u.hp > 0) {
-                const newExp = (u.exp ?? 0) + 50;
+                const newExp = (u.exp ?? 0) + amount;
                 const currentLevel = u.level ?? 1;
                 const xpForNext = getXpForLevel(currentLevel + 1);
 
@@ -1339,7 +1430,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
             return u;
         }));
 
-        addLog("Debug: Party gained 50 XP!", "#9b59b6");
+        addLog(`Debug: Party gained ${amount} XP!`, "#9b59b6");
 
         // Trigger level-up effects after state update
         if (leveledUpIds.length > 0) {
@@ -1423,11 +1514,17 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                     <div className="enemy-tooltip-status" style={{ color: "#4a90d9" }}>To: {AREAS[hoveredDoor.targetArea as AreaId]?.name ?? hoveredDoor.targetArea}</div>
                 </div>
             )}
+            {/* Secret door tooltip on hover */}
+            {hoveredSecretDoor && (
+                <div className="enemy-tooltip" style={{ left: hoveredSecretDoor.x + 12, top: hoveredSecretDoor.y - 10 }}>
+                    <div className="enemy-tooltip-name">Cracked wall</div>
+                </div>
+            )}
             {/* FPS counter */}
             <div style={{ position: "absolute", top: 10, right: 10, color: "#888", fontSize: 11, fontFamily: "monospace", opacity: 0.6 }}>
                 {fps} fps
             </div>
-            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} gold={gold} onTogglePause={handleTogglePause} onShowHelp={onShowHelp} onRestart={onRestart} debug={debug} onToggleDebug={() => setDebug(d => !d)} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} />
+            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} gold={gold} onTogglePause={handleTogglePause} onShowHelp={onShowHelp} onRestart={onRestart} debug={debug} onToggleDebug={() => setDebug(d => !d)} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} onToggleFastMove={() => setFastMove(f => !f)} fastMoveEnabled={fastMove} />
             <CombatLog log={combatLog} />
             <PartyBar
                 units={units}

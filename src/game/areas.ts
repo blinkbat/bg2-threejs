@@ -10,7 +10,7 @@ import { clearPathCache, invalidateDynamicObstacles } from "../ai/pathfinding";
 // TYPES
 // =============================================================================
 
-export type AreaId = "dungeon" | "forest" | "coast" | "ruins" | "sanctum";
+export type AreaId = "dungeon" | "forest" | "coast" | "ruins" | "sanctum" | "cliffs";
 
 // Default game start configuration - single source of truth
 export const DEFAULT_STARTING_AREA: AreaId = "coast";
@@ -68,6 +68,14 @@ export interface Decoration {
     size?: number;      // Scale multiplier
 }
 
+export interface SecretDoor {
+    x: number;
+    z: number;
+    // The wall segment that blocks entry (removed when opened)
+    blockingWall: { x: number; z: number; w: number; h: number };
+    hint?: string;  // Optional hint text when inspected
+}
+
 export interface AreaData {
     id: AreaId;
     name: string;
@@ -83,6 +91,7 @@ export interface AreaData {
     chests: ChestLocation[];
     trees: TreeLocation[];
     decorations?: Decoration[];  // Columns, broken walls, etc.
+    secretDoors?: SecretDoor[];  // Hidden doors that require inspection to use
     ambientLight: number;        // Ambient light intensity
     directionalLight: number;    // Directional light intensity
     hasFogOfWar: boolean;
@@ -235,6 +244,8 @@ export function computeAreaData(area: AreaData): ComputedAreaData {
         : [];
 
     // Merge obstacles BEFORE blocking trees (so trees don't become walls)
+    // Note: Secret door areas remain blocked, so walls WILL render there
+    // The walls get removed when the secret door is opened
     const mergedObstacles = mergeObstacles(blocked, area.gridSize);
 
     // Block tree positions for pathing and LOS (after wall merging)
@@ -612,12 +623,19 @@ export const COAST_AREA: AreaData = {
             targetArea: "forest",
             targetSpawn: { x: 25, z: 2 },
             direction: "north"
+        },
+        // West side near beach leads to cliffs
+        {
+            x: 0, z: 18, w: 1, h: 5,
+            targetArea: "cliffs",
+            targetSpawn: { x: 47, z: 25 },
+            direction: "west"
         }
     ],
     chests: [
         {
-            x: 10.5,
-            z: 18.5,
+            x: 5.5,
+            z: 40.5,
             contents: [{ itemId: "stripOfBatJerky", quantity: 1 }],
             gold: 25
         }
@@ -873,13 +891,137 @@ export const SANCTUM_AREA: AreaData = {
     ]
 };
 
+export const CLIFFS_AREA: AreaData = {
+    id: "cliffs",
+    name: "The Rocky Pass",
+    flavor: "Wind howls through the jagged stones of this narrow passage.",
+    gridSize: GRID_SIZE,
+    backgroundColor: "#87CEEB",  // Sky blue
+    groundColor: "#5a7a4a",      // Grassy green
+    ambientLight: 0.55,
+    directionalLight: 0.85,
+    hasFogOfWar: true,
+    defaultSpawn: { x: 47, z: 25 },
+    rooms: [
+        // Jagged winding hallway - series of wide connected segments
+        // Entry area from coast (east side)
+        { x: 40, z: 18, w: 10, h: 14 },
+        // First bend going north
+        { x: 32, z: 24, w: 12, h: 12 },
+        // North segment going west
+        { x: 22, z: 26, w: 14, h: 10 },
+        // Second bend going south
+        { x: 18, z: 14, w: 10, h: 16 },
+        // South segment going west
+        { x: 8, z: 12, w: 14, h: 10 },
+        // Third bend going north
+        { x: 4, z: 18, w: 10, h: 16 },
+        // Exit area (west side)
+        { x: 1, z: 22, w: 8, h: 12 },
+        // Secret cave (south of main path, wall at z:11 blocks entry)
+        { x: 10, z: 1, w: 28, h: 10 }
+    ],
+    hallways: [
+        // Connect the wide jagged segments
+        { x1: 38, z1: 24, x2: 42, z2: 30 },   // Entry to first bend
+        { x1: 32, z1: 28, x2: 36, z2: 34 },   // First bend to north segment
+        { x1: 22, z1: 22, x2: 26, z2: 26 },   // North to second bend
+        { x1: 14, z1: 16, x2: 18, z2: 20 },   // Second bend to south segment
+        { x1: 8, z1: 18, x2: 12, z2: 22 },    // South to third bend
+        { x1: 4, z1: 22, x2: 8, z2: 28 }      // Third bend to exit
+    ],
+    roomFloors: [
+        // Grassy path with some dirt patches
+        { x: 40, z: 18, w: 10, h: 14, color: "#5a7a4a" },
+        { x: 32, z: 24, w: 12, h: 12, color: "#4a6a3a" },
+        { x: 22, z: 26, w: 14, h: 10, color: "#5a7a4a" },
+        { x: 18, z: 14, w: 10, h: 16, color: "#4a6a3a" },
+        { x: 8, z: 12, w: 14, h: 10, color: "#5a7a4a" },
+        { x: 4, z: 18, w: 10, h: 16, color: "#4a6a3a" },
+        { x: 1, z: 22, w: 8, h: 12, color: "#5a7a4a" },
+        // Dirt path through the center
+        { x: 43, z: 22, w: 5, h: 6, color: "#6a5a4a" },
+        { x: 22, z: 18, w: 4, h: 6, color: "#6a5a4a" },
+        { x: 6, z: 26, w: 5, h: 4, color: "#6a5a4a" },
+        // Secret cave floor
+        { x: 10, z: 1, w: 28, h: 10, color: "#4a5a3a" }
+    ],
+    enemySpawns: [],
+    transitions: [
+        // East entrance from coast
+        {
+            x: 49, z: 23, w: 1, h: 5,
+            targetArea: "coast",
+            targetSpawn: { x: 2, z: 20 },
+            direction: "east"
+        }
+    ],
+    chests: [
+        {
+            x: 5.5,
+            z: 30.5,
+            contents: [{ itemId: "smallManaPotion", quantity: 2 }],
+            gold: 20
+        },
+        // Hidden chest in secret cave
+        {
+            x: 30.5,
+            z: 5.5,
+            contents: [{ itemId: "battleaxe", quantity: 1 }],
+            gold: 50
+        }
+    ],
+    trees: [
+        // Sparse vegetation among the rocks (outside path)
+        { x: 48, z: 16, size: 0.7 },
+        { x: 46, z: 35, size: 0.6 },
+        { x: 30, z: 38, size: 0.8 },
+        { x: 6, z: 10, size: 0.7 },
+        { x: 2, z: 36, size: 0.8 }
+    ],
+    decorations: [
+        // Rocky outcrops lining the wide path - broken walls as rock faces
+        // East entrance rocks (outside walkable area)
+        { x: 48, z: 34, type: "broken_wall", rotation: 0, size: 1.2 },
+        { x: 42, z: 16, type: "broken_wall", rotation: Math.PI / 4, size: 1.0 },
+        // First bend rocks
+        { x: 44, z: 36, type: "broken_wall", rotation: Math.PI / 3, size: 1.1 },
+        { x: 30, z: 37, type: "broken_column", size: 0.9 },
+        // North segment rocks
+        { x: 36, z: 38, type: "broken_wall", rotation: -Math.PI / 4, size: 1.0 },
+        { x: 20, z: 37, type: "broken_column", size: 0.8 },
+        // Second bend rocks
+        { x: 28, z: 12, type: "broken_wall", rotation: 0, size: 1.2 },
+        { x: 16, z: 10, type: "broken_column", size: 0.9 },
+        { x: 28, z: 8, type: "broken_wall", rotation: Math.PI / 2, size: 1.0 },
+        // South segment rocks
+        { x: 6, z: 10, type: "broken_wall", rotation: Math.PI / 4, size: 1.1 },
+        { x: 22, z: 10, type: "broken_column", size: 0.8 },
+        // Third bend rocks
+        { x: 2, z: 16, type: "broken_wall", rotation: -Math.PI / 3, size: 1.0 },
+        { x: 14, z: 35, type: "broken_column", size: 0.9 },
+        { x: 2, z: 36, type: "broken_wall", rotation: 0, size: 1.1 },
+        // Exit area rocks
+        { x: 8, z: 36, type: "broken_wall", rotation: Math.PI / 6, size: 1.0 },
+        { x: 10, z: 8, type: "broken_column", size: 0.9 }
+    ],
+    secretDoors: [
+        {
+            x: 17,
+            z: 11,
+            blockingWall: { x: 16, z: 11, w: 3, h: 1 }
+        }
+    ]
+};
+
 // Registry of all areas
 export const AREAS: Record<AreaId, AreaData> = {
     dungeon: DUNGEON_AREA,
     forest: FIELD_AREA,
     coast: COAST_AREA,
     ruins: RUINS_AREA,
-    sanctum: SANCTUM_AREA
+    sanctum: SANCTUM_AREA,
+    cliffs: CLIFFS_AREA
 };
 
 // =============================================================================

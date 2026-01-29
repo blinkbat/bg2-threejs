@@ -4,6 +4,7 @@
 
 import {
     MOVE_SPEED,
+    getDebugSpeedMultiplier,
     AVOIDANCE_RANGE_MULTIPLIER, AVOIDANCE_OVERLAP_STRENGTH,
     AVOIDANCE_STEER_THRESHOLD, AVOIDANCE_STEER_STRENGTH,
     MOVEMENT_MIN_DIST, MOVEMENT_MIN_MAGNITUDE
@@ -589,7 +590,7 @@ export function runMovementPhase(ctx: MovementContext): void {
 
     if (moveMag > MOVEMENT_MIN_MAGNITUDE) {
         // Normalize and apply speed (with optional multiplier for faster/slower enemies)
-        const speed = MOVE_SPEED * speedMultiplier;
+        const speed = MOVE_SPEED * speedMultiplier * getDebugSpeedMultiplier();
         moveX = (moveX / moveMag) * speed;
         moveZ = (moveZ / moveMag) * speed;
 

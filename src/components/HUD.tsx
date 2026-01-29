@@ -14,10 +14,12 @@ interface HUDProps {
     debug: boolean;
     onToggleDebug: () => void;
     onWarpToArea?: (areaId: AreaId) => void;
-    onAddXp?: () => void;
+    onAddXp?: (amount: number) => void;
+    onToggleFastMove?: () => void;
+    fastMoveEnabled?: boolean;
 }
 
-export function HUD({ areaName, areaFlavor, alivePlayers, paused, gold, onTogglePause, onShowHelp, onRestart, debug, onToggleDebug, onWarpToArea, onAddXp }: HUDProps) {
+export function HUD({ areaName, areaFlavor, alivePlayers, paused, gold, onTogglePause, onShowHelp, onRestart, debug, onToggleDebug, onWarpToArea, onAddXp, onToggleFastMove, fastMoveEnabled }: HUDProps) {
     const [muted, setMuted] = useState(isMuted());
 
     const handleToggleMute = () => {
@@ -75,9 +77,24 @@ export function HUD({ areaName, areaFlavor, alivePlayers, paused, gold, onToggle
                             ))}
                         </>
                     )}
+                </div>
+            )}
+            {debug && (
+                <div className="debug-warp-menu">
+                    <span className="debug-label">Cheats:</span>
                     {onAddXp && (
-                        <button className="btn btn-warp" onClick={onAddXp}>
-                            +50 XP
+                        <>
+                            <button className="btn btn-warp" onClick={() => onAddXp(50)}>
+                                +50 XP
+                            </button>
+                            <button className="btn btn-warp" onClick={() => onAddXp(500)}>
+                                +500 XP
+                            </button>
+                        </>
+                    )}
+                    {onToggleFastMove && (
+                        <button className={`btn btn-warp ${fastMoveEnabled ? "active" : ""}`} onClick={onToggleFastMove}>
+                            Speed x10
                         </button>
                     )}
                 </div>

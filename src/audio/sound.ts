@@ -641,6 +641,81 @@ const playLevelUp = () => {
     });
 };
 
+// Secret discovered - mysterious Zelda-style ascending chime
+const playSecretDiscovered = () => {
+    if (muted) return;
+    const ctx = getAudioCtx();
+
+    // Classic secret discovery arpeggio - ascending minor with shimmer
+    const notes = [
+        { freq: 392, time: 0 },      // G4
+        { freq: 466, time: 0.08 },   // Bb4
+        { freq: 523, time: 0.16 },   // C5
+        { freq: 622, time: 0.24 },   // Eb5
+        { freq: 784, time: 0.32 },   // G5
+        { freq: 932, time: 0.4 },    // Bb5
+    ];
+
+    notes.forEach(({ freq, time }) => {
+        // Main tone
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const filter = ctx.createBiquadFilter();
+
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(freq, ctx.currentTime + time);
+
+        filter.type = "lowpass";
+        filter.frequency.setValueAtTime(3000, ctx.currentTime);
+
+        const startTime = ctx.currentTime + time;
+        gain.gain.setValueAtTime(0, startTime);
+        gain.gain.linearRampToValueAtTime(0.18, startTime + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.08, startTime + 0.15);
+        gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.4);
+
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(startTime);
+        osc.stop(startTime + 0.45);
+
+        // Shimmer overtone (octave above)
+        const shimmer = ctx.createOscillator();
+        const shimmerGain = ctx.createGain();
+        shimmer.type = "sine";
+        shimmer.frequency.setValueAtTime(freq * 2, ctx.currentTime + time);
+
+        shimmerGain.gain.setValueAtTime(0, startTime);
+        shimmerGain.gain.linearRampToValueAtTime(0.06, startTime + 0.02);
+        shimmerGain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.3);
+
+        shimmer.connect(shimmerGain);
+        shimmerGain.connect(ctx.destination);
+        shimmer.start(startTime);
+        shimmer.stop(startTime + 0.35);
+    });
+
+    // Final sustained mystery chord
+    const chordNotes = [784, 932, 1175]; // G5, Bb5, D6 (minor)
+    chordNotes.forEach(freq => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(freq, ctx.currentTime);
+
+        const startTime = ctx.currentTime + 0.5;
+        gain.gain.setValueAtTime(0, startTime);
+        gain.gain.linearRampToValueAtTime(0.12, startTime + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.6);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(startTime);
+        osc.stop(startTime + 0.65);
+    });
+};
+
 // Crunch - food eating sound
 const playCrunch = () => {
     if (muted) return;
@@ -704,4 +779,5 @@ export const soundFns = {
     playGulp,
     playCrunch,
     playLevelUp,
+    playSecretDiscovered,
 };
