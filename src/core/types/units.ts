@@ -3,7 +3,7 @@
 // =============================================================================
 
 // Enemy type identifiers
-export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba" | "acid_slug" | "bat" | "undead_knight" | "ancient_construct";
+export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba" | "acid_slug" | "bat" | "undead_knight" | "ancient_construct" | "feral_hound";
 
 // Status effect types
 export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed" | "qi_drain" | "energyShield";
@@ -112,6 +112,13 @@ export interface EnemyChargeAttack {
     damageType: DamageType;  // Type of damage - armor only reduces physical
 }
 
+export interface EnemyLeapSkill {
+    cooldown: number;        // ms between leaps
+    minRange: number;        // Minimum distance to target to trigger leap
+    maxRange: number;        // Maximum leap distance
+    damage: [number, number];  // Bonus damage on landing
+}
+
 export interface EnemyStats {
     name: string;
     hp: number;
@@ -163,6 +170,8 @@ export interface EnemyStats {
     chargeAttack?: EnemyChargeAttack;
     // Aggressive targeting - immediately retargets to damage sources, bypasses scan cooldowns
     aggressiveTargeting?: boolean;
+    // Optional leap skill - jump to close distance with targets
+    leapSkill?: EnemyLeapSkill;
 }
 
 // =============================================================================

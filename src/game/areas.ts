@@ -950,7 +950,21 @@ export const CLIFFS_AREA: AreaData = {
         // Secret cave floor
         { x: 10, z: 1, w: 28, h: 10, color: "#4a5a3a" }
     ],
-    enemySpawns: [],
+    enemySpawns: [
+        // Pack at north segment
+        { x: 26, z: 30, type: "feral_hound" },
+        { x: 28, z: 32, type: "feral_hound" },
+        // Pack at second bend
+        { x: 20, z: 18, type: "feral_hound" },
+        { x: 22, z: 20, type: "feral_hound" },
+        // Pack at south segment
+        { x: 12, z: 16, type: "feral_hound" },
+        { x: 14, z: 18, type: "feral_hound" },
+        // Pack guarding exit
+        { x: 6, z: 26, type: "feral_hound" },
+        { x: 8, z: 28, type: "feral_hound" },
+        { x: 5, z: 30, type: "feral_hound" },
+    ],
     transitions: [
         // East entrance from coast
         {

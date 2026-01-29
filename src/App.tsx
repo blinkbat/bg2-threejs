@@ -60,6 +60,8 @@ import {
     processSanctuaryTiles,
     processChargeAttacks,
     clearChargeAttacks,
+    updateLeaps,
+    clearLeaps,
 } from "./gameLoop";
 import type { AcidTile } from "./core/types";
 
@@ -363,6 +365,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         acidTilesRef.current.clear();  // Clear acid tiles (meshes will be in old scene)
         sanctuaryTilesRef.current.clear();  // Clear sanctuary tiles
         clearChargeAttacks();  // Clear charge attacks (meshes will be in old scene)
+        clearLeaps();  // Clear active leaps
 
         const sceneRefs = createScene(containerRef.current, units);
         const { scene, camera, renderer, flames, candleMeshes, candleLights, fogTexture, fogMesh, moveMarker, rangeIndicator, aoeIndicator, unitGroups, selectRings, targetRings, shieldIndicators, unitMeshes, unitOriginalColors, maxHp, wallMeshes, treeMeshes, columnMeshes, columnGroups, doorMeshes, secretDoorMeshes, waterMesh, chestMeshes } = sceneRefs;
@@ -1081,6 +1084,16 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                     addLog,
                     now,
                     defeatedThisFrame
+                );
+
+                // Update leaps (feral hound leap attacks)
+                updateLeaps(
+                    now,
+                    unitsRef.current,
+                    unitsStateRef,
+                    setUnits,
+                    hitFlashRef,
+                    addLog
                 );
 
                 // Hit flash effect

@@ -911,6 +911,44 @@ const playCrunch = () => {
     crunch.stop(ctx.currentTime + 0.12);
 };
 
+// Bark/growl - aggressive dog-like sound for feral hounds
+const playBark = () => {
+    if (muted) return;
+    const ctx = getAudioCtx();
+
+    // Sharp bark - short aggressive tone
+    const bark = ctx.createOscillator();
+    const barkGain = ctx.createGain();
+    const barkFilter = ctx.createBiquadFilter();
+    bark.type = "sawtooth";
+    bark.frequency.setValueAtTime(250, ctx.currentTime);
+    bark.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 0.05);
+    bark.frequency.exponentialRampToValueAtTime(150, ctx.currentTime + 0.15);
+    barkFilter.type = "lowpass";
+    barkFilter.frequency.setValueAtTime(1000, ctx.currentTime);
+    barkFilter.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 0.15);
+    barkGain.gain.setValueAtTime(0.3, ctx.currentTime);
+    barkGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
+    bark.connect(barkFilter);
+    barkFilter.connect(barkGain);
+    barkGain.connect(ctx.destination);
+    bark.start();
+    bark.stop(ctx.currentTime + 0.18);
+
+    // Growl undertone
+    const growl = ctx.createOscillator();
+    const growlGain = ctx.createGain();
+    growl.type = "sawtooth";
+    growl.frequency.setValueAtTime(80, ctx.currentTime);
+    growl.frequency.exponentialRampToValueAtTime(60, ctx.currentTime + 0.2);
+    growlGain.gain.setValueAtTime(0.15, ctx.currentTime);
+    growlGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
+    growl.connect(growlGain);
+    growlGain.connect(ctx.destination);
+    growl.start();
+    growl.stop(ctx.currentTime + 0.22);
+};
+
 export const soundFns = {
     playMove: () => playTone(800, 0.06, 0.12, "square", undefined, 3000),
     playAttack: () => playTone(440, 0.08, 0.15, "square", 330, 2500),
@@ -931,4 +969,5 @@ export const soundFns = {
     playSecretDiscovered,
     playEnergyShield,
     playThunder,
+    playBark,
 };

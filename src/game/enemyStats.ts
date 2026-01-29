@@ -213,5 +213,25 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
             crossLength: 6,    // 6 tiles long in each direction
             damageType: "chaos"
         }
+    },
+    feral_hound: {
+        name: "Feral Hound",
+        hp: 18,
+        maxHp: 18,
+        damage: [2, 5],
+        accuracy: 65,
+        armor: 0,
+        color: "#5c4033",  // Dark brown
+        aggroRange: 10,
+        attackCooldown: 1600,  // Fast attacks
+        size: 0.85,
+        moveSpeed: 1.4,    // Fast - 140% normal speed
+        expReward: 12,
+        leapSkill: {
+            cooldown: 7000,    // Can leap every 7 seconds
+            minRange: 3,       // Only leap if target is at least 3 tiles away
+            maxRange: 5,       // Maximum leap distance
+            damage: [2, 4]     // Bonus damage on landing
+        }
     }
 };
