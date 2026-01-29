@@ -400,8 +400,9 @@ export function updateProjectiles(
                 );
 
                 if (dist <= trapProj.aoeRadius) {
-                    // Trap triggered! Apply pinned effect to all enemies in radius
+                    // Trap triggered! Apply pinned effect and damage to all enemies in radius
                     let pinnedCount = 0;
+                    let totalDamage = 0;
 
                     enemies.forEach(target => {
                         const targetG = unitsRef[target.id];
@@ -413,6 +414,18 @@ export function updateProjectiles(
                         );
 
                         if (targetDist <= trapProj.aoeRadius) {
+                            // Calculate damage if trap has damage
+                            let damage = 0;
+                            if (trapProj.trapDamage) {
+                                damage = trapProj.trapDamage[0] + Math.floor(Math.random() * (trapProj.trapDamage[1] - trapProj.trapDamage[0] + 1));
+                                totalDamage += damage;
+
+                                // Hit flash
+                                if (hitFlashRef) {
+                                    hitFlashRef[target.id] = now;
+                                }
+                            }
+
                             // Apply pinned effect
                             const pinnedEffect: StatusEffect = {
                                 type: "pinned",
@@ -429,8 +442,10 @@ export function updateProjectiles(
                                 const existingEffects = u.statusEffects || [];
                                 // Remove existing pinned effect if any (refresh)
                                 const filteredEffects = existingEffects.filter(e => e.type !== "pinned");
+                                const newHp = damage > 0 ? Math.max(0, u.hp - damage) : u.hp;
                                 return {
                                     ...u,
+                                    hp: newHp,
                                     statusEffects: [...filteredEffects, pinnedEffect]
                                 };
                             }));
@@ -450,7 +465,11 @@ export function updateProjectiles(
                     animateExpandingMesh(scene, triggerRing, { duration: 400, initialOpacity: 0.6, maxScale: trapProj.aoeRadius * 1.3, baseRadius: trapProj.aoeRadius });
 
                     soundFns.playHit();
-                    addLog(logTrapTriggered("Caltrops", pinnedCount), COLORS.pinnedText);
+                    if (totalDamage > 0) {
+                        addLog(`Caltrops pins ${pinnedCount} ${pinnedCount === 1 ? "enemy" : "enemies"} for ${totalDamage} damage!`, COLORS.pinnedText);
+                    } else {
+                        addLog(logTrapTriggered("Caltrops", pinnedCount), COLORS.pinnedText);
+                    }
 
                     disposeProjectile(scene, proj);
                     return false;

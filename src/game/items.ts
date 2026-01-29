@@ -46,7 +46,7 @@ export const WEAPONS: Record<string, WeaponItem> = {
         grip: "oneHand",
         damage: [1, 5],
         damageType: "chaos",
-        range: 8,
+        range: 6,
         projectileColor: "#ff6600",
     },
     bowAndQuiver: {
@@ -57,7 +57,7 @@ export const WEAPONS: Record<string, WeaponItem> = {
         grip: "twoHand",
         damage: [2, 4],
         damageType: "physical",
-        range: 7,
+        range: 9,
         projectileColor: "#a0522d",
     },
     bentSceptre: {

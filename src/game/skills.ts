@@ -147,15 +147,16 @@ export const SKILLS: Record<string, Skill> = {
     },
     caltrops: {
         name: "Caltrops",
-        description: "Throw a spiked trap that pins all enemies in a small area for 10 seconds when triggered.",
+        description: "Throw a spiked trap that pins all enemies in a small area for 10 seconds when triggered, dealing damage.",
         flavor: "A single step spells doom for the unwary.",
-        manaCost: 15,
+        manaCost: 8,
         cooldown: 5000,
         type: "trap",
         targetType: "aoe",  // Position-targeted
         range: 8,
         aoeRadius: 2,  // Trigger and effect radius
         value: [10000, 10000],  // Pinned duration in ms (10 seconds)
+        trapDamage: [4, 8],  // Damage when trap triggers
         damageType: "physical"
     },
     sanctuary: {

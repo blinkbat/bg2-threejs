@@ -24,6 +24,7 @@ export interface Skill {
     hitCount?: number;  // Number of hits for flurry-type skills
     stunChance?: number;  // 0-100 percent chance to apply stun on hit
     selfDamage?: [number, number];  // Damage range to apply to caster (for Qi Focus)
+    trapDamage?: [number, number];  // Damage dealt when trap triggers
 }
 
 export interface CombatLogEntry {
@@ -93,6 +94,7 @@ export interface TrapProjectile extends BaseProjectile {
     targetPos: { x: number; z: number };
     aoeRadius: number;
     pinnedDuration: number;  // Duration of pinned effect in ms
+    trapDamage?: [number, number];  // Damage dealt when trap triggers
     // Arc trajectory properties (pause-safe with delta time accumulation)
     startX: number;
     startZ: number;

@@ -1197,6 +1197,7 @@ export function executeTrapSkill(
         targetPos: { x: targetX, z: targetZ },
         aoeRadius: skill.aoeRadius ?? 2,
         pinnedDuration: skill.value[0],
+        trapDamage: skill.trapDamage,
         startX: casterG.position.x,
         startZ: casterG.position.z,
         elapsedTime: 0,
