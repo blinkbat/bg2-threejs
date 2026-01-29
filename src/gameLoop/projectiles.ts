@@ -87,6 +87,9 @@ export function updateProjectiles(
     now: number,
     defeatedThisFrame: Set<number>
 ): Projectile[] {
+    // Create ref wrapper for DamageContext
+    const unitsStateRef = { current: unitsState } as React.RefObject<Unit[]>;
+
     // Track HP locally during projectile updates to handle multiple hits in same frame
     // This prevents stale HP from unitsState causing multiple projectiles to "overkill"
     const hpTracker: Record<number, number> = {};
@@ -134,7 +137,7 @@ export function updateProjectiles(
                         }
                         const dmg = calculateDamage(damage[0] + statBonus, damage[1] + statBonus, getEffectiveArmor(target, targetData.armor), proj.damageType);
 
-                        const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
+                        const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now, defeatedThisFrame };
                         applyDamageToUnit(dmgCtx, target.id, tg, currentHp, dmg, targetData.name, {
                             color: getDamageColor(target.team, true),
                             attackerName: attackerUnit?.team === "player" ? attackerData?.name : undefined,
@@ -264,7 +267,7 @@ export function updateProjectiles(
                             }
                             dmgDealt = calculateDamage(mmProj.damage[0] + statBonus, mmProj.damage[1] + statBonus, getEffectiveArmor(targetUnit, targetData.armor), mmProj.damageType);
 
-                            const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
+                            const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now, defeatedThisFrame };
                             const mmAttackerG = unitsRef[mmProj.attackerId];
                             applyDamageToUnit(dmgCtx, targetUnit.id, targetG, currentHp, dmgDealt, targetData.name, {
                                 color: "#9966ff",
@@ -511,7 +514,7 @@ export function updateProjectiles(
                     ? logLifestealHit(attackerData.name, targetData.name, dmg, healAmount)
                     : logHit(attackerData.name, "Attack", targetData.name, dmg);
 
-                const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
+                const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now, defeatedThisFrame };
                 applyDamageToUnit(dmgCtx, targetUnit.id, targetG, targetUnit.hp, dmg, targetData.name, {
                     color: logColor,
                     poison: willPoison ? { sourceId: attackerUnit.id, damagePerTick: poisonDmg } : undefined,

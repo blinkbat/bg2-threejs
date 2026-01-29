@@ -7,7 +7,6 @@ interface HUDProps {
     areaFlavor: string;
     alivePlayers: number;
     paused: boolean;
-    gold: number;
     onTogglePause: () => void;
     onShowHelp: () => void;
     onRestart: () => void;
@@ -19,7 +18,7 @@ interface HUDProps {
     fastMoveEnabled?: boolean;
 }
 
-export function HUD({ areaName, areaFlavor, alivePlayers, paused, gold, onTogglePause, onShowHelp, onRestart, debug, onToggleDebug, onWarpToArea, onAddXp, onToggleFastMove, fastMoveEnabled }: HUDProps) {
+export function HUD({ areaName, areaFlavor, alivePlayers, paused, onTogglePause, onShowHelp, onRestart, debug, onToggleDebug, onWarpToArea, onAddXp, onToggleFastMove, fastMoveEnabled }: HUDProps) {
     const [muted, setMuted] = useState(isMuted());
 
     const handleToggleMute = () => {
@@ -42,7 +41,6 @@ export function HUD({ areaName, areaFlavor, alivePlayers, paused, gold, onToggle
                     {isDefeat ? "Defeat!" : areaName}
                 </div>
                 {!isDefeat && <div className="hud-area-flavor">{areaFlavor}</div>}
-                {gold > 0 && <div className="hud-gold">{gold} gold</div>}
             </div>
             <div className="hud-buttons">
                 <button className={`btn btn-pause ${paused ? "active" : ""}`} onClick={onTogglePause}>

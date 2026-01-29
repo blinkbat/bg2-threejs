@@ -207,6 +207,15 @@ export const CONSUMABLES: Record<string, ConsumableItem> = {
         cooldown: 5000,
         sound: "crunch",
     },
+    scrollOfLearning: {
+        id: "scrollOfLearning",
+        name: "Scroll of Learning",
+        description: "Ancient knowledge inscribed on vellum. Grants 50 experience to one party member.",
+        category: "consumable",
+        effect: "exp",
+        value: 50,
+        cooldown: 0,
+    },
 };
 
 // =============================================================================

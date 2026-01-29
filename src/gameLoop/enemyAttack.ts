@@ -25,6 +25,7 @@ export interface EnemyAttackContext {
     damageTexts: DamageText[];
     hitFlashRef: Record<number, number>;
     unitsRef: Record<number, UnitGroup>;
+    unitsStateRef: React.RefObject<Unit[]>;
     setUnits: React.Dispatch<React.SetStateAction<Unit[]>>;
     addLog: (text: string, color?: string) => void;
     now: number;
@@ -64,7 +65,7 @@ export function executeEnemyRangedAttack(ctx: EnemyAttackContext): void {
 export function executeEnemyMeleeAttack(ctx: EnemyAttackContext): void {
     const {
         scene, attacker, attackerG, target, targetG, attackerStats,
-        damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now,
+        damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now,
         defeatedThisFrame, swingAnimations
     } = ctx;
 
@@ -87,7 +88,7 @@ export function executeEnemyMeleeAttack(ctx: EnemyAttackContext): void {
             ? logLifestealHit(attackerStats.name, targetData.name, dmg, healAmount)
             : logHit(attackerStats.name, "Attack", targetData.name, dmg);
 
-        const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
+        const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now, defeatedThisFrame };
         applyDamageToUnit(dmgCtx, target.id, targetG, target.hp, dmg, targetData.name, {
             color: COLORS.damageEnemy,
             poison: willPoison ? { sourceId: attacker.id, damagePerTick: poisonDmg } : undefined,

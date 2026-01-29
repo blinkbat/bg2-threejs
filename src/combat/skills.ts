@@ -377,7 +377,7 @@ export function executeMeleeSkill(
         // Use shared defeatedThisFrame from context
         const dmgCtx: DamageContext = {
             scene, damageTexts: damageTexts.current, hitFlashRef: hitFlashRef.current,
-            unitsRef: unitsRef.current, setUnits, addLog, now, defeatedThisFrame
+            unitsRef: unitsRef.current, unitsStateRef, setUnits, addLog, now, defeatedThisFrame
         };
         applyDamageToUnit(dmgCtx, targetId, targetG, currentHp, dmg, targetData.name, {
             color: COLORS.damagePlayer,
@@ -455,7 +455,7 @@ export function executeSmiteSkill(
 
     // Create lightning pillar visual at target location
     createLightningPillar(scene, targetG.position.x, targetG.position.z);
-    soundFns.playHit();
+    soundFns.playThunder();
 
     // Check for front-shield block (undead knight etc.)
     if (targetEnemy.enemyType) {
@@ -494,7 +494,7 @@ export function executeSmiteSkill(
 
         const dmgCtx: DamageContext = {
             scene, damageTexts: damageTexts.current, hitFlashRef: hitFlashRef.current,
-            unitsRef: unitsRef.current, setUnits, addLog, now, defeatedThisFrame
+            unitsRef: unitsRef.current, unitsStateRef, setUnits, addLog, now, defeatedThisFrame
         };
         applyDamageToUnit(dmgCtx, targetId, targetG, currentHp, dmg, targetData.name, {
             color: COLORS.damagePlayer,
@@ -616,6 +616,63 @@ export function executeBuffSkill(
     // Visual effect - golden glow ring
     createAnimatedRing(scene, casterG.position.x, casterG.position.z, "#f1c40f", {
         innerRadius: 0.3, outerRadius: 0.5, maxScale: 1.5, duration: 300
+    });
+
+    return true;
+}
+
+/**
+ * Execute Energy Shield skill - creates a damage-absorbing barrier
+ */
+export function executeEnergyShieldSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill
+): boolean {
+    const { scene, unitsRef, setUnits, addLog } = ctx;
+
+    const casterG = unitsRef.current[casterId];
+    if (!casterG) return false;
+
+    consumeSkill(ctx, casterId, skill);
+
+    const casterData = UNIT_DATA[casterId];
+    const shieldAmount = skill.value[0];  // Max shield HP
+    const duration = skill.value[1];      // Duration in ms
+    const now = Date.now();
+
+    // Apply the energy shield as a status effect
+    setUnits(prev => prev.map(u => {
+        if (u.id !== casterId) return u;
+
+        const existingEffects = u.statusEffects || [];
+        // Remove existing energy shield if any (refresh)
+        const filteredEffects = existingEffects.filter(e => e.type !== "energyShield");
+
+        const shieldEffect: StatusEffect = {
+            type: "energyShield",
+            duration,
+            tickInterval: BUFF_TICK_INTERVAL,
+            timeSinceTick: 0,
+            lastUpdateTime: now,
+            damagePerTick: 0,
+            sourceId: casterId,
+            shieldAmount
+        };
+
+        return {
+            ...u,
+            statusEffects: [...filteredEffects, shieldEffect]
+        };
+    }));
+
+    // Play whoosh sound and log
+    soundFns.playEnergyShield();
+    addLog(`${casterData.name} conjures an Energy Shield!`, "#9b59b6");
+
+    // Visual effect - expanding cyan ring
+    createAnimatedRing(scene, casterG.position.x, casterG.position.z, "#66ccff", {
+        innerRadius: 0.2, outerRadius: 0.6, maxScale: 1.8, duration: 350
     });
 
     return true;
@@ -751,7 +808,7 @@ export function executeFlurrySkill(
     // Use shared defeatedThisFrame from context to prevent hitting dead enemies
     const dmgCtx: DamageContext = {
         scene, damageTexts: damageTexts.current, hitFlashRef: hitFlashRef.current,
-        unitsRef: unitsRef.current, setUnits, addLog, now, defeatedThisFrame
+        unitsRef: unitsRef.current, unitsStateRef, setUnits, addLog, now, defeatedThisFrame
     };
 
     let totalHits = 0;
@@ -1266,6 +1323,8 @@ export function executeSkill(
         return executeTauntSkill(ctx, casterId, skill);
     } else if (skill.type === "buff" && skill.targetType === "self") {
         return executeBuffSkill(ctx, casterId, skill);
+    } else if (skill.type === "energy_shield" && skill.targetType === "self") {
+        return executeEnergyShieldSkill(ctx, casterId, skill);
     } else if (skill.type === "buff" && skill.targetType === "ally") {
         return executeCleanseSkill(ctx, casterId, skill, targetX, targetZ);
     } else if (skill.type === "flurry" && skill.targetType === "self") {

@@ -77,6 +77,7 @@ export const STARTING_INVENTORY: PartyInventory = {
         { itemId: "smallManaPotion", quantity: 1 },
         { itemId: "loafOfBread", quantity: 2 },
         { itemId: "stripOfBatJerky", quantity: 1 },
+        { itemId: "scrollOfLearning", quantity: 1 },
     ],
 };
 

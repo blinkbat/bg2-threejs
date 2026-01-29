@@ -3,7 +3,7 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { DamageText, UnitGroup, Unit } from "../core/types";
+import type { DamageText, UnitGroup, Unit, DamageType } from "../core/types";
 import { PROJECTILE_CONFIG, COLORS, RING_EXPAND_DURATION } from "../core/constants";
 import { getUnitRadius, isInRange } from "../rendering/range";
 import { distanceToPoint } from "../game/geometry";
@@ -146,12 +146,12 @@ export function animateExpandingMesh(
         (mesh.material as THREE.MeshBasicMaterial).opacity = initialOpacity * (1 - t);
 
         if (t < 1) {
-            animationId = requestAnimationFrame(animate);
+            requestAnimationFrame(animate);
         } else {
             dispose();
         }
     };
-    animationId = requestAnimationFrame(animate);
+    requestAnimationFrame(animate);
 
     return dispose;
 }
@@ -196,7 +196,6 @@ export function createLightningPillar(
     scene.add(glow);
 
     const startTime = Date.now();
-    let animationId: number | null = null;
 
     const animate = () => {
         const elapsed = Date.now() - startTime;
@@ -212,7 +211,7 @@ export function createLightningPillar(
         glow.scale.set(glowScale, glowScale, 1);
 
         if (t < 1) {
-            animationId = requestAnimationFrame(animate);
+            requestAnimationFrame(animate);
         } else {
             scene.remove(pillar);
             scene.remove(glow);
@@ -222,7 +221,7 @@ export function createLightningPillar(
             (glow.material as THREE.MeshBasicMaterial).dispose();
         }
     };
-    animationId = requestAnimationFrame(animate);
+    requestAnimationFrame(animate);
 }
 
 // =============================================================================
@@ -269,6 +268,7 @@ export interface DamageContext {
     damageTexts: DamageText[];
     hitFlashRef: Record<number, number>;
     unitsRef: Record<number, UnitGroup>;
+    unitsStateRef: React.RefObject<Unit[]>;
     setUnits: React.Dispatch<React.SetStateAction<Unit[]>>;
     addLog: (text: string, color?: string) => void;
     now: number;
@@ -284,6 +284,7 @@ export interface DamageOptions {
     hitMessage?: { text: string; color: string };  // Log hit message before defeat message
     targetUnit?: Unit;  // Full unit data for special mechanics (e.g., amoeba split)
     attackerPosition?: { x: number; z: number };  // Position of attacker (for shield facing)
+    damageType?: DamageType;  // Type of damage (for energy shield - chaos does 2x)
 }
 
 /**
@@ -299,10 +300,36 @@ export function applyDamageToUnit(
     targetName: string,
     options: DamageOptions = {}
 ): number {
-    const { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame } = ctx;
-    const { poison, slow, color = COLORS.damageEnemy, skipDefeatTracking = false, attackerName, hitMessage, targetUnit, attackerPosition } = options;
+    const { scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now, defeatedThisFrame } = ctx;
+    const { poison, slow, color = COLORS.damageEnemy, skipDefeatTracking = false, attackerName, hitMessage, targetUnit, attackerPosition, damageType } = options;
 
-    const newHp = Math.max(0, currentHp - damage);
+    // Check for energy shield absorption
+    const currentUnit = targetUnit ?? unitsStateRef.current?.find(u => u.id === targetId);
+    const energyShield = currentUnit?.statusEffects?.find(e => e.type === "energyShield");
+
+    let effectiveDamage = damage;
+    let shieldAbsorbed = 0;
+    let shieldDepleted = false;
+
+    if (energyShield && energyShield.shieldAmount && energyShield.shieldAmount > 0) {
+        // Chaos damage does 2x to energy shield
+        const shieldDamage = damageType === "chaos" ? damage * 2 : damage;
+
+        if (shieldDamage >= energyShield.shieldAmount) {
+            // Shield is depleted - calculate overflow
+            shieldAbsorbed = energyShield.shieldAmount;
+            const overflowShieldDamage = shieldDamage - energyShield.shieldAmount;
+            // Convert overflow back to regular damage (halved if it was chaos)
+            effectiveDamage = damageType === "chaos" ? Math.ceil(overflowShieldDamage / 2) : overflowShieldDamage;
+            shieldDepleted = true;
+        } else {
+            // Shield absorbs all damage
+            shieldAbsorbed = shieldDamage;
+            effectiveDamage = 0;
+        }
+    }
+
+    const newHp = Math.max(0, currentHp - effectiveDamage);
 
     // Check for amoeba split mechanic
     const shouldSplit = targetUnit?.enemyType === "giant_amoeba" &&
@@ -380,6 +407,28 @@ export function applyDamageToUnit(
     setUnits(prev => prev.map(u => {
         if (u.id !== targetId) return u;
         let updated = { ...u, hp: newHp };
+
+        // Update energy shield status effect
+        if (shieldAbsorbed > 0 && updated.statusEffects) {
+            if (shieldDepleted) {
+                // Remove the depleted energy shield
+                updated = {
+                    ...updated,
+                    statusEffects: updated.statusEffects.filter(e => e.type !== "energyShield")
+                };
+            } else {
+                // Reduce shield amount
+                updated = {
+                    ...updated,
+                    statusEffects: updated.statusEffects.map(e =>
+                        e.type === "energyShield"
+                            ? { ...e, shieldAmount: (e.shieldAmount ?? 0) - shieldAbsorbed }
+                            : e
+                    )
+                };
+            }
+        }
+
         // Shielded units are immune to poison
         if (poison && !hasStatusEffect(u, "shielded")) {
             updated = applyPoison(updated, poison.sourceId, now, poison.damagePerTick);
@@ -391,9 +440,19 @@ export function applyDamageToUnit(
         return updated;
     }));
 
+    // Log energy shield effects
+    if (shieldAbsorbed > 0) {
+        if (shieldDepleted) {
+            addLog(`${targetName}'s Energy Shield shatters!`, "#9966ff");
+        }
+    }
+
     // Visual effects
     hitFlashRef[targetId] = now;
-    spawnDamageNumber(scene, targetGroup.position.x, targetGroup.position.z, damage, color, damageTexts);
+    // Show absorbed damage differently if shield took it
+    const displayDamage = shieldAbsorbed > 0 ? damage : damage;
+    const displayColor = shieldAbsorbed > 0 && effectiveDamage === 0 ? "#66ccff" : color;
+    spawnDamageNumber(scene, targetGroup.position.x, targetGroup.position.z, displayDamage, displayColor, damageTexts);
 
     // Track when this unit last took damage (for AI kiting decisions)
     targetGroup.userData.lastHitTime = now;
@@ -422,16 +481,27 @@ export function applyDamageToUnit(
         if (targetUnit && targetUnit.team === "enemy" && targetUnit.enemyType) {
             const expReward = ENEMY_STATS[targetUnit.enemyType].expReward;
             if (expReward > 0) {
+                // Compute level ups BEFORE state update using ref
+                const currentUnits = unitsStateRef.current ?? [];
                 const leveledUpIds: number[] = [];
+                for (const u of currentUnits) {
+                    if (u.team === "player" && u.hp > 0) {
+                        const newExp = (u.exp ?? 0) + expReward;
+                        const currentLevel = u.level ?? 1;
+                        const xpForNext = getXpForLevel(currentLevel + 1);
+                        if (newExp >= xpForNext) {
+                            leveledUpIds.push(u.id);
+                        }
+                    }
+                }
+
+                // Update state
                 setUnits(prev => prev.map(u => {
                     if (u.team === "player" && u.hp > 0) {
                         const newExp = (u.exp ?? 0) + expReward;
                         const currentLevel = u.level ?? 1;
                         const xpForNext = getXpForLevel(currentLevel + 1);
-
-                        // Check for level-up
                         if (newExp >= xpForNext) {
-                            leveledUpIds.push(u.id);
                             return {
                                 ...u,
                                 exp: newExp,
@@ -452,12 +522,13 @@ export function applyDamageToUnit(
                     }
                     return u;
                 }));
+
                 addLog(`Party gained ${expReward} XP!`, "#9b59b6");
-                // Level-up effects (must check after setUnits completes)
+
+                // Level-up effects
                 if (leveledUpIds.length > 0) {
                     addLog(`Level up! +3 stat points available.`, "#ffd700");
                     soundFns.playLevelUp();
-                    // Create gold pillar effect for each unit that leveled up
                     for (const unitId of leveledUpIds) {
                         const unitGroup = unitsRef[unitId];
                         if (unitGroup) {

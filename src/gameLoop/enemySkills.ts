@@ -74,7 +74,8 @@ export function executeEnemySwipe(
 
     let hitCount = 0;
     let totalDamage = 0;
-    const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
+    const unitsStateRef = { current: unitsState } as React.RefObject<Unit[]>;
+    const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now, defeatedThisFrame };
     hitTargets.forEach(({ unit: target, group: tg }) => {
         // Skip if already defeated this frame
         const currentHp = hpTracker[target.id] ?? target.hp;

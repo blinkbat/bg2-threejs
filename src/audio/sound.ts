@@ -641,6 +641,75 @@ const playLevelUp = () => {
     });
 };
 
+// Energy Shield - ethereal whoosh with crystalline shimmer
+const playEnergyShield = () => {
+    if (muted) return;
+    const ctx = getAudioCtx();
+
+    // Whoosh sweep - filtered noise rising in pitch
+    const bufferSize = ctx.sampleRate * 0.5;
+    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const output = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+        output[i] = Math.random() * 2 - 1;
+    }
+
+    const noise = ctx.createBufferSource();
+    noise.buffer = noiseBuffer;
+
+    const noiseFilter = ctx.createBiquadFilter();
+    noiseFilter.type = "bandpass";
+    noiseFilter.frequency.setValueAtTime(400, ctx.currentTime);
+    noiseFilter.frequency.exponentialRampToValueAtTime(2000, ctx.currentTime + 0.15);
+    noiseFilter.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 0.3);
+    noiseFilter.Q.setValueAtTime(2, ctx.currentTime);
+
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0, ctx.currentTime);
+    noiseGain.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 0.05);
+    noiseGain.gain.linearRampToValueAtTime(0.08, ctx.currentTime + 0.15);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+
+    noise.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    noise.start();
+    noise.stop(ctx.currentTime + 0.4);
+
+    // Crystalline shimmer - high sine tones
+    const shimmerNotes = [1047, 1319, 1760]; // C6, E6, A6
+    shimmerNotes.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(freq, ctx.currentTime);
+
+        const startTime = ctx.currentTime + i * 0.03;
+        gain.gain.setValueAtTime(0, startTime);
+        gain.gain.linearRampToValueAtTime(0.08, startTime + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.25);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(startTime);
+        osc.stop(startTime + 0.3);
+    });
+
+    // Low resonant hum - gives weight to the shield
+    const hum = ctx.createOscillator();
+    const humGain = ctx.createGain();
+    hum.type = "sine";
+    hum.frequency.setValueAtTime(110, ctx.currentTime);
+    humGain.gain.setValueAtTime(0, ctx.currentTime);
+    humGain.gain.linearRampToValueAtTime(0.12, ctx.currentTime + 0.05);
+    humGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+
+    hum.connect(humGain);
+    humGain.connect(ctx.destination);
+    hum.start();
+    hum.stop(ctx.currentTime + 0.35);
+};
+
 // Secret discovered - mysterious Zelda-style ascending chime
 const playSecretDiscovered = () => {
     if (muted) return;
@@ -716,6 +785,86 @@ const playSecretDiscovered = () => {
     });
 };
 
+// Thunder crack - sharp lightning strike with rumble
+const playThunder = () => {
+    if (muted) return;
+    const ctx = getAudioCtx();
+
+    // Sharp initial CRACK - white noise burst with very fast attack
+    const crackSize = ctx.sampleRate * 0.08;
+    const crackBuffer = ctx.createBuffer(1, crackSize, ctx.sampleRate);
+    const crackOutput = crackBuffer.getChannelData(0);
+    for (let i = 0; i < crackSize; i++) {
+        const t = i / crackSize;
+        // Very sharp attack, fast decay
+        const envelope = t < 0.05 ? t / 0.05 : Math.exp(-t * 15);
+        crackOutput[i] = (Math.random() * 2 - 1) * envelope;
+    }
+    const crack = ctx.createBufferSource();
+    crack.buffer = crackBuffer;
+    const crackFilter = ctx.createBiquadFilter();
+    crackFilter.type = "highpass";
+    crackFilter.frequency.setValueAtTime(1500, ctx.currentTime);
+    const crackGain = ctx.createGain();
+    crackGain.gain.setValueAtTime(0.5, ctx.currentTime);
+    crackGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+    crack.connect(crackFilter);
+    crackFilter.connect(crackGain);
+    crackGain.connect(ctx.destination);
+    crack.start();
+
+    // Mid-frequency crackle layer - the "CRRACK" texture
+    const crackleSize = ctx.sampleRate * 0.15;
+    const crackleBuffer = ctx.createBuffer(1, crackleSize, ctx.sampleRate);
+    const crackleOutput = crackleBuffer.getChannelData(0);
+    for (let i = 0; i < crackleSize; i++) {
+        const t = i / crackleSize;
+        // Irregular crackle pattern
+        const spike = Math.random() > 0.85 ? 1 : 0.3;
+        crackleOutput[i] = (Math.random() * 2 - 1) * spike * Math.exp(-t * 8);
+    }
+    const crackle = ctx.createBufferSource();
+    crackle.buffer = crackleBuffer;
+    const crackleFilter = ctx.createBiquadFilter();
+    crackleFilter.type = "bandpass";
+    crackleFilter.frequency.setValueAtTime(3000, ctx.currentTime);
+    crackleFilter.Q.setValueAtTime(1, ctx.currentTime);
+    const crackleGain = ctx.createGain();
+    crackleGain.gain.setValueAtTime(0.35, ctx.currentTime);
+    crackleGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+    crackle.connect(crackleFilter);
+    crackleFilter.connect(crackleGain);
+    crackleGain.connect(ctx.destination);
+    crackle.start();
+
+    // Deep rumble - follows the crack
+    const rumble = ctx.createOscillator();
+    const rumbleGain = ctx.createGain();
+    rumble.type = "sawtooth";
+    rumble.frequency.setValueAtTime(80, ctx.currentTime);
+    rumble.frequency.exponentialRampToValueAtTime(30, ctx.currentTime + 0.4);
+    rumbleGain.gain.setValueAtTime(0, ctx.currentTime);
+    rumbleGain.gain.linearRampToValueAtTime(0.25, ctx.currentTime + 0.02);
+    rumbleGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+    rumble.connect(rumbleGain);
+    rumbleGain.connect(ctx.destination);
+    rumble.start();
+    rumble.stop(ctx.currentTime + 0.5);
+
+    // Sub-bass thump - impact feeling
+    const thump = ctx.createOscillator();
+    const thumpGain = ctx.createGain();
+    thump.type = "sine";
+    thump.frequency.setValueAtTime(60, ctx.currentTime);
+    thump.frequency.exponentialRampToValueAtTime(25, ctx.currentTime + 0.3);
+    thumpGain.gain.setValueAtTime(0.3, ctx.currentTime);
+    thumpGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+    thump.connect(thumpGain);
+    thumpGain.connect(ctx.destination);
+    thump.start();
+    thump.stop(ctx.currentTime + 0.35);
+};
+
 // Crunch - food eating sound
 const playCrunch = () => {
     if (muted) return;
@@ -780,4 +929,6 @@ export const soundFns = {
     playCrunch,
     playLevelUp,
     playSecretDiscovered,
+    playEnergyShield,
+    playThunder,
 };

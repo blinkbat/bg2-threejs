@@ -252,7 +252,8 @@ function executeChargeAttack(
     defeatedThisFrame: Set<number>
 ): void {
     const enemyData = getUnitStats(unit) as EnemyStats;
-    const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, setUnits, addLog, now, defeatedThisFrame };
+    const unitsStateRef = { current: unitsState } as React.RefObject<Unit[]>;
+    const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now, defeatedThisFrame };
 
     // Find all player units in the cross area
     const halfWidth = Math.floor(charge.crossWidth / 2);

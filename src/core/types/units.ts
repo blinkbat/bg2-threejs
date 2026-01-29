@@ -6,7 +6,7 @@
 export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba" | "acid_slug" | "bat" | "undead_knight" | "ancient_construct";
 
 // Status effect types
-export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed" | "qi_drain";
+export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed" | "qi_drain" | "energyShield";
 
 export interface StatusEffect {
     type: StatusEffectType;
@@ -16,6 +16,7 @@ export interface StatusEffect {
     lastUpdateTime: number;   // last frame timestamp for delta calculation
     damagePerTick: number;    // damage dealt each tick
     sourceId: number;         // who applied the effect
+    shieldAmount?: number;    // for energyShield: remaining shield HP
 }
 
 // =============================================================================

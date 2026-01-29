@@ -107,6 +107,53 @@ export function updatePoisonVisuals(
 }
 
 // =============================================================================
+// ENERGY SHIELD BUBBLE VISUAL
+// =============================================================================
+
+const ENERGY_SHIELD_BUBBLE_NAME = "energyShieldBubble";
+
+export function updateEnergyShieldVisuals(
+    unitsState: Unit[],
+    unitsRef: Record<number, UnitGroup>,
+    now: number
+): void {
+    for (const unit of unitsState) {
+        const unitGroup = unitsRef[unit.id];
+        if (!unitGroup) continue;
+
+        const hasShield = hasStatusEffect(unit, "energyShield");
+        const existingBubble = unitGroup.getObjectByName(ENERGY_SHIELD_BUBBLE_NAME) as THREE.Mesh | undefined;
+
+        if (hasShield && !existingBubble) {
+            // Create bubble
+            const bubbleGeometry = new THREE.SphereGeometry(0.7, 24, 16);
+            const bubbleMaterial = new THREE.MeshBasicMaterial({
+                color: 0x66ccff,
+                transparent: true,
+                opacity: 0.25,
+                side: THREE.DoubleSide,
+                depthWrite: false
+            });
+            const bubble = new THREE.Mesh(bubbleGeometry, bubbleMaterial);
+            bubble.name = ENERGY_SHIELD_BUBBLE_NAME;
+            bubble.position.y = 0.5;  // Center on unit
+            unitGroup.add(bubble);
+        } else if (!hasShield && existingBubble) {
+            // Remove bubble
+            unitGroup.remove(existingBubble);
+            existingBubble.geometry.dispose();
+            (existingBubble.material as THREE.MeshBasicMaterial).dispose();
+        } else if (hasShield && existingBubble) {
+            // Animate bubble - subtle pulse
+            const pulse = Math.sin(now * 0.003) * 0.05 + 1;
+            existingBubble.scale.setScalar(pulse);
+            // Subtle rotation
+            existingBubble.rotation.y += 0.01;
+        }
+    }
+}
+
+// =============================================================================
 // FOG OF WAR UPDATE
 // =============================================================================
 

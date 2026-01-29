@@ -21,9 +21,10 @@ interface UnitPanelProps {
     onUseConsumable?: (itemId: string, targetUnitId: number) => void;
     consumableCooldownEnd?: number;
     onIncrementStat?: (unitId: number, stat: keyof CharacterStats) => void;
+    gold?: number;
 }
 
-export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, skillCooldowns = {}, paused = false, queuedSkills = [], onUseConsumable, consumableCooldownEnd = 0, onIncrementStat }: UnitPanelProps) {
+export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, skillCooldowns = {}, paused = false, queuedSkills = [], onUseConsumable, consumableCooldownEnd = 0, onIncrementStat, gold = 0 }: UnitPanelProps) {
     const [, setTick] = useState(0);
     // Use a ref to capture pause time immediately without waiting for state update
     const [pauseTimeState, setPauseTimeState] = useState<number | null>(() => paused ? Date.now() : null);
@@ -120,6 +121,7 @@ export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, ski
                         consumableCooldownEnd={consumableCooldownEnd}
                         onUseConsumable={onUseConsumable}
                         queuedSkills={queuedSkills}
+                        gold={gold}
                     />
                 )}
             </div>
@@ -684,12 +686,14 @@ function InventoryTab({
     consumableCooldownEnd,
     onUseConsumable,
     queuedSkills = [],
+    gold = 0,
 }: {
     unit: Unit;
     displayTime: number;
     consumableCooldownEnd: number;
     onUseConsumable?: (itemId: string, targetUnitId: number) => void;
     queuedSkills?: string[];
+    gold?: number;
 }) {
     const inventory = getPartyInventory();
     const consumables = inventory.items
@@ -699,12 +703,24 @@ function InventoryTab({
     const onCooldown = consumableCooldownEnd > displayTime;
     const cooldownRemaining = onCooldown ? Math.ceil((consumableCooldownEnd - displayTime) / 1000) : 0;
 
-    if (consumables.length === 0) {
+    if (consumables.length === 0 && gold === 0) {
         return <div className="text-muted" style={{ fontSize: 13 }}>No items</div>;
     }
 
     return (
         <div className="flex flex-col gap-8">
+            {gold > 0 && (
+                <div className="inventory-item-row disabled" style={{ cursor: "default" }}>
+                    <div className="inventory-item-header">
+                        <span className="inventory-item-name">Pouch of Gold</span>
+                    </div>
+                    <div className="inventory-item-stats">
+                        <span className="inventory-item-effect" style={{ color: "#f1c40f" }}>
+                            {gold} gold
+                        </span>
+                    </div>
+                </div>
+            )}
             {consumables.map(({ entry, item }) => {
                 if (!item || !isConsumable(item)) return null;
 
@@ -721,13 +737,14 @@ function InventoryTab({
                         const maxMana = getEffectiveMaxMana(unit.id, unit);
                         wouldBeWasted = (unit.mana ?? 0) >= maxMana;
                     }
+                    // exp is never wasted
                 }
 
                 // Can click if alive and not wasted (can queue even on cooldown)
                 const canClick = unitAlive && !wouldBeWasted;
 
-                const effectColor = item.effect === "heal" ? COLORS.hpHigh : COLORS.mana;
-                const effectLabel = item.effect === "heal" ? "HP" : "Mana";
+                const effectColor = item.effect === "heal" ? COLORS.hpHigh : item.effect === "mana" ? COLORS.mana : "#9b59b6";
+                const effectLabel = item.effect === "heal" ? "HP" : item.effect === "mana" ? "Mana" : "XP";
                 const itemClass = `inventory-item-row ${!canClick && !isQueued ? "disabled" : ""} ${wouldBeWasted ? "wasted" : ""} ${isQueued ? "queued" : ""}`;
 
                 return (

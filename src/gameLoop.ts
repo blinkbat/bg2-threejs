@@ -19,7 +19,7 @@ import { isEnemyKiting, clearEnemyKiting } from "./game/enemyState";
 import { findPath } from "./ai/pathfinding";
 
 // Re-export from split modules
-export { updateDamageTexts, updateHitFlash, updatePoisonVisuals, updateFogOfWar, resetFogCache } from "./gameLoop/visuals";
+export { updateDamageTexts, updateHitFlash, updatePoisonVisuals, updateEnergyShieldVisuals, updateFogOfWar, resetFogCache } from "./gameLoop/visuals";
 export { processStatusEffects } from "./gameLoop/statusEffects";
 export { updateProjectiles } from "./gameLoop/projectiles";
 export { spawnSwingIndicator, updateSwingAnimations } from "./gameLoop/swingAnimations";
@@ -362,10 +362,11 @@ export function updateUnitAI(
                     actionCooldownRef[unit.id] = attackCooldownEnd;
 
                     // Execute enemy basic attack (ranged or melee)
+                    const unitsStateRef = { current: unitsState } as React.RefObject<Unit[]>;
                     executeEnemyBasicAttack({
                         scene, attacker: unit, attackerG: g, target: targetU, targetG,
                         attackerStats: data as EnemyStats, damageTexts, hitFlashRef, unitsRef,
-                        setUnits, addLog, now, defeatedThisFrame, swingAnimations, projectilesRef
+                        unitsStateRef, setUnits, addLog, now, defeatedThisFrame, swingAnimations, projectilesRef
                     });
                 }
                 return;

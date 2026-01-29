@@ -54,6 +54,7 @@ import {
     updateSwingAnimations,
     processStatusEffects,
     updatePoisonVisuals,
+    updateEnergyShieldVisuals,
     updateShieldFacing,
     processAcidTiles,
     processSanctuaryTiles,
@@ -165,15 +166,15 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         // Find passable spawn positions so units don't get stuck in walls
         const spawnPositions = findSpawnPositions(spawn.x, spawn.z, playerIds.length);
 
-        // Stagger initial XP so party doesn't all level at once (0, 15, 30, 45, 60, 75)
-        const INITIAL_XP_STAGGER = 15;
+        // Stagger initial XP so party doesn't all level at once (0, 10, 15, 20, 25, 30)
+        const INITIAL_XP_VALUES = [0, 10, 15, 20, 25, 30];
 
         const players: Unit[] = playerIds.map((id, i) => {
             const data = UNIT_DATA[id];
             const persisted = persistedPlayers?.find(p => p.id === id);
             const pos = spawnPositions[i] ?? { x: spawn.x, z: spawn.z };
             // Only apply stagger on fresh start (no persisted data)
-            const initialExp = persisted?.exp ?? (i * INITIAL_XP_STAGGER);
+            const initialExp = persisted?.exp ?? (INITIAL_XP_VALUES[i] ?? 0);
             return {
                 id,
                 x: pos.x,
@@ -1088,6 +1089,9 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                 // Update poison visuals (green tint for poisoned units)
                 updatePoisonVisuals(unitsStateRef.current, unitMeshRef.current, unitOriginalColorRef.current, hitFlashRef.current);
 
+                // Update energy shield bubble visuals
+                updateEnergyShieldVisuals(unitsStateRef.current, unitsRef.current, now);
+
                 // Update shield facing for front-shielded enemies
                 updateShieldFacing(unitsStateRef.current, unitsRef.current, shieldIndicatorsRef.current, setUnits);
             }
@@ -1325,6 +1329,50 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
             const restored = newMana - currentMana;
             setUnits(prev => prev.map(u => u.id === unitId ? { ...u, mana: newMana } : u));
             addLog(`${UNIT_DATA[unitId].name} uses ${item.name}, restoring ${restored} Mana.`, "#3b82f6");
+        } else if (item.effect === "exp") {
+            // Grant experience to the unit
+            const newExp = (targetUnit.exp ?? 0) + item.value;
+            const currentLevel = targetUnit.level ?? 1;
+            const xpForNext = getXpForLevel(currentLevel + 1);
+
+            if (newExp >= xpForNext) {
+                // Level up!
+                setUnits(prev => prev.map(u => {
+                    if (u.id !== unitId) return u;
+                    return {
+                        ...u,
+                        exp: newExp,
+                        level: currentLevel + 1,
+                        statPoints: (u.statPoints ?? 0) + 3,
+                        hp: u.hp + 2,
+                        mana: (u.mana ?? 0) + 1,
+                        stats: u.stats ?? {
+                            strength: 0,
+                            dexterity: 0,
+                            vitality: 0,
+                            intelligence: 0,
+                            faith: 0
+                        }
+                    };
+                }));
+                addLog(`${UNIT_DATA[unitId].name} reads ${item.name} and levels up!`, "#ffd700");
+                soundFns.playLevelUp();
+
+                // Visual effect
+                const scene = sceneRef.current;
+                const unitGroup = unitsRef.current[unitId];
+                if (scene && unitGroup) {
+                    createLightningPillar(scene, unitGroup.position.x, unitGroup.position.z, {
+                        color: "#ffd700",
+                        duration: 600,
+                        radius: 0.3,
+                        height: 10
+                    });
+                }
+            } else {
+                setUnits(prev => prev.map(u => u.id === unitId ? { ...u, exp: newExp } : u));
+                addLog(`${UNIT_DATA[unitId].name} reads ${item.name}, gaining ${item.value} XP.`, "#9b59b6");
+            }
         }
 
         // Play sound
@@ -1400,15 +1448,27 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         const scene = sceneRef.current;
         if (!scene) return;
 
+        // Compute level ups BEFORE state update using ref
+        const currentUnits = unitsStateRef.current ?? [];
         const leveledUpIds: number[] = [];
+        for (const u of currentUnits) {
+            if (u.team === "player" && u.hp > 0) {
+                const newExp = (u.exp ?? 0) + amount;
+                const currentLevel = u.level ?? 1;
+                const xpForNext = getXpForLevel(currentLevel + 1);
+                if (newExp >= xpForNext) {
+                    leveledUpIds.push(u.id);
+                }
+            }
+        }
+
+        // Update state
         setUnits(prev => prev.map(u => {
             if (u.team === "player" && u.hp > 0) {
                 const newExp = (u.exp ?? 0) + amount;
                 const currentLevel = u.level ?? 1;
                 const xpForNext = getXpForLevel(currentLevel + 1);
-
                 if (newExp >= xpForNext) {
-                    leveledUpIds.push(u.id);
                     return {
                         ...u,
                         exp: newExp,
@@ -1432,7 +1492,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
 
         addLog(`Debug: Party gained ${amount} XP!`, "#9b59b6");
 
-        // Trigger level-up effects after state update
+        // Level-up effects
         if (leveledUpIds.length > 0) {
             addLog("Level up! +3 stat points available.", "#ffd700");
             soundFns.playLevelUp();
@@ -1524,7 +1584,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
             <div style={{ position: "absolute", top: 10, right: 10, color: "#888", fontSize: 11, fontFamily: "monospace", opacity: 0.6 }}>
                 {fps} fps
             </div>
-            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} gold={gold} onTogglePause={handleTogglePause} onShowHelp={onShowHelp} onRestart={onRestart} debug={debug} onToggleDebug={() => setDebug(d => !d)} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} onToggleFastMove={() => setFastMove(f => !f)} fastMoveEnabled={fastMove} />
+            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onShowHelp={onShowHelp} onRestart={onRestart} debug={debug} onToggleDebug={() => setDebug(d => !d)} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} onToggleFastMove={() => setFastMove(f => !f)} fastMoveEnabled={fastMove} />
             <CombatLog log={combatLog} />
             <PartyBar
                 units={units}
@@ -1568,6 +1628,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                     }
                     return u;
                 }))}
+                gold={gold}
             />}
         </div>
     );

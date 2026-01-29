@@ -489,7 +489,10 @@ export const FIELD_AREA: AreaData = {
         {
             x: 6.5,
             z: 6.5,
-            contents: [{ itemId: "loafOfBread", quantity: 1 }],
+            contents: [
+                { itemId: "loafOfBread", quantity: 1 },
+                { itemId: "scrollOfLearning", quantity: 1 }
+            ],
             gold: 15
         },
         {
@@ -726,7 +729,8 @@ export const RUINS_AREA: AreaData = {
             z: 20.5,
             contents: [
                 { itemId: "stripOfBatJerky", quantity: 3 },
-                { itemId: "sulliedBronzeKey", quantity: 1 }
+                { itemId: "sulliedBronzeKey", quantity: 1 },
+                { itemId: "scrollOfLearning", quantity: 1 }
             ]
         },
         {
@@ -967,7 +971,10 @@ export const CLIFFS_AREA: AreaData = {
         {
             x: 30.5,
             z: 5.5,
-            contents: [{ itemId: "battleaxe", quantity: 1 }],
+            contents: [
+                { itemId: "battleaxe", quantity: 1 },
+                { itemId: "scrollOfLearning", quantity: 2 }
+            ],
             gold: 50
         }
     ],

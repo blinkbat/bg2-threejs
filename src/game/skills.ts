@@ -19,6 +19,18 @@ export const SKILLS: Record<string, Skill> = {
         damageType: "fire",
         projectileColor: "#ff4400"
     },
+    energyShield: {
+        name: "Energy Shield",
+        description: "Surround yourself with a protective barrier that absorbs up to 30 damage. Chaos damage penetrates twice as effectively.",
+        flavor: "The exile's final lesson: even the void can be worn as armor.",
+        manaCost: 12,
+        cooldown: 25000,
+        type: "energy_shield",
+        targetType: "self",
+        range: 0,
+        value: [30, 20000],  // [shield amount, duration in ms]
+        damageType: "chaos"  // Flavor only - the shield itself doesn't deal damage
+    },
     heal: {
         name: "Prayer",
         description: "Restore health to an ally.",
