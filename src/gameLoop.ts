@@ -3,7 +3,7 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation, EnemyStats, EnemySpawnSkill, EnemyLeapSkill } from "./core/types";
+import type { Unit, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation, EnemyStats, EnemySpawnSkill } from "./core/types";
 import { SKILL_SINGLE_TARGET_CHANCE, SLOW_COOLDOWN_MULT, SLOW_MOVE_MULT } from "./core/constants";
 import { getUnitRadius, isInRange } from "./rendering/range";
 import { tryKite, type KiteContext } from "./ai/targeting";
@@ -30,7 +30,7 @@ import { executeEnemySwipe, executeEnemyHeal } from "./gameLoop/enemySkills";
 import { executeEnemyBasicAttack } from "./gameLoop/enemyAttack";
 import { createAcidTile, tryCreateAcidAura } from "./gameLoop/acidTiles";
 import { isUnitCharging } from "./gameLoop/constructCharge";
-import { trySpawnMinion, tryStartChargeAttack, tryLeapToTarget, isUnitLeaping, updateLeaps, clearLeaps, tryVinesSkill } from "./gameLoop/enemyBehaviors";
+import { trySpawnMinion, tryStartChargeAttack, tryLeapToTarget, isUnitLeaping, tryVinesSkill } from "./gameLoop/enemyBehaviors";
 export { clearLeaps, updateLeaps, isUnitLeaping } from "./gameLoop/enemyBehaviors";
 
 // Re-export unit ID utilities for backwards compatibility
