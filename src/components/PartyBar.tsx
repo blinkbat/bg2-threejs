@@ -42,9 +42,14 @@ export function PartyBar({ units, selectedIds, onSelect, targetingMode, onTarget
                     isTargetingAlly ? "targeting" : ""
                 ].filter(Boolean).join(" ");
 
+                const hasUnspentPoints = (unit.statPoints ?? 0) > 0;
+
                 return (
                     <div key={unit.id} className={portraitClass} onClick={handleClick}>
-                        <div className="portrait-icon" style={{ background: data.color }}>{data.name[0]}</div>
+                        <div className="portrait-icon" style={{ background: data.color }}>
+                            {data.name[0]}
+                            {hasUnspentPoints && <span className="levelup-badge">+</span>}
+                        </div>
                         <div className="progress-bar-sm portrait-hp">
                             <div className="progress-fill" style={{ width: `${Math.max(0, hpPct)}%`, background: hpColor }} />
                         </div>

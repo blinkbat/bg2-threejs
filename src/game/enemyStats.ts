@@ -216,8 +216,8 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     feral_hound: {
         name: "Feral Hound",
-        hp: 18,
-        maxHp: 18,
+        hp: 12,
+        maxHp: 12,
         damage: [2, 5],
         accuracy: 65,
         armor: 0,
@@ -232,6 +232,33 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
             minRange: 3,       // Only leap if target is at least 3 tiles away
             maxRange: 5,       // Maximum leap distance
             damage: [2, 4]     // Bonus damage on landing
+        }
+    },
+    corrupt_druid: {
+        name: "Corrupt Druid",
+        hp: 65,
+        maxHp: 65,
+        damage: [5, 9],        // Chaos missile damage
+        accuracy: 70,
+        armor: 0,
+        color: "#2d4a1c",      // Dark sickly green
+        aggroRange: 10,
+        attackCooldown: 2200,  // Slower caster attacks
+        range: 7,              // Long range
+        projectileColor: "#6b1f6b",  // Dark purple chaos
+        size: 1.1,
+        moveSpeed: 0.8,        // Slower movement
+        expReward: 35,
+        // Kiting behavior - retreat when players get close (less aggressive)
+        kiteTrigger: 3,
+        kiteDistance: 2.5,
+        kiteCooldown: 5000,
+        // Vines skill - immobilizes and damages target
+        vinesSkill: {
+            cooldown: 12000,   // 12 seconds between casts
+            range: 6,          // Cast range
+            duration: 5000,    // 5 seconds immobilized
+            damage: [4, 8]     // Damage on grab
         }
     }
 };

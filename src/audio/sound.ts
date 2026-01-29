@@ -572,7 +572,7 @@ const playGulp = () => {
 
 // Level Up fanfare - triumphant ascending arpeggio (10s cooldown to prevent overlap)
 let lastLevelUpTime = 0;
-const LEVEL_UP_COOLDOWN = 10000; // 10 seconds
+const LEVEL_UP_COOLDOWN = 2000; // 2 seconds
 
 const playLevelUp = () => {
     if (muted) return;
@@ -916,37 +916,115 @@ const playBark = () => {
     if (muted) return;
     const ctx = getAudioCtx();
 
-    // Sharp bark - short aggressive tone
+    // Sharp bark - aggressive yap with pitch bend
     const bark = ctx.createOscillator();
     const barkGain = ctx.createGain();
     const barkFilter = ctx.createBiquadFilter();
     bark.type = "sawtooth";
-    bark.frequency.setValueAtTime(250, ctx.currentTime);
-    bark.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 0.05);
-    bark.frequency.exponentialRampToValueAtTime(150, ctx.currentTime + 0.15);
+    bark.frequency.setValueAtTime(350, ctx.currentTime);
+    bark.frequency.exponentialRampToValueAtTime(500, ctx.currentTime + 0.04);
+    bark.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.12);
     barkFilter.type = "lowpass";
-    barkFilter.frequency.setValueAtTime(1000, ctx.currentTime);
-    barkFilter.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 0.15);
-    barkGain.gain.setValueAtTime(0.3, ctx.currentTime);
-    barkGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
+    barkFilter.frequency.setValueAtTime(1500, ctx.currentTime);
+    barkFilter.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + 0.15);
+    barkGain.gain.setValueAtTime(0.5, ctx.currentTime);
+    barkGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
     bark.connect(barkFilter);
     barkFilter.connect(barkGain);
     barkGain.connect(ctx.destination);
     bark.start();
-    bark.stop(ctx.currentTime + 0.18);
+    bark.stop(ctx.currentTime + 0.2);
 
-    // Growl undertone
+    // Second bark syllable - quick follow-up
+    const bark2 = ctx.createOscillator();
+    const bark2Gain = ctx.createGain();
+    const bark2Filter = ctx.createBiquadFilter();
+    bark2.type = "sawtooth";
+    bark2.frequency.setValueAtTime(400, ctx.currentTime + 0.1);
+    bark2.frequency.exponentialRampToValueAtTime(250, ctx.currentTime + 0.2);
+    bark2Filter.type = "lowpass";
+    bark2Filter.frequency.setValueAtTime(1200, ctx.currentTime + 0.1);
+    bark2Gain.gain.setValueAtTime(0, ctx.currentTime);
+    bark2Gain.gain.linearRampToValueAtTime(0.4, ctx.currentTime + 0.1);
+    bark2Gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+    bark2.connect(bark2Filter);
+    bark2Filter.connect(bark2Gain);
+    bark2Gain.connect(ctx.destination);
+    bark2.start();
+    bark2.stop(ctx.currentTime + 0.25);
+
+    // Growl undertone - deeper and louder
     const growl = ctx.createOscillator();
     const growlGain = ctx.createGain();
     growl.type = "sawtooth";
-    growl.frequency.setValueAtTime(80, ctx.currentTime);
-    growl.frequency.exponentialRampToValueAtTime(60, ctx.currentTime + 0.2);
-    growlGain.gain.setValueAtTime(0.15, ctx.currentTime);
-    growlGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
+    growl.frequency.setValueAtTime(100, ctx.currentTime);
+    growl.frequency.exponentialRampToValueAtTime(70, ctx.currentTime + 0.25);
+    growlGain.gain.setValueAtTime(0.3, ctx.currentTime);
+    growlGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
     growl.connect(growlGain);
     growlGain.connect(ctx.destination);
     growl.start();
-    growl.stop(ctx.currentTime + 0.22);
+    growl.stop(ctx.currentTime + 0.3);
+};
+
+// Vines - earthy rustling/growing sound for entangle
+const playVines = () => {
+    if (muted) return;
+    const ctx = getAudioCtx();
+
+    // Rustling noise - filtered for organic feel
+    const rustleSize = ctx.sampleRate * 0.4;
+    const rustleBuffer = ctx.createBuffer(1, rustleSize, ctx.sampleRate);
+    const rustleOutput = rustleBuffer.getChannelData(0);
+    for (let i = 0; i < rustleSize; i++) {
+        const t = i / rustleSize;
+        // Irregular rustle pattern
+        const rustle = Math.random() * 2 - 1;
+        const envelope = Math.sin(t * Math.PI) * (1 + Math.sin(t * 20) * 0.3);
+        rustleOutput[i] = rustle * envelope * 0.4;
+    }
+    const rustleNoise = ctx.createBufferSource();
+    rustleNoise.buffer = rustleBuffer;
+    const rustleFilter = ctx.createBiquadFilter();
+    rustleFilter.type = "bandpass";
+    rustleFilter.frequency.setValueAtTime(800, ctx.currentTime);
+    rustleFilter.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 0.4);
+    rustleFilter.Q.setValueAtTime(2, ctx.currentTime);
+    const rustleGain = ctx.createGain();
+    rustleGain.gain.setValueAtTime(0.3, ctx.currentTime);
+    rustleGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+    rustleNoise.connect(rustleFilter);
+    rustleFilter.connect(rustleGain);
+    rustleGain.connect(ctx.destination);
+    rustleNoise.start();
+
+    // Low earthy tone - vines rising from ground
+    const earth = ctx.createOscillator();
+    const earthGain = ctx.createGain();
+    earth.type = "triangle";
+    earth.frequency.setValueAtTime(60, ctx.currentTime);
+    earth.frequency.exponentialRampToValueAtTime(120, ctx.currentTime + 0.15);
+    earth.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + 0.35);
+    earthGain.gain.setValueAtTime(0.2, ctx.currentTime);
+    earthGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+    earth.connect(earthGain);
+    earthGain.connect(ctx.destination);
+    earth.start();
+    earth.stop(ctx.currentTime + 0.4);
+
+    // Snap/grab sound at the end
+    const snap = ctx.createOscillator();
+    const snapGain = ctx.createGain();
+    snap.type = "square";
+    snap.frequency.setValueAtTime(300, ctx.currentTime + 0.25);
+    snap.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.35);
+    snapGain.gain.setValueAtTime(0, ctx.currentTime);
+    snapGain.gain.linearRampToValueAtTime(0.25, ctx.currentTime + 0.25);
+    snapGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+    snap.connect(snapGain);
+    snapGain.connect(ctx.destination);
+    snap.start();
+    snap.stop(ctx.currentTime + 0.35);
 };
 
 export const soundFns = {
@@ -970,4 +1048,5 @@ export const soundFns = {
     playEnergyShield,
     playThunder,
     playBark,
+    playVines,
 };

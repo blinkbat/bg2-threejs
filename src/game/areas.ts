@@ -964,6 +964,8 @@ export const CLIFFS_AREA: AreaData = {
         { x: 6, z: 26, type: "feral_hound" },
         { x: 8, z: 28, type: "feral_hound" },
         { x: 5, z: 30, type: "feral_hound" },
+        // Corrupt Druid near chest
+        { x: 3, z: 28, type: "corrupt_druid" },
     ],
     transitions: [
         // East entrance from coast

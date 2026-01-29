@@ -30,7 +30,7 @@ import { executeEnemySwipe, executeEnemyHeal } from "./gameLoop/enemySkills";
 import { executeEnemyBasicAttack } from "./gameLoop/enemyAttack";
 import { createAcidTile, tryCreateAcidAura } from "./gameLoop/acidTiles";
 import { isUnitCharging } from "./gameLoop/constructCharge";
-import { trySpawnMinion, tryStartChargeAttack, tryLeapToTarget, isUnitLeaping, updateLeaps, clearLeaps } from "./gameLoop/enemyBehaviors";
+import { trySpawnMinion, tryStartChargeAttack, tryLeapToTarget, isUnitLeaping, updateLeaps, clearLeaps, tryVinesSkill } from "./gameLoop/enemyBehaviors";
 export { clearLeaps, updateLeaps, isUnitLeaping } from "./gameLoop/enemyBehaviors";
 
 // Re-export unit ID utilities for backwards compatibility
@@ -268,6 +268,17 @@ export function updateUnitAI(
         if (targetG && targetU && isUnitAlive(targetU, defeatedThisFrame)) {
             targetX = targetG.position.x;
             targetZ = targetG.position.z;
+
+            // Check if we can cast vines to immobilize target (checked before attack range)
+            if (!isPlayer && 'vinesSkill' in data && data.vinesSkill) {
+                tryVinesSkill({
+                    unit, g, enemyStats: data as EnemyStats, vinesSkill: data.vinesSkill,
+                    targetUnit: targetU, targetG, scene,
+                    skillCooldowns, setSkillCooldowns, setUnits, addLog, now
+                });
+                // Don't return - druid can still attack/move after casting vines
+            }
+
             const unitRange = getAttackRange(unit);
 
             // Use hitbox-aware range: if closest edge of target is in range, we can attack

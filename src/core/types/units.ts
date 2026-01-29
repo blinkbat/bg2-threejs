@@ -3,7 +3,7 @@
 // =============================================================================
 
 // Enemy type identifiers
-export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba" | "acid_slug" | "bat" | "undead_knight" | "ancient_construct" | "feral_hound";
+export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba" | "acid_slug" | "bat" | "undead_knight" | "ancient_construct" | "feral_hound" | "corrupt_druid";
 
 // Status effect types
 export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed" | "qi_drain" | "energyShield";
@@ -119,6 +119,13 @@ export interface EnemyLeapSkill {
     damage: [number, number];  // Bonus damage on landing
 }
 
+export interface EnemyVinesSkill {
+    cooldown: number;        // ms between casts
+    range: number;           // Cast range
+    duration: number;        // How long target is immobilized (ms)
+    damage: [number, number];  // Damage dealt when vines grab
+}
+
 export interface EnemyStats {
     name: string;
     hp: number;
@@ -172,6 +179,8 @@ export interface EnemyStats {
     aggressiveTargeting?: boolean;
     // Optional leap skill - jump to close distance with targets
     leapSkill?: EnemyLeapSkill;
+    // Optional vines skill - immobilizes target
+    vinesSkill?: EnemyVinesSkill;
 }
 
 // =============================================================================
