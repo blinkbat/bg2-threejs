@@ -490,8 +490,8 @@ export function updateHpBarPositions(
 // =============================================================================
 
 // Turn speed in radians per frame (at 60fps)
-const TURN_SPEED_STATIONARY = 0.25;  // Fast turn when standing still
-const TURN_SPEED_MOVING = 0.08;      // Slower turn when moving
+const TURN_SPEED_STATIONARY = 0.35;  // Fast turn when standing still
+const TURN_SPEED_MOVING = 0.10;      // Slower turn when moving
 const DAMAGE_SOURCE_PRIORITY_TIME = 2000;  // ms - prioritize damage source for 2 seconds
 
 /**
