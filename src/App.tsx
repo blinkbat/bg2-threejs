@@ -12,9 +12,9 @@ import type { Unit, Skill, CombatLogEntry, SelectionBox, DamageText, UnitGroup, 
 
 // Game Logic
 import { blocked } from "./game/dungeon";
-import { getCurrentArea, setCurrentArea, AREAS, DEFAULT_STARTING_AREA, DEFAULT_SPAWN_POINT, getBlocked, type AreaId, type AreaTransition } from "./game/areas";
+import { getCurrentArea, getCurrentAreaId, setCurrentArea, AREAS, DEFAULT_STARTING_AREA, DEFAULT_SPAWN_POINT, getBlocked, type AreaId, type AreaTransition } from "./game/areas";
 import { UNIT_DATA, ENEMY_STATS, getBasicAttackSkill } from "./game/units";
-import { initializeEquipmentState, getPartyInventory, setPartyInventory } from "./game/equipmentState";
+import { initializeEquipmentState, getPartyInventory, setPartyInventory, getAllEquipment, setAllEquipment } from "./game/equipmentState";
 import { removeFromInventory } from "./game/equipment";
 import { getItem } from "./game/items";
 import { isConsumable, isKey } from "./core/types";
@@ -71,6 +71,8 @@ import { UnitPanel } from "./components/UnitPanel";
 import { CombatLog } from "./components/CombatLog";
 import { HUD } from "./components/HUD";
 import { HelpModal } from "./components/HelpModal";
+import { SaveLoadModal } from "./components/SaveLoadModal";
+import { type SaveSlotData, SAVE_VERSION, saveGame, loadGame } from "./game/saveLoad";
 
 // =============================================================================
 // MAIN COMPONENT
@@ -94,11 +96,30 @@ interface GameProps {
     onShowHelp: () => void;
     onCloseHelp: () => void;
     helpOpen: boolean;
+    saveLoadOpen: boolean;
     persistedPlayers: PersistedPlayer[] | null;
     spawnPoint: { x: number; z: number } | null;
+    // Save/load
+    onSaveClick: () => void;
+    onLoadClick: () => void;
+    gameStateRef: React.MutableRefObject<(() => SaveableGameState) | null>;
+    initialOpenedChests: Set<string> | null;
+    initialOpenedSecretDoors: Set<string> | null;
+    initialGold: number | null;
+    initialKilledEnemies: Set<string> | null;
 }
 
-function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, persistedPlayers, spawnPoint }: GameProps) {
+/** State that can be saved */
+export interface SaveableGameState {
+    players: PersistedPlayer[];
+    currentAreaId: AreaId;
+    openedChests: Set<string>;
+    openedSecretDoors: Set<string>;
+    gold: number;
+    killedEnemies: Set<string>;
+}
+
+function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, saveLoadOpen, persistedPlayers, spawnPoint, onSaveClick, onLoadClick, gameStateRef, initialOpenedChests, initialOpenedSecretDoors, initialGold, initialKilledEnemies }: GameProps) {
     // Three.js refs
     const containerRef = useRef<HTMLDivElement>(null);
     const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -194,10 +215,18 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
             };
         });
 
-        // Create enemies from area spawn data (only in dungeon for now)
-        const enemies: Unit[] = area.enemySpawns.map((spawn, i) => {
+        // Create enemies from area spawn data, filtering out killed enemies
+        const areaId = getCurrentAreaId();
+        const killedSet = initialKilledEnemies ?? new Set<string>();
+        const enemies: Unit[] = [];
+        area.enemySpawns.forEach((spawn, i) => {
+            // Check if this enemy was killed
+            const enemyKey = `${areaId}-${i}`;
+            if (killedSet.has(enemyKey)) {
+                return;  // Skip killed enemies
+            }
             const stats = ENEMY_STATS[spawn.type];
-            return {
+            enemies.push({
                 id: 100 + i,
                 x: spawn.x,
                 z: spawn.z,
@@ -208,7 +237,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                 aiEnabled: true,
                 // Initialize facing for front-shielded enemies (face south by default)
                 ...(stats.frontShield && { facing: 0 })
-            };
+            });
         });
 
         const allUnits = [...players, ...enemies];
@@ -230,9 +259,10 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
     const [queuedActions, setQueuedActions] = useState<{ unitId: number; skillName: string }[]>([]);
     const [hoveredEnemy, setHoveredEnemy] = useState<{ id: number; x: number; y: number } | null>(null);
     const [hoveredChest, setHoveredChest] = useState<{ x: number; y: number; chestIndex: number; chestX: number; chestZ: number } | null>(null);
-    const [openedChests, setOpenedChests] = useState<Set<string>>(new Set());
-    const [openedSecretDoors, setOpenedSecretDoors] = useState<Set<string>>(new Set());
-    const [gold, setGold] = useState(0);
+    const [openedChests, setOpenedChests] = useState<Set<string>>(() => initialOpenedChests ?? new Set());
+    const [openedSecretDoors, setOpenedSecretDoors] = useState<Set<string>>(() => initialOpenedSecretDoors ?? new Set());
+    const [gold, setGold] = useState(() => initialGold ?? 0);
+    const [killedEnemies, setKilledEnemies] = useState<Set<string>>(() => initialKilledEnemies ?? new Set());
     const [hoveredPlayer, setHoveredPlayer] = useState<{ id: number; x: number; y: number } | null>(null);
     const [hoveredDoor, setHoveredDoor] = useState<{ targetArea: string; x: number; y: number } | null>(null);
     const [hoveredSecretDoor, setHoveredSecretDoor] = useState<{ x: number; y: number } | null>(null);
@@ -269,6 +299,63 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
     useEffect(() => { openedChestsRef.current = openedChests; }, [openedChests]);
     useEffect(() => { updateChestStates(chestMeshesRef.current, openedChests); }, [openedChests]);
     useEffect(() => { hoveredDoorRef.current = hoveredDoor?.targetArea ?? null; }, [hoveredDoor]);
+
+    // Track enemy deaths - detect when enemies go from alive to dead
+    const prevAliveEnemiesRef = useRef<Set<number>>(new Set());
+    useEffect(() => {
+        const areaId = getCurrentAreaId();
+        const currentAlive = new Set<number>();
+        const newlyDead: string[] = [];
+
+        for (const u of units) {
+            if (u.team === "enemy" && u.id >= 100) {
+                if (u.hp > 0) {
+                    currentAlive.add(u.id);
+                } else if (prevAliveEnemiesRef.current.has(u.id)) {
+                    // Enemy just died this update
+                    const spawnIndex = u.id - 100;
+                    newlyDead.push(`${areaId}-${spawnIndex}`);
+                }
+            }
+        }
+
+        if (newlyDead.length > 0) {
+            setKilledEnemies(prev => {
+                const next = new Set(prev);
+                for (const key of newlyDead) {
+                    next.add(key);
+                }
+                return next;
+            });
+        }
+
+        prevAliveEnemiesRef.current = currentAlive;
+    }, [units]);
+
+    // Expose game state for save functionality
+    useEffect(() => {
+        gameStateRef.current = () => {
+            const playerUnits = unitsStateRef.current.filter(u => u.team === "player");
+            return {
+                players: playerUnits.map(u => ({
+                    id: u.id,
+                    hp: u.hp,
+                    mana: u.mana,
+                    level: u.level,
+                    exp: u.exp,
+                    stats: u.stats,
+                    statPoints: u.statPoints,
+                    statusEffects: u.statusEffects
+                })),
+                currentAreaId: getCurrentAreaId(),
+                openedChests: openedChestsRef.current,
+                openedSecretDoors,
+                gold,
+                killedEnemies
+            };
+        };
+        return () => { gameStateRef.current = null; };
+    }, [gameStateRef, openedSecretDoors, gold, killedEnemies]);
 
     // Debug grid effect
     useEffect(() => {
@@ -1597,7 +1684,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
             <div style={{ position: "absolute", top: 10, right: 10, color: "#888", fontSize: 11, fontFamily: "monospace", opacity: 0.6 }}>
                 {fps} fps
             </div>
-            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onShowHelp={onShowHelp} onRestart={onRestart} debug={debug} onToggleDebug={() => setDebug(d => !d)} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} onToggleFastMove={() => setFastMove(f => !f)} fastMoveEnabled={fastMove} />
+            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onPause={() => setPaused(true)} onShowHelp={onShowHelp} onRestart={onRestart} onSaveClick={onSaveClick} onLoadClick={onLoadClick} debug={debug} onToggleDebug={() => setDebug(d => !d)} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} onToggleFastMove={() => setFastMove(f => !f)} fastMoveEnabled={fastMove} otherModalOpen={helpOpen || saveLoadOpen} hasSelection={selectedIds.length > 0} />
             <CombatLog log={combatLog} />
             <PartyBar
                 units={units}
@@ -1655,10 +1742,24 @@ export default function App() {
     const [persistedPlayers, setPersistedPlayers] = useState<PersistedPlayer[] | null>(null);
     const [spawnPoint, setSpawnPoint] = useState<{ x: number; z: number } | null>(null);
 
+    // Save/load state
+    const [showSaveLoad, setShowSaveLoad] = useState(false);
+    const [saveLoadMode, setSaveLoadMode] = useState<"save" | "load">("save");
+    const [initialOpenedChests, setInitialOpenedChests] = useState<Set<string> | null>(null);
+    const [initialOpenedSecretDoors, setInitialOpenedSecretDoors] = useState<Set<string> | null>(null);
+    const [initialGold, setInitialGold] = useState<number | null>(null);
+    const [initialKilledEnemies, setInitialKilledEnemies] = useState<Set<string> | null>(null);
+    const gameStateRef = useRef<(() => SaveableGameState) | null>(null);
+
     // Full restart (resets player state too)
     const handleFullRestart = () => {
         setPersistedPlayers(null);
         setSpawnPoint(null);
+        setInitialOpenedChests(null);
+        setInitialOpenedSecretDoors(null);
+        setInitialGold(null);
+        setInitialKilledEnemies(null);
+        initializeEquipmentState();
         setCurrentArea(DEFAULT_STARTING_AREA);
         setGameKey(k => k + 1);
     };
@@ -1671,6 +1772,76 @@ export default function App() {
         setGameKey(k => k + 1);  // Remount with new area
     };
 
+    // Save game
+    const handleSave = (slot: number) => {
+        if (!gameStateRef.current) return;
+        const state = gameStateRef.current();
+        const areaData = AREAS[state.currentAreaId];
+
+        const saveData: SaveSlotData = {
+            version: SAVE_VERSION,
+            timestamp: Date.now(),
+            slotName: areaData.name,
+            players: state.players,
+            currentAreaId: state.currentAreaId,
+            openedChests: Array.from(state.openedChests),
+            openedSecretDoors: Array.from(state.openedSecretDoors),
+            killedEnemies: Array.from(state.killedEnemies),
+            gold: state.gold,
+            equipment: getAllEquipment(),
+            inventory: getPartyInventory()
+        };
+
+        saveGame(slot, saveData);
+    };
+
+    // Load game
+    const handleLoad = (slot: number) => {
+        const saveData = loadGame(slot);
+        if (!saveData) return;
+
+        // Restore equipment and inventory first
+        setAllEquipment(saveData.equipment);
+        setPartyInventory(saveData.inventory);
+
+        // Set area
+        setCurrentArea(saveData.currentAreaId);
+        const area = AREAS[saveData.currentAreaId];
+
+        // Set initial state for Game component
+        setInitialOpenedChests(new Set(saveData.openedChests));
+        setInitialOpenedSecretDoors(new Set(saveData.openedSecretDoors));
+        setInitialKilledEnemies(new Set(saveData.killedEnemies ?? []));
+        setInitialGold(saveData.gold);
+
+        // Set player state and spawn point
+        setPersistedPlayers(saveData.players);
+        setSpawnPoint(area.defaultSpawn);
+
+        // Remount game
+        setGameKey(k => k + 1);
+    };
+
+    // Get current state for save modal
+    const getCurrentSaveState = (): SaveSlotData | null => {
+        if (!gameStateRef.current) return null;
+        const state = gameStateRef.current();
+        const areaData = AREAS[state.currentAreaId];
+        return {
+            version: SAVE_VERSION,
+            timestamp: Date.now(),
+            slotName: areaData.name,
+            players: state.players,
+            currentAreaId: state.currentAreaId,
+            openedChests: Array.from(state.openedChests),
+            openedSecretDoors: Array.from(state.openedSecretDoors),
+            killedEnemies: Array.from(state.killedEnemies),
+            gold: state.gold,
+            equipment: getAllEquipment(),
+            inventory: getPartyInventory()
+        };
+    };
+
     return (
         <>
             <Game
@@ -1680,10 +1851,27 @@ export default function App() {
                 onShowHelp={() => setShowHelp(true)}
                 onCloseHelp={() => setShowHelp(false)}
                 helpOpen={showHelp}
+                saveLoadOpen={showSaveLoad}
                 persistedPlayers={persistedPlayers}
                 spawnPoint={spawnPoint}
+                onSaveClick={() => { setSaveLoadMode("save"); setShowSaveLoad(true); }}
+                onLoadClick={() => { setSaveLoadMode("load"); setShowSaveLoad(true); }}
+                gameStateRef={gameStateRef}
+                initialOpenedChests={initialOpenedChests}
+                initialOpenedSecretDoors={initialOpenedSecretDoors}
+                initialGold={initialGold}
+                initialKilledEnemies={initialKilledEnemies}
             />
             {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
+            {showSaveLoad && (
+                <SaveLoadModal
+                    mode={saveLoadMode}
+                    onClose={() => setShowSaveLoad(false)}
+                    onSave={handleSave}
+                    onLoad={handleLoad}
+                    currentState={getCurrentSaveState()}
+                />
+            )}
         </>
     );
 }

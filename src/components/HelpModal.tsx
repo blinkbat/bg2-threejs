@@ -1,8 +1,24 @@
+import { useEffect } from "react";
+
 interface HelpModalProps {
     onClose: () => void;
 }
 
 export function HelpModal({ onClose }: HelpModalProps) {
+    // ESC key to close
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape") {
+                e.preventDefault();
+                e.stopPropagation();
+                onClose();
+            }
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [onClose]);
+
     return (
         <div className="modal-overlay" onClick={onClose}>
             <div className="modal-content" onClick={e => e.stopPropagation()}>
