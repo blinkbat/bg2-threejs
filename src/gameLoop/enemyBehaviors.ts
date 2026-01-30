@@ -3,14 +3,15 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitGroup, EnemyStats, EnemySpawnSkill, EnemyChargeAttack, EnemyLeapSkill, EnemyVinesSkill } from "../core/types";
-import { ENEMY_STATS } from "../game/units";
+import type { Unit, UnitGroup, EnemyStats, EnemySpawnSkill, EnemyChargeAttack, EnemyLeapSkill, EnemyVinesSkill, DamageText } from "../core/types";
+import { ENEMY_STATS, getUnitStats } from "../game/units";
 import { getNextUnitId } from "../core/unitIds";
 import { soundFns } from "../audio/sound";
 import { hasBroodMotherScreeched, markBroodMotherScreeched } from "../game/enemyState";
 import { hasStatusEffect } from "../combat/combatMath";
-import { SLOW_COOLDOWN_MULT, BUFF_TICK_INTERVAL } from "../core/constants";
+import { SLOW_COOLDOWN_MULT, BUFF_TICK_INTERVAL, COLORS } from "../core/constants";
 import { startChargeAttack } from "./constructCharge";
+import { applyDamageToUnit, type DamageContext } from "../combat/combat";
 
 // =============================================================================
 // TYPES
@@ -69,6 +70,12 @@ export interface VinesContext {
     setUnits: React.Dispatch<React.SetStateAction<Unit[]>>;
     addLog: (text: string, color?: string) => void;
     now: number;
+    // Damage context for proper death handling
+    damageTexts: DamageText[];
+    hitFlashRef: Record<number, number>;
+    unitsRef: Record<number, UnitGroup>;
+    unitsStateRef: React.RefObject<Unit[]>;
+    defeatedThisFrame: Set<number>;
 }
 
 // =============================================================================
@@ -287,7 +294,10 @@ export function updateLeaps(
     unitsStateRef: React.RefObject<Unit[]>,
     setUnits: React.Dispatch<React.SetStateAction<Unit[]>>,
     hitFlashRef: React.RefObject<Record<number, number>>,
-    addLog: (text: string, color?: string) => void
+    addLog: (text: string, color?: string) => void,
+    scene: THREE.Scene,
+    damageTexts: DamageText[],
+    defeatedThisFrame: Set<number>
 ): void {
     for (let i = activeLeaps.length - 1; i >= 0; i--) {
         const leap = activeLeaps[i];
@@ -342,7 +352,7 @@ export function updateLeaps(
             // Deal damage to target if they're still alive and nearby
             const targetG = unitsRef[leap.targetId];
             const targetUnit = unitsStateRef.current.find(u => u.id === leap.targetId);
-            if (targetG && targetUnit && targetUnit.hp > 0) {
+            if (targetG && targetUnit && targetUnit.hp > 0 && !defeatedThisFrame.has(leap.targetId)) {
                 const landDist = Math.hypot(
                     targetG.position.x - leap.endX,
                     targetG.position.z - leap.endZ
@@ -351,20 +361,19 @@ export function updateLeaps(
                 // Deal damage if close enough on landing
                 if (landDist < 2.5) {
                     const damage = leap.damage[0] + Math.floor(Math.random() * (leap.damage[1] - leap.damage[0] + 1));
+                    const targetData = getUnitStats(targetUnit);
 
-                    setUnits(prev => prev.map(u => {
-                        if (u.id !== leap.targetId) return u;
-                        const newHp = Math.max(0, u.hp - damage);
-                        return { ...u, hp: newHp };
-                    }));
-
-                    // Hit flash
-                    if (hitFlashRef.current) {
-                        hitFlashRef.current[leap.targetId] = now;
-                    }
+                    const dmgCtx: DamageContext = {
+                        scene, damageTexts, hitFlashRef: hitFlashRef.current, unitsRef, unitsStateRef,
+                        setUnits, addLog, now, defeatedThisFrame
+                    };
+                    applyDamageToUnit(dmgCtx, leap.targetId, targetG, targetUnit.hp, damage, targetData.name, {
+                        color: COLORS.damageEnemy,
+                        hitMessage: { text: `Feral Hound's leap deals ${damage} damage!`, color: "#ff6600" },
+                        targetUnit
+                    });
 
                     soundFns.playHit();
-                    addLog(`Feral Hound's leap deals ${damage} damage!`, "#ff6600");
                 }
             }
 
@@ -389,7 +398,11 @@ export function clearLeaps(): void {
  * @returns true if vines were cast
  */
 export function tryVinesSkill(ctx: VinesContext): boolean {
-    const { unit, g, enemyStats, vinesSkill, targetUnit, targetG, scene, skillCooldowns, setSkillCooldowns, setUnits, addLog, now } = ctx;
+    const {
+        unit, g, enemyStats, vinesSkill, targetUnit, targetG, scene,
+        skillCooldowns, setSkillCooldowns, setUnits, addLog, now,
+        damageTexts, hitFlashRef, unitsRef, unitsStateRef, defeatedThisFrame
+    } = ctx;
 
     const vinesKey = `${unit.id}-vines`;
     const vinesCooldownEnd = skillCooldowns[vinesKey]?.end ?? 0;
@@ -413,10 +426,7 @@ export function tryVinesSkill(ctx: VinesContext): boolean {
         return false;
     }
 
-    // Calculate damage
-    const damage = vinesSkill.damage[0] + Math.floor(Math.random() * (vinesSkill.damage[1] - vinesSkill.damage[0] + 1));
-
-    // Apply pinned status effect and damage to target
+    // Apply pinned status effect
     setUnits(prev => prev.map(u => {
         if (u.id !== targetUnit.id) return u;
         const newEffects = [...(u.statusEffects || [])];
@@ -429,17 +439,24 @@ export function tryVinesSkill(ctx: VinesContext): boolean {
             damagePerTick: 0,
             sourceId: unit.id
         });
-        const newHp = Math.max(0, u.hp - damage);
-        return { ...u, hp: newHp, statusEffects: newEffects };
+        return { ...u, statusEffects: newEffects };
     }));
+
+    // Calculate and apply damage using centralized damage system
+    const damage = vinesSkill.damage[0] + Math.floor(Math.random() * (vinesSkill.damage[1] - vinesSkill.damage[0] + 1));
+    const targetData = getUnitStats(targetUnit);
+    const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now, defeatedThisFrame };
+    applyDamageToUnit(dmgCtx, targetUnit.id, targetG, targetUnit.hp, damage, targetData.name, {
+        color: COLORS.damageEnemy,
+        hitMessage: { text: `${enemyStats.name} entangles ${targetUnit.team === "player" ? "a party member" : "its target"} in vines for ${damage} damage!`, color: "#2d4a1c" },
+        targetUnit
+    });
 
     // Create visual effect - green vines rising from ground
     createVinesEffect(scene, targetG.position.x, targetG.position.z, vinesSkill.duration);
 
     // Play sound
     soundFns.playVines();
-
-    addLog(`${enemyStats.name} entangles ${targetUnit.team === "player" ? "a party member" : "its target"} in vines for ${damage} damage!`, "#2d4a1c");
 
     const cooldownMult = hasStatusEffect(unit, "slowed") ? SLOW_COOLDOWN_MULT : 1;
     setSkillCooldowns(prev => ({

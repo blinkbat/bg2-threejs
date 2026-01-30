@@ -203,7 +203,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                 id,
                 x: pos.x,
                 z: pos.z,
-                hp: persisted?.hp ?? data.hp,
+                hp: persisted?.hp ?? getEffectiveMaxHp(id),
                 mana: persisted?.mana ?? data.mana,
                 level: persisted?.level ?? 1,
                 exp: initialExp,
@@ -1183,14 +1183,11 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                     unitsStateRef,
                     setUnits,
                     hitFlashRef,
-                    addLog
+                    addLog,
+                    scene,
+                    damageTexts.current,
+                    defeatedThisFrame
                 );
-
-                // Hit flash effect
-                updateHitFlash(hitFlashRef.current, unitMeshRef.current, unitOriginalColorRef.current, unitsStateRef.current, now);
-
-                // Update poison visuals (green tint for poisoned units)
-                updatePoisonVisuals(unitsStateRef.current, unitMeshRef.current, unitOriginalColorRef.current, hitFlashRef.current);
 
                 // Update energy shield bubble visuals
                 updateEnergyShieldVisuals(unitsStateRef.current, unitsRef.current, now);
@@ -1198,6 +1195,13 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                 // Update shield facing for front-shielded enemies
                 updateShieldFacing(unitsStateRef.current, unitsRef.current, shieldIndicatorsRef.current, setUnits);
             }
+
+            // Visual updates that should run even when paused (so colors are correct on load/area transition)
+            // Hit flash effect
+            updateHitFlash(hitFlashRef.current, unitMeshRef.current, unitOriginalColorRef.current, unitsStateRef.current, now);
+
+            // Update poison visuals (green tint for poisoned units)
+            updatePoisonVisuals(unitsStateRef.current, unitMeshRef.current, unitOriginalColorRef.current, hitFlashRef.current);
 
             const currentUnits = unitsStateRef.current;
 
@@ -1730,8 +1734,10 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                 onIncrementStat={(id, stat) => setUnits(prev => prev.map(u => {
                     if (u.id === id && (u.statPoints ?? 0) > 0) {
                         const currentStats = u.stats ?? { strength: 0, dexterity: 0, vitality: 0, intelligence: 0, faith: 0 };
+                        const hpBonus = stat === "vitality" ? 2 : 0;  // Vitality gives +2 HP per point
                         return {
                             ...u,
+                            hp: u.hp + hpBonus,
                             statPoints: (u.statPoints ?? 0) - 1,
                             stats: { ...currentStats, [stat]: currentStats[stat] + 1 }
                         };

@@ -7,7 +7,7 @@ export { UNIT_DATA, getBasicAttackSkill, getAllSkills, getEffectiveUnitData, get
 export { ENEMY_STATS } from "./enemyStats";
 
 // Import for local use
-import { UNIT_DATA, getEffectiveUnitData } from "./playerUnits";
+import { UNIT_DATA, getEffectiveUnitData, getEffectiveMaxHp } from "./playerUnits";
 import { ENEMY_STATS } from "./enemyStats";
 
 // =============================================================================
@@ -95,12 +95,13 @@ export function createInitialUnits(): Unit[] {
     return [
         // Player units (starting at spawn point - water's edge on coast)
         ...Object.keys(UNIT_DATA).map((id, i) => {
-            const data = UNIT_DATA[Number(id)];
+            const unitId = Number(id);
+            const data = UNIT_DATA[unitId];
             return {
-                id: Number(id),
+                id: unitId,
                 x: DEFAULT_SPAWN_POINT.x + (i % 3) * 2,
                 z: DEFAULT_SPAWN_POINT.z + Math.floor(i / 3) * 2,
-                hp: data.hp,
+                hp: getEffectiveMaxHp(unitId),  // Use effective max HP (includes equipment bonuses)
                 mana: data.mana,
                 team: "player" as const,
                 target: null,

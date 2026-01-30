@@ -271,10 +271,12 @@ export function updateUnitAI(
 
             // Check if we can cast vines to immobilize target (checked before attack range)
             if (!isPlayer && 'vinesSkill' in data && data.vinesSkill) {
+                const unitsStateRef = { current: unitsState } as React.RefObject<Unit[]>;
                 tryVinesSkill({
                     unit, g, enemyStats: data as EnemyStats, vinesSkill: data.vinesSkill,
                     targetUnit: targetU, targetG, scene,
-                    skillCooldowns, setSkillCooldowns, setUnits, addLog, now
+                    skillCooldowns, setSkillCooldowns, setUnits, addLog, now,
+                    damageTexts, hitFlashRef, unitsRef, unitsStateRef, defeatedThisFrame
                 });
                 // Don't return - druid can still attack/move after casting vines
             }
