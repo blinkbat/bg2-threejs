@@ -7,6 +7,10 @@ import { GRID_SIZE, FOG_SCALE } from "../core/constants";
 import { getCurrentArea, getComputedAreaData, type AreaTransition, type SecretDoor } from "../game/areas";
 import { getUnitStats } from "../game/units";
 import type { Unit, UnitGroup, FogTexture } from "../core/types";
+import wizardSpriteUrl from "../assets/wizard.png";
+import barbarianSpriteUrl from "../assets/barbarian.png";
+import clericSpriteUrl from "../assets/cleric.png";
+import paladinSpriteUrl from "../assets/paladin.png";
 
 /**
  * Calculate effective size for a unit, accounting for amoeba split scaling
@@ -642,6 +646,23 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     const unitOriginalColors: Record<number, THREE.Color> = {};
     const maxHp: Record<number, number> = {};
 
+    // Load player sprite textures
+    const wizardTexture = new THREE.TextureLoader().load(wizardSpriteUrl);
+    wizardTexture.magFilter = THREE.NearestFilter;
+    wizardTexture.minFilter = THREE.NearestFilter;
+
+    const barbarianTexture = new THREE.TextureLoader().load(barbarianSpriteUrl);
+    barbarianTexture.magFilter = THREE.NearestFilter;
+    barbarianTexture.minFilter = THREE.NearestFilter;
+
+    const clericTexture = new THREE.TextureLoader().load(clericSpriteUrl);
+    clericTexture.magFilter = THREE.NearestFilter;
+    clericTexture.minFilter = THREE.NearestFilter;
+
+    const paladinTexture = new THREE.TextureLoader().load(paladinSpriteUrl);
+    paladinTexture.magFilter = THREE.NearestFilter;
+    paladinTexture.minFilter = THREE.NearestFilter;
+
     units.forEach(unit => {
         // Skip dead units - don't create scene objects for them
         if (unit.hp <= 0) return;
@@ -656,18 +677,47 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         const boxH = isPlayer ? 1 : (size > 1 ? 1.8 : 0.6);
         const boxW = 0.6 * size;
         const isAmoeba = unit.enemyType === "giant_amoeba";
-        const boxMat = new THREE.MeshStandardMaterial({
-            color: data.color,
-            metalness: isAmoeba ? 0.1 : 0.5,
-            roughness: isAmoeba ? 0.2 : 0.4,
-            transparent: isAmoeba,
-            opacity: isAmoeba ? 0.6 : 1.0
-        });
-        const box = new THREE.Mesh(new THREE.BoxGeometry(boxW, boxH, boxW), boxMat);
-        box.position.y = boxH / 2;
-        box.userData.unitId = unit.id;
-        group.add(box);
-        unitMeshes[unit.id] = box;
+
+        // Sprite configs: { texture, width, height, offsetX?, color? } - dimensions in pixels
+        const spriteConfigs: Record<number, { texture: THREE.Texture; width: number; height: number; offsetX?: number; color?: number }> = {
+            1: { texture: barbarianTexture, width: 157, height: 195, offsetX: -0.1 },  // Barbarian
+            2: { texture: paladinTexture, width: 128, height: 196 },    // Paladin
+            4: { texture: wizardTexture, width: 110, height: 196 },     // Wizard
+            6: { texture: clericTexture, width: 128, height: 196, color: 0xcccccc },   // Cleric (slightly darker)
+        };
+        const spriteConfig = spriteConfigs[unit.id];
+
+        let unitMesh: THREE.Mesh | THREE.Sprite;
+
+        if (spriteConfig) {
+            // Player sprite that always faces the camera
+            const spriteHeight = 1.8;
+            const spriteWidth = spriteHeight * (spriteConfig.width / spriteConfig.height);
+            const spriteMat = new THREE.SpriteMaterial({ map: spriteConfig.texture, color: spriteConfig.color ?? 0xffaaaa });
+            const sprite = new THREE.Sprite(spriteMat);
+            sprite.scale.set(spriteWidth, spriteHeight, 1);
+            sprite.position.y = spriteHeight / 2;
+            sprite.position.x = spriteConfig.offsetX ?? 0;
+            sprite.userData.unitId = unit.id;
+            group.add(sprite);
+            unitMesh = sprite;
+        } else {
+            // Other units use box meshes
+            const boxMat = new THREE.MeshStandardMaterial({
+                color: data.color,
+                metalness: isAmoeba ? 0.1 : 0.5,
+                roughness: isAmoeba ? 0.2 : 0.4,
+                transparent: isAmoeba,
+                opacity: isAmoeba ? 0.6 : 1.0
+            });
+            const box = new THREE.Mesh(new THREE.BoxGeometry(boxW, boxH, boxW), boxMat);
+            box.position.y = boxH / 2;
+            box.userData.unitId = unit.id;
+            group.add(box);
+            unitMesh = box;
+        }
+
+        unitMeshes[unit.id] = unitMesh as THREE.Mesh;
         unitOriginalColors[unit.id] = new THREE.Color(data.color);
 
         // Determine fly height early (needed for shadow positioning)

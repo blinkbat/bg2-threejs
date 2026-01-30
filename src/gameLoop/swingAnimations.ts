@@ -29,7 +29,7 @@ export function spawnSwingIndicator(
     ) - Math.PI / 3;
     swingDot.position.set(
         attackerG.position.x + Math.cos(startAngle) * 0.5,
-        0.7,
+        1.0,
         attackerG.position.z + Math.sin(startAngle) * 0.5
     );
     scene.add(swingDot);

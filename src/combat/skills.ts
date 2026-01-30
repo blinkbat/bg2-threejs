@@ -16,6 +16,8 @@ import { soundFns } from "../audio/sound";
 import { createProjectile, getProjectileSpeed, applyDamageToUnit, createAnimatedRing, createLightningPillar, type DamageContext } from "./combat";
 import { createSanctuaryTile } from "../gameLoop/sanctuaryTiles";
 import { updateUnitWith } from "../core/stateUtils";
+import { spawnSwingIndicator } from "../gameLoop/swingAnimations";
+import type { SwingAnimation } from "../core/types";
 
 export interface SkillExecutionContext {
     scene: THREE.Scene;
@@ -27,6 +29,7 @@ export interface SkillExecutionContext {
     damageTexts: React.MutableRefObject<{ mesh: THREE.Mesh; life: number }[]>;
     unitMeshRef: React.RefObject<Record<number, THREE.Mesh>>;
     unitOriginalColorRef: React.RefObject<Record<number, THREE.Color>>;
+    swingAnimationsRef: React.MutableRefObject<SwingAnimation[]>;
     setUnits: React.Dispatch<React.SetStateAction<Unit[]>>;
     setSkillCooldowns: React.Dispatch<React.SetStateAction<Record<string, { end: number; duration: number }>>>;
     addLog: (text: string, color?: string) => void;
@@ -307,7 +310,7 @@ export function executeMeleeSkill(
     targetX: number,
     targetZ: number
 ): boolean {
-    const { scene, unitsStateRef, unitsRef, hitFlashRef, damageTexts, setUnits, addLog, defeatedThisFrame } = ctx;
+    const { scene, unitsStateRef, unitsRef, hitFlashRef, damageTexts, setUnits, addLog, defeatedThisFrame, swingAnimationsRef } = ctx;
 
     // Find closest enemy to target position
     const closest = findClosestTargetByTeam(unitsStateRef.current, unitsRef.current, "enemy", targetX, targetZ);
@@ -331,6 +334,9 @@ export function executeMeleeSkill(
 
     const now = Date.now();
     consumeSkill(ctx, casterId, skill);
+
+    // Spawn swing animation for melee attacks
+    spawnSwingIndicator(scene, casterG, targetG, true, swingAnimationsRef.current, now);
 
     const casterData = UNIT_DATA[casterId];
     const targetData = getUnitStats(targetEnemy);

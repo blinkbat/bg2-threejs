@@ -180,12 +180,6 @@ export function MenuModal({
                         </>
                     )}
                 </div>
-
-                <div className="help-footer">
-                    <button className="btn mono" onClick={onClose}>
-                        Close
-                    </button>
-                </div>
             </div>
         </div>
     );

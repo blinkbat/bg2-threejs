@@ -472,7 +472,7 @@ export function updateHpBarPositions(
         const isPlayer = u.team === "player";
         const data = getUnitStats(u);
         const size = (!isPlayer && 'size' in data && data.size) ? data.size : 1;
-        const boxH = isPlayer ? 1 : (size > 1 ? 1.8 : 0.6);
+        const boxH = isPlayer ? 1.8 : (size > 1 ? 1.8 : 0.6);
         _hpWorldPos.set(g.position.x, boxH + 0.4, g.position.z);
         _hpWorldPos.project(camera);
         positions[u.id] = {

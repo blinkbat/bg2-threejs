@@ -5,7 +5,8 @@
       "Bash(npm run build:*)",
       "Bash(grep:*)",
       "Bash(ls:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(git mv:*)"
     ]
   }
 }
