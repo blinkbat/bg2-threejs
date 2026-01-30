@@ -11,6 +11,8 @@ import wizardSpriteUrl from "../assets/wizard.png";
 import barbarianSpriteUrl from "../assets/barbarian.png";
 import clericSpriteUrl from "../assets/cleric.png";
 import paladinSpriteUrl from "../assets/paladin.png";
+import thiefSpriteUrl from "../assets/thief.png";
+import monkSpriteUrl from "../assets/monk.png";
 
 /**
  * Calculate effective size for a unit, accounting for amoeba split scaling
@@ -70,6 +72,7 @@ export interface SceneRefs {
     secretDoorMeshes: SecretDoorMesh[];  // Hidden doors that reveal caves when clicked
     waterMesh: THREE.Mesh | null;  // Water for coast
     chestMeshes: ChestMeshData[];  // Chest lid pivots for open/close animation
+    billboards: THREE.Mesh[];  // Billboard meshes that face the camera
 }
 
 
@@ -645,6 +648,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     const unitMeshes: Record<number, THREE.Mesh> = {};
     const unitOriginalColors: Record<number, THREE.Color> = {};
     const maxHp: Record<number, number> = {};
+    const billboards: THREE.Mesh[] = [];
 
     // Load player sprite textures
     const wizardTexture = new THREE.TextureLoader().load(wizardSpriteUrl);
@@ -663,6 +667,14 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     paladinTexture.magFilter = THREE.NearestFilter;
     paladinTexture.minFilter = THREE.NearestFilter;
 
+    const thiefTexture = new THREE.TextureLoader().load(thiefSpriteUrl);
+    thiefTexture.magFilter = THREE.NearestFilter;
+    thiefTexture.minFilter = THREE.NearestFilter;
+
+    const monkTexture = new THREE.TextureLoader().load(monkSpriteUrl);
+    monkTexture.magFilter = THREE.NearestFilter;
+    monkTexture.minFilter = THREE.NearestFilter;
+
     units.forEach(unit => {
         // Skip dead units - don't create scene objects for them
         if (unit.hp <= 0) return;
@@ -678,11 +690,13 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         const boxW = 0.6 * size;
         const isAmoeba = unit.enemyType === "giant_amoeba";
 
-        // Sprite configs: { texture, width, height, offsetX?, color? } - dimensions in pixels
-        const spriteConfigs: Record<number, { texture: THREE.Texture; width: number; height: number; offsetX?: number; color?: number }> = {
-            1: { texture: barbarianTexture, width: 157, height: 195, offsetX: -0.1 },  // Barbarian
+        // Sprite configs: { texture, width, height, offsetX?, color?, emissive? } - dimensions in pixels
+        const spriteConfigs: Record<number, { texture: THREE.Texture; width: number; height: number; offsetX?: number; color?: number; emissive?: number }> = {
+            1: { texture: barbarianTexture, width: 157, height: 195, offsetX: -0.1, emissive: 0.07 },  // Barbarian
             2: { texture: paladinTexture, width: 128, height: 196 },    // Paladin
-            4: { texture: wizardTexture, width: 110, height: 196 },     // Wizard
+            3: { texture: thiefTexture, width: 128, height: 196, offsetX: 0.1, emissive: 0.07 },  // Thief
+            4: { texture: wizardTexture, width: 110, height: 196, emissive: 0.05 },     // Wizard
+            5: { texture: monkTexture, width: 128, height: 196, offsetX: -0.1 },       // Monk
             6: { texture: clericTexture, width: 128, height: 196, color: 0xcccccc },   // Cleric (slightly darker)
         };
         const spriteConfig = spriteConfigs[unit.id];
@@ -690,17 +704,29 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         let unitMesh: THREE.Mesh | THREE.Sprite;
 
         if (spriteConfig) {
-            // Player sprite that always faces the camera
+            // Player billboard plane that faces the camera and responds to lighting
             const spriteHeight = 1.8;
             const spriteWidth = spriteHeight * (spriteConfig.width / spriteConfig.height);
-            const spriteMat = new THREE.SpriteMaterial({ map: spriteConfig.texture, color: spriteConfig.color ?? 0xffaaaa });
-            const sprite = new THREE.Sprite(spriteMat);
-            sprite.scale.set(spriteWidth, spriteHeight, 1);
-            sprite.position.y = spriteHeight / 2;
-            sprite.position.x = spriteConfig.offsetX ?? 0;
-            sprite.userData.unitId = unit.id;
-            group.add(sprite);
-            unitMesh = sprite;
+            const planeMat = new THREE.MeshStandardMaterial({
+                map: spriteConfig.texture,
+                color: spriteConfig.color ?? 0xffffff,
+                transparent: true,
+                alphaTest: 0.5,
+                side: THREE.DoubleSide,
+                metalness: 0,
+                roughness: 1,
+                emissive: 0xffffff,
+                emissiveIntensity: spriteConfig.emissive ?? 0,
+                emissiveMap: spriteConfig.emissive ? spriteConfig.texture : undefined
+            });
+            const plane = new THREE.Mesh(new THREE.PlaneGeometry(spriteWidth, spriteHeight), planeMat);
+            plane.position.y = spriteHeight / 2;
+            plane.position.x = spriteConfig.offsetX ?? 0;
+            plane.userData.unitId = unit.id;
+            plane.userData.isBillboard = true;
+            group.add(plane);
+            billboards.push(plane);
+            unitMesh = plane;
         } else {
             // Other units use box meshes
             const boxMat = new THREE.MeshStandardMaterial({
@@ -821,6 +847,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         secretDoorMeshes,
         waterMesh,
         chestMeshes,
+        billboards,
     };
 }
 
@@ -846,6 +873,15 @@ export function updateCamera(camera: THREE.OrthographicCamera, offset: { x: numb
  */
 export function updateWater(_waterMesh: THREE.Mesh | null, _time: number): void {
     // Simple blue water - no animation
+}
+
+/**
+ * Update billboard meshes to face the camera.
+ */
+export function updateBillboards(billboards: THREE.Mesh[], camera: THREE.Camera): void {
+    for (const billboard of billboards) {
+        billboard.quaternion.copy(camera.quaternion);
+    }
 }
 
 /**

@@ -20,7 +20,7 @@ import { getItem } from "./game/items";
 import { isConsumable, isKey } from "./core/types";
 import { addToInventory } from "./game/equipment";
 import { getEffectiveMaxHp } from "./game/units";
-import { createScene, updateCamera, updateWallTransparency, updateTreeFogVisibility, updateLightLOD, addUnitToScene, updateWater, updateChestStates, type DoorMesh, type ChestMeshData, type SecretDoorMesh } from "./rendering/scene";
+import { createScene, updateCamera, updateWallTransparency, updateTreeFogVisibility, updateLightLOD, addUnitToScene, updateWater, updateChestStates, updateBillboards, type DoorMesh, type ChestMeshData, type SecretDoorMesh } from "./rendering/scene";
 import { soundFns } from "./audio/sound";
 import { updateDynamicObstacles, findSpawnPositions, clearPathCache } from "./ai/pathfinding";
 import { updateUnitCache } from "./ai/unitAI";
@@ -170,6 +170,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
     const secretDoorMeshesRef = useRef<SecretDoorMesh[]>([]);
     const waterMeshRef = useRef<THREE.Mesh | null>(null);
     const chestMeshesRef = useRef<ChestMeshData[]>([]);
+    const billboardsRef = useRef<THREE.Mesh[]>([]);
     const debugGridRef = useRef<THREE.Group | null>(null);
     const acidTilesRef = useRef<Map<string, AcidTile>>(new Map());
     const sanctuaryTilesRef = useRef<Map<string, SanctuaryTile>>(new Map());
@@ -456,7 +457,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         clearLeaps();  // Clear active leaps
 
         const sceneRefs = createScene(containerRef.current, units);
-        const { scene, camera, renderer, flames, candleMeshes, candleLights, fogTexture, fogMesh, moveMarker, rangeIndicator, aoeIndicator, unitGroups, selectRings, targetRings, shieldIndicators, unitMeshes, unitOriginalColors, maxHp, wallMeshes, treeMeshes, columnMeshes, columnGroups, doorMeshes, secretDoorMeshes, waterMesh, chestMeshes } = sceneRefs;
+        const { scene, camera, renderer, flames, candleMeshes, candleLights, fogTexture, fogMesh, moveMarker, rangeIndicator, aoeIndicator, unitGroups, selectRings, targetRings, shieldIndicators, unitMeshes, unitOriginalColors, maxHp, wallMeshes, treeMeshes, columnMeshes, columnGroups, doorMeshes, secretDoorMeshes, waterMesh, chestMeshes, billboards } = sceneRefs;
 
         sceneRef.current = scene;
         cameraRef.current = camera;
@@ -481,6 +482,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         secretDoorMeshesRef.current = secretDoorMeshes;
         waterMeshRef.current = waterMesh;
         chestMeshesRef.current = chestMeshes;
+        billboardsRef.current = billboards;
 
         // Apply initial chest open states
         updateChestStates(chestMeshes, openedChests);
@@ -1313,6 +1315,9 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
 
             // Animated water waves
             updateWater(waterMeshRef.current, now);
+
+            // Billboard rotation to face camera
+            updateBillboards(billboardsRef.current, camera);
 
             renderer.render(scene, camera);
         };
