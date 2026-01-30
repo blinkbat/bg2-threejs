@@ -27,6 +27,8 @@ export function PartyBar({ units, selectedIds, onSelect, targetingMode, onTarget
 
                 const handleClick = (e: React.MouseEvent) => {
                     e.stopPropagation();
+                    // Dead units cannot be selected or targeted
+                    if (unit.hp <= 0) return;
                     if (targetingMode && isTargetingAlly && onTargetUnit) {
                         onTargetUnit(unit.id);
                         return;

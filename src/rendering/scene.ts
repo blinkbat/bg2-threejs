@@ -643,6 +643,9 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     const maxHp: Record<number, number> = {};
 
     units.forEach(unit => {
+        // Skip dead units - don't create scene objects for them
+        if (unit.hp <= 0) return;
+
         const isPlayer = unit.team === "player";
         const data = getUnitStats(unit);
         const baseSize = (!isPlayer && 'size' in data && data.size) ? data.size : 1;

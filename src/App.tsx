@@ -1042,8 +1042,8 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
 
         renderer.domElement.addEventListener("click", onClick);
         renderer.domElement.addEventListener("mousedown", onMouseDown);
-        renderer.domElement.addEventListener("mousemove", onMouseMove);
-        renderer.domElement.addEventListener("mouseup", onMouseUp);
+        window.addEventListener("mousemove", onMouseMove);
+        window.addEventListener("mouseup", onMouseUp);
         renderer.domElement.addEventListener("contextmenu", onContextMenu);
         renderer.domElement.addEventListener("wheel", onWheel, { passive: false });
         window.addEventListener("keydown", onKeyDown);
@@ -1337,8 +1337,8 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
             window.removeEventListener("keyup", onKeyUp);
             renderer.domElement.removeEventListener("click", onClick);
             renderer.domElement.removeEventListener("mousedown", onMouseDown);
-            renderer.domElement.removeEventListener("mousemove", onMouseMove);
-            renderer.domElement.removeEventListener("mouseup", onMouseUp);
+            window.removeEventListener("mousemove", onMouseMove);
+            window.removeEventListener("mouseup", onMouseUp);
             renderer.domElement.removeEventListener("contextmenu", onContextMenu);
             renderer.domElement.removeEventListener("wheel", onWheel);
             renderer.dispose();
@@ -1349,9 +1349,13 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
     // Update selection rings
     useEffect(() => {
         Object.entries(selectRingsRef.current).forEach(([id, ring]) => {
-            ring.visible = selectedIds.includes(Number(id));
+            const unit = units.find(u => u.id === Number(id));
+            // Only show selection ring for alive units
+            ring.visible = selectedIds.includes(Number(id)) && (unit?.hp ?? 0) > 0;
         });
-        setShowPanel(selectedIds.length === 1 && units.find(u => u.id === selectedIds[0])?.team === "player");
+        const selectedUnit = units.find(u => u.id === selectedIds[0]);
+        // Only show panel for alive player units
+        setShowPanel(selectedIds.length === 1 && selectedUnit?.team === "player" && (selectedUnit?.hp ?? 0) > 0);
     }, [selectedIds, units]);
 
     const alivePlayers = units.filter(u => u.team === "player" && u.hp > 0).length;
