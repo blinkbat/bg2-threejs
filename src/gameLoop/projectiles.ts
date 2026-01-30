@@ -7,7 +7,7 @@ import type { Unit, UnitGroup, DamageText, Projectile, EnemyStats, MagicMissileP
 import { HIT_DETECTION_RADIUS, COLORS, BUFF_TICK_INTERVAL } from "../core/constants";
 import { getUnitStats } from "../game/units";
 import { getIntelligenceMagicDamageBonus, getFaithHolyDamageBonus } from "../game/statBonuses";
-import { calculateDamage, getDirectionAndDistance, rollHit, shouldApplyPoison, getEffectiveArmor, logHit, logLifestealHit, logMiss, logPoisoned, logAoeHit, logAoeMiss, getDamageColor, logTrapTriggered, isBlockedByFrontShield } from "../combat/combatMath";
+import { calculateDamage, getDirectionAndDistance, rollHit, rollChance, shouldApplyPoison, getEffectiveArmor, logHit, logLifestealHit, logMiss, logPoisoned, logAoeHit, logAoeMiss, getDamageColor, logTrapTriggered, isBlockedByFrontShield } from "../combat/combatMath";
 import { distance } from "../game/geometry";
 import { ENEMY_STATS } from "../game/units";
 import { applyDamageToUnit, animateExpandingMesh, spawnDamageNumber, type DamageContext } from "../combat/combat";
@@ -512,6 +512,16 @@ export function updateProjectiles(
                     if (attackerG && isBlockedByFrontShield(attackerG.position.x, attackerG.position.z, targetG.position.x, targetG.position.z, targetUnit.facing)) {
                         soundFns.playMiss();
                         addLog(`${attackerData.name}'s attack is blocked by ${targetData.name}'s shield!`, "#4488ff");
+                        disposeProjectile(scene, proj);
+                        return false;
+                    }
+                }
+                // Check for block chance (skeleton warrior etc.) - only blocks physical damage
+                if (enemyStats.blockChance) {
+                    const dmgType = getBasicAttackDamageType(attackerUnit, attackerData);
+                    if (dmgType === "physical" && rollChance(enemyStats.blockChance)) {
+                        soundFns.playMiss();
+                        addLog(`${targetData.name} blocks ${attackerData.name}'s attack!`, "#aaaaaa");
                         disposeProjectile(scene, proj);
                         return false;
                     }

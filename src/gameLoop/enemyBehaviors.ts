@@ -9,7 +9,7 @@ import { getNextUnitId } from "../core/unitIds";
 import { soundFns } from "../audio/sound";
 import { hasBroodMotherScreeched, markBroodMotherScreeched } from "../game/enemyState";
 import { hasStatusEffect } from "../combat/combatMath";
-import { SLOW_COOLDOWN_MULT } from "../core/constants";
+import { SLOW_COOLDOWN_MULT, BUFF_TICK_INTERVAL } from "../core/constants";
 import { startChargeAttack } from "./constructCharge";
 
 // =============================================================================
@@ -201,7 +201,8 @@ interface ActiveLeap {
     startZ: number;
     endX: number;
     endZ: number;
-    startTime: number;
+    elapsedTime: number;      // Accumulated leap time (pause-safe)
+    lastUpdateTime: number;   // Last frame's timestamp for delta calculation
     duration: number;  // ms
     targetId: number;
     damage: [number, number];
@@ -249,7 +250,8 @@ export function tryLeapToTarget(ctx: LeapContext): boolean {
         startZ: g.position.z,
         endX,
         endZ,
-        startTime: now,
+        elapsedTime: 0,
+        lastUpdateTime: now,
         duration: LEAP_DURATION,
         targetId: targetUnit.id,
         damage: leapSkill.damage
@@ -289,8 +291,14 @@ export function updateLeaps(
 ): void {
     for (let i = activeLeaps.length - 1; i >= 0; i--) {
         const leap = activeLeaps[i];
-        const elapsed = now - leap.startTime;
-        const progress = Math.min(1, elapsed / leap.duration);
+
+        // Cap delta to prevent pause/unpause from causing instant leap completion
+        const rawDelta = now - leap.lastUpdateTime;
+        const delta = Math.min(rawDelta, 100); // Max 100ms per frame
+        leap.elapsedTime += delta;
+        leap.lastUpdateTime = now;
+
+        const progress = Math.min(1, leap.elapsedTime / leap.duration);
 
         const g = unitsRef[leap.unitId];
         if (!g) {
@@ -415,7 +423,7 @@ export function tryVinesSkill(ctx: VinesContext): boolean {
         newEffects.push({
             type: "pinned",
             duration: vinesSkill.duration,
-            tickInterval: 0,
+            tickInterval: BUFF_TICK_INTERVAL,
             timeSinceTick: 0,
             lastUpdateTime: now,
             damagePerTick: 0,

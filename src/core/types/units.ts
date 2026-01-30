@@ -3,7 +3,7 @@
 // =============================================================================
 
 // Enemy type identifiers
-export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba" | "acid_slug" | "bat" | "undead_knight" | "ancient_construct" | "feral_hound" | "corrupt_druid";
+export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba" | "acid_slug" | "bat" | "undead_knight" | "ancient_construct" | "feral_hound" | "corrupt_druid" | "skeleton_warrior";
 
 // Status effect types
 export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed" | "qi_drain" | "energyShield";
@@ -181,6 +181,8 @@ export interface EnemyStats {
     leapSkill?: EnemyLeapSkill;
     // Optional vines skill - immobilizes target
     vinesSkill?: EnemyVinesSkill;
+    // Optional block chance - percent chance to block physical damage
+    blockChance?: number;
 }
 
 // =============================================================================

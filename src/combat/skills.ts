@@ -352,6 +352,14 @@ export function executeMeleeSkill(
                 return true;
             }
         }
+        // Check for block chance (skeleton warrior etc.) - only blocks physical damage
+        if (enemyStats.blockChance && skill.damageType === "physical") {
+            if (rollChance(enemyStats.blockChance)) {
+                soundFns.playMiss();
+                addLog(`${targetData.name} blocks ${casterData.name}'s ${skill.name}!`, "#aaaaaa");
+                return true;
+            }
+        }
     }
 
     // Roll to hit

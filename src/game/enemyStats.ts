@@ -260,5 +260,20 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
             duration: 5000,    // 5 seconds immobilized
             damage: [4, 8]     // Damage on grab
         }
+    },
+    skeleton_warrior: {
+        name: "Skeleton Warrior",
+        hp: 45,
+        maxHp: 45,
+        damage: [6, 12],
+        accuracy: 60,
+        armor: 1,
+        color: "#c9c9b0",      // Bone/ivory color
+        aggroRange: 7,
+        attackCooldown: 2000,
+        size: 1.2,
+        moveSpeed: 0.9,
+        expReward: 30,
+        blockChance: 35        // 35% chance to block physical damage
     }
 };

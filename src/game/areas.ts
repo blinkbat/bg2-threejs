@@ -92,6 +92,7 @@ export interface AreaData {
     trees: TreeLocation[];
     decorations?: Decoration[];  // Columns, broken walls, etc.
     secretDoors?: SecretDoor[];  // Hidden doors that require inspection to use
+    candles?: CandlePosition[];  // Manual candle placements
     ambientLight: number;        // Ambient light intensity
     directionalLight: number;    // Directional light intensity
     hasFogOfWar: boolean;
@@ -238,10 +239,11 @@ export function computeAreaData(area: AreaData): ComputedAreaData {
     // Carve transition areas (doors)
     area.transitions.forEach(t => carve(blocked, t.x, t.z, t.x + t.w - 1, t.z + t.h - 1));
 
-    // Generate candles only for dungeon-like areas
-    const candlePositions = area.id === "dungeon"
+    // Generate candles for dungeon-like areas, and include any manual candle placements
+    const generatedCandles = area.id === "dungeon"
         ? generateCandles(area.rooms, blocked, area.gridSize)
         : [];
+    const candlePositions = [...generatedCandles, ...(area.candles ?? [])];
 
     // Merge obstacles BEFORE blocking trees (so trees don't become walls)
     // Note: Secret door areas remain blocked, so walls WILL render there
@@ -966,6 +968,9 @@ export const CLIFFS_AREA: AreaData = {
         { x: 5, z: 30, type: "feral_hound" },
         // Corrupt Druid near chest
         { x: 3, z: 28, type: "corrupt_druid" },
+        // Skeleton Warriors guarding secret cave treasure
+        { x: 28, z: 5, type: "skeleton_warrior" },
+        { x: 33, z: 6, type: "skeleton_warrior" },
     ],
     transitions: [
         // East entrance from coast
@@ -1034,6 +1039,11 @@ export const CLIFFS_AREA: AreaData = {
             z: 11,
             blockingWall: { x: 16, z: 11, w: 3, h: 1 }
         }
+    ],
+    // Candles in the secret cave
+    candles: [
+        { x: 10.85, z: 5.5, dx: 1, dz: 0 },   // West wall, facing east
+        { x: 25, z: 1.85, dx: 0, dz: 1 }      // South wall, facing north
     ]
 };
 
