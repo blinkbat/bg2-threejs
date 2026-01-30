@@ -1027,6 +1027,64 @@ const playVines = () => {
     snap.stop(ctx.currentTime + 0.35);
 };
 
+// Splash - water splash sound for kraken/tentacles
+const playSplash = () => {
+    if (muted) return;
+    const ctx = getAudioCtx();
+
+    // Noise burst - water splashing
+    const splashSize = ctx.sampleRate * 0.35;
+    const splashBuffer = ctx.createBuffer(1, splashSize, ctx.sampleRate);
+    const splashOutput = splashBuffer.getChannelData(0);
+    for (let i = 0; i < splashSize; i++) {
+        const t = i / splashSize;
+        // Fast attack, medium decay with some bubbling texture
+        const envelope = t < 0.05 ? t / 0.05 : Math.exp(-t * 4);
+        const bubbles = 1 + Math.sin(i * 0.02) * 0.2 * Math.exp(-t * 6);
+        splashOutput[i] = (Math.random() * 2 - 1) * envelope * bubbles;
+    }
+    const splash = ctx.createBufferSource();
+    splash.buffer = splashBuffer;
+    const splashFilter = ctx.createBiquadFilter();
+    splashFilter.type = "lowpass";
+    splashFilter.frequency.setValueAtTime(2000, ctx.currentTime);
+    splashFilter.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 0.3);
+    const splashGain = ctx.createGain();
+    splashGain.gain.setValueAtTime(0.4, ctx.currentTime);
+    splashGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+    splash.connect(splashFilter);
+    splashFilter.connect(splashGain);
+    splashGain.connect(ctx.destination);
+    splash.start();
+
+    // Low thump - water displacement
+    const thump = ctx.createOscillator();
+    const thumpGain = ctx.createGain();
+    thump.type = "sine";
+    thump.frequency.setValueAtTime(100, ctx.currentTime);
+    thump.frequency.exponentialRampToValueAtTime(40, ctx.currentTime + 0.2);
+    thumpGain.gain.setValueAtTime(0.3, ctx.currentTime);
+    thumpGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+    thump.connect(thumpGain);
+    thumpGain.connect(ctx.destination);
+    thump.start();
+    thump.stop(ctx.currentTime + 0.25);
+
+    // Bubbling overtones
+    const bubble = ctx.createOscillator();
+    const bubbleGain = ctx.createGain();
+    bubble.type = "sine";
+    bubble.frequency.setValueAtTime(300, ctx.currentTime + 0.1);
+    bubble.frequency.exponentialRampToValueAtTime(150, ctx.currentTime + 0.25);
+    bubbleGain.gain.setValueAtTime(0, ctx.currentTime);
+    bubbleGain.gain.linearRampToValueAtTime(0.1, ctx.currentTime + 0.1);
+    bubbleGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    bubble.connect(bubbleGain);
+    bubbleGain.connect(ctx.destination);
+    bubble.start();
+    bubble.stop(ctx.currentTime + 0.3);
+};
+
 export const soundFns = {
     playMove: () => playTone(800, 0.06, 0.12, "square", undefined, 3000),
     playAttack: () => playTone(440, 0.08, 0.15, "square", 330, 2500),
@@ -1049,4 +1107,5 @@ export const soundFns = {
     playThunder,
     playBark,
     playVines,
+    playSplash,
 };

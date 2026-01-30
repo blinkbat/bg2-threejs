@@ -3,7 +3,7 @@
 // =============================================================================
 
 // Enemy type identifiers
-export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba" | "acid_slug" | "bat" | "undead_knight" | "ancient_construct" | "feral_hound" | "corrupt_druid" | "skeleton_warrior";
+export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba" | "acid_slug" | "bat" | "undead_knight" | "ancient_construct" | "feral_hound" | "corrupt_druid" | "skeleton_warrior" | "baby_kraken" | "kraken_tentacle";
 
 // Status effect types
 export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed" | "qi_drain" | "energyShield";
@@ -126,6 +126,14 @@ export interface EnemyVinesSkill {
     damage: [number, number];  // Damage dealt when vines grab
 }
 
+export interface EnemyTentacleSkill {
+    cooldown: number;        // ms between tentacle spawns
+    maxTentacles: number;    // Maximum active tentacles at once
+    spawnRange: number;      // How far from the kraken to spawn tentacles (toward targets)
+    tentacleDuration: number; // How long tentacles last before despawning (ms)
+    damageToParent: number;  // Damage dealt to kraken when tentacle is killed
+}
+
 export interface EnemyStats {
     name: string;
     hp: number;
@@ -183,6 +191,8 @@ export interface EnemyStats {
     vinesSkill?: EnemyVinesSkill;
     // Optional block chance - percent chance to block physical damage
     blockChance?: number;
+    // Optional tentacle skill - spawns tentacles toward targets
+    tentacleSkill?: EnemyTentacleSkill;
 }
 
 // =============================================================================

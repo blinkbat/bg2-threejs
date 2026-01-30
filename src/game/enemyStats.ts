@@ -275,5 +275,40 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         moveSpeed: 0.9,
         expReward: 30,
         blockChance: 35        // 35% chance to block physical damage
+    },
+    baby_kraken: {
+        name: "Kraken Nymph",
+        hp: 150,
+        maxHp: 150,
+        damage: [8, 14],
+        accuracy: 65,
+        armor: 2,
+        color: "#6b3fa0",      // Purple
+        aggroRange: 12,
+        attackCooldown: 3000,
+        size: 2.5,             // Large
+        moveSpeed: 0.2,        // VERY slow
+        expReward: 100,
+        tentacleSkill: {
+            cooldown: 4000,        // Spawn tentacle every 4 seconds
+            maxTentacles: 3,       // Up to 3 active tentacles
+            spawnRange: 6,         // Tentacles spawn up to 6 tiles away toward targets
+            tentacleDuration: 5000, // Tentacles last 5 seconds
+            damageToParent: 15     // Killing tentacle deals 15 damage to kraken
+        }
+    },
+    kraken_tentacle: {
+        name: "Kraken Tentacle",
+        hp: 20,
+        maxHp: 20,
+        damage: [4, 8],
+        accuracy: 70,
+        armor: 0,
+        color: "#8b5fbf",      // Lighter purple
+        aggroRange: 3,         // Short aggro - melee turret
+        attackCooldown: 1500,  // Fast attacks
+        size: 0.8,
+        moveSpeed: 0,          // Stationary - does not move
+        expReward: 5
     }
 };

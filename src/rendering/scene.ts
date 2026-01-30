@@ -727,6 +727,18 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
             group.add(plane);
             billboards.push(plane);
             unitMesh = plane;
+        } else if (unit.enemyType === "kraken_tentacle") {
+            // Tentacles use cone geometry (pointing up)
+            const coneMat = new THREE.MeshStandardMaterial({
+                color: data.color,
+                metalness: 0.3,
+                roughness: 0.6
+            });
+            const cone = new THREE.Mesh(new THREE.ConeGeometry(boxW * 0.5, boxH * 1.5, 8), coneMat);
+            cone.position.y = boxH * 0.75;
+            cone.userData.unitId = unit.id;
+            group.add(cone);
+            unitMesh = cone;
         } else {
             // Other units use box meshes
             const boxMat = new THREE.MeshStandardMaterial({
@@ -908,18 +920,36 @@ export function addUnitToScene(
     const boxH = isPlayer ? 1 : (size > 1 ? 1.8 : 0.6);
     const boxW = 0.6 * size;
     const isAmoeba = unit.enemyType === "giant_amoeba";
-    const boxMat = new THREE.MeshStandardMaterial({
-        color: data.color,
-        metalness: isAmoeba ? 0.1 : 0.5,
-        roughness: isAmoeba ? 0.2 : 0.4,
-        transparent: isAmoeba,
-        opacity: isAmoeba ? 0.6 : 1.0
-    });
-    const box = new THREE.Mesh(new THREE.BoxGeometry(boxW, boxH, boxW), boxMat);
-    box.position.y = boxH / 2;
-    box.userData.unitId = unit.id;
-    group.add(box);
-    unitMeshes[unit.id] = box;
+    const isTentacle = unit.enemyType === "kraken_tentacle";
+
+    let unitMesh: THREE.Mesh;
+    if (isTentacle) {
+        // Tentacles use cone geometry (pointing up)
+        const coneMat = new THREE.MeshStandardMaterial({
+            color: data.color,
+            metalness: 0.3,
+            roughness: 0.6
+        });
+        const cone = new THREE.Mesh(new THREE.ConeGeometry(boxW * 0.5, boxH * 1.5, 8), coneMat);
+        cone.position.y = boxH * 0.75;
+        cone.userData.unitId = unit.id;
+        group.add(cone);
+        unitMesh = cone;
+    } else {
+        const boxMat = new THREE.MeshStandardMaterial({
+            color: data.color,
+            metalness: isAmoeba ? 0.1 : 0.5,
+            roughness: isAmoeba ? 0.2 : 0.4,
+            transparent: isAmoeba,
+            opacity: isAmoeba ? 0.6 : 1.0
+        });
+        const box = new THREE.Mesh(new THREE.BoxGeometry(boxW, boxH, boxW), boxMat);
+        box.position.y = boxH / 2;
+        box.userData.unitId = unit.id;
+        group.add(box);
+        unitMesh = box;
+    }
+    unitMeshes[unit.id] = unitMesh;
     unitOriginalColors[unit.id] = new THREE.Color(data.color);
 
     // Determine fly height early (needed for shadow positioning)

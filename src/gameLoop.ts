@@ -30,8 +30,8 @@ import { executeEnemySwipe, executeEnemyHeal } from "./gameLoop/enemySkills";
 import { executeEnemyBasicAttack } from "./gameLoop/enemyAttack";
 import { createAcidTile, tryCreateAcidAura } from "./gameLoop/acidTiles";
 import { isUnitCharging } from "./gameLoop/constructCharge";
-import { trySpawnMinion, tryStartChargeAttack, tryLeapToTarget, isUnitLeaping, tryVinesSkill } from "./gameLoop/enemyBehaviors";
-export { clearLeaps, updateLeaps, isUnitLeaping } from "./gameLoop/enemyBehaviors";
+import { trySpawnMinion, tryStartChargeAttack, tryLeapToTarget, isUnitLeaping, tryVinesSkill, trySpawnTentacle } from "./gameLoop/enemyBehaviors";
+export { clearLeaps, updateLeaps, isUnitLeaping, updateTentacles, clearTentacles, trySubmergeKraken, isKrakenSubmerged, updateSubmergedKrakens } from "./gameLoop/enemyBehaviors";
 
 // Re-export unit ID utilities for backwards compatibility
 export { getNextUnitId, initializeUnitIdCounter } from "./core/unitIds";
@@ -256,6 +256,14 @@ export function updateUnitAI(
         trySpawnMinion({
             unit, g, enemyStats: data as EnemyStats, spawnSkill: data.spawnSkill as EnemySpawnSkill,
             unitsState, unitsRef, skillCooldowns, setSkillCooldowns, setUnits, addLog, now
+        });
+    }
+
+    // Phase 1.8: Tentacle spawn check - Baby Kraken spawns tentacles toward players
+    if (!isPlayer && 'tentacleSkill' in data && data.tentacleSkill) {
+        trySpawnTentacle({
+            unit, g, enemyStats: data as EnemyStats, tentacleSkill: data.tentacleSkill,
+            unitsState, unitsRef, scene, skillCooldowns, setSkillCooldowns, setUnits, addLog, now
         });
     }
 

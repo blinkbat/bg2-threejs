@@ -14,6 +14,7 @@ import { logDefeated, applyPoison, applySlowed, hasStatusEffect, isUnitAlive } f
 import { tryKillBark } from "./barks";
 import { getNextUnitId } from "../core/unitIds";
 import { ENEMY_STATS, getXpForLevel } from "../game/units";
+import { trySubmergeKraken, isKrakenSubmerged } from "../gameLoop/enemyBehaviors";
 
 // =============================================================================
 // PROJECTILE CREATION
@@ -303,6 +304,11 @@ export function applyDamageToUnit(
     const { scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now, defeatedThisFrame } = ctx;
     const { poison, slow, color = COLORS.damageEnemy, skipDefeatTracking = false, attackerName, hitMessage, targetUnit, attackerPosition, damageType } = options;
 
+    // Submerged krakens are invulnerable
+    if (isKrakenSubmerged(targetId)) {
+        return currentHp;
+    }
+
     // Check for energy shield absorption
     const currentUnit = targetUnit ?? unitsStateRef.current?.find(u => u.id === targetId);
     const energyShield = currentUnit?.statusEffects?.find(e => e.type === "energyShield");
@@ -542,7 +548,34 @@ export function applyDamageToUnit(
                     }
                 }
             }
+
+            // Handle kraken tentacle death - damage parent kraken
+            if (targetUnit.enemyType === "kraken_tentacle" && targetUnit.spawnedBy !== undefined) {
+                const parentKraken = unitsStateRef.current.find(u => u.id === targetUnit.spawnedBy && u.hp > 0);
+                if (parentKraken) {
+                    const krakenG = unitsRef[parentKraken.id];
+                    if (krakenG) {
+                        const krakenStats = ENEMY_STATS.baby_kraken;
+                        const tentacleDamage = krakenStats.tentacleSkill?.damageToParent ?? 15;
+                        // Recursively apply damage to the kraken (skip defeat tracking since this is bonus damage)
+                        applyDamageToUnit(
+                            { scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now, defeatedThisFrame },
+                            parentKraken.id, krakenG, parentKraken.hp, tentacleDamage, krakenStats.name,
+                            {
+                                color: COLORS.damageEnemy,
+                                hitMessage: { text: `The severed tentacle damages ${krakenStats.name} for ${tentacleDamage}!`, color: "#ff6600" },
+                                targetUnit: parentKraken
+                            }
+                        );
+                    }
+                }
+            }
         }
+    }
+
+    // Check if kraken should submerge after taking damage
+    if (newHp > 0 && targetUnit?.enemyType === "baby_kraken") {
+        trySubmergeKraken({ ...targetUnit, hp: newHp }, unitsRef, addLog, now);
     }
 
     return newHp;

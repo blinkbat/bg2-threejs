@@ -62,6 +62,9 @@ import {
     clearChargeAttacks,
     updateLeaps,
     clearLeaps,
+    updateTentacles,
+    clearTentacles,
+    updateSubmergedKrakens,
 } from "./gameLoop";
 import type { AcidTile } from "./core/types";
 
@@ -455,6 +458,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         sanctuaryTilesRef.current.clear();  // Clear sanctuary tiles
         clearChargeAttacks();  // Clear charge attacks (meshes will be in old scene)
         clearLeaps();  // Clear active leaps
+        clearTentacles();  // Clear active tentacles
 
         const sceneRefs = createScene(containerRef.current, units);
         const { scene, camera, renderer, flames, candleMeshes, candleLights, fogTexture, fogMesh, moveMarker, rangeIndicator, aoeIndicator, unitGroups, selectRings, targetRings, shieldIndicators, unitMeshes, unitOriginalColors, maxHp, wallMeshes, treeMeshes, columnMeshes, columnGroups, doorMeshes, secretDoorMeshes, waterMesh, chestMeshes, billboards } = sceneRefs;
@@ -1188,6 +1192,12 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                     damageTexts.current,
                     defeatedThisFrame
                 );
+
+                // Update tentacles (kraken tentacle despawning)
+                updateTentacles(now, unitsStateRef.current, unitsRef.current, setUnits, addLog);
+
+                // Update submerged krakens (resurfacing)
+                updateSubmergedKrakens(now, unitsStateRef.current, unitsRef.current, addLog);
 
                 // Update energy shield bubble visuals
                 updateEnergyShieldVisuals(unitsStateRef.current, unitsRef.current, now);

@@ -619,7 +619,9 @@ export const COAST_AREA: AreaData = {
         // Acid slugs further up the beach
         { x: 10, z: 32, type: "acid_slug" },
         { x: 40, z: 34, type: "acid_slug" },
-        { x: 25, z: 36, type: "acid_slug" }
+        { x: 25, z: 36, type: "acid_slug" },
+        // Baby Kraken in the shallow water
+        { x: 45, z: 5, type: "baby_kraken" }
     ],
     transitions: [
         // North edge leads back to forest
