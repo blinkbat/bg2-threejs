@@ -570,12 +570,14 @@ const MAX_LIFETIME_TENTACLES = 8;
 interface SubmergedKraken {
     unitId: number;
     submergeEndTime: number;
-    lastHpThreshold: number;  // Track which HP threshold triggered the submerge
 }
 
 const submergedKrakens: SubmergedKraken[] = [];
 const KRAKEN_SUBMERGE_DURATION = 10000;  // 10 seconds underwater
 const KRAKEN_HP_THRESHOLDS = [0.75, 0.5, 0.25];  // Submerge at 75%, 50%, 25% HP
+
+// Track which thresholds each kraken has already used (persists after resurface)
+const krakenUsedThresholds: Map<number, number[]> = new Map();
 
 /**
  * Try to spawn a tentacle for a kraken enemy.
@@ -807,6 +809,7 @@ export function clearTentacles(): void {
     activeTentacles.length = 0;
     submergedKrakens.length = 0;
     krakenLifetimeTentacles.clear();
+    krakenUsedThresholds.clear();
 }
 
 /**
@@ -889,10 +892,13 @@ export function trySubmergeKraken(
     const maxHp = ENEMY_STATS.baby_kraken.maxHp;
     const hpPercent = unit.hp / maxHp;
 
-    // Find the highest threshold we've crossed
+    // Get thresholds this kraken has already used
+    const usedThresholds = krakenUsedThresholds.get(unit.id) ?? [];
+
+    // Find the highest threshold we've crossed that hasn't been used
     let triggeredThreshold = -1;
     for (const threshold of KRAKEN_HP_THRESHOLDS) {
-        if (hpPercent <= threshold) {
+        if (hpPercent <= threshold && !usedThresholds.includes(threshold)) {
             triggeredThreshold = threshold;
             break;
         }
@@ -900,9 +906,8 @@ export function trySubmergeKraken(
 
     if (triggeredThreshold < 0) return;
 
-    // Check if we've already submerged for this threshold
-    const existingRecord = submergedKrakens.find(sk => sk.unitId === unit.id);
-    if (existingRecord && existingRecord.lastHpThreshold <= triggeredThreshold) return;
+    // Mark this threshold as used
+    krakenUsedThresholds.set(unit.id, [...usedThresholds, triggeredThreshold]);
 
     // Submerge!
     const krakenG = unitsRef[unit.id];
@@ -912,11 +917,10 @@ export function trySubmergeKraken(
 
     submergedKrakens.push({
         unitId: unit.id,
-        submergeEndTime: now + KRAKEN_SUBMERGE_DURATION,
-        lastHpThreshold: triggeredThreshold
+        submergeEndTime: now + KRAKEN_SUBMERGE_DURATION
     });
 
-    addLog("The Baby Kraken submerges beneath the waves!", "#6b3fa0");
+    addLog("The Kraken Nymph submerges beneath the waves!", "#6b3fa0");
     soundFns.playSplash();
 }
 

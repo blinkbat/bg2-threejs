@@ -20,6 +20,7 @@ import { getUnitRadius } from "../rendering/range";
 import { clampToGrid, distanceBetween } from "../game/geometry";
 import { getAttackRange, ENEMY_STATS } from "../game/units";
 import { isUnitAlive } from "../combat/combatMath";
+import { isKrakenSubmerged } from "../gameLoop/enemyBehaviors";
 import type { Unit, UnitGroup } from "../core/types";
 
 // =============================================================================
@@ -139,7 +140,7 @@ export interface TargetingContext {
 }
 
 /**
- * Check if the current attack target is still valid (alive and not defeated).
+ * Check if the current attack target is still valid (alive, not defeated, not submerged).
  */
 export function validateCurrentTarget(
     currentTarget: number | null | undefined,
@@ -150,7 +151,10 @@ export function validateCurrentTarget(
         return { valid: false, targetUnit: undefined };
     }
     const targetUnit = unitsState.find(u => u.id === currentTarget);
-    const valid = targetUnit !== undefined && isUnitAlive(targetUnit, defeatedThisFrame);
+    // Invalid if dead, defeated this frame, or submerged (kraken)
+    const valid = targetUnit !== undefined &&
+        isUnitAlive(targetUnit, defeatedThisFrame) &&
+        !isKrakenSubmerged(currentTarget);
     return { valid, targetUnit };
 }
 
@@ -190,6 +194,8 @@ export function findNearestTarget(ctx: TargetingContext, alerted: boolean = fals
         if (enemy.team !== enemyTeam || enemy.hp <= 0) continue;
         if (defeatedThisFrame.has(enemy.id)) continue;
         if (blockedTargets.includes(enemy.id)) continue;
+        // Skip submerged krakens - they're invulnerable underwater
+        if (isKrakenSubmerged(enemy.id)) continue;
 
         const eg = unitsRef[enemy.id];
         if (!eg) continue;
