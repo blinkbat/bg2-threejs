@@ -31,7 +31,7 @@ import { executeEnemyBasicAttack } from "./gameLoop/enemyAttack";
 import { createAcidTile, tryCreateAcidAura } from "./gameLoop/acidTiles";
 import { isUnitCharging } from "./gameLoop/constructCharge";
 import { trySpawnMinion, tryStartChargeAttack, tryLeapToTarget, isUnitLeaping, tryVinesSkill, trySpawnTentacle } from "./gameLoop/enemyBehaviors";
-export { clearLeaps, updateLeaps, isUnitLeaping, updateTentacles, clearTentacles, trySubmergeKraken, isKrakenSubmerged, updateSubmergedKrakens } from "./gameLoop/enemyBehaviors";
+export { clearLeaps, updateLeaps, isUnitLeaping, updateTentacles, clearTentacles, trySubmergeKraken, isKrakenSubmerged, isKrakenFullySubmerged, updateSubmergedKrakens } from "./gameLoop/enemyBehaviors";
 
 // Re-export unit ID utilities for backwards compatibility
 export { getNextUnitId, initializeUnitIdCounter } from "./core/unitIds";

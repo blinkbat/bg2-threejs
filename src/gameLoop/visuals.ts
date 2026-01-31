@@ -9,7 +9,7 @@ import { hasStatusEffect } from "../combat/combatMath";
 import { updateVisibility } from "../ai/pathfinding";
 import { getCurrentArea } from "../game/areas";
 import { disposeTexturedMesh } from "../rendering/disposal";
-import { isKrakenSubmerged } from "./enemyBehaviors";
+import { isKrakenFullySubmerged } from "./enemyBehaviors";
 
 // =============================================================================
 // DAMAGE TEXT UPDATE
@@ -184,7 +184,7 @@ export function updateFogOfWar(
         // Make all enemies visible (except submerged krakens)
         unitsState.filter(u => u.team === "enemy").forEach(u => {
             const g = unitsRef[u.id];
-            if (g) g.visible = u.hp > 0 && !isKrakenSubmerged(u.id);
+            if (g) g.visible = u.hp > 0 && !isKrakenFullySubmerged(u.id);
         });
         return;
     }
@@ -232,6 +232,6 @@ export function updateFogOfWar(
         if (!g) return;
         const cx = Math.floor(g.position.x), cz = Math.floor(g.position.z);
         const vis = visibility[cx]?.[cz] ?? 0;
-        g.visible = u.hp > 0 && vis === 2 && !isKrakenSubmerged(u.id);
+        g.visible = u.hp > 0 && vis === 2 && !isKrakenFullySubmerged(u.id);
     });
 }
