@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
-import { Play, Pause, Menu } from "lucide-react";
+import { Play, Pause, Menu, Bug } from "lucide-react";
 import { MenuModal } from "./MenuModal";
-import { type AreaId } from "../game/areas";
+import { AREAS, type AreaId } from "../game/areas";
 
 interface HUDProps {
     areaName: string;
@@ -45,6 +45,21 @@ export function HUD({
     hasSelection
 }: HUDProps) {
     const [menuOpen, setMenuOpen] = useState(false);
+    const [debugPanelOpen, setDebugPanelOpen] = useState(false);
+
+    // Enable debug visuals when panel opens, disable when it closes
+    useEffect(() => {
+        if (debugPanelOpen && !debug) {
+            onToggleDebug();
+        } else if (!debugPanelOpen && debug) {
+            onToggleDebug();
+        }
+    }, [debugPanelOpen]);
+
+    const areaList = Object.entries(AREAS).map(([id, data]) => ({
+        id: id as AreaId,
+        name: data.name
+    }));
 
     const isDefeat = alivePlayers === 0;
     const anyModalOpen = menuOpen || otherModalOpen;
@@ -118,7 +133,53 @@ export function HUD({
                         <Menu size={16} />
                         <span>Menu</span>
                     </button>
+                    <button
+                        className={`btn btn-with-icon btn-debug ${debugPanelOpen ? "btn-debug-active" : ""}`}
+                        onClick={() => setDebugPanelOpen(prev => !prev)}
+                        title="Toggle Debug Panel"
+                    >
+                        <Bug size={16} />
+                        <span>Debug</span>
+                    </button>
                 </div>
+                {/* Debug options inline */}
+                {debugPanelOpen && (
+                    <div className="hud-debug-section">
+                        <div className="hud-debug-group">
+                            <div className="hud-debug-label">Warp</div>
+                            <div className="hud-debug-buttons">
+                                {onWarpToArea && areaList.map(area => (
+                                    <button
+                                        key={area.id}
+                                        className={`btn btn-tiny ${areaName === area.name ? "btn-active" : ""}`}
+                                        onClick={() => onWarpToArea(area.id)}
+                                    >
+                                        {area.name}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="hud-debug-group">
+                            <div className="hud-debug-label">Cheats</div>
+                            <div className="hud-debug-buttons">
+                                {onAddXp && (
+                                    <>
+                                        <button className="btn btn-tiny" onClick={() => onAddXp(50)}>+50 XP</button>
+                                        <button className="btn btn-tiny" onClick={() => onAddXp(500)}>+500 XP</button>
+                                    </>
+                                )}
+                                {onToggleFastMove && (
+                                    <button
+                                        className={`btn btn-tiny ${fastMoveEnabled ? "btn-active" : ""}`}
+                                        onClick={onToggleFastMove}
+                                    >
+                                        Speed x10
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {menuOpen && (
@@ -128,13 +189,6 @@ export function HUD({
                     onRestart={onRestart}
                     onSaveClick={onSaveClick}
                     onLoadClick={onLoadClick}
-                    debug={debug}
-                    onToggleDebug={onToggleDebug}
-                    onWarpToArea={onWarpToArea}
-                    onAddXp={onAddXp}
-                    onToggleFastMove={onToggleFastMove}
-                    fastMoveEnabled={fastMoveEnabled}
-                    currentAreaName={areaName}
                 />
             )}
         </>

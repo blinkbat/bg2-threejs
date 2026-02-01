@@ -6,14 +6,9 @@ import {
     Volume2,
     VolumeX,
     HelpCircle,
-    Bug,
-    Map,
-    Sparkles,
-    Zap,
     X
 } from "lucide-react";
 import { toggleMute, isMuted } from "../audio/sound";
-import { AREAS, type AreaId } from "../game/areas";
 
 interface MenuModalProps {
     onClose: () => void;
@@ -21,13 +16,6 @@ interface MenuModalProps {
     onRestart: () => void;
     onSaveClick: () => void;
     onLoadClick: () => void;
-    debug: boolean;
-    onToggleDebug: () => void;
-    onWarpToArea?: (areaId: AreaId) => void;
-    onAddXp?: (amount: number) => void;
-    onToggleFastMove?: () => void;
-    fastMoveEnabled?: boolean;
-    currentAreaName: string;
 }
 
 export function MenuModal({
@@ -35,14 +23,7 @@ export function MenuModal({
     onShowHelp,
     onRestart,
     onSaveClick,
-    onLoadClick,
-    debug,
-    onToggleDebug,
-    onWarpToArea,
-    onAddXp,
-    onToggleFastMove,
-    fastMoveEnabled,
-    currentAreaName
+    onLoadClick
 }: MenuModalProps) {
     const [muted, setMuted] = useState(isMuted());
 
@@ -72,11 +53,6 @@ export function MenuModal({
             onClose();
         }
     };
-
-    const areaList = Object.entries(AREAS).map(([id, data]) => ({
-        id: id as AreaId,
-        name: data.name
-    }));
 
     return (
         <div className="modal-overlay" onClick={onClose}>
@@ -118,67 +94,6 @@ export function MenuModal({
                             <span>Controls</span>
                         </button>
                     </div>
-                </div>
-
-                {/* Debug Section */}
-                <div className="menu-section">
-                    <div className="menu-section-title">Developer</div>
-                    <div className="menu-buttons">
-                        <button className={`menu-btn ${debug ? "active" : ""}`} onClick={onToggleDebug}>
-                            <Bug size={18} />
-                            <span>Debug Mode</span>
-                        </button>
-                    </div>
-
-                    {debug && (
-                        <>
-                            <div className="menu-subsection">
-                                <div className="menu-subsection-title">
-                                    <Map size={14} />
-                                    <span>Warp to Area</span>
-                                </div>
-                                <div className="menu-buttons menu-buttons-small">
-                                    {onWarpToArea && areaList.map(area => (
-                                        <button
-                                            key={area.id}
-                                            className={`menu-btn menu-btn-small ${currentAreaName === area.name ? "active" : ""}`}
-                                            onClick={() => { onWarpToArea(area.id); onClose(); }}
-                                        >
-                                            {area.name}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <div className="menu-subsection">
-                                <div className="menu-subsection-title">
-                                    <Sparkles size={14} />
-                                    <span>Cheats</span>
-                                </div>
-                                <div className="menu-buttons menu-buttons-small">
-                                    {onAddXp && (
-                                        <>
-                                            <button className="menu-btn menu-btn-small" onClick={() => onAddXp(50)}>
-                                                +50 XP
-                                            </button>
-                                            <button className="menu-btn menu-btn-small" onClick={() => onAddXp(500)}>
-                                                +500 XP
-                                            </button>
-                                        </>
-                                    )}
-                                    {onToggleFastMove && (
-                                        <button
-                                            className={`menu-btn menu-btn-small ${fastMoveEnabled ? "active" : ""}`}
-                                            onClick={onToggleFastMove}
-                                        >
-                                            <Zap size={14} />
-                                            <span>Speed x10</span>
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        </>
-                    )}
                 </div>
             </div>
         </div>

@@ -96,3 +96,17 @@ export interface SanctuaryTile {
     sourceId: number;        // ID of the unit that created it
     healPerTick: number;     // How much to heal each tick
 }
+
+// =============================================================================
+// LOOT
+// =============================================================================
+
+// Loot bag - dropped by enemies, contains gold/items
+export interface LootBag {
+    id: number;
+    mesh: THREE.Group;
+    x: number;           // World X position
+    z: number;           // World Z position
+    gold: number;        // Gold contained in bag
+    items?: string[];    // Item IDs (for future use)
+}

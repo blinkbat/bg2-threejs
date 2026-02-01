@@ -1027,6 +1027,55 @@ const playVines = () => {
     snap.stop(ctx.currentTime + 0.35);
 };
 
+// Gold coin pickup - satisfying jingle
+const playGold = () => {
+    if (muted) return;
+    const ctx = getAudioCtx();
+
+    // Coin jingle - quick ascending notes
+    const notes = [
+        { freq: 1047, time: 0 },      // C6
+        { freq: 1319, time: 0.05 },   // E6
+        { freq: 1568, time: 0.1 },    // G6
+    ];
+
+    notes.forEach(({ freq, time }) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const filter = ctx.createBiquadFilter();
+
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(freq, ctx.currentTime + time);
+
+        filter.type = "lowpass";
+        filter.frequency.setValueAtTime(4000, ctx.currentTime);
+
+        const startTime = ctx.currentTime + time;
+        gain.gain.setValueAtTime(0, startTime);
+        gain.gain.linearRampToValueAtTime(0.15, startTime + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.15);
+
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(startTime);
+        osc.stop(startTime + 0.2);
+    });
+
+    // Metallic shimmer - coin glint
+    const shimmer = ctx.createOscillator();
+    const shimmerGain = ctx.createGain();
+    shimmer.type = "sine";
+    shimmer.frequency.setValueAtTime(2637, ctx.currentTime);  // E7
+    shimmer.frequency.exponentialRampToValueAtTime(2093, ctx.currentTime + 0.1);  // C7
+    shimmerGain.gain.setValueAtTime(0.05, ctx.currentTime);
+    shimmerGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+    shimmer.connect(shimmerGain);
+    shimmerGain.connect(ctx.destination);
+    shimmer.start();
+    shimmer.stop(ctx.currentTime + 0.15);
+};
+
 // Splash - water splash sound for kraken/tentacles
 const playSplash = () => {
     if (muted) return;
@@ -1108,4 +1157,5 @@ export const soundFns = {
     playBark,
     playVines,
     playSplash,
+    playGold,
 };

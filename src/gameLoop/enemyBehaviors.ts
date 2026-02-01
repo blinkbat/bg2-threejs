@@ -993,9 +993,14 @@ export function updateSubmergedKrakens(
                 // Submerge animation complete - now fully underwater
                 sk.isSubmerging = false;
                 krakenG.position.y = KRAKEN_SUBMERGE_DEPTH;
-                // Hide shadow while fully submerged
+                // Keep shadow visible as underwater silhouette, maintain offset
                 if (shadow) {
-                    shadow.visible = false;
+                    shadow.position.y = 0.004 - KRAKEN_SUBMERGE_DEPTH;
+                    // Darken shadow to indicate underwater presence
+                    const shadowMesh = shadow as THREE.Mesh;
+                    if (shadowMesh.material instanceof THREE.MeshBasicMaterial) {
+                        shadowMesh.material.opacity = 0.25;
+                    }
                 }
             }
             continue;
@@ -1010,10 +1015,14 @@ export function updateSubmergedKrakens(
             const newY = KRAKEN_SUBMERGE_DEPTH + (0 - KRAKEN_SUBMERGE_DEPTH) * easedProgress;
             krakenG.position.y = newY;
 
-            // Show and offset shadow as kraken rises
+            // Offset shadow as kraken rises and restore opacity
             if (shadow) {
-                shadow.visible = true;
                 shadow.position.y = 0.004 - newY;
+                // Gradually restore shadow opacity as it surfaces
+                const shadowMesh = shadow as THREE.Mesh;
+                if (shadowMesh.material instanceof THREE.MeshBasicMaterial) {
+                    shadowMesh.material.opacity = 0.25 + (0.35 * easedProgress);
+                }
             }
 
             if (progress >= 1) {
@@ -1021,6 +1030,11 @@ export function updateSubmergedKrakens(
                 krakenG.position.y = 0;
                 if (shadow) {
                     shadow.position.y = 0.004;
+                    // Restore full shadow opacity
+                    const shadowMesh = shadow as THREE.Mesh;
+                    if (shadowMesh.material instanceof THREE.MeshBasicMaterial) {
+                        shadowMesh.material.opacity = 0.6;
+                    }
                 }
                 submergedKrakens.splice(i, 1);
             }

@@ -65,8 +65,11 @@ import {
     updateTentacles,
     clearTentacles,
     updateSubmergedKrakens,
+    spawnLootBag,
+    removeLootBag,
+    resetLootBagIds,
 } from "./gameLoop";
-import type { AcidTile } from "./core/types";
+import type { AcidTile, LootBag } from "./core/types";
 
 // UI Components
 import { PartyBar } from "./components/PartyBar";
@@ -177,6 +180,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
     const debugGridRef = useRef<THREE.Group | null>(null);
     const acidTilesRef = useRef<Map<string, AcidTile>>(new Map());
     const sanctuaryTilesRef = useRef<Map<string, SanctuaryTile>>(new Map());
+    const lootBagsRef = useRef<LootBag[]>([]);
 
     // Action queue (per-unit: last action wins)
     const actionQueueRef = useRef<ActionQueue>({});
@@ -270,6 +274,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
     const [hoveredPlayer, setHoveredPlayer] = useState<{ id: number; x: number; y: number } | null>(null);
     const [hoveredDoor, setHoveredDoor] = useState<{ targetArea: string; x: number; y: number } | null>(null);
     const [hoveredSecretDoor, setHoveredSecretDoor] = useState<{ x: number; y: number } | null>(null);
+    const [hoveredLootBag, setHoveredLootBag] = useState<{ x: number; y: number; gold: number } | null>(null);
     const [fps, setFps] = useState(0);
     const [debug, setDebug] = useState(false);
     const [fastMove, setFastMove] = useState(false);
@@ -310,6 +315,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         const areaId = getCurrentAreaId();
         const currentAlive = new Set<number>();
         const newlyDead: string[] = [];
+        const newlyDeadUnits: Unit[] = [];
 
         for (const u of units) {
             if (u.team === "enemy" && u.id >= 100) {
@@ -319,6 +325,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                     // Enemy just died this update
                     const spawnIndex = u.id - 100;
                     newlyDead.push(`${areaId}-${spawnIndex}`);
+                    newlyDeadUnits.push(u);
                 }
             }
         }
@@ -331,6 +338,23 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                 }
                 return next;
             });
+        }
+
+        // Spawn loot bags for special enemies (kraken)
+        const scene = sceneRef.current;
+        if (scene) {
+            for (const u of newlyDeadUnits) {
+                if (u.enemyType === "baby_kraken") {
+                    // Get position from the unit group
+                    const g = unitsRef.current[u.id];
+                    const x = g ? g.position.x : u.x;
+                    const z = g ? g.position.z : u.z;
+                    // Spawn loot bag with gold reward
+                    const bag = spawnLootBag(scene, x, z, 100);  // 100 gold from kraken
+                    lootBagsRef.current.push(bag);
+                    addLog("The Kraken Nymph drops a bag of treasure!", "#ffd700");
+                }
+            }
         }
 
         prevAliveEnemiesRef.current = currentAlive;
@@ -459,6 +483,8 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
         clearChargeAttacks();  // Clear charge attacks (meshes will be in old scene)
         clearLeaps();  // Clear active leaps
         clearTentacles();  // Clear active tentacles
+        lootBagsRef.current = [];  // Clear loot bags (meshes will be in old scene)
+        resetLootBagIds();  // Reset loot bag ID counter
 
         const sceneRefs = createScene(containerRef.current, units);
         const { scene, camera, renderer, flames, candleMeshes, candleLights, fogTexture, fogMesh, moveMarker, rangeIndicator, aoeIndicator, unitGroups, selectRings, targetRings, shieldIndicators, unitMeshes, unitOriginalColors, maxHp, wallMeshes, treeMeshes, columnMeshes, columnGroups, doorMeshes, secretDoorMeshes, waterMesh, chestMeshes, billboards } = sceneRefs;
@@ -659,6 +685,15 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                     setHoveredSecretDoor({ x: e.clientX, y: e.clientY });
                     break;
                 }
+                // Check for loot bag hover
+                if (hit.object.name === "lootBag" && hit.object.userData?.lootBagId !== undefined) {
+                    const bagId = hit.object.userData.lootBagId;
+                    const bag = lootBagsRef.current.find(b => b.id === bagId);
+                    if (bag) {
+                        setHoveredLootBag({ x: e.clientX, y: e.clientY, gold: bag.gold });
+                    }
+                    break;
+                }
             }
             setHoveredEnemy(foundEnemy);
             setHoveredChest(foundChest);
@@ -670,6 +705,9 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
             }
             if (!hits.some(h => h.object.name === "secretDoor")) {
                 setHoveredSecretDoor(null);
+            }
+            if (!hits.some(h => h.object.name === "lootBag")) {
+                setHoveredLootBag(null);
             }
         };
 
@@ -870,6 +908,59 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                     }
 
                     soundFns.playAttack();  // Use attack sound for now as chest open sound
+                    return;
+                }
+            }
+
+            // Check for loot bag click - loot if nearby
+            for (const h of raycaster.intersectObjects(scene.children, true)) {
+                if (h.object.name === "lootBag" && h.object.userData?.lootBagId !== undefined) {
+                    const { lootBagId, lootBagX, lootBagZ } = h.object.userData;
+
+                    // Find the loot bag
+                    const bagIndex = lootBagsRef.current.findIndex(b => b.id === lootBagId);
+                    if (bagIndex === -1) {
+                        return;  // Already looted
+                    }
+
+                    // Check if any alive player is within range
+                    const lootRange = 2.5;
+                    const alivePlayers = unitsStateRef.current.filter(u => u.team === "player" && u.hp > 0);
+                    const playerNearby = alivePlayers.some(player => {
+                        const playerG = unitsRef.current[player.id];
+                        if (!playerG) return false;
+                        const dx = playerG.position.x - lootBagX;
+                        const dz = playerG.position.z - lootBagZ;
+                        return Math.sqrt(dx * dx + dz * dz) <= lootRange;
+                    });
+
+                    if (!playerNearby) {
+                        addLog("You need to get closer to open this.", "#f59e0b");
+                        return;
+                    }
+
+                    const bag = lootBagsRef.current[bagIndex];
+
+                    // Collect loot
+                    const lootMessages: string[] = [];
+
+                    if (bag.gold > 0) {
+                        setGold(prev => prev + bag.gold);
+                        lootMessages.push(`${bag.gold} gold`);
+                    }
+
+                    // TODO: Handle items when implemented
+
+                    // Log what was found
+                    if (lootMessages.length > 0) {
+                        addLog(`Found: ${lootMessages.join(", ")}`, "#ffd700");
+                    }
+
+                    // Remove the loot bag
+                    removeLootBag(scene, bag);
+                    lootBagsRef.current.splice(bagIndex, 1);
+
+                    soundFns.playGold();
                     return;
                 }
             }
@@ -1702,6 +1793,13 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
             {hoveredSecretDoor && (
                 <div className="enemy-tooltip" style={{ left: hoveredSecretDoor.x + 12, top: hoveredSecretDoor.y - 10 }}>
                     <div className="enemy-tooltip-name">Cracked wall</div>
+                </div>
+            )}
+            {/* Loot bag tooltip on hover */}
+            {hoveredLootBag && (
+                <div className="enemy-tooltip" style={{ left: hoveredLootBag.x + 12, top: hoveredLootBag.y - 10 }}>
+                    <div className="enemy-tooltip-name">Loot Bag</div>
+                    <div className="enemy-tooltip-status" style={{ color: "#f1c40f" }}>{hoveredLootBag.gold} Gold</div>
                 </div>
             )}
             {/* FPS counter */}
