@@ -184,7 +184,8 @@ export function getAreaDisplayName(areaId: AreaId): string {
         dungeon: "Kobold Warrens",
         ruins: "Ancient Ruins",
         sanctum: "The Sanctum",
-        cliffs: "Coastal Cliffs"
+        cliffs: "Coastal Cliffs",
+        magma_cave: "The Magma Cave"
     };
     return names[areaId] ?? areaId;
 }

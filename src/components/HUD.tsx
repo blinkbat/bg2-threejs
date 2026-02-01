@@ -86,11 +86,15 @@ export function HUD({
         onTogglePause();
     }, [paused, anyModalOpen, onTogglePause]);
 
-    // ESC key - close menu if open, open menu if no modals/selection
+    // ESC key - close debug panel if open, close menu if open, open menu if no modals/selection
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === "Escape") {
-                if (menuOpen) {
+                if (debugPanelOpen) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setDebugPanelOpen(false);
+                } else if (menuOpen) {
                     e.preventDefault();
                     e.stopPropagation();
                     handleCloseMenu();
@@ -104,7 +108,7 @@ export function HUD({
 
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [menuOpen, otherModalOpen, hasSelection, handleCloseMenu, handleOpenMenu]);
+    }, [debugPanelOpen, menuOpen, otherModalOpen, hasSelection, handleCloseMenu, handleOpenMenu]);
 
     return (
         <>

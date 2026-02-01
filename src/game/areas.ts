@@ -10,7 +10,7 @@ import { clearPathCache, invalidateDynamicObstacles } from "../ai/pathfinding";
 // TYPES
 // =============================================================================
 
-export type AreaId = "dungeon" | "forest" | "coast" | "ruins" | "sanctum" | "cliffs";
+export type AreaId = "dungeon" | "forest" | "coast" | "ruins" | "sanctum" | "cliffs" | "magma_cave";
 
 // Default game start configuration - single source of truth
 export const DEFAULT_STARTING_AREA: AreaId = "coast";
@@ -76,6 +76,13 @@ export interface SecretDoor {
     hint?: string;  // Optional hint text when inspected
 }
 
+export interface LavaZone {
+    x: number;
+    z: number;
+    w: number;
+    h: number;
+}
+
 export interface AreaData {
     id: AreaId;
     name: string;
@@ -93,6 +100,7 @@ export interface AreaData {
     decorations?: Decoration[];  // Columns, broken walls, etc.
     secretDoors?: SecretDoor[];  // Hidden doors that require inspection to use
     candles?: CandlePosition[];  // Manual candle placements
+    lavaZones?: LavaZone[];      // Impassable lava/magma areas (no walls, blocks movement)
     ambientLight: number;        // Ambient light intensity
     directionalLight: number;    // Directional light intensity
     hasFogOfWar: boolean;
@@ -104,6 +112,7 @@ export interface ComputedAreaData {
     mergedObstacles: MergedObstacle[];
     candlePositions: CandlePosition[];
     treeBlocked: Set<string>;  // Set of "x,z" keys for tree-blocked cells (for LOS)
+    lavaBlocked: Set<string>;  // Set of "x,z" keys for lava-blocked cells (movement only, not LOS)
 }
 
 // =============================================================================
@@ -239,16 +248,35 @@ export function computeAreaData(area: AreaData): ComputedAreaData {
     // Carve transition areas (doors)
     area.transitions.forEach(t => carve(blocked, t.x, t.z, t.x + t.w - 1, t.z + t.h - 1));
 
+    // Carve lava zones BEFORE wall merging (so they don't render as walls)
+    if (area.lavaZones) {
+        area.lavaZones.forEach(lz => carve(blocked, lz.x, lz.z, lz.x + lz.w - 1, lz.z + lz.h - 1));
+    }
+
     // Generate candles for dungeon-like areas, and include any manual candle placements
     const generatedCandles = area.id === "dungeon"
         ? generateCandles(area.rooms, blocked, area.gridSize)
         : [];
     const candlePositions = [...generatedCandles, ...(area.candles ?? [])];
 
-    // Merge obstacles BEFORE blocking trees (so trees don't become walls)
+    // Merge obstacles BEFORE blocking trees/lava (so they don't become walls)
     // Note: Secret door areas remain blocked, so walls WILL render there
     // The walls get removed when the secret door is opened
     const mergedObstacles = mergeObstacles(blocked, area.gridSize);
+
+    // Track lava zones for pathfinding (NOT in main blocked grid - lava doesn't block LOS)
+    const lavaBlocked = new Set<string>();
+    if (area.lavaZones) {
+        area.lavaZones.forEach(lz => {
+            for (let x = lz.x; x < lz.x + lz.w; x++) {
+                for (let z = lz.z; z < lz.z + lz.h; z++) {
+                    if (x >= 0 && x < area.gridSize && z >= 0 && z < area.gridSize) {
+                        lavaBlocked.add(`${x},${z}`);
+                    }
+                }
+            }
+        });
+    }
 
     // Block tree positions for pathing and LOS (after wall merging)
     const treeBlocked = new Set<string>();
@@ -292,7 +320,7 @@ export function computeAreaData(area: AreaData): ComputedAreaData {
         });
     }
 
-    return { blocked, mergedObstacles, candlePositions, treeBlocked };
+    return { blocked, mergedObstacles, candlePositions, treeBlocked, lavaBlocked };
 }
 
 // =============================================================================
@@ -981,6 +1009,13 @@ export const CLIFFS_AREA: AreaData = {
             targetArea: "coast",
             targetSpawn: { x: 2, z: 20 },
             direction: "east"
+        },
+        // West entrance to Magma Cave (near the druid)
+        {
+            x: 0, z: 28, w: 1, h: 5,
+            targetArea: "magma_cave",
+            targetSpawn: { x: 46, z: 25 },
+            direction: "west"
         }
     ],
     chests: [
@@ -1049,6 +1084,121 @@ export const CLIFFS_AREA: AreaData = {
     ]
 };
 
+export const MAGMA_CAVE_AREA: AreaData = {
+    id: "magma_cave",
+    name: "The Magma Cave",
+    flavor: "Heat radiates from rivers of molten rock flowing through the darkness.",
+    gridSize: GRID_SIZE,
+    backgroundColor: "#1a0a0a",  // Very dark red-black
+    groundColor: "#2a1a1a",      // Dark stone with red tint
+    ambientLight: 0.12,          // Very dark
+    directionalLight: 0.15,      // Minimal directional light
+    hasFogOfWar: true,
+    defaultSpawn: { x: 46, z: 25 },  // Near east entrance
+    rooms: [
+        // East entrance chamber
+        { x: 40, z: 20, w: 8, h: 12 },
+        // First corridor going west
+        { x: 30, z: 22, w: 10, h: 8 },
+        // Central chamber (large, magma river runs through it)
+        { x: 10, z: 14, w: 20, h: 22 },
+        // North alcove
+        { x: 12, z: 38, w: 8, h: 6 },
+        // South alcove
+        { x: 12, z: 4, w: 8, h: 8 },
+        // West chamber
+        { x: 2, z: 18, w: 8, h: 14 }
+    ],
+    hallways: [
+        // Connect east entrance to first corridor
+        { x1: 38, z1: 24, x2: 42, z2: 28 },
+        // Connect first corridor to central chamber
+        { x1: 28, z1: 24, x2: 32, z2: 28 },
+        // Connect central chamber to north alcove
+        { x1: 14, z1: 34, x2: 18, z2: 38 },
+        // Connect central chamber to south alcove
+        { x1: 14, z1: 10, x2: 18, z2: 14 },
+        // Connect central chamber to west chamber
+        { x1: 8, z1: 22, x2: 12, z2: 28 }
+    ],
+    // Lava zones - impassable but no walls rendered
+    lavaZones: [
+        // Main magma river running north-south (with gap for bridge at z:23-27)
+        { x: 18, z: 14, w: 4, h: 9 },   // South of bridge
+        { x: 18, z: 27, w: 4, h: 9 }    // North of bridge
+    ],
+    roomFloors: [
+        // Cave floor - dark stone
+        { x: 40, z: 20, w: 8, h: 12, color: "#1a1215" },
+        { x: 30, z: 22, w: 10, h: 8, color: "#1a1215" },
+        { x: 10, z: 14, w: 20, h: 22, color: "#1a1215" },  // Central chamber
+        { x: 12, z: 38, w: 8, h: 6, color: "#1a1215" },
+        { x: 12, z: 4, w: 8, h: 8, color: "#1a1215" },
+        { x: 2, z: 18, w: 8, h: 14, color: "#1a1215" },
+        // MAIN MAGMA RIVER - runs north-south (rendered on top)
+        { x: 18, z: 14, w: 4, h: 9, color: "#ff4500" },   // South of bridge
+        { x: 18, z: 27, w: 4, h: 9, color: "#ff4500" },   // North of bridge
+        // Bridge floor (darker stone, rendered on top of central chamber)
+        { x: 18, z: 23, w: 4, h: 4, color: "#2a2020" },
+        // Small magma pools in corners
+        { x: 2, z: 32, w: 4, h: 4, color: "#ff5500" },
+        { x: 2, z: 8, w: 4, h: 4, color: "#ff5500" }
+    ],
+    enemySpawns: [
+        // Bats in central chamber (east side)
+        { x: 26, z: 20, type: "bat" },
+        // Bats in central chamber (west side)
+        { x: 14, z: 28, type: "bat" },
+        // Bat in west chamber
+        { x: 5, z: 24, type: "bat" },
+        // Bat in south alcove
+        { x: 15, z: 8, type: "bat" }
+    ],
+    transitions: [
+        // East entrance from Cliffs
+        {
+            x: 48, z: 23, w: 1, h: 5,
+            targetArea: "cliffs",
+            targetSpawn: { x: 2, z: 30 },
+            direction: "east"
+        }
+    ],
+    chests: [
+        // Chest in west chamber
+        {
+            x: 5.5,
+            z: 28.5,
+            contents: [
+                { itemId: "smallManaPotion", quantity: 2 },
+                { itemId: "stripOfBatJerky", quantity: 3 }
+            ],
+            gold: 40
+        }
+    ],
+    trees: [],  // No trees in cave
+    decorations: [
+        // Broken stalagmites/columns throughout
+        { x: 12, z: 20, type: "broken_column", size: 0.8 },
+        { x: 26, z: 30, type: "broken_column", size: 0.9 },
+        { x: 34, z: 26, type: "broken_column", size: 0.7 },
+        { x: 5, z: 20, type: "broken_column", size: 0.8 }
+    ],
+    // Orange-tinted candles near magma for the glow effect
+    candles: [
+        // Along the magma river (east bank)
+        { x: 22.5, z: 18, dx: -1, dz: 0 },
+        { x: 22.5, z: 32, dx: -1, dz: 0 },
+        // Along the magma river (west bank)
+        { x: 17.5, z: 18, dx: 1, dz: 0 },
+        { x: 17.5, z: 32, dx: 1, dz: 0 },
+        // West chamber
+        { x: 2.85, z: 24, dx: 1, dz: 0 },
+        // Near small magma pools
+        { x: 6.5, z: 32, dx: -1, dz: 0 },
+        { x: 6.5, z: 8, dx: -1, dz: 0 }
+    ]
+};
+
 // Registry of all areas
 export const AREAS: Record<AreaId, AreaData> = {
     dungeon: DUNGEON_AREA,
@@ -1056,7 +1206,8 @@ export const AREAS: Record<AreaId, AreaData> = {
     coast: COAST_AREA,
     ruins: RUINS_AREA,
     sanctum: SANCTUM_AREA,
-    cliffs: CLIFFS_AREA
+    cliffs: CLIFFS_AREA,
+    magma_cave: MAGMA_CAVE_AREA
 };
 
 // =============================================================================
@@ -1096,4 +1247,8 @@ export function getBlocked(): boolean[][] {
 
 export function isTreeBlocked(x: number, z: number): boolean {
     return getComputedAreaData().treeBlocked.has(`${x},${z}`);
+}
+
+export function isLavaBlocked(x: number, z: number): boolean {
+    return getComputedAreaData().lavaBlocked.has(`${x},${z}`);
 }

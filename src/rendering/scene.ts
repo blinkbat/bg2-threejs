@@ -133,18 +133,30 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     const waterColors = ["#5f9ea0", "#4682b4"];  // Shallow and deep water colors
     let waterMesh: THREE.Mesh | null = null;
 
+    // Lava colors that should render higher for visibility
+    const lavaColors = ["#ff4500", "#ff5500", "#ff6600"];
+
     area.roomFloors.forEach(r => {
         // Skip water floors on coast - we'll render them with animated shader
         if (area.id === "coast" && waterColors.includes(r.color)) {
             return;
         }
-        const floorMat = new THREE.MeshStandardMaterial({ color: r.color, metalness: 0.2, roughness: 0.9 });
+        const isLava = lavaColors.includes(r.color.toLowerCase());
+        const floorMat = new THREE.MeshStandardMaterial({
+            color: r.color,
+            metalness: isLava ? 0.1 : 0.2,
+            roughness: isLava ? 0.4 : 0.9,
+            emissive: isLava ? r.color : "#000000",
+            emissiveIntensity: isLava ? 0.5 : 0
+        });
         const floor = new THREE.Mesh(
             new THREE.PlaneGeometry(r.w, r.h),
             floorMat
         );
         floor.rotation.x = -Math.PI / 2;
-        floor.position.set(r.x + r.w / 2, 0.001, r.z + r.h / 2);  // Tiny offset instead of polygonOffset
+        // Lava renders higher for guaranteed visibility above fog
+        const yPos = isLava ? 0.05 : 0.001;
+        floor.position.set(r.x + r.w / 2, yPos, r.z + r.h / 2);
         floor.name = "ground";
         scene.add(floor);
     });

@@ -1,6 +1,6 @@
 import { GRID_SIZE, VISION_RADIUS, PATH_RECURSION_LIMIT, ASTAR_BLOCKED_TARGET_SEARCH, ASTAR_DIAGONAL_COST } from "../core/constants";
 import { blocked } from "../game/dungeon";
-import { isTreeBlocked } from "../game/areas";
+import { isTreeBlocked, isLavaBlocked } from "../game/areas";
 import { isWithinGrid } from "../game/geometry";
 import type { PathNode, Unit, UnitGroup } from "../core/types";
 
@@ -127,7 +127,7 @@ export function isBlocked(x: number, z: number): boolean {
  * Check if a cell is passable (not blocked and within grid).
  */
 export function isPassable(x: number, z: number): boolean {
-    return isWithinGrid(x, z) && !isBlocked(x, z);
+    return isWithinGrid(x, z) && !isBlocked(x, z) && !isLavaBlocked(x, z);
 }
 
 /**
@@ -282,10 +282,11 @@ export function updateVisibility(
     decayVisibility(visibility);
 
     // Mark cells visible from each player unit
+    // Use Math.round to center visibility on the unit's visual position
     playerUnits.forEach((u: Unit) => {
         const g = unitsRef.current[u.id];
         if (!g || u.hp <= 0) return;
-        const ux = Math.floor(g.position.x), uz = Math.floor(g.position.z);
+        const ux = Math.round(g.position.x), uz = Math.round(g.position.z);
         markVisibleFromUnit(visibility, ux, uz);
     });
 
