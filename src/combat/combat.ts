@@ -479,8 +479,8 @@ export function applyDamageToUnit(
             defeatedThisFrame.add(targetId);
         }
         handleUnitDefeat(targetId, targetGroup, unitsRef, addLog, targetName);
-        // Bark on kill (only for player attackers)
-        if (attackerName) {
+        // Bark on kill (only when player kills an enemy, not when enemy kills player)
+        if (attackerName && targetUnit?.team === "enemy") {
             tryKillBark(attackerName, addLog);
         }
         // Award XP to all living player units when an enemy dies

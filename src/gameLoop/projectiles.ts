@@ -3,12 +3,13 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitGroup, DamageText, Projectile, EnemyStats, MagicMissileProjectile, TrapProjectile, StatusEffect, DamageType, UnitData } from "../core/types";
+import type { Unit, UnitGroup, DamageText, Projectile, EnemyStats, MagicMissileProjectile, TrapProjectile, FireballProjectile, StatusEffect, DamageType, UnitData } from "../core/types";
 import { HIT_DETECTION_RADIUS, COLORS, BUFF_TICK_INTERVAL } from "../core/constants";
 import { getUnitStats } from "../game/units";
 import { getIntelligenceMagicDamageBonus, getFaithHolyDamageBonus } from "../game/statBonuses";
 import { calculateDamage, getDirectionAndDistance, rollHit, rollChance, shouldApplyPoison, getEffectiveArmor, logHit, logLifestealHit, logMiss, logPoisoned, logAoeHit, logAoeMiss, getDamageColor, logTrapTriggered, isBlockedByFrontShield } from "../combat/combatMath";
 import { distance } from "../game/geometry";
+import { isBlocked } from "../ai/pathfinding";
 import { ENEMY_STATS } from "../game/units";
 import { applyDamageToUnit, animateExpandingMesh, spawnDamageNumber, type DamageContext } from "../combat/combat";
 import { soundFns } from "../audio/sound";
@@ -477,6 +478,107 @@ export function updateProjectiles(
             }
 
             return true;  // Trap still active, waiting for trigger
+        }
+
+        // Fireball projectile - slow-moving, hurts everything it touches, expires on wall or distance
+        if (proj.type === "fireball") {
+            const fbProj = proj as FireballProjectile;
+            const attackerUnit = unitsState.find(u => u.id === fbProj.attackerId);
+
+            // Move fireball in straight line
+            proj.mesh.position.x += fbProj.directionX * fbProj.speed;
+            proj.mesh.position.z += fbProj.directionZ * fbProj.speed;
+
+            // Check wall collision
+            const cellX = Math.floor(proj.mesh.position.x);
+            const cellZ = Math.floor(proj.mesh.position.z);
+            if (isBlocked(cellX, cellZ)) {
+                // Create small explosion effect on wall hit
+                const explosion = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.4, 12, 8),
+                    new THREE.MeshBasicMaterial({ color: "#ff4400", transparent: true, opacity: 0.8 })
+                );
+                explosion.position.copy(proj.mesh.position);
+                scene.add(explosion);
+                animateExpandingMesh(scene, explosion, { duration: 300, initialOpacity: 0.8, maxScale: 1.5, baseRadius: 0.4 });
+                soundFns.playExplosion();
+                disposeProjectile(scene, proj);
+                return false;
+            }
+
+            // Check max distance traveled
+            const traveledDist = Math.hypot(
+                proj.mesh.position.x - fbProj.startX,
+                proj.mesh.position.z - fbProj.startZ
+            );
+            if (traveledDist >= fbProj.maxDistance) {
+                // Fizzle out at max distance
+                disposeProjectile(scene, proj);
+                return false;
+            }
+
+            // Check collision with all living units (hurts EVERYTHING - friendly fire!)
+            // But don't hurt the attacker who fired it
+            for (const target of unitsState) {
+                if (target.id === fbProj.attackerId) continue;  // Don't hurt self
+                const currentHp = hpTracker[target.id] ?? target.hp;
+                if (currentHp <= 0 || defeatedThisFrame.has(target.id)) continue;
+                if (fbProj.hitUnits.has(target.id)) continue;  // Already hit this unit
+
+                const targetG = unitsRef[target.id];
+                if (!targetG) continue;
+
+                const distToTarget = distance(
+                    proj.mesh.position.x, proj.mesh.position.z,
+                    targetG.position.x, targetG.position.z
+                );
+
+                // Hit radius - slightly larger than normal for easier hits
+                if (distToTarget < 0.6) {
+                    // Mark as hit so we don't hit again
+                    fbProj.hitUnits.add(target.id);
+
+                    const targetData = getUnitStats(target);
+                    const attackerData = attackerUnit ? getUnitStats(attackerUnit) : null;
+
+                    // Calculate fire damage
+                    const dmg = calculateDamage(
+                        fbProj.damage[0], fbProj.damage[1],
+                        getEffectiveArmor(target, targetData.armor),
+                        fbProj.damageType
+                    );
+
+                    const dmgCtx: DamageContext = {
+                        scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef,
+                        setUnits, addLog, now, defeatedThisFrame
+                    };
+                    applyDamageToUnit(dmgCtx, target.id, targetG, currentHp, dmg, targetData.name, {
+                        color: getDamageColor(target.team, true),
+                        attackerName: attackerData?.name,
+                        targetUnit: target
+                    });
+                    hpTracker[target.id] = Math.max(0, currentHp - dmg);
+
+                    soundFns.playHit();
+
+                    // Log the hit
+                    const attackerName = attackerData?.name ?? "Fireball";
+                    addLog(`${attackerName}'s fireball burns ${targetData.name} for ${dmg} damage!`, COLORS.damageNeutral);
+
+                    // Aggro enemies hit by the fireball
+                    if (attackerUnit?.team === "enemy" && target.team === "enemy") {
+                        // Enemy hit by friendly fire - don't aggro
+                    } else {
+                        aggroOnHit(target, fbProj.attackerId, unitsRef);
+                    }
+                }
+            }
+
+            // Rotate the fireball for visual effect
+            proj.mesh.rotation.x += 0.1;
+            proj.mesh.rotation.y += 0.15;
+
+            return true;
         }
 
         // Regular projectile (single target) - validate target exists

@@ -3,13 +3,20 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitGroup, DamageText, Projectile, EnemyStats, SwingAnimation } from "../core/types";
+import type { Unit, UnitGroup, DamageText, Projectile, EnemyStats, SwingAnimation, FireballProjectile } from "../core/types";
 import { COLORS } from "../core/constants";
 import { getUnitStats } from "../game/units";
 import { calculateDamage, rollHit, shouldApplyPoison, shouldApplySlow, getEffectiveArmor, getEffectiveDamage, logHit, logLifestealHit, logMiss, logPoisoned, logSlowed } from "../combat/combatMath";
 import { createProjectile, getProjectileSpeed, applyDamageToUnit, spawnDamageNumber, type DamageContext } from "../combat/combat";
 import { soundFns } from "../audio/sound";
 import { spawnSwingIndicator } from "./swingAnimations";
+
+// =============================================================================
+// FIREBALL CONSTANTS
+// =============================================================================
+
+const FIREBALL_SPEED = 0.08;        // Slow-moving projectile
+const FIREBALL_MAX_DISTANCE = 12;   // Max travel distance before expiring
 
 // =============================================================================
 // TYPES
@@ -52,6 +59,71 @@ export function executeEnemyRangedAttack(ctx: EnemyAttackContext): void {
         attackerId: attacker.id,
         speed: getProjectileSpeed("enemy")
     });
+    soundFns.playAttack();
+}
+
+// =============================================================================
+// FIREBALL ATTACK
+// =============================================================================
+
+/**
+ * Create a fireball mesh - glowing orange sphere.
+ */
+function createFireballMesh(scene: THREE.Scene, x: number, z: number): THREE.Mesh {
+    const geometry = new THREE.SphereGeometry(0.35, 12, 8);
+    const material = new THREE.MeshBasicMaterial({
+        color: "#ff4500",
+        transparent: true,
+        opacity: 0.9
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(x, 0.5, z);
+    scene.add(mesh);
+
+    // Add inner glow
+    const innerGlow = new THREE.Mesh(
+        new THREE.SphereGeometry(0.25, 8, 6),
+        new THREE.MeshBasicMaterial({ color: "#ffcc00", transparent: true, opacity: 0.7 })
+    );
+    mesh.add(innerGlow);
+
+    return mesh;
+}
+
+/**
+ * Execute a fireball attack (slow-moving projectile that hurts everything).
+ */
+export function executeEnemyFireballAttack(ctx: EnemyAttackContext): void {
+    const { scene, attacker, attackerG, targetG, attackerStats, projectilesRef } = ctx;
+
+    // Calculate direction to target
+    const dx = targetG.position.x - attackerG.position.x;
+    const dz = targetG.position.z - attackerG.position.z;
+    const dist = Math.hypot(dx, dz);
+
+    if (dist < 0.1) return;  // Too close, skip
+
+    const dirX = dx / dist;
+    const dirZ = dz / dist;
+
+    const mesh = createFireballMesh(scene, attackerG.position.x, attackerG.position.z);
+
+    const fireballProj: FireballProjectile = {
+        type: "fireball",
+        mesh,
+        attackerId: attacker.id,
+        speed: FIREBALL_SPEED,
+        damage: attackerStats.damage,
+        damageType: "fire",
+        startX: attackerG.position.x,
+        startZ: attackerG.position.z,
+        directionX: dirX,
+        directionZ: dirZ,
+        maxDistance: FIREBALL_MAX_DISTANCE,
+        hitUnits: new Set<number>()
+    };
+
+    projectilesRef.push(fireballProj);
     soundFns.playAttack();
 }
 
@@ -130,7 +202,9 @@ export function executeEnemyMeleeAttack(ctx: EnemyAttackContext): void {
 export function executeEnemyBasicAttack(ctx: EnemyAttackContext): void {
     const { attackerStats } = ctx;
 
-    if (attackerStats.projectileColor) {
+    if (attackerStats.fireballAttack) {
+        executeEnemyFireballAttack(ctx);
+    } else if (attackerStats.projectileColor) {
         executeEnemyRangedAttack(ctx);
     } else {
         executeEnemyMeleeAttack(ctx);

@@ -317,14 +317,16 @@ export interface CreatePathResult {
 /**
  * Create a new path to a target, handling the common pattern of
  * slicing off the first waypoint (which is the start position).
+ * Flying units can pass over lava.
  */
 export function createPathToTarget(
     startX: number,
     startZ: number,
     targetX: number,
-    targetZ: number
+    targetZ: number,
+    flying: boolean = false
 ): CreatePathResult {
-    const path = findPath(startX, startZ, targetX, targetZ);
+    const path = findPath(startX, startZ, targetX, targetZ, 0, flying);
     if (path && path.length > 0) {
         return { path: path.slice(1), success: true };
     }

@@ -310,5 +310,26 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         size: 0.8,
         moveSpeed: 0,          // Stationary - does not move
         expReward: 5
+    },
+    magma_imp: {
+        name: "Magma Imp",
+        hp: 35,
+        maxHp: 35,
+        damage: [6, 12],       // Fireball damage
+        accuracy: 75,
+        armor: 0,
+        color: "#ff4500",      // Orange-red (magma)
+        aggroRange: 10,
+        attackCooldown: 3000,  // Slow attack rate
+        range: 8,              // Long range caster
+        size: 1.0,             // Medium size
+        moveSpeed: 0.5,        // Very slow flyer
+        flying: true,          // Floats above ground (ignores lava)
+        fireballAttack: true,  // Uses slow fireball that hurts everything
+        expReward: 25,
+        // Kiting behavior - retreat when players get close
+        kiteTrigger: 4,        // Start kiting when player within this range
+        kiteDistance: 3,       // How far to retreat (shorter due to slow speed)
+        kiteCooldown: 4000     // Can only kite every 4 seconds
     }
 };

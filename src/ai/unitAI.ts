@@ -238,7 +238,9 @@ export function acquireTarget(ctx: TargetingContext, targetId: number): boolean 
             return true;
         }
 
-        const path = findPath(g.position.x, g.position.z, targetG.position.x, targetG.position.z);
+        // Flying enemies can pass over lava
+        const isFlying = !isPlayer && unit.enemyType && ENEMY_STATS[unit.enemyType]?.flying === true;
+        const path = findPath(g.position.x, g.position.z, targetG.position.x, targetG.position.z, 0, isFlying);
         if (path && path.length > 0) {
             pathsRef[unit.id] = path.slice(1);
             moveStartRef[unit.id] = { time: now, x: g.position.x, z: g.position.z };
@@ -613,7 +615,7 @@ export function runMovementPhase(ctx: MovementContext): void {
  * Recalculate path to target if needed (target moved, unit deviated, etc).
  */
 export function recalculatePathIfNeeded(
-    unitId: number,
+    unit: Unit,
     g: UnitGroup,
     targetX: number,
     targetZ: number,
@@ -621,10 +623,10 @@ export function recalculatePathIfNeeded(
     moveStartRef: Record<number, { time: number; x: number; z: number }>,
     now: number
 ): void {
-    if (recentlyGaveUp(unitId, now)) return;
+    if (recentlyGaveUp(unit.id, now)) return;
 
     const { needsNewPath } = checkPathNeedsRecalc(
-        pathsRef[unitId],
+        pathsRef[unit.id],
         targetX,
         targetZ,
         g.position.x,
@@ -632,11 +634,13 @@ export function recalculatePathIfNeeded(
     );
 
     if (needsNewPath) {
-        const result = createPathToTarget(g.position.x, g.position.z, targetX, targetZ);
-        pathsRef[unitId] = result.path;
+        // Flying enemies can pass over lava
+        const isFlying = unit.team === "enemy" && unit.enemyType && ENEMY_STATS[unit.enemyType]?.flying === true;
+        const result = createPathToTarget(g.position.x, g.position.z, targetX, targetZ, isFlying);
+        pathsRef[unit.id] = result.path;
         if (result.success) {
-            moveStartRef[unitId] = { time: now, x: g.position.x, z: g.position.z };
-            clearJitterTracking(unitId);  // Reset jitter detection for new path
+            moveStartRef[unit.id] = { time: now, x: g.position.x, z: g.position.z };
+            clearJitterTracking(unit.id);  // Reset jitter detection for new path
         }
     }
 }

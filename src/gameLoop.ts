@@ -407,7 +407,7 @@ export function updateUnitAI(
                 }
 
                 // Recalculate path if needed (but not if we recently gave up)
-                recalculatePathIfNeeded(unit.id, g, targetX, targetZ, pathsRef, moveStartRef, now);
+                recalculatePathIfNeeded(unit, g, targetX, targetZ, pathsRef, moveStartRef, now);
             }
         } else {
             g.userData.attackTarget = null;

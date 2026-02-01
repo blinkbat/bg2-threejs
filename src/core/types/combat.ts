@@ -105,4 +105,16 @@ export interface TrapProjectile extends BaseProjectile {
     isLanded: boolean;        // Whether trap has landed and is active
 }
 
-export type Projectile = BasicProjectile | AoeProjectile | MagicMissileProjectile | TrapProjectile;
+export interface FireballProjectile extends BaseProjectile {
+    type: "fireball";
+    damage: [number, number];
+    damageType: DamageType;
+    startX: number;
+    startZ: number;
+    directionX: number;      // Normalized direction vector
+    directionZ: number;
+    maxDistance: number;     // Expire after this distance traveled
+    hitUnits: Set<number>;   // Track units already hit to avoid multi-hit
+}
+
+export type Projectile = BasicProjectile | AoeProjectile | MagicMissileProjectile | TrapProjectile | FireballProjectile;

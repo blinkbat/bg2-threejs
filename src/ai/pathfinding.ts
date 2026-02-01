@@ -125,9 +125,13 @@ export function isBlocked(x: number, z: number): boolean {
 
 /**
  * Check if a cell is passable (not blocked and within grid).
+ * Flying units can pass over lava.
  */
-export function isPassable(x: number, z: number): boolean {
-    return isWithinGrid(x, z) && !isBlocked(x, z) && !isLavaBlocked(x, z);
+export function isPassable(x: number, z: number, flying: boolean = false): boolean {
+    if (!isWithinGrid(x, z) || isBlocked(x, z)) return false;
+    // Flying units can pass over lava
+    if (flying) return true;
+    return !isLavaBlocked(x, z);
 }
 
 /**
@@ -321,14 +325,15 @@ const DIAGONALS = [
  * Get valid neighbors for A* pathfinding.
  * Handles diagonal movement with corner-cutting prevention.
  * Adds dynamic cost for cells near other units (for wider berth pathfinding).
+ * Flying units can pass over lava.
  */
-function getNeighbors(x: number, z: number, diagonalCost: number): Neighbor[] {
+function getNeighbors(x: number, z: number, diagonalCost: number, flying: boolean = false): Neighbor[] {
     const neighbors: Neighbor[] = [];
 
     // Add cardinal neighbors
     for (const { dx, dz } of CARDINALS) {
         const nx = x + dx, nz = z + dz;
-        if (isPassable(nx, nz)) {
+        if (isPassable(nx, nz, flying)) {
             // Base cost + dynamic cost from nearby units
             const cost = 1 + getDynamicCost(nx, nz);
             neighbors.push({ x: nx, z: nz, cost });
@@ -338,7 +343,7 @@ function getNeighbors(x: number, z: number, diagonalCost: number): Neighbor[] {
     // Add diagonal neighbors (with corner-cutting prevention)
     for (const { dx, dz } of DIAGONALS) {
         const nx = x + dx, nz = z + dz;
-        if (!isPassable(nx, nz)) continue;
+        if (!isPassable(nx, nz, flying)) continue;
 
         // Block diagonal if either adjacent cardinal is blocked (no corner cutting)
         if (isBlocked(x, nz) || isBlocked(nx, z)) continue;
@@ -512,7 +517,7 @@ class OpenList {
     }
 }
 
-export function findPath(startX: number, startZ: number, endX: number, endZ: number, depth: number = 0): { x: number; z: number }[] | null {
+export function findPath(startX: number, startZ: number, endX: number, endZ: number, depth: number = 0, flying: boolean = false): { x: number; z: number }[] | null {
     // Prevent infinite recursion with depth limit
     if (depth > PATH_RECURSION_LIMIT) return null;
 
@@ -529,13 +534,13 @@ export function findPath(startX: number, startZ: number, endX: number, endZ: num
         for (let dx = -ASTAR_BLOCKED_TARGET_SEARCH; dx <= ASTAR_BLOCKED_TARGET_SEARCH; dx++) {
             for (let dz = -ASTAR_BLOCKED_TARGET_SEARCH; dz <= ASTAR_BLOCKED_TARGET_SEARCH; dz++) {
                 const nx = ex + dx, nz = ez + dz;
-                if (isPassable(nx, nz)) {
+                if (isPassable(nx, nz, flying)) {
                     const dSq = dx * dx + dz * dz;
                     if (dSq < bestDistSq) { bestDistSq = dSq; best = { x: nx, z: nz }; }
                 }
             }
         }
-        if (best) return findPath(startX, startZ, best.x + 0.5, best.z + 0.5, depth + 1);
+        if (best) return findPath(startX, startZ, best.x + 0.5, best.z + 0.5, depth + 1, flying);
         return null;
     }
 
@@ -574,7 +579,7 @@ export function findPath(startX: number, startZ: number, endX: number, endZ: num
         closed.add(currentKey);
 
         // Get valid neighbors (handles bounds, blocking, and corner-cutting)
-        const neighbors = getNeighbors(current.x, current.z, ASTAR_DIAGONAL_COST);
+        const neighbors = getNeighbors(current.x, current.z, ASTAR_DIAGONAL_COST, flying);
 
         for (const n of neighbors) {
             const nKey = key(n.x, n.z);

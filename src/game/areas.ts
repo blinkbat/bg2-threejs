@@ -1145,14 +1145,16 @@ export const MAGMA_CAVE_AREA: AreaData = {
         { x: 2, z: 8, w: 4, h: 4, color: "#ff5500" }
     ],
     enemySpawns: [
-        // Bats in central chamber (east side)
-        { x: 26, z: 20, type: "bat" },
-        // Bats in central chamber (west side)
+        // Bats in central chamber (deeper in)
         { x: 14, z: 28, type: "bat" },
         // Bat in west chamber
         { x: 5, z: 24, type: "bat" },
-        // Bat in south alcove
-        { x: 15, z: 8, type: "bat" }
+        // Magma Imps - positioned near/over lava for tactical advantage
+        { x: 19, z: 17, type: "magma_imp" },    // Over south magma river
+        { x: 20, z: 32, type: "magma_imp" },    // Over north magma river
+        { x: 12, z: 24, type: "magma_imp" },    // West side of central chamber
+        // Magma Imp in south alcove (guards treasure)
+        { x: 15, z: 8, type: "magma_imp" }
     ],
     transitions: [
         // East entrance from Cliffs
