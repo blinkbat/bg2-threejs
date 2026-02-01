@@ -1091,8 +1091,8 @@ export const MAGMA_CAVE_AREA: AreaData = {
     gridSize: GRID_SIZE,
     backgroundColor: "#1a0a0a",  // Very dark red-black
     groundColor: "#2a1a1a",      // Dark stone with red tint
-    ambientLight: 0.12,          // Very dark
-    directionalLight: 0.15,      // Minimal directional light
+    ambientLight: 0.18,          // Dark but visible
+    directionalLight: 0.22,      // Low directional light
     hasFogOfWar: true,
     defaultSpawn: { x: 46, z: 25 },  // Near east entrance
     rooms: [
@@ -1187,14 +1187,27 @@ export const MAGMA_CAVE_AREA: AreaData = {
     ],
     // Orange-tinted candles near magma for the glow effect
     candles: [
+        // East entrance chamber
+        { x: 44, z: 20.85, dx: 0, dz: 1 },
+        { x: 40.85, z: 26, dx: 1, dz: 0 },
+        // First corridor
+        { x: 34, z: 22.85, dx: 0, dz: 1 },
         // Along the magma river (east bank)
         { x: 22.5, z: 18, dx: -1, dz: 0 },
         { x: 22.5, z: 32, dx: -1, dz: 0 },
         // Along the magma river (west bank)
         { x: 17.5, z: 18, dx: 1, dz: 0 },
         { x: 17.5, z: 32, dx: 1, dz: 0 },
+        // Central chamber corners
+        { x: 10.85, z: 20, dx: 1, dz: 0 },
+        { x: 10.85, z: 28, dx: 1, dz: 0 },
         // West chamber
         { x: 2.85, z: 24, dx: 1, dz: 0 },
+        { x: 2.85, z: 20, dx: 1, dz: 0 },
+        // North alcove
+        { x: 14, z: 42.15, dx: 0, dz: -1 },
+        // South alcove (near treasure)
+        { x: 14, z: 4.85, dx: 0, dz: 1 },
         // Near small magma pools
         { x: 6.5, z: 32, dx: -1, dz: 0 },
         { x: 6.5, z: 8, dx: -1, dz: 0 }

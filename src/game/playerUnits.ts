@@ -20,11 +20,11 @@ import {
 // =============================================================================
 
 // XP required to reach each level (index = level, value = total XP needed)
-export const XP_REQUIREMENTS = [0, 0, 100, 250, 450, 700, 1000, 1400, 1900, 2500, 3200];
+export const XP_REQUIREMENTS = [0, 0, 200, 500, 900, 1400, 2000, 2800, 3800, 5000, 6400];
 
 export function getXpForLevel(level: number): number {
     if (level < 1) return 0;
-    if (level >= XP_REQUIREMENTS.length) return XP_REQUIREMENTS[XP_REQUIREMENTS.length - 1] + (level - XP_REQUIREMENTS.length + 1) * 800;
+    if (level >= XP_REQUIREMENTS.length) return XP_REQUIREMENTS[XP_REQUIREMENTS.length - 1] + (level - XP_REQUIREMENTS.length + 1) * 1500;
     return XP_REQUIREMENTS[level];
 }
 

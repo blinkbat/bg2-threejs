@@ -512,7 +512,7 @@ export function applyDamageToUnit(
                                 ...u,
                                 exp: newExp,
                                 level: currentLevel + 1,
-                                statPoints: (u.statPoints ?? 0) + 3,
+                                statPoints: (u.statPoints ?? 0) + 5,
                                 hp: u.hp + 2,
                                 mana: (u.mana ?? 0) + 1,
                                 stats: u.stats ?? {

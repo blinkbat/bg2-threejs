@@ -15,7 +15,7 @@ import { spawnSwingIndicator } from "./swingAnimations";
 // FIREBALL CONSTANTS
 // =============================================================================
 
-const FIREBALL_SPEED = 0.08;        // Slow-moving projectile
+const FIREBALL_SPEED = 0.04;        // Very slow-moving projectile
 const FIREBALL_MAX_DISTANCE = 12;   // Max travel distance before expiring
 
 // =============================================================================
