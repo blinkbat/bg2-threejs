@@ -6,11 +6,9 @@
 import { useEffect, useRef, useCallback } from "react";
 import * as THREE from "three";
 import { GRID_SIZE, PAN_SPEED } from "../core/constants";
-import type { Unit, UnitGroup, DamageText, Projectile, SwingAnimation, FogTexture, SanctuaryTile } from "../core/types";
-import type { AcidTile, LootBag } from "../core/types";
-import type { DoorMesh, ChestMeshData } from "../rendering/scene";
+import type { Unit, UnitGroup } from "../core/types";
 import { updateCamera, updateWallTransparency, updateTreeFogVisibility, updateLightLOD, addUnitToScene, updateWater, updateBillboards } from "../rendering/scene";
-import { updateDynamicObstacles, clearPathCache } from "../ai/pathfinding";
+import { updateDynamicObstacles } from "../ai/pathfinding";
 import { updateUnitCache } from "../ai/unitAI";
 import {
     updateDamageTexts,
@@ -32,75 +30,24 @@ import {
     updateSubmergedKrakens
 } from "../gameLoop";
 import type { ActionQueue } from "../input";
+import type { ThreeSceneState, GameRefs } from "./useThreeScene";
 
 // =============================================================================
 // TYPES
 // =============================================================================
 
-export interface GameLoopSceneState {
+/** Scene state with required (non-null) core objects - use when scene is initialized */
+export type InitializedSceneState = ThreeSceneState & {
     scene: THREE.Scene;
     camera: THREE.OrthographicCamera;
     renderer: THREE.WebGLRenderer;
-    flames: THREE.Mesh[];
-    candleMeshes: THREE.Mesh[];
-    candleLights: THREE.PointLight[];
-    fogTexture: FogTexture | null;
-    fogMesh: THREE.Mesh | null;
-    moveMarker: THREE.Mesh | null;
-    rangeIndicator: THREE.Mesh | null;
-    aoeIndicator: THREE.Mesh | null;
-    unitGroups: Record<number, UnitGroup>;
-    selectRings: Record<number, THREE.Mesh>;
-    targetRings: Record<number, THREE.Mesh>;
-    shieldIndicators: Record<number, THREE.Mesh>;
-    unitMeshes: Record<number, THREE.Mesh>;
-    unitOriginalColors: Record<number, THREE.Color>;
-    maxHp: Record<number, number>;
-    wallMeshes: THREE.Mesh[];
-    treeMeshes: THREE.Mesh[];
-    columnMeshes: THREE.Mesh[];
-    columnGroups: THREE.Mesh[][];
-    doorMeshes: DoorMesh[];
-    waterMesh: THREE.Mesh | null;
-    chestMeshes: ChestMeshData[];
-    billboards: THREE.Mesh[];
-}
-
-export interface GameLoopRefs {
-    // Timing
-    targetRingTimers: Record<number, number>;
-    moveMarkerStart: number;
-    moveStart: Record<number, { time: number; x: number; z: number }>;
-
-    // Combat
-    actionCooldown: Record<number, number>;
-    hitFlash: Record<number, number>;
-    projectiles: Projectile[];
-    swingAnimations: SwingAnimation[];
-    damageTexts: DamageText[];
-
-    // Pathing
-    paths: Record<number, { x: number; z: number }[]>;
-
-    // Visibility
-    visibility: number[][];
-
-    // Environment state
-    acidTiles: Map<string, AcidTile>;
-    sanctuaryTiles: Map<string, SanctuaryTile>;
-    lootBags: LootBag[];
-    hoveredDoor: string | null;
-
-    // Camera
-    cameraOffset: { x: number; z: number };
-    zoomLevel: number;
-}
+};
 
 export interface GameLoopStateRefs {
-    unitsStateRef: React.RefObject<Unit[]>;
+    unitsStateRef: React.MutableRefObject<Unit[]>;
     pausedRef: React.MutableRefObject<boolean>;
-    targetingModeRef: React.RefObject<{ casterId: number; skill: import("../core/types").Skill } | null>;
-    skillCooldownsRef: React.RefObject<Record<string, { end: number; duration: number }>>;
+    targetingModeRef: React.MutableRefObject<{ casterId: number; skill: import("../core/types").Skill } | null>;
+    skillCooldownsRef: React.MutableRefObject<Record<string, { end: number; duration: number }>>;
     actionQueueRef: React.MutableRefObject<ActionQueue>;
 }
 
@@ -115,8 +62,8 @@ export interface GameLoopCallbacks {
 }
 
 export interface UseGameLoopOptions {
-    sceneState: GameLoopSceneState | null;
-    gameRefs: React.MutableRefObject<GameLoopRefs>;
+    sceneState: InitializedSceneState | null;
+    gameRefs: React.MutableRefObject<GameRefs>;
     stateRefs: GameLoopStateRefs;
     callbacks: GameLoopCallbacks;
     keysPressed: React.MutableRefObject<Set<string>>;
@@ -128,21 +75,21 @@ export interface UseGameLoopOptions {
 // =============================================================================
 
 function updateVisualEffects(
-    sceneState: GameLoopSceneState,
-    gameRefs: GameLoopRefs,
+    sceneState: InitializedSceneState,
+    gameRefs: GameRefs,
     now: number
 ): void {
     const { flames, candleLights, doorMeshes } = sceneState;
 
     // Flickering flames - slow, intense flicker
-    flames.forEach((flame, i) => {
+    flames.forEach((flame: THREE.Mesh, i: number) => {
         const flicker = 0.6 + Math.sin(now * 0.004 + i * 2) * 0.25 + Math.random() * 0.1;
         flame.scale.y = 1.6 + Math.sin(now * 0.005 + i) * 0.5;
         (flame.material as THREE.MeshBasicMaterial).opacity = flicker;
     });
 
     // Room lights flicker subtly
-    candleLights.forEach((light, i) => {
+    candleLights.forEach((light: THREE.PointLight, i: number) => {
         light.intensity = 12 + Math.sin(now * 0.003 + i * 1.7) * 3 + Math.random() * 1;
     });
 
@@ -474,7 +421,9 @@ export function useGameLoop({
             renderer.render(scene, camera);
         };
 
-        animate();
+        // Schedule first frame instead of calling animate() directly
+        // This prevents running game logic multiple times if the effect restarts
+        animId = requestAnimationFrame(animate);
 
         return () => {
             cancelAnimationFrame(animId);
