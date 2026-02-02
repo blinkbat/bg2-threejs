@@ -3,11 +3,61 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitGroup, DamageText } from "../core/types";
+import type { Unit, UnitGroup, DamageText, StatusEffect, StatusEffectType } from "../core/types";
 import { COLORS } from "../core/constants";
 import { getUnitStats } from "../game/units";
 import { handleUnitDefeat, showDamageVisual } from "../combat/combat";
 import { isUnitAlive } from "../combat/combatMath";
+
+// =============================================================================
+// DOT VISUAL CONFIG (for effects that deal damage)
+// =============================================================================
+
+/** Visual config for damage-over-time effects - keyed by effect type */
+const DOT_VISUAL_CONFIG: Partial<Record<StatusEffectType, { color: string; messageTemplate: (name: string, dmg: number) => string }>> = {
+    poison: { color: COLORS.poisonText, messageTemplate: (name, dmg) => `${name} takes ${dmg} poison damage.` },
+    qi_drain: { color: "#9b59b6", messageTemplate: (name, dmg) => `${name} loses ${dmg} HP from Qi drain.` }
+};
+
+// =============================================================================
+// EFFECT UPDATE HELPERS
+// =============================================================================
+
+/**
+ * Tick an effect: decrement duration and reset timeSinceTick.
+ * Returns the updated statusEffects array with expired effects removed.
+ */
+function tickEffect(
+    effects: StatusEffect[],
+    effectType: StatusEffectType,
+    now: number,
+    tickInterval: number
+): StatusEffect[] {
+    return effects.map(e => {
+        if (e.type === effectType) {
+            const newDuration = e.duration - tickInterval;
+            return { ...e, duration: newDuration, timeSinceTick: 0, lastUpdateTime: now };
+        }
+        return { ...e, lastUpdateTime: now };
+    }).filter(e => e.duration > 0);
+}
+
+/**
+ * Update timeSinceTick for an effect without ticking (between tick intervals).
+ */
+function updateEffectTime(
+    effects: StatusEffect[],
+    effectType: StatusEffectType,
+    newTimeSinceTick: number,
+    now: number
+): StatusEffect[] {
+    return effects.map(e => {
+        if (e.type === effectType) {
+            return { ...e, timeSinceTick: newTimeSinceTick, lastUpdateTime: now };
+        }
+        return e;
+    });
+}
 
 // =============================================================================
 // STATUS EFFECT PROCESSING
@@ -34,35 +84,28 @@ export function processStatusEffects(
         const data = getUnitStats(unit);
 
         unit.statusEffects.forEach(effect => {
+            // All effects with duration tick down automatically
             // Calculate delta time for pause-safe accumulation
             // Cap delta to prevent pause/unpause from causing instant multi-ticks
             const rawDelta = now - effect.lastUpdateTime;
             const delta = Math.min(rawDelta, 100); // Max 100ms per frame
             const newTimeSinceTick = effect.timeSinceTick + delta;
+            const shouldTick = newTimeSinceTick >= effect.tickInterval;
 
-            if (effect.type === "poison") {
-                // Check if it's time for a tick (using accumulated time)
-                if (newTimeSinceTick >= effect.tickInterval) {
-                    // Deal poison damage
+            // Check if this effect deals damage (DOT effect)
+            const dealsDamage = effect.damagePerTick > 0;
+
+            if (shouldTick) {
+                if (dealsDamage) {
+                    // Damage-over-time effect: deal damage and tick duration
                     const dmg = effect.damagePerTick;
-                    // Track whether unit was defeated for post-update handling
                     let wasDefeated = false;
 
                     setUnits(prev => prev.map(u => {
                         if (u.id !== unit.id) return u;
-
-                        // Calculate newHp from current state to avoid race condition
                         const newHp = Math.max(0, u.hp - dmg);
                         wasDefeated = newHp <= 0;
-
-                        const updatedEffects = (u.statusEffects || []).map(e => {
-                            if (e.type === "poison") {
-                                const newDuration = e.duration - effect.tickInterval;
-                                return { ...e, duration: newDuration, timeSinceTick: 0, lastUpdateTime: now };
-                            }
-                            return { ...e, lastUpdateTime: now };
-                        }).filter(e => e.duration > 0);
-
+                        const updatedEffects = tickEffect(u.statusEffects || [], effect.type, now, effect.tickInterval);
                         return {
                             ...u,
                             hp: newHp,
@@ -70,103 +113,33 @@ export function processStatusEffects(
                         };
                     }));
 
-                    showDamageVisual(scene, unit.id, unitG.position.x, unitG.position.z, dmg, COLORS.poisonText, hitFlashRef, damageTexts, addLog, `${data.name} takes ${dmg} poison damage.`, now);
+                    // Show damage visual if we have config for this effect type
+                    const config = DOT_VISUAL_CONFIG[effect.type];
+                    if (config) {
+                        showDamageVisual(scene, unit.id, unitG.position.x, unitG.position.z, dmg, config.color, hitFlashRef, damageTexts, addLog, config.messageTemplate(data.name, dmg), now);
+                    }
 
                     if (wasDefeated) {
                         defeatedThisFrame.add(unit.id);
                         handleUnitDefeat(unit.id, unitG, unitsRef, addLog, data.name);
                     }
                 } else {
-                    // Update lastUpdateTime even when not ticking
+                    // Pure duration effect: just tick down duration
                     setUnits(prev => prev.map(u => {
                         if (u.id !== unit.id) return u;
-                        const updatedEffects = (u.statusEffects || []).map(e => {
-                            if (e.type === "poison") {
-                                return { ...e, timeSinceTick: newTimeSinceTick, lastUpdateTime: now };
-                            }
-                            return e;
-                        });
-                        return { ...u, statusEffects: updatedEffects };
-                    }));
-                }
-            } else if (effect.type === "qi_drain") {
-                // Qi Drain - self-damage over time from Qi Focus
-                if (newTimeSinceTick >= effect.tickInterval) {
-                    const dmg = effect.damagePerTick;
-                    let wasDefeated = false;
-
-                    setUnits(prev => prev.map(u => {
-                        if (u.id !== unit.id) return u;
-
-                        const newHp = Math.max(0, u.hp - dmg);
-                        wasDefeated = newHp <= 0;
-
-                        const updatedEffects = (u.statusEffects || []).map(e => {
-                            if (e.type === "qi_drain") {
-                                const newDuration = e.duration - effect.tickInterval;
-                                return { ...e, duration: newDuration, timeSinceTick: 0, lastUpdateTime: now };
-                            }
-                            return { ...e, lastUpdateTime: now };
-                        }).filter(e => e.duration > 0);
-
-                        return {
-                            ...u,
-                            hp: newHp,
-                            statusEffects: updatedEffects.length > 0 ? updatedEffects : undefined
-                        };
-                    }));
-
-                    showDamageVisual(scene, unit.id, unitG.position.x, unitG.position.z, dmg, "#9b59b6", hitFlashRef, damageTexts, addLog, `${data.name} loses ${dmg} HP from Qi drain.`, now);
-
-                    if (wasDefeated) {
-                        defeatedThisFrame.add(unit.id);
-                        handleUnitDefeat(unit.id, unitG, unitsRef, addLog, data.name);
-                    }
-                } else {
-                    // Update lastUpdateTime even when not ticking
-                    setUnits(prev => prev.map(u => {
-                        if (u.id !== unit.id) return u;
-                        const updatedEffects = (u.statusEffects || []).map(e => {
-                            if (e.type === "qi_drain") {
-                                return { ...e, timeSinceTick: newTimeSinceTick, lastUpdateTime: now };
-                            }
-                            return e;
-                        });
-                        return { ...u, statusEffects: updatedEffects };
-                    }));
-                }
-            } else if (effect.type === "shielded" || effect.type === "stunned" || effect.type === "cleansed" || effect.type === "pinned" || effect.type === "slowed") {
-                // Shielded/stunned/cleansed/pinned/slowed buff - tick down duration at fixed interval
-                if (newTimeSinceTick >= effect.tickInterval) {
-                    setUnits(prev => prev.map(u => {
-                        if (u.id !== unit.id) return u;
-
-                        const updatedEffects = (u.statusEffects || []).map(e => {
-                            if (e.type === effect.type) {
-                                const newDuration = e.duration - e.tickInterval;
-                                return { ...e, duration: newDuration, timeSinceTick: 0, lastUpdateTime: now };
-                            }
-                            return { ...e, lastUpdateTime: now };
-                        }).filter(e => e.duration > 0);
-
+                        const updatedEffects = tickEffect(u.statusEffects || [], effect.type, now, effect.tickInterval);
                         return {
                             ...u,
                             statusEffects: updatedEffects.length > 0 ? updatedEffects : undefined
                         };
                     }));
-                } else {
-                    // Update lastUpdateTime even when not ticking
-                    setUnits(prev => prev.map(u => {
-                        if (u.id !== unit.id) return u;
-                        const updatedEffects = (u.statusEffects || []).map(e => {
-                            if (e.type === effect.type) {
-                                return { ...e, timeSinceTick: newTimeSinceTick, lastUpdateTime: now };
-                            }
-                            return e;
-                        });
-                        return { ...u, statusEffects: updatedEffects };
-                    }));
                 }
+            } else {
+                // Not time to tick yet - just update accumulated time
+                setUnits(prev => prev.map(u => {
+                    if (u.id !== unit.id) return u;
+                    return { ...u, statusEffects: updateEffectTime(u.statusEffects || [], effect.type, newTimeSinceTick, now) };
+                }));
             }
         });
     });

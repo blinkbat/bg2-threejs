@@ -6,12 +6,13 @@ import * as THREE from "three";
 import type { Unit, Skill, UnitGroup, Projectile, StatusEffect, MagicMissileProjectile, TrapProjectile, SanctuaryTile, AcidTile } from "../core/types";
 import { COLORS, BUFF_TICK_INTERVAL, TRAP_FLIGHT_DURATION, TRAP_ARC_HEIGHT, TRAP_MESH_SIZE, SANCTUARY_HEAL_PER_TICK, QI_DRAIN_DURATION, QI_DRAIN_TICK_INTERVAL } from "../core/constants";
 import { UNIT_DATA, getUnitStats, getEffectiveUnitData, getEffectiveMaxHp } from "../game/units";
-import { getFaithHealingBonus, getStrengthDamageBonus, getIntelligenceMagicDamageBonus, getFaithHolyDamageBonus } from "../game/statBonuses";
-import { rollDamage, rollChance, calculateDamage, rollHit, getEffectiveArmor, hasStatusEffect, logHit, logMiss, logHeal, logPoisoned, logCast, logTaunt, logTauntMiss, logBuff, logStunned, logCleanse, logTrapThrown, isBlockedByFrontShield } from "./combatMath";
+import { getFaithHealingBonus } from "../game/statBonuses";
+import { rollDamage, rollChance, calculateDamage, rollHit, getEffectiveArmor, hasStatusEffect, logHit, logMiss, logHeal, logPoisoned, logCast, logTaunt, logTauntMiss, logBuff, logStunned, logCleanse, logTrapThrown, getCooldownMultiplier, calculateStatBonus, applyStatusEffect, checkFrontShieldBlock, checkEnemyBlockChance } from "./combatMath";
 import { ENEMY_STATS } from "../game/units";
 import { tryHealBark, trySpellBark } from "./barks";
 import { getUnitRadius, isInRange } from "../rendering/range";
 import { distanceToPoint } from "../game/geometry";
+import { getAliveUnits } from "../game/unitQuery";
 import { soundFns } from "../audio/sound";
 import { createProjectile, getProjectileSpeed, applyDamageToUnit, createAnimatedRing, createLightningPillar, type DamageContext } from "./combat";
 import { createSanctuaryTile } from "../gameLoop/sanctuaryTiles";
@@ -42,11 +43,6 @@ export interface SkillExecutionContext {
 // =============================================================================
 // HELPERS - Reusable functions to avoid duplication
 // =============================================================================
-
-/** Get all alive units of a specific team */
-function getAliveUnits(units: Unit[], team: "player" | "enemy"): Unit[] {
-    return units.filter(u => u.team === team && u.hp > 0);
-}
 
 /** Find the closest unit to a target position (within maxDist) */
 function findClosestUnit(
@@ -87,7 +83,8 @@ function findClosestTargetByTeam(
 /**
  * Consume skill resources: set cooldown for the used skill and deduct mana.
  * Call this at the START of every skill execution (after validation, before effects).
- * If the caster has shielded effect, cooldowns are doubled.
+ * If the caster has shielded effect, cooldowns are doubled (defensive stance penalty).
+ * Slowed increases cooldowns by 1.5x, Defiance decreases cooldowns by 0.5x.
  *
  * Note: actionCooldownRef tracks when the UNIT can act again (blocks all actions).
  * skillCooldowns tracks per-skill UI animation (only the used skill shows cooldown bar).
@@ -96,11 +93,14 @@ function consumeSkill(ctx: SkillExecutionContext, casterId: number, skill: Skill
     const { unitsStateRef, actionCooldownRef, setSkillCooldowns, setUnits, addLog } = ctx;
     const now = Date.now();
 
-    // Check if caster is shielded - doubles cooldowns
+    // Get caster and calculate cooldown multipliers
     const caster = unitsStateRef.current.find(u => u.id === casterId);
-    const cooldownMultiplier = caster && hasStatusEffect(caster, "shielded") ? 2 : 1;
+    // Shielded doubles cooldowns (defensive stance penalty)
+    const shieldedMult = caster && hasStatusEffect(caster, "shielded") ? 2 : 1;
+    // Slow/Defiance affect cooldowns (slow increases, defiance decreases)
+    const statusMult = caster ? getCooldownMultiplier(caster) : 1;
 
-    const effectiveCooldown = skill.cooldown * cooldownMultiplier;
+    const effectiveCooldown = skill.cooldown * shieldedMult * statusMult;
     const cooldownEnd = now + effectiveCooldown;
 
     // Set internal cooldown ref (unit-level lock)
@@ -146,7 +146,7 @@ export function executeAoeSkill(
         attackerId: casterId,
         speed: getProjectileSpeed("aoe"),
         aoeRadius: skill.aoeRadius!,
-        damage: skill.value,
+        damage: skill.damageRange!,
         damageType: skill.damageType,
         targetPos: { x: targetX, z: targetZ }
     });
@@ -187,7 +187,7 @@ export function executeHealSkill(
 
     // Apply heal with faith bonus
     const faithBonus = casterUnit ? getFaithHealingBonus(casterUnit) : 0;
-    const healAmount = rollDamage(skill.value[0], skill.value[1]) + faithBonus;
+    const healAmount = rollDamage(skill.healRange![0], skill.healRange![1]) + faithBonus;
     const targetData = UNIT_DATA[targetAlly.id];
     const healTargetId = targetAlly.id;
     updateUnitWith(setUnits, healTargetId, u => ({ hp: Math.min(targetMaxHp, u.hp + healAmount) }));
@@ -258,7 +258,7 @@ export function executeManaTransferSkill(
     const casterData = UNIT_DATA[casterId];
 
     // Give mana to ally
-    const manaAmount = rollDamage(skill.value[0], skill.value[1]);
+    const manaAmount = rollDamage(skill.manaRange![0], skill.manaRange![1]);
     const actualMana = Math.min(manaAmount, (targetData.maxMana ?? 0) - (targetAlly.mana ?? 0));
     const healTargetId = targetAlly.id;
 
@@ -342,41 +342,26 @@ export function executeMeleeSkill(
     const targetData = getUnitStats(targetEnemy);
     const targetId = targetEnemy.id;
 
-    // Check for front-shield block (undead knight etc.)
+    // Check for enemy defensive abilities
     if (targetEnemy.enemyType) {
         const enemyStats = ENEMY_STATS[targetEnemy.enemyType];
-        if (enemyStats.frontShield && targetEnemy.facing !== undefined) {
-            if (isBlockedByFrontShield(casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, targetEnemy.facing)) {
-                soundFns.playMiss();
-                addLog(`${casterData.name}'s ${skill.name} is blocked by ${targetData.name}'s shield!`, "#4488ff");
-                return true;
-            }
+        if (checkFrontShieldBlock(enemyStats, targetEnemy.facing, casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z)) {
+            soundFns.playBlock();
+            addLog(`${casterData.name}'s ${skill.name} is blocked by ${targetData.name}'s shield!`, "#4488ff");
+            return true;
         }
-        // Check for block chance (skeleton warrior etc.) - only blocks physical damage
-        if (enemyStats.blockChance && skill.damageType === "physical") {
-            if (rollChance(enemyStats.blockChance)) {
-                soundFns.playMiss();
-                addLog(`${targetData.name} blocks ${casterData.name}'s ${skill.name}!`, "#aaaaaa");
-                return true;
-            }
+        if (checkEnemyBlockChance(enemyStats, skill.damageType)) {
+            soundFns.playBlock();
+            addLog(`${targetData.name} blocks ${casterData.name}'s ${skill.name}!`, "#aaaaaa");
+            return true;
         }
     }
 
     // Roll to hit
     if (rollHit(casterData.accuracy)) {
-        // Apply stat bonuses based on damage type
         const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
-        let statBonus = 0;
-        if (casterUnit) {
-            if (skill.damageType === "physical") {
-                statBonus = getStrengthDamageBonus(casterUnit);
-            } else if (skill.damageType === "fire" || skill.damageType === "cold" || skill.damageType === "lightning" || skill.damageType === "chaos") {
-                statBonus = getIntelligenceMagicDamageBonus(casterUnit);
-            } else if (skill.damageType === "holy") {
-                statBonus = getFaithHolyDamageBonus(casterUnit);
-            }
-        }
-        const dmg = calculateDamage(skill.value[0] + statBonus, skill.value[1] + statBonus, getEffectiveArmor(targetEnemy, targetData.armor), skill.damageType);
+        const statBonus = calculateStatBonus(casterUnit, skill.damageType);
+        const dmg = calculateDamage(skill.damageRange![0] + statBonus, skill.damageRange![1] + statBonus, getEffectiveArmor(targetEnemy, targetData.armor), skill.damageType);
         const willPoison = skill.poisonChance ? rollChance(skill.poisonChance) : false;
 
         // Read fresh HP from current state to avoid stale data race condition
@@ -471,31 +456,21 @@ export function executeSmiteSkill(
     createLightningPillar(scene, targetG.position.x, targetG.position.z);
     soundFns.playThunder();
 
-    // Check for front-shield block (undead knight etc.)
+    // Check for front-shield block
     if (targetEnemy.enemyType) {
         const enemyStats = ENEMY_STATS[targetEnemy.enemyType];
-        if (enemyStats.frontShield && targetEnemy.facing !== undefined) {
-            if (isBlockedByFrontShield(casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, targetEnemy.facing)) {
-                soundFns.playMiss();
-                addLog(`${casterData.name}'s ${skill.name} is blocked by ${targetData.name}'s shield!`, "#4488ff");
-                return true;
-            }
+        if (checkFrontShieldBlock(enemyStats, targetEnemy.facing, casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z)) {
+            soundFns.playBlock();
+            addLog(`${casterData.name}'s ${skill.name} is blocked by ${targetData.name}'s shield!`, "#4488ff");
+            return true;
         }
     }
 
     // Roll to hit
     if (rollHit(casterData.accuracy)) {
-        // Apply stat bonuses based on damage type
         const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
-        let statBonus = 0;
-        if (casterUnit) {
-            if (skill.damageType === "lightning") {
-                statBonus = getIntelligenceMagicDamageBonus(casterUnit);
-            } else if (skill.damageType === "holy") {
-                statBonus = getFaithHolyDamageBonus(casterUnit);
-            }
-        }
-        const dmg = calculateDamage(skill.value[0] + statBonus, skill.value[1] + statBonus, getEffectiveArmor(targetEnemy, targetData.armor), skill.damageType);
+        const statBonus = calculateStatBonus(casterUnit, skill.damageType);
+        const dmg = calculateDamage(skill.damageRange![0] + statBonus, skill.damageRange![1] + statBonus, getEffectiveArmor(targetEnemy, targetData.armor), skill.damageType);
 
         // Read fresh HP from current state
         const freshTarget = unitsStateRef.current.find(u => u.id === targetId);
@@ -541,7 +516,7 @@ export function executeTauntSkill(
     consumeSkill(ctx, casterId, skill);
 
     const casterData = UNIT_DATA[casterId];
-    const tauntChance = skill.value[0];  // Use first value as taunt chance percentage
+    const tauntChance = skill.tauntChance ?? 80;  // Taunt chance percentage
 
     // Find all enemies within range
     const enemies = getAliveUnits(unitsStateRef.current, "enemy");
@@ -596,32 +571,22 @@ export function executeBuffSkill(
     consumeSkill(ctx, casterId, skill);
 
     const casterData = UNIT_DATA[casterId];
-    const duration = skill.value[0];  // Duration in ms
+    const duration = skill.duration!;  // Duration in ms
     const now = Date.now();
 
     // Apply the buff as a status effect
-    setUnits(prev => prev.map(u => {
-        if (u.id !== casterId) return u;
-
-        const existingEffects = u.statusEffects || [];
-        // Remove existing shielded effect if any (refresh)
-        const filteredEffects = existingEffects.filter(e => e.type !== "shielded");
-
-        const shieldedEffect: StatusEffect = {
-            type: "shielded",
-            duration,
-            tickInterval: BUFF_TICK_INTERVAL,
-            timeSinceTick: 0,
-            lastUpdateTime: now,
-            damagePerTick: 0,
-            sourceId: casterId
-        };
-
-        return {
-            ...u,
-            statusEffects: [...filteredEffects, shieldedEffect]
-        };
-    }));
+    const shieldedEffect: StatusEffect = {
+        type: "shielded",
+        duration,
+        tickInterval: BUFF_TICK_INTERVAL,
+        timeSinceTick: 0,
+        lastUpdateTime: now,
+        damagePerTick: 0,
+        sourceId: casterId
+    };
+    setUnits(prev => prev.map(u =>
+        u.id === casterId ? { ...u, statusEffects: applyStatusEffect(u.statusEffects, shieldedEffect) } : u
+    ));
 
     // Play sound and log
     soundFns.playHeal();  // Reuse heal sound for buff activation
@@ -630,6 +595,66 @@ export function executeBuffSkill(
     // Visual effect - golden glow ring
     createAnimatedRing(scene, casterG.position.x, casterG.position.z, "#f1c40f", {
         innerRadius: 0.3, outerRadius: 0.5, maxScale: 1.5, duration: 300
+    });
+
+    return true;
+}
+
+/**
+ * Execute AOE Buff skill (like Defiance) - applies a buff to all allies within range
+ */
+export function executeAoeBuffSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill
+): boolean {
+    const { scene, unitsStateRef, unitsRef, setUnits, addLog } = ctx;
+
+    const casterG = unitsRef.current[casterId];
+    if (!casterG) return false;
+
+    consumeSkill(ctx, casterId, skill);
+
+    const casterData = UNIT_DATA[casterId];
+    const duration = skill.duration!;  // Duration in ms
+    const now = Date.now();
+
+    // Find all player allies within range FIRST (outside setUnits)
+    const allies = unitsStateRef.current.filter(u => u.team === "player" && u.hp > 0);
+    const alliesInRange: number[] = [];
+
+    allies.forEach(ally => {
+        const allyG = unitsRef.current[ally.id];
+        if (!allyG) return;
+
+        // Check if ally is within range (using hitbox-aware range check)
+        const allyRadius = getUnitRadius(ally);
+        if (isInRange(casterG.position.x, casterG.position.z, allyG.position.x, allyG.position.z, allyRadius, skill.range)) {
+            alliesInRange.push(ally.id);
+        }
+    });
+
+    // Apply buff to all allies in range
+    const defianceEffect: StatusEffect = {
+        type: "defiance",
+        duration,
+        tickInterval: BUFF_TICK_INTERVAL,
+        timeSinceTick: 0,
+        lastUpdateTime: now,
+        damagePerTick: 0,
+        sourceId: casterId
+    };
+    setUnits(prev => prev.map(u =>
+        alliesInRange.includes(u.id) ? { ...u, statusEffects: applyStatusEffect(u.statusEffects, defianceEffect) } : u
+    ));
+
+    // Play sound and log
+    soundFns.playWarcry();  // Use warcry sound for battle cry
+    addLog(`${casterData.name} rallies ${alliesInRange.length} allies with ${skill.name}!`, "#c0392b");
+
+    // Visual effect - red battle cry ring expanding outward
+    createAnimatedRing(scene, casterG.position.x, casterG.position.z, "#c0392b", {
+        innerRadius: 0.5, outerRadius: skill.range, maxScale: 2, duration: 400
     });
 
     return true;
@@ -651,34 +676,24 @@ export function executeEnergyShieldSkill(
     consumeSkill(ctx, casterId, skill);
 
     const casterData = UNIT_DATA[casterId];
-    const shieldAmount = skill.value[0];  // Max shield HP
-    const duration = skill.value[1];      // Duration in ms
+    const shieldAmount = skill.shieldAmount!;  // Max shield HP
+    const duration = skill.duration!;          // Duration in ms
     const now = Date.now();
 
     // Apply the energy shield as a status effect
-    setUnits(prev => prev.map(u => {
-        if (u.id !== casterId) return u;
-
-        const existingEffects = u.statusEffects || [];
-        // Remove existing energy shield if any (refresh)
-        const filteredEffects = existingEffects.filter(e => e.type !== "energyShield");
-
-        const shieldEffect: StatusEffect = {
-            type: "energyShield",
-            duration,
-            tickInterval: BUFF_TICK_INTERVAL,
-            timeSinceTick: 0,
-            lastUpdateTime: now,
-            damagePerTick: 0,
-            sourceId: casterId,
-            shieldAmount
-        };
-
-        return {
-            ...u,
-            statusEffects: [...filteredEffects, shieldEffect]
-        };
-    }));
+    const shieldEffect: StatusEffect = {
+        type: "energyShield",
+        duration,
+        tickInterval: BUFF_TICK_INTERVAL,
+        timeSinceTick: 0,
+        lastUpdateTime: now,
+        damagePerTick: 0,
+        sourceId: casterId,
+        shieldAmount
+    };
+    setUnits(prev => prev.map(u =>
+        u.id === casterId ? { ...u, statusEffects: applyStatusEffect(u.statusEffects, shieldEffect) } : u
+    ));
 
     // Play whoosh sound and log
     soundFns.playEnergyShield();
@@ -729,32 +744,23 @@ export function executeCleanseSkill(
     consumeSkill(ctx, casterId, skill);
 
     const casterData = UNIT_DATA[casterId];
-    const duration = skill.value[0];  // Duration in ms (30 seconds)
+    const duration = skill.duration!;  // Duration in ms (30 seconds)
 
     // Apply cleanse: remove poison and add cleansed (immunity) effect
+    const cleansedEffect: StatusEffect = {
+        type: "cleansed",
+        duration,
+        tickInterval: BUFF_TICK_INTERVAL,
+        timeSinceTick: 0,
+        lastUpdateTime: now,
+        damagePerTick: 0,
+        sourceId: casterId
+    };
     setUnits(prev => prev.map(u => {
         if (u.id !== targetId) return u;
-
-        const existingEffects = u.statusEffects || [];
-        // Remove poison effect
-        const withoutPoison = existingEffects.filter(e => e.type !== "poison");
-        // Remove existing cleansed effect if any (refresh)
-        const filteredEffects = withoutPoison.filter(e => e.type !== "cleansed");
-
-        const cleansedEffect: StatusEffect = {
-            type: "cleansed",
-            duration,
-            tickInterval: BUFF_TICK_INTERVAL,
-            timeSinceTick: 0,
-            lastUpdateTime: now,
-            damagePerTick: 0,
-            sourceId: casterId
-        };
-
-        return {
-            ...u,
-            statusEffects: [...filteredEffects, cleansedEffect]
-        };
+        // First remove poison, then apply cleansed effect (which replaces existing cleansed)
+        const withoutPoison = (u.statusEffects || []).filter(e => e.type !== "poison");
+        return { ...u, statusEffects: applyStatusEffect(withoutPoison, cleansedEffect) };
     }));
 
     // Play sound and log
@@ -828,18 +834,8 @@ export function executeFlurrySkill(
     let totalHits = 0;
     let totalDamage = 0;
 
-    // Calculate stat bonus for damage
     const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
-    let statBonus = 0;
-    if (casterUnit) {
-        if (skill.damageType === "physical") {
-            statBonus = getStrengthDamageBonus(casterUnit);
-        } else if (skill.damageType === "fire" || skill.damageType === "cold" || skill.damageType === "lightning" || skill.damageType === "chaos") {
-            statBonus = getIntelligenceMagicDamageBonus(casterUnit);
-        } else if (skill.damageType === "holy") {
-            statBonus = getFaithHolyDamageBonus(casterUnit);
-        }
-    }
+    const statBonus = calculateStatBonus(casterUnit, skill.damageType);
 
     for (let i = 0; i < hitCount; i++) {
         const targetIdx = i % enemiesInRange.length;
@@ -854,15 +850,14 @@ export function executeFlurrySkill(
         // Check for front-shield block
         if (target.enemyType) {
             const enemyStats = ENEMY_STATS[target.enemyType];
-            if (enemyStats.frontShield && target.facing !== undefined) {
-                if (isBlockedByFrontShield(casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, target.facing)) {
-                    continue;  // Skip this hit - blocked by shield
-                }
+            if (checkFrontShieldBlock(enemyStats, target.facing, casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z)) {
+                soundFns.playBlock();
+                continue;  // Skip this hit - blocked by shield
             }
         }
 
         if (rollHit(casterData.accuracy)) {
-            const dmg = calculateDamage(skill.value[0] + statBonus, skill.value[1] + statBonus, getEffectiveArmor(target, targetData.armor), skill.damageType);
+            const dmg = calculateDamage(skill.damageRange![0] + statBonus, skill.damageRange![1] + statBonus, getEffectiveArmor(target, targetData.armor), skill.damageType);
 
             // Use tracked HP, not stale snapshot
             const currentHp = hpTracker[target.id];
@@ -998,12 +993,10 @@ export function executeDebuffSkill(
     // Check for front-shield block
     if (targetEnemy.enemyType) {
         const enemyStats = ENEMY_STATS[targetEnemy.enemyType];
-        if (enemyStats.frontShield && targetEnemy.facing !== undefined) {
-            if (isBlockedByFrontShield(casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, targetEnemy.facing)) {
-                soundFns.playMiss();
-                addLog(`${casterData.name}'s ${skill.name} is blocked by ${targetData.name}'s shield!`, "#4488ff");
-                return true;
-            }
+        if (checkFrontShieldBlock(enemyStats, targetEnemy.facing, casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z)) {
+            soundFns.playBlock();
+            addLog(`${casterData.name}'s ${skill.name} is blocked by ${targetData.name}'s shield!`, "#4488ff");
+            return true;
         }
     }
 
@@ -1012,31 +1005,21 @@ export function executeDebuffSkill(
         // Roll for stun chance
         const stunChance = skill.stunChance ?? 75;
         if (rollChance(stunChance)) {
-            const stunDuration = skill.value[0];  // Duration in ms
+            const stunDuration = skill.duration!;  // Duration in ms
 
             // Apply stunned effect
-            setUnits(prev => prev.map(u => {
-                if (u.id !== targetId) return u;
-
-                const existingEffects = u.statusEffects || [];
-                // Remove existing stunned effect if any (refresh)
-                const filteredEffects = existingEffects.filter(e => e.type !== "stunned");
-
-                const stunnedEffect: StatusEffect = {
-                    type: "stunned",
-                    duration: stunDuration,
-                    tickInterval: BUFF_TICK_INTERVAL,
-                    timeSinceTick: 0,
-                    lastUpdateTime: now,
-                    damagePerTick: 0,
-                    sourceId: casterId
-                };
-
-                return {
-                    ...u,
-                    statusEffects: [...filteredEffects, stunnedEffect]
-                };
-            }));
+            const stunnedEffect: StatusEffect = {
+                type: "stunned",
+                duration: stunDuration,
+                tickInterval: BUFF_TICK_INTERVAL,
+                timeSinceTick: 0,
+                lastUpdateTime: now,
+                damagePerTick: 0,
+                sourceId: casterId
+            };
+            setUnits(prev => prev.map(u =>
+                u.id === targetId ? { ...u, statusEffects: applyStatusEffect(u.statusEffects, stunnedEffect) } : u
+            ));
 
             soundFns.playHit();
             addLog(`${casterData.name}'s ${skill.name} hits ${targetData.name}!`, COLORS.damagePlayer);
@@ -1146,7 +1129,7 @@ export function executeMagicWaveSkill(
             attackerId: casterId,
             targetId: targetId,
             speed: 0.07,
-            damage: skill.value,
+            damage: skill.damageRange!,
             damageType: skill.damageType ?? "chaos",
             zigzagOffset: 0,
             zigzagDirection: i % 2 === 0 ? 1 : -1,
@@ -1210,7 +1193,7 @@ export function executeTrapSkill(
         speed: 0,  // Speed not used for arc trajectory
         targetPos: { x: targetX, z: targetZ },
         aoeRadius: skill.aoeRadius ?? 2,
-        pinnedDuration: skill.value[0],
+        pinnedDuration: skill.duration!,
         trapDamage: skill.trapDamage,
         startX: casterG.position.x,
         startZ: casterG.position.z,
@@ -1255,7 +1238,7 @@ export function executeSanctuarySkill(
     const casterData = UNIT_DATA[casterId];
     const now = Date.now();
     const radius = skill.aoeRadius ?? 2.5;
-    const healPerTick = skill.value[0] ?? SANCTUARY_HEAL_PER_TICK;
+    const healPerTick = skill.healPerTick ?? SANCTUARY_HEAL_PER_TICK;
 
     // Create sanctuary tiles in radius, dispelling acid
     const centerX = Math.floor(targetX);
@@ -1354,6 +1337,8 @@ export function executeSkill(
         return executeManaTransferSkill(ctx, casterId, skill, targetX, targetZ);
     } else if (skill.type === "smite" && skill.targetType === "enemy") {
         return executeSmiteSkill(ctx, casterId, skill, targetX, targetZ, targetId);
+    } else if (skill.type === "aoe_buff" && skill.targetType === "self") {
+        return executeAoeBuffSkill(ctx, casterId, skill);
     }
 
     return false;

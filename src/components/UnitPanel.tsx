@@ -4,7 +4,7 @@ import type { Unit, Skill, StatusEffect, DamageType, Item, CharacterStats } from
 import { isConsumable, isWeapon, isShield, isArmor, isAccessory } from "../core/types";
 import { UNIT_DATA, getAllSkills, getEffectiveUnitData, getEffectiveMaxHp, getEffectiveMaxMana, getXpForLevel } from "../game/units";
 import { getHpPercentage, getHpColor, getMana, hasStatusEffect, getEffectiveArmor } from "../combat/combatMath";
-import { COLORS } from "../core/constants";
+import { COLORS, getSkillColorClass, getSkillBorderColor } from "../core/constants";
 import { getCharacterEquipment, getPartyInventory } from "../game/equipmentState";
 import { getItem } from "../game/items";
 import { isOffHandDisabled } from "../game/equipment";
@@ -168,6 +168,63 @@ const STAT_INFO: Record<keyof CharacterStats, { label: string; name: string; col
     }
 };
 
+/** Effect metadata for display */
+const EFFECT_INFO: Record<string, { icon: string; color: string; description: string }> = {
+    poison: { icon: "☠", color: COLORS.poisonText, description: "Taking damage over time" },
+    shielded: { icon: "🛡", color: COLORS.shieldedText, description: "Armor doubled, cooldowns doubled" },
+    stunned: { icon: "💫", color: COLORS.stunnedText, description: "Cannot act" },
+    cleansed: { icon: "✨", color: COLORS.cleansedText, description: "Immune to poison" },
+    defiance: { icon: "⚔", color: COLORS.defianceText, description: "+2 armor, cooldowns halved" },
+    pinned: { icon: "📌", color: "#c0392b", description: "Cannot move" },
+    slowed: { icon: "🐌", color: "#3498db", description: "Move speed halved, cooldowns +50%" },
+    energyShield: { icon: "🔮", color: "#9b59b6", description: "Absorbs damage" },
+    qi_drain: { icon: "💔", color: "#e74c3c", description: "Life force draining" },
+};
+
+/** Renders active status effects as inline icons with tooltips */
+function EffectsDisplay({ unit }: { unit: Unit }) {
+    if (!unit.statusEffects || unit.statusEffects.length === 0) return null;
+
+    return (
+        <div className="effects-inline">
+            {unit.statusEffects.map((effect: StatusEffect, i: number) => {
+                const remainingSec = Math.ceil(effect.duration / 1000);
+                const info = EFFECT_INFO[effect.type] || { icon: "?", color: "#888", description: "Unknown effect" };
+                const displayName = effect.type.replace(/_/g, " ");
+
+                return (
+                    <Tippy
+                        key={i}
+                        content={
+                            <div className="effect-tooltip">
+                                <div className="effect-tooltip-header" style={{ color: info.color }}>
+                                    {info.icon} {displayName}
+                                </div>
+                                <div className="effect-tooltip-desc">{info.description}</div>
+                                <div className="effect-tooltip-time">{remainingSec}s remaining</div>
+                                {effect.type === "energyShield" && effect.shieldAmount !== undefined && (
+                                    <div className="effect-tooltip-extra" style={{ color: info.color }}>
+                                        {effect.shieldAmount} HP remaining
+                                    </div>
+                                )}
+                            </div>
+                        }
+                        placement="top"
+                        delay={[100, 0]}
+                    >
+                        <div
+                            className="effect-icon"
+                            style={{ color: info.color, borderColor: info.color }}
+                        >
+                            {info.icon}
+                        </div>
+                    </Tippy>
+                );
+            })}
+        </div>
+    );
+}
+
 function StatusTab({ unit, effectiveData, onToggleAI, unitId, onIncrementStat }: {
     unit: Unit;
     effectiveData: typeof UNIT_DATA[number];
@@ -195,6 +252,8 @@ function StatusTab({ unit, effectiveData, onToggleAI, unitId, onIncrementStat }:
 
     return (
         <div style={{ fontSize: 13 }}>
+            <EffectsDisplay unit={unit} />
+
             <div className="level-exp-section">
                 <div className="level-badge">Lv {level}</div>
                 <div className="exp-bar-container">
@@ -270,34 +329,6 @@ function StatusTab({ unit, effectiveData, onToggleAI, unitId, onIncrementStat }:
                 </div>
             </div>
 
-            {unit.statusEffects && unit.statusEffects.length > 0 && (
-                <div className="effects-section">
-                    <div className="effects-label">Effects</div>
-                    <div className="flex flex-col gap-6">
-                        {unit.statusEffects.map((effect: StatusEffect, i: number) => {
-                            const remainingSec = Math.ceil(effect.duration / 1000);
-                            const effectColorMap: Record<string, { bg: string; border: string; text: string }> = {
-                                poison: { bg: COLORS.poisonBg, border: COLORS.poison, text: COLORS.poisonText },
-                                shielded: { bg: COLORS.shieldedBg, border: COLORS.shielded, text: COLORS.shieldedText },
-                                stunned: { bg: COLORS.stunnedBg, border: COLORS.stunned, text: COLORS.stunnedText },
-                                cleansed: { bg: COLORS.cleansedBg, border: COLORS.cleansed, text: COLORS.cleansedText }
-                            };
-                            const colors = effectColorMap[effect.type] || { bg: "#1a1a2a", border: "#444", text: COLORS.logNeutral };
-                            return (
-                                <div
-                                    key={i}
-                                    className="effect-card"
-                                    style={{ background: colors.bg, borderColor: colors.border }}
-                                >
-                                    <span className="capitalize" style={{ color: colors.text }}>{effect.type}</span>
-                                    <span className="effect-duration">{remainingSec}s</span>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            )}
-
             <div
                 className={`toggle-row ${unit.aiEnabled ? "active" : ""}`}
                 onClick={() => onToggleAI(unitId)}
@@ -337,19 +368,20 @@ function SkillTooltip({ skill, isShielded }: { skill: Skill; isShielded: boolean
         const dmgInfo = getDamageTypeInfo(skill.damageType);
         // Magic Missile shows damage per missile and missile count
         if (skill.hitCount) {
-            lines.push({ label: "Damage", value: `${skill.value[0]}-${skill.value[1]} × ${skill.hitCount}`, color: dmgInfo.color });
+            lines.push({ label: "Damage", value: `${skill.damageRange![0]}-${skill.damageRange![1]} × ${skill.hitCount}`, color: dmgInfo.color });
             lines.push({ label: "Type", value: dmgInfo.name, color: dmgInfo.color });
             lines.push({ label: "Missiles", value: `${skill.hitCount} (up to ${skill.hitCount} targets)`, color: "#9966ff" });
         } else {
-            lines.push({ label: "Damage", value: `${skill.value[0]}-${skill.value[1]}`, color: dmgInfo.color });
+            lines.push({ label: "Damage", value: `${skill.damageRange![0]}-${skill.damageRange![1]}`, color: dmgInfo.color });
             lines.push({ label: "Type", value: dmgInfo.name, color: dmgInfo.color });
         }
     } else if (skill.type === "heal") {
-        lines.push({ label: "Heal", value: `${skill.value[0]}-${skill.value[1]}`, color: COLORS.hpHigh });
+        lines.push({ label: "Heal", value: `${skill.healRange![0]}-${skill.healRange![1]}`, color: COLORS.hpHigh });
     } else if (skill.type === "taunt") {
-        lines.push({ label: "Taunt chance", value: `${skill.value[0]}%` });
+        lines.push({ label: "Taunt chance", value: `${skill.tauntChance}%` });
+        lines.push({ label: "Radius", value: `${skill.range}`, color: "#ff6600" });
     } else if (skill.type === "buff") {
-        const durationSec = Math.round(skill.value[0] / 1000);
+        const durationSec = Math.round(skill.duration! / 1000);
         // Different buff types have different effects
         if (skill.name === "Raise Shield") {
             lines.push({ label: "Duration", value: `${durationSec}s`, color: COLORS.shieldedText });
@@ -364,35 +396,51 @@ function SkillTooltip({ skill, isShielded }: { skill: Skill; isShielded: boolean
         }
     } else if (skill.type === "flurry") {
         const dmgInfo = getDamageTypeInfo(skill.damageType);
-        lines.push({ label: "Damage", value: `${skill.value[0]}-${skill.value[1]} × ${skill.hitCount ?? 5}`, color: dmgInfo.color });
+        lines.push({ label: "Damage", value: `${skill.damageRange![0]}-${skill.damageRange![1]} × ${skill.hitCount ?? 5}`, color: dmgInfo.color });
         lines.push({ label: "Type", value: dmgInfo.name, color: dmgInfo.color });
         lines.push({ label: "Targets", value: `Up to ${skill.hitCount ?? 5} nearby` });
+        lines.push({ label: "Radius", value: `${skill.range}`, color: "#ff6600" });
     } else if (skill.type === "debuff") {
-        const durationSec = Math.round(skill.value[0] / 1000);
+        const durationSec = Math.round(skill.duration! / 1000);
         lines.push({ label: "Duration", value: `${durationSec}s`, color: COLORS.stunnedText });
         if (skill.stunChance) {
             lines.push({ label: "Stun chance", value: `${skill.stunChance}%`, color: COLORS.stunnedText });
         }
     } else if (skill.type === "trap") {
-        const durationSec = Math.round(skill.value[0] / 1000);
+        const durationSec = Math.round(skill.duration! / 1000);
         lines.push({ label: "Pin duration", value: `${durationSec}s`, color: "#c0392b" });
     } else if (skill.type === "sanctuary") {
-        lines.push({ label: "Heal/tick", value: `${skill.value[0]}`, color: COLORS.hpHigh });
+        lines.push({ label: "Heal/tick", value: `${skill.healPerTick}`, color: COLORS.hpHigh });
         lines.push({ label: "Effect", value: "Dispels acid", color: "#9acd32" });
     } else if (skill.type === "mana_transfer") {
-        lines.push({ label: "Mana given", value: `${skill.value[0]}-${skill.value[1]}`, color: COLORS.mana });
+        lines.push({ label: "Mana given", value: `${skill.manaRange![0]}-${skill.manaRange![1]}`, color: COLORS.mana });
         if (skill.selfDamage) {
             lines.push({ label: "HP cost", value: `${skill.selfDamage[0]}-${skill.selfDamage[1]} over time`, color: COLORS.damageEnemy });
         }
     } else if (skill.type === "smite") {
         // Instant-hit single-target damage (e.g., Thunder)
         const dmgInfo = getDamageTypeInfo(skill.damageType);
-        lines.push({ label: "Damage", value: `${skill.value[0]}-${skill.value[1]}`, color: dmgInfo.color });
+        lines.push({ label: "Damage", value: `${skill.damageRange![0]}-${skill.damageRange![1]}`, color: dmgInfo.color });
         lines.push({ label: "Type", value: dmgInfo.name, color: dmgInfo.color });
+    } else if (skill.type === "aoe_buff") {
+        // AOE ally buff (e.g., Defiance)
+        const durationSec = Math.round(skill.duration! / 1000);
+        const armorBonus = skill.armorBonus;
+        lines.push({ label: "Duration", value: `${durationSec}s`, color: COLORS.defianceText });
+        lines.push({ label: "Armor bonus", value: `+${armorBonus}`, color: COLORS.defianceText });
+        lines.push({ label: "Cooldown buff", value: "×0.5", color: COLORS.defianceText });
+        lines.push({ label: "Radius", value: `${skill.range}`, color: "#ff6600" });
+    } else if (skill.type === "energy_shield") {
+        // Self-buff that absorbs damage
+        const durationSec = Math.round(skill.duration! / 1000);
+        lines.push({ label: "Shield HP", value: `${skill.shieldAmount}`, color: "#9b59b6" });
+        lines.push({ label: "Duration", value: `${durationSec}s`, color: "#9b59b6" });
+        lines.push({ label: "Weakness", value: "Chaos ×2 penetration", color: COLORS.dmgChaos });
     }
 
-    // Range
-    if (skill.range > 0) {
+    // Range (skip for self-targeted AOE skills that use range as radius)
+    const skipRange = skill.targetType === "self" && (skill.type === "taunt" || skill.type === "flurry" || skill.type === "aoe_buff");
+    if (skill.range > 0 && !skipRange) {
         lines.push({ label: isRanged ? "Range" : "Melee", value: isRanged ? `${skill.range}` : "1.8" });
     }
 
@@ -457,6 +505,8 @@ function SkillsTab({
 
     return (
         <div className="flex flex-col gap-8">
+            <EffectsDisplay unit={unit} />
+
             {getAllSkills(unitId).map((skill: Skill, i: number) => {
                 const cooldownKey = `${unitId}-${skill.name}`;
                 const cooldownData = skillCooldowns[cooldownKey];
@@ -473,14 +523,8 @@ function SkillsTab({
                 // Can click if has mana and alive (clicking queues the skill)
                 const canClick = hasManaForSkill && unit.hp > 0;
 
-                const skillColorClass = skill.type === "damage" ? "skill-damage" :
-                    skill.type === "heal" ? "skill-heal" :
-                    skill.type === "taunt" ? "skill-taunt" :
-                    skill.type === "flurry" ? "skill-flurry" : "skill-buff";
-                const skillBorderColor = skill.type === "damage" ? "#ef4444" :
-                    skill.type === "heal" ? "#22c55e" :
-                    skill.type === "taunt" ? "#c0392b" :
-                    skill.type === "flurry" ? "#27ae60" : "#f1c40f";
+                const skillColorClass = getSkillColorClass(skill.type);
+                const skillBorderColor = getSkillBorderColor(skill.type);
 
                 const cardClass = `skill-card ${!canClick && !isQueued ? "disabled" : ""} ${isQueued ? "queued" : ""}`;
 

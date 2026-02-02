@@ -13,7 +13,7 @@ import type { Unit, Skill, CombatLogEntry, SelectionBox, DamageText, UnitGroup, 
 // Game Logic
 import { blocked } from "./game/dungeon";
 import { getCurrentArea, getCurrentAreaId, setCurrentArea, AREAS, DEFAULT_STARTING_AREA, DEFAULT_SPAWN_POINT, getBlocked, type AreaId, type AreaTransition } from "./game/areas";
-import { UNIT_DATA, ENEMY_STATS, getBasicAttackSkill } from "./game/units";
+import { UNIT_DATA, ENEMY_STATS, getBasicAttackSkill, getAllSkills } from "./game/units";
 import { initializeEquipmentState, getPartyInventory, setPartyInventory, getAllEquipment, setAllEquipment } from "./game/equipmentState";
 import { removeFromInventory } from "./game/equipment";
 import { getItem } from "./game/items";
@@ -74,6 +74,7 @@ import type { AcidTile, LootBag } from "./core/types";
 // UI Components
 import { PartyBar } from "./components/PartyBar";
 import { UnitPanel } from "./components/UnitPanel";
+import { type HotbarAssignments, loadHotbarAssignments, saveHotbarAssignments } from "./components/SkillHotbar";
 import { CombatLog } from "./components/CombatLog";
 import { HUD } from "./components/HUD";
 import { HelpModal } from "./components/HelpModal";
@@ -278,6 +279,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
     const [fps, setFps] = useState(0);
     const [debug, setDebug] = useState(false);
     const [fastMove, setFastMove] = useState(false);
+    const [hotbarAssignments, setHotbarAssignments] = useState<HotbarAssignments>(loadHotbarAssignments);
 
     // Update debug speed multiplier when fastMove changes
     useEffect(() => {
@@ -297,6 +299,8 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
     const helpOpenRef = useRef(helpOpen);
     const skillCooldownsRef = useRef(skillCooldowns);
     const openedChestsRef = useRef(openedChests);
+    const hotbarAssignmentsRef = useRef(hotbarAssignments);
+    const handleCastSkillRef = useRef<((unitId: number, skill: import("./core/types").Skill) => void) | null>(null);
 
     useEffect(() => { selectedRef.current = selectedIds; }, [selectedIds]);
     useEffect(() => { unitsStateRef.current = units; }, [units]);
@@ -306,6 +310,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
     useEffect(() => { helpOpenRef.current = helpOpen; }, [helpOpen]);
     useEffect(() => { skillCooldownsRef.current = skillCooldowns; }, [skillCooldowns]);
     useEffect(() => { openedChestsRef.current = openedChests; }, [openedChests]);
+    useEffect(() => { hotbarAssignmentsRef.current = hotbarAssignments; }, [hotbarAssignments]);
     useEffect(() => { updateChestStates(chestMeshesRef.current, openedChests); }, [openedChests]);
     useEffect(() => { hoveredDoorRef.current = hoveredDoor?.targetArea ?? null; }, [hoveredDoor]);
 
@@ -1110,6 +1115,23 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                     setSelectedIds([]);
                 }
             }
+            // Hotbar skill shortcuts (1-5)
+            if (["Digit1", "Digit2", "Digit3", "Digit4", "Digit5"].includes(e.code)) {
+                const slotIndex = parseInt(e.code.charAt(5)) - 1;  // 0-4
+                const selected = selectedRef.current;
+                if (selected.length === 1) {
+                    const unitId = selected[0];
+                    const slots = hotbarAssignmentsRef.current[unitId] || [null, null, null, null, null];
+                    const skillName = slots[slotIndex];
+                    if (skillName) {
+                        const skills = getAllSkills(unitId);
+                        const skill = skills.find(s => s.name === skillName);
+                        if (skill) {
+                            handleCastSkillRef.current?.(unitId, skill);
+                        }
+                    }
+                }
+            }
             if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyW", "KeyA", "KeyS", "KeyD"].includes(e.code)) {
                 keysPressed.current.add(e.code);
             }
@@ -1509,6 +1531,7 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
 
         setupTargetingMode(casterId, skill, casterG, rangeIndicatorRef, aoeIndicatorRef, setTargetingMode);
     };
+    handleCastSkillRef.current = handleCastSkill;
 
     // Toggle pause handler for HUD button
     const handleTogglePause = () => {
@@ -1827,6 +1850,20 @@ function Game({ onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, 
                         addLog
                     );
                 }}
+                hotbarAssignments={hotbarAssignments}
+                onAssignSkill={(unitId, slotIndex, skillName) => {
+                    setHotbarAssignments(prev => {
+                        const unitSlots = prev[unitId] || [null, null, null, null, null];
+                        const newSlots = [...unitSlots];
+                        newSlots[slotIndex] = skillName;
+                        const newAssignments = { ...prev, [unitId]: newSlots };
+                        saveHotbarAssignments(newAssignments);
+                        return newAssignments;
+                    });
+                }}
+                onCastSkill={handleCastSkill}
+                skillCooldowns={skillCooldowns}
+                paused={paused}
             />
             {showPanel && selectedIds.length === 1 && <UnitPanel
                 unitId={selectedIds[0]}

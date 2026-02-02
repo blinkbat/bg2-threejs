@@ -36,7 +36,7 @@ export function getXpForLevel(level: number): number {
 
 // Level 1 base stats - characters gain stats on level up
 export const UNIT_DATA: Record<number, UnitData> = {
-    1: { name: "Barbarian", class: "Barbarian", hp: 30, maxHp: 30, mana: 15, maxMana: 15, damage: [1, 4], accuracy: 70, armor: 0, color: "#c0392b", skills: [SKILLS.warcry, SKILLS.stunningBlow], items: [], attackCooldown: 2000 },
+    1: { name: "Barbarian", class: "Barbarian", hp: 30, maxHp: 30, mana: 15, maxMana: 15, damage: [1, 4], accuracy: 70, armor: 0, color: "#c0392b", skills: [SKILLS.warcry, SKILLS.defiance, SKILLS.stunningBlow], items: [], attackCooldown: 2000 },
     2: { name: "Paladin", class: "Paladin", hp: 28, maxHp: 28, mana: 20, maxMana: 20, damage: [1, 4], accuracy: 65, armor: 0, color: "#f1c40f", skills: [SKILLS.raiseShield, SKILLS.sanctuary], items: [], attackCooldown: 2500 },
     3: { name: "Thief", class: "Thief", hp: 16, maxHp: 16, mana: 18, maxMana: 18, damage: [1, 4], accuracy: 75, armor: 0, color: "#8e44ad", skills: [SKILLS.poisonDagger, SKILLS.caltrops], items: [], attackCooldown: 1500 },
     4: { name: "Wizard", class: "Wizard", hp: 12, maxHp: 12, mana: 50, maxMana: 50, damage: [1, 4], accuracy: 60, armor: 0, color: "#3498db", skills: [SKILLS.fireball, SKILLS.magicWave, SKILLS.energyShield], items: [], attackCooldown: 3000 },
@@ -69,7 +69,7 @@ export function getBasicAttackSkill(unitId: number, unit?: Unit): Skill {
         type: "damage",
         targetType: "enemy",
         range: range ?? 1.8,
-        value: damage,
+        damageRange: damage,
         damageType,
         projectileColor,
     };

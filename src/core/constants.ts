@@ -35,6 +35,9 @@ export const SLOW_DURATION = 10000;        // 10 seconds
 export const SLOW_COOLDOWN_MULT = 1.5;     // 1.5x cooldowns when slowed
 export const SLOW_MOVE_MULT = 0.5;         // 0.5x move speed when slowed
 
+// Status Effects - Defiance
+export const DEFIANCE_COOLDOWN_MULT = 0.5; // 0.5x cooldowns when under defiance buff
+
 // Status Effects - Qi Drain (self-damage from Qi Focus)
 export const QI_DRAIN_DURATION = 10000;    // 10 seconds
 export const QI_DRAIN_TICK_INTERVAL = 1000; // tick every 1 second
@@ -132,6 +135,9 @@ export const COLORS = {
     pinned: "#8b0000",
     pinnedText: "#ff4444",
     pinnedBg: "#2a1010",
+    defiance: "#c0392b",
+    defianceText: "#e74c3c",
+    defianceBg: "#2a1515",
     acid: "#9acd32",            // Yellow-green for acid tiles
     acidText: "#b8e060",        // Brighter for damage text
     sanctuary: "#ffd700",       // Golden for sanctuary tiles
@@ -157,3 +163,49 @@ export const COLORS = {
     dmgChaos: "#9b59b6",       // Purple - chaos/arcane damage
     dmgHoly: "#f1c40f",        // Golden - holy damage
 };
+
+// =============================================================================
+// SKILL TYPE UI MAPPING - CSS class and border color by skill type
+// =============================================================================
+
+type SkillTypeForColor = "damage" | "heal" | "buff" | "taunt" | "flurry" | "debuff" | "trap" | "sanctuary" | "mana_transfer" | "smite" | "energy_shield" | "aoe_buff";
+
+/** Map skill type to CSS class for styling */
+export function getSkillColorClass(skillType: SkillTypeForColor | undefined): string {
+    switch (skillType) {
+        case "damage":
+        case "smite":
+            return "skill-damage";
+        case "heal":
+        case "sanctuary":
+            return "skill-heal";
+        case "taunt":
+        case "debuff":
+        case "trap":
+            return "skill-taunt";
+        case "flurry":
+            return "skill-flurry";
+        default:
+            return "skill-buff";
+    }
+}
+
+/** Map skill type to border color for visual indication */
+export function getSkillBorderColor(skillType: SkillTypeForColor | undefined): string {
+    switch (skillType) {
+        case "damage":
+        case "smite":
+            return "#ef4444";  // Red
+        case "heal":
+        case "sanctuary":
+            return "#22c55e";  // Green
+        case "taunt":
+        case "debuff":
+        case "trap":
+            return "#c0392b";  // Dark red
+        case "flurry":
+            return "#27ae60";  // Emerald
+        default:
+            return "#f1c40f";  // Yellow (buff)
+    }
+}

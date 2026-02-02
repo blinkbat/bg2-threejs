@@ -1,6 +1,7 @@
 import type { Unit, Skill } from "../core/types";
 import { UNIT_DATA, getEffectiveMaxHp } from "../game/units";
 import { getHpPercentage, getHpColor } from "../combat/combatMath";
+import { SkillHotbar, type HotbarAssignments } from "./SkillHotbar";
 
 interface PartyBarProps {
     units: Unit[];
@@ -8,9 +9,26 @@ interface PartyBarProps {
     onSelect: React.Dispatch<React.SetStateAction<number[]>>;
     targetingMode?: { casterId: number; skill: Skill } | null;
     onTargetUnit?: (targetUnitId: number) => void;
+    // Hotbar props
+    hotbarAssignments?: HotbarAssignments;
+    onAssignSkill?: (unitId: number, slotIndex: number, skillName: string | null) => void;
+    onCastSkill?: (unitId: number, skill: Skill) => void;
+    skillCooldowns?: Record<string, { end: number; duration: number }>;
+    paused?: boolean;
 }
 
-export function PartyBar({ units, selectedIds, onSelect, targetingMode, onTargetUnit }: PartyBarProps) {
+export function PartyBar({
+    units,
+    selectedIds,
+    onSelect,
+    targetingMode,
+    onTargetUnit,
+    hotbarAssignments = {},
+    onAssignSkill,
+    onCastSkill,
+    skillCooldowns = {},
+    paused = false
+}: PartyBarProps) {
     const playerUnits = units.filter((u: Unit) => u.team === "player");
 
     return (
@@ -46,9 +64,23 @@ export function PartyBar({ units, selectedIds, onSelect, targetingMode, onTarget
                 ].filter(Boolean).join(" ");
 
                 const hasUnspentPoints = (unit.statPoints ?? 0) > 0;
+                const showHotbar = isSelected && selectedIds.length === 1 && onAssignSkill;
 
                 return (
                     <div key={unit.id} className={portraitClass} onClick={handleClick}>
+                        {/* Show hotbar above selected unit */}
+                        {showHotbar && (
+                            <div className="party-bar-hotbar">
+                                <SkillHotbar
+                                    unit={unit}
+                                    hotbarAssignments={hotbarAssignments}
+                                    onAssignSkill={onAssignSkill}
+                                    onCastSkill={onCastSkill}
+                                    skillCooldowns={skillCooldowns}
+                                    paused={paused}
+                                />
+                            </div>
+                        )}
                         <div className="portrait-icon" style={{ background: data.color }}>
                             {data.name[0]}
                             {hasUnspentPoints && <span className="levelup-badge">+</span>}

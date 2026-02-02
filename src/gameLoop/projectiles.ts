@@ -6,8 +6,7 @@ import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, Projectile, EnemyStats, MagicMissileProjectile, TrapProjectile, FireballProjectile, StatusEffect, DamageType, UnitData } from "../core/types";
 import { HIT_DETECTION_RADIUS, COLORS, BUFF_TICK_INTERVAL } from "../core/constants";
 import { getUnitStats } from "../game/units";
-import { getIntelligenceMagicDamageBonus, getFaithHolyDamageBonus } from "../game/statBonuses";
-import { calculateDamage, getDirectionAndDistance, rollHit, rollChance, shouldApplyPoison, getEffectiveArmor, logHit, logLifestealHit, logMiss, logPoisoned, logAoeHit, logAoeMiss, getDamageColor, logTrapTriggered, isBlockedByFrontShield } from "../combat/combatMath";
+import { calculateDamage, getDirectionAndDistance, rollHit, shouldApplyPoison, getEffectiveArmor, logHit, logLifestealHit, logMiss, logPoisoned, logAoeHit, logAoeMiss, getDamageColor, logTrapTriggered, calculateStatBonus, applyStatusEffect, checkFrontShieldBlock, checkEnemyBlockChance } from "../combat/combatMath";
 import { distance } from "../game/geometry";
 import { isBlocked } from "../ai/pathfinding";
 import { ENEMY_STATS } from "../game/units";
@@ -129,13 +128,7 @@ export function updateProjectiles(
                     if (targetDist <= aoeRadius) {
                         const targetData = getUnitStats(target);
                         const currentHp = hpTracker[target.id] ?? target.hp;
-                        // Apply intelligence bonus for elemental/chaos damage, faith bonus for holy
-                        let statBonus = 0;
-                        if (attackerUnit && (proj.damageType === "fire" || proj.damageType === "cold" || proj.damageType === "lightning" || proj.damageType === "chaos")) {
-                            statBonus = getIntelligenceMagicDamageBonus(attackerUnit);
-                        } else if (attackerUnit && proj.damageType === "holy") {
-                            statBonus = getFaithHolyDamageBonus(attackerUnit);
-                        }
+                        const statBonus = calculateStatBonus(attackerUnit, proj.damageType);
                         const dmg = calculateDamage(damage[0] + statBonus, damage[1] + statBonus, getEffectiveArmor(target, targetData.armor), proj.damageType);
 
                         const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now, defeatedThisFrame };
@@ -241,14 +234,10 @@ export function updateProjectiles(
                     // Magic missiles only have 50% chance to be blocked by shield
                     if (attackerUnit.team === "player" && targetUnit.enemyType) {
                         const enemyStats = ENEMY_STATS[targetUnit.enemyType];
-                        if (enemyStats.frontShield && targetUnit.facing !== undefined) {
-                            const attackerG = unitsRef[mmProj.attackerId];
-                            if (attackerG && isBlockedByFrontShield(attackerG.position.x, attackerG.position.z, targetG.position.x, targetG.position.z, targetUnit.facing)) {
-                                // 50% chance to block magic projectiles
-                                if (Math.random() < 0.5) {
-                                    shieldBlocked = true;
-                                }
-                            }
+                        const attackerG = unitsRef[mmProj.attackerId];
+                        if (attackerG && checkFrontShieldBlock(enemyStats, targetUnit.facing, attackerG.position.x, attackerG.position.z, targetG.position.x, targetG.position.z, 0.5)) {
+                            soundFns.playBlock();
+                            shieldBlocked = true;
                         }
                     }
 
@@ -259,13 +248,7 @@ export function updateProjectiles(
 
                         // Skip if target already dead (killed by another projectile this frame)
                         if (currentHp > 0) {
-                            // Apply intelligence bonus for elemental/chaos damage
-                            let statBonus = 0;
-                            if (mmProj.damageType === "fire" || mmProj.damageType === "cold" || mmProj.damageType === "lightning" || mmProj.damageType === "chaos") {
-                                statBonus = getIntelligenceMagicDamageBonus(attackerUnit);
-                            } else if (mmProj.damageType === "holy") {
-                                statBonus = getFaithHolyDamageBonus(attackerUnit);
-                            }
+                            const statBonus = calculateStatBonus(attackerUnit, mmProj.damageType);
                             dmgDealt = calculateDamage(mmProj.damage[0] + statBonus, mmProj.damage[1] + statBonus, getEffectiveArmor(targetUnit, targetData.armor), mmProj.damageType);
 
                             const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now, defeatedThisFrame };
@@ -440,15 +423,8 @@ export function updateProjectiles(
 
                             setUnits(prev => prev.map(u => {
                                 if (u.id !== target.id) return u;
-                                const existingEffects = u.statusEffects || [];
-                                // Remove existing pinned effect if any (refresh)
-                                const filteredEffects = existingEffects.filter(e => e.type !== "pinned");
                                 const newHp = damage > 0 ? Math.max(0, u.hp - damage) : u.hp;
-                                return {
-                                    ...u,
-                                    hp: newHp,
-                                    statusEffects: [...filteredEffects, pinnedEffect]
-                                };
+                                return { ...u, hp: newHp, statusEffects: applyStatusEffect(u.statusEffects, pinnedEffect) };
                             }));
 
                             pinnedCount++;
@@ -607,26 +583,21 @@ export function updateProjectiles(
                 aggroOnHit(targetUnit, proj.attackerId, unitsRef);
             }
 
-            // Check for front-shield block (player attacking shielded enemy)
+            // Check for enemy defensive abilities (player attacking shielded enemy)
             if (attackerUnit.team === "player" && targetUnit.enemyType) {
                 const enemyStats = ENEMY_STATS[targetUnit.enemyType];
-                if (enemyStats.frontShield && targetUnit.facing !== undefined) {
-                    if (attackerG && isBlockedByFrontShield(attackerG.position.x, attackerG.position.z, targetG.position.x, targetG.position.z, targetUnit.facing)) {
-                        soundFns.playMiss();
-                        addLog(`${attackerData.name}'s attack is blocked by ${targetData.name}'s shield!`, "#4488ff");
-                        disposeProjectile(scene, proj);
-                        return false;
-                    }
+                if (attackerG && checkFrontShieldBlock(enemyStats, targetUnit.facing, attackerG.position.x, attackerG.position.z, targetG.position.x, targetG.position.z)) {
+                    soundFns.playBlock();
+                    addLog(`${attackerData.name}'s attack is blocked by ${targetData.name}'s shield!`, "#4488ff");
+                    disposeProjectile(scene, proj);
+                    return false;
                 }
-                // Check for block chance (skeleton warrior etc.) - only blocks physical damage
-                if (enemyStats.blockChance) {
-                    const dmgType = getBasicAttackDamageType(attackerUnit, attackerData);
-                    if (dmgType === "physical" && rollChance(enemyStats.blockChance)) {
-                        soundFns.playMiss();
-                        addLog(`${targetData.name} blocks ${attackerData.name}'s attack!`, "#aaaaaa");
-                        disposeProjectile(scene, proj);
-                        return false;
-                    }
+                const dmgType = getBasicAttackDamageType(attackerUnit, attackerData);
+                if (checkEnemyBlockChance(enemyStats, dmgType)) {
+                    soundFns.playBlock();
+                    addLog(`${targetData.name} blocks ${attackerData.name}'s attack!`, "#aaaaaa");
+                    disposeProjectile(scene, proj);
+                    return false;
                 }
             }
 

@@ -3,7 +3,8 @@
 // =============================================================================
 
 import type { Unit, UnitData, EnemyStats, StatusEffect, StatusEffectType, DamageType } from "../core/types";
-import { POISON_DURATION, POISON_TICK_INTERVAL, POISON_DAMAGE_PER_TICK, SLOW_DURATION, BUFF_TICK_INTERVAL, COLORS } from "../core/constants";
+import { POISON_DURATION, POISON_TICK_INTERVAL, POISON_DAMAGE_PER_TICK, SLOW_DURATION, BUFF_TICK_INTERVAL, COLORS, SLOW_COOLDOWN_MULT, DEFIANCE_COOLDOWN_MULT } from "../core/constants";
+import { getStrengthDamageBonus, getIntelligenceMagicDamageBonus, getFaithHolyDamageBonus } from "../game/statBonuses";
 
 // =============================================================================
 // DISTANCE & POSITION UTILITIES
@@ -68,6 +69,23 @@ export const rollDamage = (min: number, max: number): number =>
 // Roll hit based on accuracy percentage
 export const rollHit = (accuracy: number): boolean =>
     rollChance(accuracy);
+
+/**
+ * Calculate stat-based damage bonus for a unit based on damage type.
+ * Physical damage gets strength bonus, elemental/chaos gets intelligence bonus, holy gets faith bonus.
+ * @returns The stat bonus to add to damage (0 if unit is undefined)
+ */
+export function calculateStatBonus(unit: Unit | undefined, damageType: DamageType): number {
+    if (!unit) return 0;
+    if (damageType === "physical") {
+        return getStrengthDamageBonus(unit);
+    } else if (damageType === "fire" || damageType === "cold" || damageType === "lightning" || damageType === "chaos") {
+        return getIntelligenceMagicDamageBonus(unit);
+    } else if (damageType === "holy") {
+        return getFaithHolyDamageBonus(unit);
+    }
+    return 0;
+}
 
 /**
  * Calculate final damage after armor reduction.
@@ -212,10 +230,25 @@ export function shouldApplySlow(attackerData: UnitData | EnemyStats): boolean {
 }
 
 /**
- * Get effective armor for a unit, applying shielded buff (doubles armor).
+ * Get effective armor for a unit, applying shielded buff (doubles armor) and defiance (+2 armor).
  */
 export function getEffectiveArmor(unit: Unit, baseArmor: number): number {
-    return hasStatusEffect(unit, "shielded") ? baseArmor * 2 : baseArmor;
+    let armor = baseArmor;
+    if (hasStatusEffect(unit, "shielded")) armor *= 2;
+    if (hasStatusEffect(unit, "defiance")) armor += 2;
+    return armor;
+}
+
+/**
+ * Get effective cooldown multiplier for a unit, accounting for slow (increases) and defiance (decreases).
+ * Slow: 1.5x cooldowns, Defiance: 0.5x cooldowns
+ * If both apply, they multiply together (1.5 * 0.5 = 0.75)
+ */
+export function getCooldownMultiplier(unit: Unit): number {
+    let mult = 1;
+    if (hasStatusEffect(unit, "slowed")) mult *= SLOW_COOLDOWN_MULT;
+    if (hasStatusEffect(unit, "defiance")) mult *= DEFIANCE_COOLDOWN_MULT;
+    return mult;
 }
 
 /**
@@ -367,6 +400,51 @@ export function isUnitAlive(unit: Unit, defeatedThisFrame?: Set<number>): boolea
     if (unit.hp <= 0) return false;
     if (defeatedThisFrame && defeatedThisFrame.has(unit.id)) return false;
     return true;
+}
+
+// =============================================================================
+// ENEMY DEFENSE HELPERS
+// =============================================================================
+
+/**
+ * Check if an enemy's front shield blocks an attack.
+ * Returns true if the enemy has a front shield, is facing the attacker, and the attack comes from the front.
+ * @param enemyStats - The enemy's stats (from ENEMY_STATS lookup)
+ * @param enemyFacing - The enemy's facing direction (undefined if not applicable)
+ * @param attackerX - Attacker's X position
+ * @param attackerZ - Attacker's Z position
+ * @param targetX - Target's X position
+ * @param targetZ - Target's Z position
+ * @param blockModifier - Optional modifier to reduce block effectiveness (e.g., 0.5 for magic projectiles)
+ */
+export function checkFrontShieldBlock(
+    enemyStats: { frontShield?: boolean },
+    enemyFacing: number | undefined,
+    attackerX: number,
+    attackerZ: number,
+    targetX: number,
+    targetZ: number,
+    blockModifier: number = 1
+): boolean {
+    if (!enemyStats.frontShield || enemyFacing === undefined) return false;
+    if (!isBlockedByFrontShield(attackerX, attackerZ, targetX, targetZ, enemyFacing)) return false;
+    // Apply block modifier (e.g., magic missiles have 50% chance to be blocked)
+    if (blockModifier < 1 && Math.random() >= blockModifier) return false;
+    return true;
+}
+
+/**
+ * Check if an enemy's passive block chance blocks a physical attack.
+ * Only physical damage can be blocked by block chance.
+ * @param enemyStats - The enemy's stats (from ENEMY_STATS lookup)
+ * @param damageType - The type of damage being dealt
+ */
+export function checkEnemyBlockChance(
+    enemyStats: { blockChance?: number },
+    damageType: DamageType
+): boolean {
+    if (!enemyStats.blockChance || damageType !== "physical") return false;
+    return rollChance(enemyStats.blockChance);
 }
 
 // =============================================================================

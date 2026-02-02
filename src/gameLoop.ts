@@ -4,7 +4,7 @@
 
 import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation, EnemyStats, EnemySpawnSkill } from "./core/types";
-import { SKILL_SINGLE_TARGET_CHANCE, SLOW_COOLDOWN_MULT, SLOW_MOVE_MULT } from "./core/constants";
+import { SKILL_SINGLE_TARGET_CHANCE, SLOW_MOVE_MULT } from "./core/constants";
 import { getUnitRadius, isInRange } from "./rendering/range";
 import { tryKite, type KiteContext } from "./ai/targeting";
 import {
@@ -13,7 +13,7 @@ import {
 } from "./ai/unitAI";
 import { getUnitStats, getBasicAttackSkill, getAttackRange } from "./game/units";
 import type { ActionQueue } from "./input";
-import { hasStatusEffect, isUnitAlive } from "./combat/combatMath";
+import { hasStatusEffect, isUnitAlive, getCooldownMultiplier } from "./combat/combatMath";
 import { getAliveUnitsInRange } from "./combat/combat";
 import { isEnemyKiting, clearEnemyKiting } from "./game/enemyState";
 import { findPath } from "./ai/pathfinding";
@@ -241,7 +241,7 @@ export function updateUnitAI(
                 setUnits, addLog
             );
             if (executed) {
-                const cooldownMult = hasStatusEffect(unit, "slowed") ? SLOW_COOLDOWN_MULT : 1;
+                const cooldownMult = getCooldownMultiplier(unit);
                 setSkillCooldowns(prev => ({
                     ...prev,
                     [healCooldownKey]: { end: now + healSkill.cooldown * cooldownMult, duration: healSkill.cooldown }
@@ -344,7 +344,7 @@ export function updateUnitAI(
                                     hitFlashRef, setUnits, addLog, now, defeatedThisFrame
                                 );
                                 if (executed) {
-                                    const cooldownMult = hasStatusEffect(unit, "slowed") ? SLOW_COOLDOWN_MULT : 1;
+                                    const cooldownMult = getCooldownMultiplier(unit);
                                     setSkillCooldowns(prev => ({
                                         ...prev,
                                         [enemySkillKey]: { end: now + skill.cooldown * cooldownMult, duration: skill.cooldown }
@@ -380,7 +380,7 @@ export function updateUnitAI(
                     }
 
                     // Enemy units: execute attack directly (they don't use player skill queue)
-                    const cooldownMult = hasStatusEffect(unit, "slowed") ? SLOW_COOLDOWN_MULT : 1;
+                    const cooldownMult = getCooldownMultiplier(unit);
                     const attackCooldownEnd = now + data.attackCooldown * cooldownMult;
                     actionCooldownRef[unit.id] = attackCooldownEnd;
 

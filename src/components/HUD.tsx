@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
-import { Play, Pause, Menu, Bug } from "lucide-react";
+import { Play, Pause, Menu, Bug, Music } from "lucide-react";
 import { MenuModal } from "./MenuModal";
+import { JukeboxModal } from "./JukeboxModal";
 import { AREAS, type AreaId } from "../game/areas";
 
 interface HUDProps {
@@ -46,6 +47,7 @@ export function HUD({
 }: HUDProps) {
     const [menuOpen, setMenuOpen] = useState(false);
     const [debugPanelOpen, setDebugPanelOpen] = useState(false);
+    const [jukeboxOpen, setJukeboxOpen] = useState(false);
 
     // Enable debug visuals when panel opens, disable when it closes
     useEffect(() => {
@@ -180,6 +182,13 @@ export function HUD({
                                         Speed x10
                                     </button>
                                 )}
+                                <button
+                                    className="btn btn-tiny"
+                                    onClick={() => setJukeboxOpen(true)}
+                                >
+                                    <Music size={12} />
+                                    Jukebox
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -194,6 +203,10 @@ export function HUD({
                     onSaveClick={onSaveClick}
                     onLoadClick={onLoadClick}
                 />
+            )}
+
+            {jukeboxOpen && (
+                <JukeboxModal onClose={() => setJukeboxOpen(false)} />
             )}
         </>
     );

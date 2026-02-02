@@ -13,18 +13,29 @@ export interface Skill {
     flavor?: string;       // Flavor text for tooltip
     manaCost: number;
     cooldown: number;  // ms
-    type: "damage" | "heal" | "buff" | "taunt" | "flurry" | "debuff" | "trap" | "sanctuary" | "mana_transfer" | "smite" | "energy_shield";
+    type: "damage" | "heal" | "buff" | "taunt" | "flurry" | "debuff" | "trap" | "sanctuary" | "mana_transfer" | "smite" | "energy_shield" | "aoe_buff";
     targetType: "enemy" | "ally" | "self" | "aoe";
     range: number;
     aoeRadius?: number;
-    value: [number, number];  // damage/heal range, or taunt chance for taunt skills
     damageType: DamageType;  // Type of damage - armor only reduces physical
     projectileColor?: string;
-    poisonChance?: number;  // 0-100 percent chance to apply poison on hit
-    hitCount?: number;  // Number of hits for flurry-type skills
-    stunChance?: number;  // 0-100 percent chance to apply stun on hit
-    selfDamage?: [number, number];  // Damage range to apply to caster (for Qi Focus)
-    trapDamage?: [number, number];  // Damage dealt when trap triggers
+
+    // Explicit value properties (replaces overloaded 'value' array)
+    damageRange?: [number, number];   // [min, max] damage for damage/smite/flurry skills
+    healRange?: [number, number];     // [min, max] heal for heal skills
+    manaRange?: [number, number];     // [min, max] mana transfer for mana_transfer skills
+    duration?: number;                // Duration in ms for buffs/debuffs
+    shieldAmount?: number;            // Shield HP for energy_shield
+    armorBonus?: number;              // Armor bonus for defiance
+    tauntChance?: number;             // 0-100 percent chance to taunt each enemy
+    healPerTick?: number;             // Heal per tick for sanctuary
+
+    // Additional optional properties
+    poisonChance?: number;            // 0-100 percent chance to apply poison on hit
+    hitCount?: number;                // Number of hits for flurry-type skills
+    stunChance?: number;              // 0-100 percent chance to apply stun on hit
+    selfDamage?: [number, number];    // Damage range to apply to caster (for Qi Focus)
+    trapDamage?: [number, number];    // Damage dealt when trap triggers
 }
 
 export interface CombatLogEntry {

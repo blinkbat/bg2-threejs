@@ -15,7 +15,7 @@ export const SKILLS: Record<string, Skill> = {
         targetType: "aoe",
         range: 10,
         aoeRadius: 2.5,
-        value: [8, 14],
+        damageRange: [8, 14],
         damageType: "fire",
         projectileColor: "#ff4400"
     },
@@ -23,12 +23,13 @@ export const SKILLS: Record<string, Skill> = {
         name: "Energy Shield",
         description: "Surround yourself with a protective barrier that absorbs up to 30 damage. Chaos damage penetrates twice as effectively.",
         flavor: "The exile's final lesson: even the void can be worn as armor.",
-        manaCost: 12,
-        cooldown: 25000,
+        manaCost: 18,
+        cooldown: 2500,
         type: "energy_shield",
         targetType: "self",
         range: 0,
-        value: [30, 20000],  // [shield amount, duration in ms]
+        shieldAmount: 30,
+        duration: 20000,
         damageType: "chaos"  // Flavor only - the shield itself doesn't deal damage
     },
     heal: {
@@ -40,7 +41,7 @@ export const SKILLS: Record<string, Skill> = {
         type: "heal",
         targetType: "ally",
         range: 10,
-        value: [8, 12],
+        healRange: [8, 12],
         damageType: "holy"
     },
     poisonDagger: {
@@ -48,11 +49,11 @@ export const SKILLS: Record<string, Skill> = {
         description: "A quick strike with a venomous blade that may poison the target.",
         flavor: "True power does not echo -- it whispers.",
         manaCost: 8,
-        cooldown: 6000,
+        cooldown: 4000,
         type: "damage",
         targetType: "enemy",
         range: 1.8,  // melee range
-        value: [4, 8],
+        damageRange: [4, 8],
         damageType: "physical",
         poisonChance: 85  // 85% chance to poison
     },
@@ -61,11 +62,24 @@ export const SKILLS: Record<string, Skill> = {
         description: "Let out a mighty shout that forces nearby enemies to attack you.",
         flavor: "When the dust cleared, only Kvel of the North was visible over the slain dead.",
         manaCost: 10,
-        cooldown: 12000,
+        cooldown: 2000,
         type: "taunt",
         targetType: "self",  // centered on caster
         range: 6,  // taunt radius
-        value: [80, 80],  // 80% chance to taunt each enemy
+        tauntChance: 80,  // 80% chance to taunt each enemy
+        damageType: "physical"
+    },
+    defiance: {
+        name: "Defiance",
+        description: "Rally nearby allies with a fierce battle cry, boosting armor by 2 and halving cooldowns for 10 seconds.",
+        flavor: "\"Stand with me, and we shall not fall!\" - Kvel of the North",
+        manaCost: 12,
+        cooldown: 5000,
+        type: "aoe_buff",
+        targetType: "self",  // centered on caster
+        range: 5,  // buff radius
+        duration: 10000,
+        armorBonus: 2,
         damageType: "physical"
     },
     raiseShield: {
@@ -77,7 +91,7 @@ export const SKILLS: Record<string, Skill> = {
         type: "buff",
         targetType: "self",
         range: 0,
-        value: [20000, 20000],  // duration in ms (20 seconds)
+        duration: 20000,  // duration in ms (20 seconds)
         damageType: "physical"
     },
     flurryOfFists: {
@@ -89,7 +103,7 @@ export const SKILLS: Record<string, Skill> = {
         type: "flurry",
         targetType: "self",  // centered on caster
         range: 2.5,  // melee range for targets
-        value: [2, 4],  // low damage per hit
+        damageRange: [2, 4],  // low damage per hit
         damageType: "physical",
         hitCount: 5
     },
@@ -102,7 +116,7 @@ export const SKILLS: Record<string, Skill> = {
         type: "debuff",
         targetType: "enemy",
         range: 1.8,  // melee range
-        value: [5000, 5000],  // stun duration in ms (5 seconds)
+        duration: 5000,  // stun duration in ms (5 seconds)
         damageType: "physical",
         stunChance: 75  // 75% chance to stun
     },
@@ -115,7 +129,7 @@ export const SKILLS: Record<string, Skill> = {
         type: "smite",
         targetType: "enemy",
         range: 9,
-        value: [10, 16],
+        damageRange: [10, 16],
         damageType: "lightning"
     },
     cleanse: {
@@ -127,7 +141,7 @@ export const SKILLS: Record<string, Skill> = {
         type: "buff",
         targetType: "ally",
         range: 8,
-        value: [30000, 30000],  // duration in ms (30 seconds)
+        duration: 30000,  // duration in ms (30 seconds)
         damageType: "holy"
     },
     magicWave: {
@@ -135,12 +149,12 @@ export const SKILLS: Record<string, Skill> = {
         description: "Launch 8 arcane missiles that fan out towards a target area.",
         flavor: "\"Running will only make it worse!\" - Archmage Konen",
         manaCost: 20,
-        cooldown: 7000,
+        cooldown: 6000,
         type: "damage",
         targetType: "aoe",  // Can target any position like fireball
         range: 10,
         aoeRadius: 3,  // Visual indicator radius
-        value: [2, 4],  // damage per missile
+        damageRange: [2, 4],  // damage per missile
         damageType: "chaos",
         hitCount: 8,  // 8 missiles
         projectileColor: "#9966ff"  // Purple arcane color
@@ -155,7 +169,7 @@ export const SKILLS: Record<string, Skill> = {
         targetType: "aoe",  // Position-targeted
         range: 8,
         aoeRadius: 2,  // Trigger and effect radius
-        value: [10000, 10000],  // Pinned duration in ms (10 seconds)
+        duration: 10000,  // Pinned duration in ms (10 seconds)
         trapDamage: [4, 8],  // Damage when trap triggers
         damageType: "physical"
     },
@@ -164,12 +178,12 @@ export const SKILLS: Record<string, Skill> = {
         description: "Consecrate the ground, dispelling hazards and creating holy tiles that heal allies over time.",
         flavor: "\"Stand fast, for this ground is sacred now.\" - Paladin Aldric",
         manaCost: 20,
-        cooldown: 15000,
+        cooldown: 7000,
         type: "sanctuary",
         targetType: "aoe",
         range: 4,
         aoeRadius: 2.5,  // Radius of effect
-        value: [3, 3],  // Heal per tick (uses SANCTUARY_HEAL_PER_TICK from constants)
+        healPerTick: 3,  // Heal per tick
         damageType: "holy"
     },
     qiFocus: {
@@ -177,11 +191,11 @@ export const SKILLS: Record<string, Skill> = {
         description: "Channel your life force to restore an ally's mana, at the cost of your own vitality.",
         flavor: "\"The body is but a vessel for the spirit's gift.\" - Master Shen",
         manaCost: 0,
-        cooldown: 8000,
+        cooldown: 4000,
         type: "mana_transfer",
         targetType: "ally",
         range: 6,
-        value: [10, 14],  // Mana to give
+        manaRange: [10, 14],  // Mana to give
         selfDamage: [20, 30],  // HP cost to caster over time
         damageType: "physical"
     }

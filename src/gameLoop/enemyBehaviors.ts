@@ -8,8 +8,8 @@ import { ENEMY_STATS, getUnitStats } from "../game/units";
 import { getNextUnitId } from "../core/unitIds";
 import { soundFns } from "../audio/sound";
 import { hasBroodMotherScreeched, markBroodMotherScreeched } from "../game/enemyState";
-import { hasStatusEffect } from "../combat/combatMath";
-import { SLOW_COOLDOWN_MULT, BUFF_TICK_INTERVAL, COLORS } from "../core/constants";
+import { getCooldownMultiplier } from "../combat/combatMath";
+import { BUFF_TICK_INTERVAL, COLORS } from "../core/constants";
 import { startChargeAttack } from "./constructCharge";
 import { applyDamageToUnit, type DamageContext } from "../combat/combat";
 
@@ -188,7 +188,7 @@ export function tryStartChargeAttack(ctx: ChargeContext): boolean {
     // Start the charge attack
     startChargeAttack(scene, unit, g, chargeAttack, now, addLog);
 
-    const cooldownMult = hasStatusEffect(unit, "slowed") ? SLOW_COOLDOWN_MULT : 1;
+    const cooldownMult = getCooldownMultiplier(unit);
     setSkillCooldowns(prev => ({
         ...prev,
         [chargeKey]: { end: now + chargeAttack.cooldown * cooldownMult, duration: chargeAttack.cooldown }
@@ -269,7 +269,7 @@ export function tryLeapToTarget(ctx: LeapContext): boolean {
 
     addLog(`Feral Hound leaps at ${targetUnit.team === "player" ? "the party" : "its target"}!`, "#cc6600");
 
-    const cooldownMult = hasStatusEffect(unit, "slowed") ? SLOW_COOLDOWN_MULT : 1;
+    const cooldownMult = getCooldownMultiplier(unit);
     setSkillCooldowns(prev => ({
         ...prev,
         [leapKey]: { end: now + leapSkill.cooldown * cooldownMult, duration: leapSkill.cooldown }
@@ -458,7 +458,7 @@ export function tryVinesSkill(ctx: VinesContext): boolean {
     // Play sound
     soundFns.playVines();
 
-    const cooldownMult = hasStatusEffect(unit, "slowed") ? SLOW_COOLDOWN_MULT : 1;
+    const cooldownMult = getCooldownMultiplier(unit);
     setSkillCooldowns(prev => ({
         ...prev,
         [vinesKey]: { end: now + vinesSkill.cooldown * cooldownMult, duration: vinesSkill.cooldown }
@@ -681,7 +681,7 @@ export function trySpawnTentacle(ctx: TentacleContext): boolean {
 
     addLog(`${enemyStats.name} extends a tentacle!`, "#6b3fa0");
 
-    const cooldownMult = hasStatusEffect(unit, "slowed") ? SLOW_COOLDOWN_MULT : 1;
+    const cooldownMult = getCooldownMultiplier(unit);
     setSkillCooldowns(prev => ({
         ...prev,
         [spawnKey]: { end: now + tentacleSkill.cooldown * cooldownMult, duration: tentacleSkill.cooldown }
@@ -886,7 +886,7 @@ function createTentacleEmergeEffect(scene: THREE.Scene, x: number, z: number): v
  */
 export function trySubmergeKraken(
     unit: Unit,
-    unitsRef: Record<number, UnitGroup>,
+    _unitsRef: Record<number, UnitGroup>,
     addLog: (text: string, color?: string) => void,
     now: number
 ): void {

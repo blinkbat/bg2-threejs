@@ -4,6 +4,7 @@
 1. Map the directory structure and file organization
 2. Identify existing utilities, helpers, and shared logic
 3. Locate relevant type definitions and interfaces
+4. Assume the Windows command line.
 
 ## Phase 2: Implementation Constraints
 

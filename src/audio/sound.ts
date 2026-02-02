@@ -1134,6 +1134,59 @@ const playSplash = () => {
     bubble.stop(ctx.currentTime + 0.3);
 };
 
+// Block - metallic "schiing" sound for shield blocks
+const playBlock = () => {
+    if (muted) return;
+    const ctx = getAudioCtx();
+
+    // Sharp metallic ring - the initial impact
+    const ring = ctx.createOscillator();
+    const ringGain = ctx.createGain();
+    const ringFilter = ctx.createBiquadFilter();
+    ring.type = "sawtooth";
+    ring.frequency.setValueAtTime(1200, ctx.currentTime);
+    ring.frequency.exponentialRampToValueAtTime(2400, ctx.currentTime + 0.02);
+    ring.frequency.exponentialRampToValueAtTime(1800, ctx.currentTime + 0.1);
+    ring.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 0.25);
+    ringFilter.type = "bandpass";
+    ringFilter.frequency.setValueAtTime(2000, ctx.currentTime);
+    ringFilter.Q.setValueAtTime(4, ctx.currentTime);
+    ringGain.gain.setValueAtTime(0.25, ctx.currentTime);
+    ringGain.gain.exponentialRampToValueAtTime(0.15, ctx.currentTime + 0.05);
+    ringGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    ring.connect(ringFilter);
+    ringFilter.connect(ringGain);
+    ringGain.connect(ctx.destination);
+    ring.start();
+    ring.stop(ctx.currentTime + 0.3);
+
+    // High shimmer - the metallic "shing" overtone
+    const shimmer = ctx.createOscillator();
+    const shimmerGain = ctx.createGain();
+    shimmer.type = "sine";
+    shimmer.frequency.setValueAtTime(3200, ctx.currentTime);
+    shimmer.frequency.exponentialRampToValueAtTime(2800, ctx.currentTime + 0.15);
+    shimmerGain.gain.setValueAtTime(0.12, ctx.currentTime);
+    shimmerGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+    shimmer.connect(shimmerGain);
+    shimmerGain.connect(ctx.destination);
+    shimmer.start();
+    shimmer.stop(ctx.currentTime + 0.2);
+
+    // Low thud - impact weight
+    const thud = ctx.createOscillator();
+    const thudGain = ctx.createGain();
+    thud.type = "sine";
+    thud.frequency.setValueAtTime(180, ctx.currentTime);
+    thud.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + 0.1);
+    thudGain.gain.setValueAtTime(0.2, ctx.currentTime);
+    thudGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+    thud.connect(thudGain);
+    thudGain.connect(ctx.destination);
+    thud.start();
+    thud.stop(ctx.currentTime + 0.15);
+};
+
 export const soundFns = {
     playMove: () => playTone(800, 0.06, 0.12, "square", undefined, 3000),
     playAttack: () => playTone(440, 0.08, 0.15, "square", 330, 2500),
@@ -1158,4 +1211,5 @@ export const soundFns = {
     playVines,
     playSplash,
     playGold,
+    playBlock,
 };
