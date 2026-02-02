@@ -1,14 +1,14 @@
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import Tippy from "@tippyjs/react";
 import type { Unit, Skill } from "../core/types";
 import { getAllSkills } from "../game/units";
 import { getSkillColorClass } from "../core/constants";
+import type { HotbarAssignments } from "../hooks/hotbarStorage";
 
-// =============================================================================
-// TYPES
-// =============================================================================
-
-export type HotbarAssignments = Record<number, (string | null)[]>;  // unitId -> [5 skill names or null]
+// Re-export for backwards compatibility
+export type { HotbarAssignments } from "../hooks/hotbarStorage";
+export { loadHotbarAssignments, saveHotbarAssignments } from "../hooks/hotbarStorage";
 
 interface SkillHotbarProps {
     unit: Unit;
@@ -34,7 +34,7 @@ interface SkillSelectorProps {
 function SkillSelector({ unit, slotIndex, currentSkill, onSelect, onClose }: SkillSelectorProps) {
     const skills = getAllSkills(unit.id);
 
-    return (
+    return createPortal(
         <div className="skill-selector-backdrop" onClick={onClose}>
             <div className="skill-selector-popup" onClick={e => e.stopPropagation()}>
                 <div className="skill-selector-header">
@@ -64,7 +64,8 @@ function SkillSelector({ unit, slotIndex, currentSkill, onSelect, onClose }: Ski
                     })}
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }
 
@@ -234,30 +235,3 @@ export function SkillHotbar({
     );
 }
 
-// =============================================================================
-// HOTBAR STATE HELPERS
-// =============================================================================
-
-const HOTBAR_STORAGE_KEY = "skillHotbarAssignments";
-
-/** Load hotbar assignments from localStorage */
-export function loadHotbarAssignments(): HotbarAssignments {
-    try {
-        const stored = localStorage.getItem(HOTBAR_STORAGE_KEY);
-        if (stored) {
-            return JSON.parse(stored);
-        }
-    } catch {
-        // Ignore parse errors
-    }
-    return {};
-}
-
-/** Save hotbar assignments to localStorage */
-export function saveHotbarAssignments(assignments: HotbarAssignments): void {
-    try {
-        localStorage.setItem(HOTBAR_STORAGE_KEY, JSON.stringify(assignments));
-    } catch {
-        // Ignore storage errors
-    }
-}

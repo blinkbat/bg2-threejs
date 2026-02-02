@@ -10,14 +10,17 @@ export * from "./types";
 // Helpers
 export { computeAreaData } from "./helpers";
 
-// Area definitions
+// Area definitions (TypeScript)
 import { DUNGEON_AREA } from "./dungeon";
 import { FIELD_AREA } from "./forest";
-import { COAST_AREA } from "./coast";
 import { RUINS_AREA } from "./ruins";
 import { SANCTUM_AREA } from "./sanctum";
 import { CLIFFS_AREA } from "./cliffs";
 import { MAGMA_CAVE_AREA } from "./magmaCave";
+
+// Text-based areas (testing)
+import { TEXT_AREAS } from "./textLoader";
+const COAST_AREA = TEXT_AREAS.coast;
 
 import type { AreaId, AreaData, ComputedAreaData } from "./types";
 import { computeAreaData } from "./helpers";
