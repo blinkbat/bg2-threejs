@@ -105,7 +105,7 @@ function updateVisualEffects(
 function updateKeyboardPanning(
     keysPressed: Set<string>,
     cameraOffset: { x: number; z: number },
-    camera: THREE.OrthographicCamera,
+    _camera: THREE.OrthographicCamera,
     updateCam: () => void
 ): void {
     let screenX = 0, screenY = 0;
@@ -210,7 +210,7 @@ export function useGameLoop({
             scene, camera, renderer, flames, candleLights, fogTexture, fogMesh, moveMarker,
             rangeIndicator, unitGroups, selectRings, targetRings, shieldIndicators,
             unitMeshes, unitOriginalColors, maxHp, wallMeshes, treeMeshes,
-            columnMeshes, columnGroups, doorMeshes, waterMesh, billboards, candleMeshes
+            columnMeshes, columnGroups, waterMesh, billboards, candleMeshes
         } = sceneState;
 
         let animId: number;

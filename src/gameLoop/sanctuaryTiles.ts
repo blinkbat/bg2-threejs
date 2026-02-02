@@ -6,7 +6,7 @@ import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, SanctuaryTile, AcidTile } from "../core/types";
 import { COLORS, SANCTUARY_TILE_DURATION, SANCTUARY_TICK_INTERVAL, SANCTUARY_MAX_TILES } from "../core/constants";
 import { getUnitStats } from "../game/units";
-import { spawnDamageNumber } from "../combat/combat";
+import { spawnDamageNumber } from "../combat/damageEffects";
 import { disposeBasicMesh } from "../rendering/disposal";
 import { createTileMesh, updateTileFade, removeExpiredTiles, clearAllTiles, getTileKey, isUnitOnTile, type TileProcessConfig } from "./tileUtils";
 

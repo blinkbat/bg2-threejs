@@ -8,8 +8,8 @@ import { COLORS, SWIPE_ANIMATE_DURATION } from "../core/constants";
 import { getUnitStats } from "../game/units";
 import { calculateDamage, rollHit, getEffectiveArmor, logAoeHit, logAoeMiss } from "../combat/combatMath";
 import { distance } from "../game/geometry";
-import { applyDamageToUnit, animateExpandingMesh, getAliveUnitsInRange, spawnDamageNumber, type DamageContext } from "../combat/combat";
-import { soundFns } from "../audio/sound";
+import { applyDamageToUnit, animateExpandingMesh, getAliveUnitsInRange, spawnDamageNumber, type DamageContext } from "../combat/damageEffects";
+import { soundFns } from "../audio";
 
 // =============================================================================
 // ENEMY SKILL EXECUTION

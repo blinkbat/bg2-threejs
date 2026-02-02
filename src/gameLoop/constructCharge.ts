@@ -7,8 +7,8 @@ import type { Unit, UnitGroup, DamageText, EnemyChargeAttack, EnemyStats, Damage
 import { COLORS } from "../core/constants";
 import { getUnitStats } from "../game/units";
 import { calculateDamage, rollHit, getEffectiveArmor, logAoeHit, isUnitAlive } from "../combat/combatMath";
-import { applyDamageToUnit, type DamageContext } from "../combat/combat";
-import { soundFns } from "../audio/sound";
+import { applyDamageToUnit, type DamageContext } from "../combat/damageEffects";
+import { soundFns } from "../audio";
 import { disposeBasicMesh } from "../rendering/disposal";
 
 // =============================================================================

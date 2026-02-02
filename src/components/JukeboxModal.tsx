@@ -1,5 +1,5 @@
 import { X, Volume2 } from "lucide-react";
-import { soundFns } from "../audio/sound";
+import { soundFns } from "../audio";
 
 interface JukeboxModalProps {
     onClose: () => void;

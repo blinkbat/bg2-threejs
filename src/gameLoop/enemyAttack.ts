@@ -7,8 +7,8 @@ import type { Unit, UnitGroup, DamageText, Projectile, EnemyStats, SwingAnimatio
 import { COLORS } from "../core/constants";
 import { getUnitStats } from "../game/units";
 import { calculateDamage, rollHit, shouldApplyPoison, shouldApplySlow, getEffectiveArmor, getEffectiveDamage, logHit, logLifestealHit, logMiss, logPoisoned, logSlowed } from "../combat/combatMath";
-import { createProjectile, getProjectileSpeed, applyDamageToUnit, spawnDamageNumber, type DamageContext } from "../combat/combat";
-import { soundFns } from "../audio/sound";
+import { createProjectile, getProjectileSpeed, applyDamageToUnit, spawnDamageNumber, type DamageContext } from "../combat/damageEffects";
+import { soundFns } from "../audio";
 import { spawnSwingIndicator } from "./swingAnimations";
 
 // =============================================================================

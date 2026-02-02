@@ -1,0 +1,139 @@
+// =============================================================================
+// SKILL SYSTEM - Main entry point and skill router
+// =============================================================================
+
+import * as THREE from "three";
+import type { Skill } from "../../core/types";
+import { COLORS } from "../../core/constants";
+import { UNIT_DATA, getEffectiveUnitData } from "../../game/units";
+
+// Re-export types
+export type { SkillExecutionContext } from "./types";
+
+// Re-export helpers
+export { findClosestUnit, findClosestTargetByTeam, consumeSkill } from "./helpers";
+
+// Re-export damage skills
+export {
+    executeAoeSkill,
+    executeMeleeSkill,
+    executeSmiteSkill,
+    executeRangedSkill,
+    executeFlurrySkill,
+    executeMagicWaveSkill
+} from "./damage";
+
+// Re-export support skills
+export {
+    executeHealSkill,
+    executeManaTransferSkill,
+    executeBuffSkill,
+    executeAoeBuffSkill,
+    executeEnergyShieldSkill,
+    executeCleanseSkill
+} from "./support";
+
+// Re-export utility skills
+export {
+    executeTauntSkill,
+    executeDebuffSkill,
+    executeTrapSkill,
+    executeSanctuarySkill
+} from "./utility";
+
+// Import for internal use
+import type { SkillExecutionContext } from "./types";
+import { executeAoeSkill, executeMeleeSkill, executeSmiteSkill, executeRangedSkill, executeFlurrySkill, executeMagicWaveSkill } from "./damage";
+import { executeHealSkill, executeManaTransferSkill, executeBuffSkill, executeAoeBuffSkill, executeEnergyShieldSkill, executeCleanseSkill } from "./support";
+import { executeTauntSkill, executeDebuffSkill, executeTrapSkill, executeSanctuarySkill } from "./utility";
+
+// =============================================================================
+// MAIN SKILL ROUTER
+// =============================================================================
+
+/**
+ * Execute a skill based on its type
+ * @param targetId Optional target unit ID for enemy-targeted skills (tracks moving targets)
+ */
+export function executeSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill,
+    targetX: number,
+    targetZ: number,
+    targetId?: number
+): boolean {
+    const caster = ctx.unitsStateRef.current.find(u => u.id === casterId);
+    const casterG = ctx.unitsRef.current[casterId];
+
+    if (!caster || !casterG || caster.hp <= 0) return false;
+    if ((caster.mana ?? 0) < skill.manaCost) {
+        ctx.addLog(`${UNIT_DATA[casterId].name}: Not enough mana!`, COLORS.logNeutral);
+        return false;
+    }
+
+    if (skill.type === "damage" && skill.targetType === "aoe") {
+        // Magic Wave - multi-target zig-zag projectiles that fan out
+        if (skill.name === "Magic Wave") {
+            return executeMagicWaveSkill(ctx, casterId, skill, targetX, targetZ);
+        }
+        // Standard AOE like Fireball
+        executeAoeSkill(ctx, casterId, skill, targetX, targetZ);
+        return true;
+    } else if (skill.type === "heal" && skill.targetType === "ally") {
+        return executeHealSkill(ctx, casterId, skill, targetX, targetZ);
+    } else if (skill.type === "damage" && skill.targetType === "enemy") {
+        // Check if this is a ranged skill (basic attack for ranged units)
+        // Melee range is typically <= 2, ranged is > 2
+        // Use effective stats to get equipment-derived range
+        const effectiveData = getEffectiveUnitData(casterId);
+        const isRanged = effectiveData.range && effectiveData.range > 2;
+
+        // For basic attacks (name === "Attack"), use ranged if unit has range
+        if (skill.name === "Attack" && isRanged) {
+            return executeRangedSkill(ctx, casterId, skill, targetX, targetZ);
+        }
+        return executeMeleeSkill(ctx, casterId, skill, targetX, targetZ);
+    } else if (skill.type === "taunt" && skill.targetType === "self") {
+        return executeTauntSkill(ctx, casterId, skill);
+    } else if (skill.type === "buff" && skill.targetType === "self") {
+        return executeBuffSkill(ctx, casterId, skill);
+    } else if (skill.type === "energy_shield" && skill.targetType === "self") {
+        return executeEnergyShieldSkill(ctx, casterId, skill);
+    } else if (skill.type === "buff" && skill.targetType === "ally") {
+        return executeCleanseSkill(ctx, casterId, skill, targetX, targetZ);
+    } else if (skill.type === "flurry" && skill.targetType === "self") {
+        return executeFlurrySkill(ctx, casterId, skill);
+    } else if (skill.type === "debuff" && skill.targetType === "enemy") {
+        return executeDebuffSkill(ctx, casterId, skill, targetX, targetZ);
+    } else if (skill.type === "trap" && skill.targetType === "aoe") {
+        return executeTrapSkill(ctx, casterId, skill, targetX, targetZ);
+    } else if (skill.type === "sanctuary" && skill.targetType === "aoe") {
+        return executeSanctuarySkill(ctx, casterId, skill, targetX, targetZ);
+    } else if (skill.type === "mana_transfer" && skill.targetType === "ally") {
+        return executeManaTransferSkill(ctx, casterId, skill, targetX, targetZ);
+    } else if (skill.type === "smite" && skill.targetType === "enemy") {
+        return executeSmiteSkill(ctx, casterId, skill, targetX, targetZ, targetId);
+    } else if (skill.type === "aoe_buff" && skill.targetType === "self") {
+        return executeAoeBuffSkill(ctx, casterId, skill);
+    }
+
+    return false;
+}
+
+// =============================================================================
+// TARGETING MODE
+// =============================================================================
+
+/**
+ * Clear targeting mode and hide indicators
+ */
+export function clearTargetingMode(
+    setTargetingMode: React.Dispatch<React.SetStateAction<{ casterId: number; skill: Skill } | null>>,
+    rangeIndicatorRef: React.RefObject<THREE.Mesh | null>,
+    aoeIndicatorRef: React.RefObject<THREE.Mesh | null>
+): void {
+    setTargetingMode(null);
+    if (rangeIndicatorRef.current) rangeIndicatorRef.current.visible = false;
+    if (aoeIndicatorRef.current) aoeIndicatorRef.current.visible = false;
+}

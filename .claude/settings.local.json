@@ -6,7 +6,9 @@
       "Bash(grep:*)",
       "Bash(ls:*)",
       "Bash(wc:*)",
-      "Bash(git mv:*)"
+      "Bash(git mv:*)",
+      "Bash(powershell -Command:*)",
+      "Bash(del \"c:\\\\Users\\\\DavidBennett\\\\Desktop\\\\projects\\\\tests\\\\bg2-threejs\\\\src\\\\combat\\\\skills.ts\")"
     ]
   }
 }

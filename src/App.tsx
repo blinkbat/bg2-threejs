@@ -19,13 +19,13 @@ import { getItem } from "./game/items";
 import { isConsumable } from "./core/types";
 import { getEffectiveMaxHp } from "./game/units";
 import { updateChestStates } from "./rendering/scene";
-import { soundFns } from "./audio/sound";
+import { soundFns } from "./audio";
 import { findSpawnPositions } from "./ai/pathfinding";
 
 // Extracted modules
 import { executeSkill, type SkillExecutionContext } from "./combat/skills";
 import { setupTargetingMode } from "./input";
-import { createLightningPillar } from "./combat/combat";
+import { createLightningPillar } from "./combat/damageEffects";
 import { getXpForLevel } from "./game/playerUnits";
 import { initializeUnitIdCounter, spawnLootBag } from "./gameLoop";
 import {
@@ -79,6 +79,7 @@ interface GameProps {
     initialOpenedSecretDoors: Set<string> | null;
     initialGold: number | null;
     initialKilledEnemies: Set<string> | null;
+    onReady?: () => void;
 }
 
 export interface SaveableGameState {
@@ -97,7 +98,7 @@ export interface SaveableGameState {
 function Game({
     onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, saveLoadOpen,
     persistedPlayers, spawnPoint, onSaveClick, onLoadClick, gameStateRef,
-    initialOpenedChests, initialOpenedSecretDoors, initialGold, initialKilledEnemies
+    initialOpenedChests, initialOpenedSecretDoors, initialGold, initialKilledEnemies, onReady
 }: GameProps) {
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -239,6 +240,13 @@ function Game({
         openedChests,
         initialCameraOffset: initialCamOffset
     });
+
+    // Notify parent when scene is ready
+    useEffect(() => {
+        if (isInitialized && onReady) {
+            onReady();
+        }
+    }, [isInitialized, onReady]);
 
     // Sync hoveredDoor to gameRefs
     useEffect(() => {
@@ -780,6 +788,9 @@ function Game({
 // APP WRAPPER
 // =============================================================================
 
+// Transition timing constants
+const FADE_DURATION = 300; // ms for fade in/out
+
 export default function App() {
     const [gameKey, setGameKey] = useState(0);
     const [showHelp, setShowHelp] = useState(true);
@@ -792,6 +803,10 @@ export default function App() {
     const [initialGold, setInitialGold] = useState<number | null>(null);
     const [initialKilledEnemies, setInitialKilledEnemies] = useState<Set<string> | null>(null);
     const gameStateRef = useRef<(() => SaveableGameState) | null>(null);
+
+    // Transition overlay state
+    const [transitionOpacity, setTransitionOpacity] = useState(0);
+    const pendingTransition = useRef<{ players: PersistedPlayer[]; targetArea: AreaId; spawn: { x: number; z: number } } | null>(null);
 
     const handleFullRestart = () => {
         setPersistedPlayers(null);
@@ -806,11 +821,27 @@ export default function App() {
     };
 
     const handleAreaTransition = (players: PersistedPlayer[], targetArea: AreaId, spawn: { x: number; z: number }) => {
-        setPersistedPlayers(players);
-        setSpawnPoint(spawn);
-        setCurrentArea(targetArea);
-        setGameKey(k => k + 1);
+        // Store pending transition and start fade to black
+        pendingTransition.current = { players, targetArea, spawn };
+        setTransitionOpacity(1);
+
+        // After fade completes, execute the actual transition
+        setTimeout(() => {
+            if (pendingTransition.current) {
+                const { players: p, targetArea: area, spawn: s } = pendingTransition.current;
+                setPersistedPlayers(p);
+                setSpawnPoint(s);
+                setCurrentArea(area);
+                setGameKey(k => k + 1);
+            }
+        }, FADE_DURATION);
     };
+
+    const handleSceneReady = useCallback(() => {
+        // Scene is ready, fade out the overlay
+        pendingTransition.current = null;
+        setTransitionOpacity(0);
+    }, []);
 
     const handleSave = (slot: number) => {
         if (!gameStateRef.current) return;
@@ -867,9 +898,22 @@ export default function App() {
                 gameStateRef={gameStateRef}
                 initialOpenedChests={initialOpenedChests} initialOpenedSecretDoors={initialOpenedSecretDoors}
                 initialGold={initialGold} initialKilledEnemies={initialKilledEnemies}
+                onReady={handleSceneReady}
             />
             {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
             {showSaveLoad && <SaveLoadModal mode={saveLoadMode} onClose={() => setShowSaveLoad(false)} onSave={handleSave} onLoad={handleLoad} currentState={getCurrentSaveState()} />}
+            {/* Transition overlay - fades to black during area transitions */}
+            <div
+                style={{
+                    position: "fixed",
+                    inset: 0,
+                    backgroundColor: "#000",
+                    opacity: transitionOpacity,
+                    pointerEvents: transitionOpacity > 0 ? "all" : "none",
+                    transition: `opacity ${FADE_DURATION}ms ease-in-out`,
+                    zIndex: 9999
+                }}
+            />
         </>
     );
 }

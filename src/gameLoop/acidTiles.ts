@@ -7,7 +7,7 @@ import type { Unit, UnitGroup, DamageText, AcidTile } from "../core/types";
 import { COLORS, ACID_TILE_DURATION, ACID_TICK_INTERVAL, ACID_DAMAGE_PER_TICK, ACID_MAX_TILES, ACID_AURA_COOLDOWN, ACID_AURA_RADIUS } from "../core/constants";
 import type { EnemyStats } from "../core/types";
 import { getUnitStats } from "../game/units";
-import { handleUnitDefeat, showDamageVisual } from "../combat/combat";
+import { handleUnitDefeat, showDamageVisual } from "../combat/damageEffects";
 import { createTileMesh, updateTileFade, removeExpiredTiles, clearAllTiles, getTileKey, isUnitOnTile, type TileProcessConfig } from "./tileUtils";
 import { isUnitAlive } from "../combat/combatMath";
 

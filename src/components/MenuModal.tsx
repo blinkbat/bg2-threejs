@@ -8,7 +8,7 @@ import {
     HelpCircle,
     X
 } from "lucide-react";
-import { toggleMute, isMuted } from "../audio/sound";
+import { toggleMute, isMuted } from "../audio";
 
 interface MenuModalProps {
     onClose: () => void;

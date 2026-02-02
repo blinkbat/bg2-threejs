@@ -3,14 +3,14 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, Skill, UnitGroup, SelectionBox } from "./core/types";
-import { getUnitRadius, isInRange } from "./rendering/range";
-import { findPath } from "./ai/pathfinding";
-import { UNIT_DATA } from "./game/units";
-import { soundFns } from "./audio/sound";
-import { executeSkill, clearTargetingMode, type SkillExecutionContext } from "./combat/skills";
-import { disposeGeometry } from "./rendering/disposal";
-import { distanceToPoint } from "./game/geometry";
+import type { Unit, Skill, UnitGroup, SelectionBox } from "../core/types";
+import { getUnitRadius, isInRange } from "../rendering/range";
+import { findPath } from "../ai/pathfinding";
+import { UNIT_DATA } from "../game/units";
+import { soundFns } from "../audio";
+import { executeSkill, clearTargetingMode, type SkillExecutionContext } from "../combat/skills";
+import { disposeGeometry } from "../rendering/disposal";
+import { distanceToPoint } from "../game/geometry";
 
 // =============================================================================
 // TYPES

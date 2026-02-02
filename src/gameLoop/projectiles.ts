@@ -10,8 +10,8 @@ import { calculateDamage, getDirectionAndDistance, rollHit, shouldApplyPoison, g
 import { distance } from "../game/geometry";
 import { isBlocked } from "../ai/pathfinding";
 import { ENEMY_STATS } from "../game/units";
-import { applyDamageToUnit, animateExpandingMesh, spawnDamageNumber, type DamageContext } from "../combat/combat";
-import { soundFns } from "../audio/sound";
+import { applyDamageToUnit, animateExpandingMesh, spawnDamageNumber, type DamageContext } from "../combat/damageEffects";
+import { soundFns } from "../audio";
 import { disposeBasicMesh } from "../rendering/disposal";
 
 // =============================================================================

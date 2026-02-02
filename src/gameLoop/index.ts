@@ -3,39 +3,39 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation, EnemyStats, EnemySpawnSkill } from "./core/types";
-import { SKILL_SINGLE_TARGET_CHANCE, SLOW_MOVE_MULT } from "./core/constants";
-import { getUnitRadius, isInRange } from "./rendering/range";
-import { tryKite, type KiteContext } from "./ai/targeting";
+import type { Unit, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation, EnemyStats, EnemySpawnSkill } from "../core/types";
+import { SKILL_SINGLE_TARGET_CHANCE, SLOW_MOVE_MULT } from "../core/constants";
+import { getUnitRadius, isInRange } from "../rendering/range";
+import { tryKite, type KiteContext } from "../ai/targeting";
 import {
     runTargetingPhase, runPathFollowingPhase, runMovementPhase, recalculatePathIfNeeded,
     type TargetingContext, type PathContext, type MovementContext
-} from "./ai/unitAI";
-import { getUnitStats, getBasicAttackSkill, getAttackRange } from "./game/units";
-import type { ActionQueue } from "./input";
-import { hasStatusEffect, isUnitAlive, getCooldownMultiplier } from "./combat/combatMath";
-import { getAliveUnitsInRange } from "./combat/combat";
-import { isEnemyKiting, clearEnemyKiting } from "./game/enemyState";
-import { findPath } from "./ai/pathfinding";
+} from "../ai/unitAI";
+import { getUnitStats, getBasicAttackSkill, getAttackRange } from "../game/units";
+import type { ActionQueue } from "../input";
+import { hasStatusEffect, isUnitAlive, getCooldownMultiplier } from "../combat/combatMath";
+import { getAliveUnitsInRange } from "../combat/damageEffects";
+import { isEnemyKiting, clearEnemyKiting } from "../game/enemyState";
+import { findPath } from "../ai/pathfinding";
 
 // Re-export from split modules
-export { updateDamageTexts, updateHitFlash, updatePoisonVisuals, updateEnergyShieldVisuals, updateFogOfWar, resetFogCache } from "./gameLoop/visuals";
-export { processStatusEffects } from "./gameLoop/statusEffects";
-export { updateProjectiles } from "./gameLoop/projectiles";
-export { spawnSwingIndicator, updateSwingAnimations } from "./gameLoop/swingAnimations";
-export { processAcidTiles, createAcidTile, clearAcidTiles } from "./gameLoop/acidTiles";
-export { processSanctuaryTiles, createSanctuaryTile, clearSanctuaryTiles } from "./gameLoop/sanctuaryTiles";
-export { processChargeAttacks, clearChargeAttacks, isUnitCharging } from "./gameLoop/constructCharge";
-import { executeEnemySwipe, executeEnemyHeal } from "./gameLoop/enemySkills";
-import { executeEnemyBasicAttack } from "./gameLoop/enemyAttack";
-import { createAcidTile, tryCreateAcidAura } from "./gameLoop/acidTiles";
-import { isUnitCharging } from "./gameLoop/constructCharge";
-import { trySpawnMinion, tryStartChargeAttack, tryLeapToTarget, isUnitLeaping, tryVinesSkill, trySpawnTentacle } from "./gameLoop/enemyBehaviors";
-export { clearLeaps, updateLeaps, isUnitLeaping, updateTentacles, clearTentacles, trySubmergeKraken, isKrakenSubmerged, isKrakenFullySubmerged, updateSubmergedKrakens } from "./gameLoop/enemyBehaviors";
-export { spawnLootBag, removeLootBag, clearAllLootBags, resetLootBagIds } from "./gameLoop/lootBags";
+export { updateDamageTexts, updateHitFlash, updatePoisonVisuals, updateEnergyShieldVisuals, updateFogOfWar, resetFogCache } from "./visuals";
+export { processStatusEffects } from "./statusEffects";
+export { updateProjectiles } from "./projectiles";
+export { spawnSwingIndicator, updateSwingAnimations } from "./swingAnimations";
+export { processAcidTiles, createAcidTile, clearAcidTiles } from "./acidTiles";
+export { processSanctuaryTiles, createSanctuaryTile, clearSanctuaryTiles } from "./sanctuaryTiles";
+export { processChargeAttacks, clearChargeAttacks, isUnitCharging } from "./constructCharge";
+import { executeEnemySwipe, executeEnemyHeal } from "./enemySkills";
+import { executeEnemyBasicAttack } from "./enemyAttack";
+import { createAcidTile, tryCreateAcidAura } from "./acidTiles";
+import { isUnitCharging } from "./constructCharge";
+import { trySpawnMinion, tryStartChargeAttack, tryLeapToTarget, isUnitLeaping, tryVinesSkill, trySpawnTentacle } from "./enemyBehaviors";
+export { clearLeaps, updateLeaps, isUnitLeaping, updateTentacles, clearTentacles, trySubmergeKraken, isKrakenSubmerged, isKrakenFullySubmerged, updateSubmergedKrakens } from "./enemyBehaviors";
+export { spawnLootBag, removeLootBag, clearAllLootBags, resetLootBagIds } from "./lootBags";
 
 // Re-export unit ID utilities for backwards compatibility
-export { getNextUnitId, initializeUnitIdCounter } from "./core/unitIds";
+export { getNextUnitId, initializeUnitIdCounter } from "../core/unitIds";
 
 // =============================================================================
 // TYPES
@@ -90,7 +90,7 @@ export function updateUnitAI(
     actionQueueRef?: ActionQueue,
     setQueuedActions?: React.Dispatch<React.SetStateAction<{ unitId: number; skillName: string }[]>>,
     // For acid slug enemies
-    acidTilesRef?: Map<string, import("./core/types").AcidTile>
+    acidTilesRef?: Map<string, import("../core/types").AcidTile>
 ): void {
     const isPlayer = unit.team === "player";
     const data = getUnitStats(unit);
