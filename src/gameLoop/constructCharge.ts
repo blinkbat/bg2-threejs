@@ -6,7 +6,7 @@ import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, EnemyChargeAttack, EnemyStats, DamageType } from "../core/types";
 import { COLORS } from "../core/constants";
 import { getUnitStats } from "../game/units";
-import { calculateDamage, rollHit, getEffectiveArmor, logAoeHit, isUnitAlive } from "../combat/combatMath";
+import { calculateDamageWithCrit, rollHit, getEffectiveArmor, logAoeHit, isUnitAlive } from "../combat/combatMath";
 import { applyDamageToUnit, type DamageContext } from "../combat/damageEffects";
 import { soundFns } from "../audio";
 import { disposeBasicMesh } from "../rendering/disposal";
@@ -279,7 +279,7 @@ function executeChargeAttack(
             const targetData = getUnitStats(target);
 
             if (rollHit(enemyData.accuracy)) {
-                const dmg = calculateDamage(charge.damage[0], charge.damage[1], getEffectiveArmor(target, targetData.armor), charge.damageType);
+                const { damage: dmg } = calculateDamageWithCrit(charge.damage[0], charge.damage[1], getEffectiveArmor(target, targetData.armor), charge.damageType, unit);
                 applyDamageToUnit(dmgCtx, target.id, tg, target.hp, dmg, targetData.name, {
                     color: COLORS.damageEnemy,
                     targetUnit: target

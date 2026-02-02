@@ -4,7 +4,7 @@
 
 import type { Unit, UnitData, EnemyStats, StatusEffect, StatusEffectType, DamageType } from "../core/types";
 import { POISON_DURATION, POISON_TICK_INTERVAL, POISON_DAMAGE_PER_TICK, SLOW_DURATION, BUFF_TICK_INTERVAL, COLORS, SLOW_COOLDOWN_MULT, DEFIANCE_COOLDOWN_MULT } from "../core/constants";
-import { getStrengthDamageBonus, getIntelligenceMagicDamageBonus, getFaithHolyDamageBonus } from "../game/statBonuses";
+import { getStrengthDamageBonus, getIntelligenceMagicDamageBonus, getFaithHolyDamageBonus, getDexterityCritChance, CRIT_MULTIPLIER } from "../game/statBonuses";
 
 // =============================================================================
 // DISTANCE & POSITION UTILITIES
@@ -71,6 +71,31 @@ export const rollHit = (accuracy: number): boolean =>
     rollChance(accuracy);
 
 /**
+ * Check if an attack is a critical hit based on unit's dexterity.
+ * @returns true if crit occurs
+ */
+export function rollCrit(attacker: Unit | undefined): boolean {
+    if (!attacker) return false;
+    const critChance = getDexterityCritChance(attacker);
+    return rollChance(critChance);
+}
+
+/**
+ * Roll damage with potential critical hit.
+ * @returns object with final damage and whether it was a crit
+ */
+export function rollDamageWithCrit(
+    min: number,
+    max: number,
+    attacker: Unit | undefined
+): { damage: number; isCrit: boolean } {
+    const baseDamage = rollDamage(min, max);
+    const isCrit = rollCrit(attacker);
+    const damage = isCrit ? Math.floor(baseDamage * CRIT_MULTIPLIER) : baseDamage;
+    return { damage, isCrit };
+}
+
+/**
  * Calculate stat-based damage bonus for a unit based on damage type.
  * Physical damage gets strength bonus, elemental/chaos gets intelligence bonus, holy gets faith bonus.
  * @returns The stat bonus to add to damage (0 if unit is undefined)
@@ -88,17 +113,23 @@ export function calculateStatBonus(unit: Unit | undefined, damageType: DamageTyp
 }
 
 /**
- * Calculate final damage after armor reduction.
- * Armor only reduces physical damage - magic bypasses armor entirely.
- * Always returns at least 1 damage.
+ * Calculate final damage with critical hit check.
+ * Rolls damage, checks for crit, applies crit multiplier, then applies armor.
+ * @returns object with final damage and whether it was a crit
  */
-export function calculateDamage(rawMin: number, rawMax: number, armor: number, damageType: DamageType): number {
-    const rolled = rollDamage(rawMin, rawMax);
+export function calculateDamageWithCrit(
+    rawMin: number,
+    rawMax: number,
+    armor: number,
+    damageType: DamageType,
+    attacker: Unit | undefined
+): { damage: number; isCrit: boolean } {
+    const { damage: rolledDamage, isCrit } = rollDamageWithCrit(rawMin, rawMax, attacker);
     // Only physical damage is reduced by armor
-    if (damageType === "physical") {
-        return Math.max(1, rolled - armor);
-    }
-    return rolled;
+    const finalDamage = damageType === "physical"
+        ? Math.max(1, rolledDamage - armor)
+        : rolledDamage;
+    return { damage: finalDamage, isCrit };
 }
 
 /**

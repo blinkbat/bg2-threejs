@@ -17,7 +17,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         aggroRange: 6,
         attackCooldown: 2000,
         moveSpeed: DEFAULT_MOVE_SPEED,
-        expReward: 5
+        expReward: 8
     },
     kobold_archer: {
         name: "Kobold Archer",
@@ -33,7 +33,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         projectileColor: "#8B4513",
         poisonChance: 35,  // 35% chance to poison on hit
         moveSpeed: DEFAULT_MOVE_SPEED,
-        expReward: 8,
+        expReward: 12,
         // Kiting behavior - retreat when players get close
         kiteTrigger: 4,      // Start kiting when player within this range
         kiteDistance: 4,     // How far to retreat
@@ -52,7 +52,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         range: 5,
         projectileColor: "#9932CC",  // Dark orchid
         moveSpeed: DEFAULT_MOVE_SPEED,
-        expReward: 12,
+        expReward: 15,
         healSkill: {
             name: "Dark Mending",
             cooldown: 8000,  // 8 seconds
@@ -76,7 +76,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         moveSpeed: 0.4,  // Slow movement
         attackCooldown: 3000,
         size: 2.0,
-        expReward: 60,
+        expReward: 75,
         skill: {
             name: "Swipe",
             cooldown: 10000,  // 10 seconds
@@ -138,7 +138,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         moveSpeed: 0.7,  // Slightly slower, it's a blob
         maxSplitCount: 3,  // Can split up to 3 times (4 generations total)
         slowChance: 30,  // 30% chance to slow on hit
-        expReward: 15
+        expReward: 12
     },
     acid_slug: {
         name: "Acid Slug",
@@ -156,7 +156,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         acidAura: true,    // Periodically creates acid around itself
         acidAuraCooldown: 3500,  // 3.5 seconds between aura creation
         acidAuraRadius: 1.5,     // 1.5 grid cells around itself
-        expReward: 35
+        expReward: 30
     },
     bat: {
         name: "Vampire Bat",
@@ -172,7 +172,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         moveSpeed: 1.4,    // Fast flyer (140% normal speed)
         flying: true,      // Floats above ground
         lifesteal: 0.5,    // Heals for 50% of damage dealt
-        expReward: 15
+        expReward: 18
     },
     undead_knight: {
         name: "Undead Knight",
@@ -188,7 +188,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         moveSpeed: 0.35,   // Very slow movement
         frontShield: true, // Blocks all damage from the front
         turnSpeed: 0.15,   // Turns very slowly (15% of normal)
-        expReward: 75
+        expReward: 120
     },
     ancient_construct: {
         name: "Ancient Construct",
@@ -203,7 +203,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         size: 2.5,         // Large boss
         moveSpeed: 0.6,    // Moderately slow
         aggressiveTargeting: true,  // Immediately retargets to damage sources
-        expReward: 200,
+        expReward: 250,
         chargeAttack: {
             name: "Cataclysm",
             cooldown: 18000,   // 18 seconds between charges
@@ -226,7 +226,8 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         attackCooldown: 1600,  // Fast attacks
         size: 0.85,
         moveSpeed: 1.4,    // Fast - 140% normal speed
-        expReward: 12,
+        expReward: 16,
+        baseCrit: 20,      // 20% crit chance
         leapSkill: {
             cooldown: 7000,    // Can leap every 7 seconds
             minRange: 3,       // Only leap if target is at least 3 tiles away
@@ -236,8 +237,8 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     corrupt_druid: {
         name: "Corrupt Druid",
-        hp: 65,
-        maxHp: 65,
+        hp: 125,
+        maxHp: 125,
         damage: [5, 9],        // Chaos missile damage
         accuracy: 70,
         armor: 0,
@@ -248,7 +249,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         projectileColor: "#6b1f6b",  // Dark purple chaos
         size: 1.1,
         moveSpeed: 0.8,        // Slower movement
-        expReward: 35,
+        expReward: 75,
         // Kiting behavior - retreat when players get close (less aggressive)
         kiteTrigger: 3,
         kiteDistance: 2.5,
@@ -263,9 +264,9 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     skeleton_warrior: {
         name: "Skeleton Warrior",
-        hp: 45,
-        maxHp: 45,
-        damage: [6, 12],
+        hp: 35,
+        maxHp: 35,
+        damage: [6, 10],
         accuracy: 60,
         armor: 1,
         color: "#c9c9b0",      // Bone/ivory color
@@ -273,7 +274,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         attackCooldown: 2000,
         size: 1.2,
         moveSpeed: 0.9,
-        expReward: 30,
+        expReward: 20,
         blockChance: 35        // 35% chance to block physical damage
     },
     baby_kraken: {
@@ -288,7 +289,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         attackCooldown: 3000,
         size: 2.5,             // Large
         moveSpeed: 0.2,        // VERY slow
-        expReward: 100,
+        expReward: 300,
         tentacleSkill: {
             cooldown: 4000,        // Spawn tentacle every 4 seconds
             maxTentacles: 3,       // Up to 3 active tentacles
@@ -309,13 +310,13 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         attackCooldown: 1500,  // Fast attacks
         size: 0.8,
         moveSpeed: 0,          // Stationary - does not move
-        expReward: 5
+        expReward: 2
     },
     magma_imp: {
         name: "Magma Imp",
-        hp: 35,
-        maxHp: 35,
-        damage: [6, 12],       // Fireball damage
+        hp: 25,
+        maxHp: 25,
+        damage: [6, 10],       // Fireball damage
         accuracy: 75,
         armor: 0,
         color: "#ff4500",      // Orange-red (magma)

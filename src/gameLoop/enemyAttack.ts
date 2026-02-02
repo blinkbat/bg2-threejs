@@ -6,7 +6,7 @@ import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, Projectile, EnemyStats, SwingAnimation, FireballProjectile } from "../core/types";
 import { COLORS } from "../core/constants";
 import { getUnitStats } from "../game/units";
-import { calculateDamage, rollHit, shouldApplyPoison, shouldApplySlow, getEffectiveArmor, getEffectiveDamage, logHit, logLifestealHit, logMiss, logPoisoned, logSlowed } from "../combat/combatMath";
+import { calculateDamageWithCrit, rollHit, shouldApplyPoison, shouldApplySlow, getEffectiveArmor, getEffectiveDamage, logHit, logLifestealHit, logMiss, logPoisoned, logSlowed } from "../combat/combatMath";
 import { createProjectile, getProjectileSpeed, applyDamageToUnit, spawnDamageNumber, type DamageContext } from "../combat/damageEffects";
 import { soundFns } from "../audio";
 import { spawnSwingIndicator } from "./swingAnimations";
@@ -146,7 +146,7 @@ export function executeEnemyMeleeAttack(ctx: EnemyAttackContext): void {
 
     if (rollHit(attackerStats.accuracy)) {
         const effectiveDamage = getEffectiveDamage(attacker, attackerStats.damage);
-        const dmg = calculateDamage(effectiveDamage[0], effectiveDamage[1], getEffectiveArmor(target, targetData.armor), "physical");
+        const { damage: dmg } = calculateDamageWithCrit(effectiveDamage[0], effectiveDamage[1], getEffectiveArmor(target, targetData.armor), "physical", attacker);
         const willPoison = shouldApplyPoison(attackerStats);
         const willSlow = shouldApplySlow(attackerStats);
         const poisonDmg = willPoison ? attackerStats.poisonDamage : undefined;

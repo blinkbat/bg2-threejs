@@ -286,6 +286,7 @@ export interface DamageOptions {
     targetUnit?: Unit;  // Full unit data for special mechanics (e.g., amoeba split)
     attackerPosition?: { x: number; z: number };  // Position of attacker (for shield facing)
     damageType?: DamageType;  // Type of damage (for energy shield - chaos does 2x)
+    isCrit?: boolean;  // Whether this was a critical hit (shows gold damage text)
 }
 
 /**
@@ -302,7 +303,7 @@ export function applyDamageToUnit(
     options: DamageOptions = {}
 ): number {
     const { scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now, defeatedThisFrame } = ctx;
-    const { poison, slow, color = COLORS.damageEnemy, skipDefeatTracking = false, attackerName, hitMessage, targetUnit, attackerPosition, damageType } = options;
+    const { poison, slow, color = COLORS.damageEnemy, skipDefeatTracking = false, attackerName, hitMessage, targetUnit, attackerPosition, damageType, isCrit = false } = options;
 
     // Submerged krakens are invulnerable
     if (isKrakenSubmerged(targetId)) {
@@ -391,7 +392,7 @@ export function applyDamageToUnit(
 
         // Visual feedback
         hitFlashRef[targetId] = now;
-        spawnDamageNumber(scene, targetGroup.position.x, targetGroup.position.z, damage, color, damageTexts);
+        spawnDamageNumber(scene, targetGroup.position.x, targetGroup.position.z, damage, color, damageTexts, false, isCrit);
 
         // Play gushing sound for the split
         soundFns.playGush();
@@ -458,7 +459,7 @@ export function applyDamageToUnit(
     // Show absorbed damage differently if shield took it
     const displayDamage = shieldAbsorbed > 0 ? damage : damage;
     const displayColor = shieldAbsorbed > 0 && effectiveDamage === 0 ? "#66ccff" : color;
-    spawnDamageNumber(scene, targetGroup.position.x, targetGroup.position.z, displayDamage, displayColor, damageTexts);
+    spawnDamageNumber(scene, targetGroup.position.x, targetGroup.position.z, displayDamage, displayColor, damageTexts, false, isCrit);
 
     // Track when this unit last took damage (for AI kiting decisions)
     targetGroup.userData.lastHitTime = now;
@@ -584,6 +585,7 @@ export function applyDamageToUnit(
 /**
  * Spawn a floating damage number at the given position
  * @param isHeal - If true, shows + prefix instead of - prefix
+ * @param isCrit - If true, shows larger gold "CRIT!" text
  */
 export function spawnDamageNumber(
     scene: THREE.Scene,
@@ -592,21 +594,25 @@ export function spawnDamageNumber(
     damage: number,
     color: string,
     damageTexts: DamageText[],
-    isHeal: boolean = false
+    isHeal: boolean = false,
+    isCrit: boolean = false
 ): void {
     const canvas = document.createElement("canvas");
-    canvas.width = 64;
-    canvas.height = 32;
+    canvas.width = isCrit ? 96 : 64;
+    canvas.height = isCrit ? 48 : 32;
     const ctx = canvas.getContext("2d")!;
-    ctx.font = "bold 24px monospace";
-    ctx.fillStyle = color;
+    ctx.font = isCrit ? "bold 28px monospace" : "bold 24px monospace";
+    ctx.fillStyle = isCrit ? COLORS.damageCrit : color;
     ctx.textAlign = "center";
     const prefix = isHeal ? "+" : "-";
-    ctx.fillText(`${prefix}${damage}`, 32, 24);
+    const text = isCrit ? `${prefix}${damage}!` : `${prefix}${damage}`;
+    ctx.fillText(text, canvas.width / 2, isCrit ? 36 : 24);
 
     const texture = new THREE.CanvasTexture(canvas);
+    const planeWidth = isCrit ? 1.2 : 0.8;
+    const planeHeight = isCrit ? 0.6 : 0.4;
     const mesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.8, 0.4),
+        new THREE.PlaneGeometry(planeWidth, planeHeight),
         new THREE.MeshBasicMaterial({ map: texture, transparent: true })
     );
     mesh.position.set(x, 1.5, z);

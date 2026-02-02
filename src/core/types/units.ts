@@ -26,9 +26,9 @@ export interface StatusEffect {
 // Character stats type
 export interface CharacterStats {
     strength: number;     // +1 physical damage per 2 points
-    dexterity: number;    // +1% hit chance per 2 points
-    vitality: number;     // +2 HP per point
-    intelligence: number; // +1 MP per point, +1 elemental/chaos damage per 3 points
+    dexterity: number;    // +1% hit chance per 2 points, +1% crit chance per 2 points
+    vitality: number;     // +1 HP per point
+    intelligence: number; // +1 MP per point, +1 elemental/chaos damage per 2 points
     faith: number;        // +1 holy damage per 2 points, +1 healing power per 2 points
 }
 
@@ -71,6 +71,7 @@ export interface UnitData {
     projectileColor?: string;
     attackCooldown: number;  // ms - cooldown for basic attack (also global cooldown)
     size?: number;  // hitbox size multiplier (default 1)
+    baseCrit?: number;  // base crit chance percentage (added to dexterity bonus)
 }
 
 // =============================================================================
@@ -195,6 +196,8 @@ export interface EnemyStats {
     tentacleSkill?: EnemyTentacleSkill;
     // Optional fireball attack - slow projectile that hurts everything it touches
     fireballAttack?: boolean;
+    // Base crit chance percentage (0 by default, enemies can crit too)
+    baseCrit?: number;
 }
 
 // =============================================================================

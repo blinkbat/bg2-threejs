@@ -6,7 +6,7 @@ import * as THREE from "three";
 import type { Unit, Skill, UnitGroup, MagicMissileProjectile } from "../../core/types";
 import { COLORS } from "../../core/constants";
 import { UNIT_DATA, getUnitStats, getEffectiveUnitData } from "../../game/units";
-import { rollChance, calculateDamage, rollHit, getEffectiveArmor, logHit, logMiss, logPoisoned, logCast, calculateStatBonus, checkFrontShieldBlock, checkEnemyBlockChance } from "../combatMath";
+import { rollChance, calculateDamageWithCrit, rollHit, getEffectiveArmor, logHit, logMiss, logPoisoned, logCast, calculateStatBonus, checkFrontShieldBlock, checkEnemyBlockChance } from "../combatMath";
 import { ENEMY_STATS } from "../../game/units";
 import { getUnitRadius, isInRange } from "../../rendering/range";
 import { distanceToPoint } from "../../game/geometry";
@@ -120,7 +120,7 @@ export function executeMeleeSkill(
     if (rollHit(casterData.accuracy)) {
         const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
         const statBonus = calculateStatBonus(casterUnit, skill.damageType);
-        const dmg = calculateDamage(skill.damageRange![0] + statBonus, skill.damageRange![1] + statBonus, getEffectiveArmor(targetEnemy, targetData.armor), skill.damageType);
+        const { damage: dmg, isCrit } = calculateDamageWithCrit(skill.damageRange![0] + statBonus, skill.damageRange![1] + statBonus, getEffectiveArmor(targetEnemy, targetData.armor), skill.damageType, casterUnit);
         const willPoison = skill.poisonChance ? rollChance(skill.poisonChance) : false;
 
         // Read fresh HP from current state to avoid stale data race condition
@@ -141,9 +141,10 @@ export function executeMeleeSkill(
             color: COLORS.damagePlayer,
             poison: willPoison ? { sourceId: casterId } : undefined,
             attackerName: casterData.name,
-            hitMessage: { text: logHit(casterData.name, skill.name, targetData.name, dmg), color: COLORS.damagePlayer },
+            hitMessage: { text: logHit(casterData.name, skill.name, targetData.name, dmg) + (isCrit ? " Critical hit!" : ""), color: isCrit ? COLORS.damageCrit : COLORS.damagePlayer },
             targetUnit: targetEnemy,
-            attackerPosition: { x: casterG.position.x, z: casterG.position.z }
+            attackerPosition: { x: casterG.position.x, z: casterG.position.z },
+            isCrit
         });
 
         soundFns.playHit();
@@ -233,7 +234,7 @@ export function executeSmiteSkill(
     if (rollHit(casterData.accuracy)) {
         const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
         const statBonus = calculateStatBonus(casterUnit, skill.damageType);
-        const dmg = calculateDamage(skill.damageRange![0] + statBonus, skill.damageRange![1] + statBonus, getEffectiveArmor(targetEnemy, targetData.armor), skill.damageType);
+        const { damage: dmg, isCrit } = calculateDamageWithCrit(skill.damageRange![0] + statBonus, skill.damageRange![1] + statBonus, getEffectiveArmor(targetEnemy, targetData.armor), skill.damageType, casterUnit);
 
         // Read fresh HP from current state
         const freshTarget = unitsStateRef.current.find(u => u.id === targetId);
@@ -251,9 +252,10 @@ export function executeSmiteSkill(
         applyDamageToUnit(dmgCtx, targetId, targetG, currentHp, dmg, targetData.name, {
             color: COLORS.damagePlayer,
             attackerName: casterData.name,
-            hitMessage: { text: logHit(casterData.name, skill.name, targetData.name, dmg), color: COLORS.damagePlayer },
+            hitMessage: { text: logHit(casterData.name, skill.name, targetData.name, dmg) + (isCrit ? " Critical hit!" : ""), color: isCrit ? COLORS.damageCrit : COLORS.damagePlayer },
             targetUnit: targetEnemy,
-            attackerPosition: { x: casterG.position.x, z: casterG.position.z }
+            attackerPosition: { x: casterG.position.x, z: casterG.position.z },
+            isCrit
         });
     } else {
         soundFns.playMiss();
@@ -375,6 +377,7 @@ export function executeFlurrySkill(
 
     let totalHits = 0;
     let totalDamage = 0;
+    let totalCrits = 0;
 
     const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
     const statBonus = calculateStatBonus(casterUnit, skill.damageType);
@@ -399,7 +402,7 @@ export function executeFlurrySkill(
         }
 
         if (rollHit(casterData.accuracy)) {
-            const dmg = calculateDamage(skill.damageRange![0] + statBonus, skill.damageRange![1] + statBonus, getEffectiveArmor(target, targetData.armor), skill.damageType);
+            const { damage: dmg, isCrit } = calculateDamageWithCrit(skill.damageRange![0] + statBonus, skill.damageRange![1] + statBonus, getEffectiveArmor(target, targetData.armor), skill.damageType, casterUnit);
 
             // Use tracked HP, not stale snapshot
             const currentHp = hpTracker[target.id];
@@ -407,7 +410,8 @@ export function executeFlurrySkill(
                 color: COLORS.damagePlayer,
                 attackerName: casterData.name,
                 targetUnit: target,
-                attackerPosition: { x: casterG.position.x, z: casterG.position.z }
+                attackerPosition: { x: casterG.position.x, z: casterG.position.z },
+                isCrit
             });
 
             // Update local HP tracker
@@ -415,6 +419,7 @@ export function executeFlurrySkill(
 
             totalHits++;
             totalDamage += dmg;
+            if (isCrit) totalCrits++;
         }
     }
 
@@ -426,7 +431,8 @@ export function executeFlurrySkill(
     });
 
     if (totalHits > 0) {
-        addLog(`${casterData.name}'s ${skill.name} lands ${totalHits} hits for ${totalDamage} total damage!`, COLORS.damagePlayer);
+        const critText = totalCrits > 0 ? ` (${totalCrits} critical!)` : "";
+        addLog(`${casterData.name}'s ${skill.name} lands ${totalHits} hits for ${totalDamage} total damage!${critText}`, COLORS.damagePlayer);
     } else {
         addLog(`${casterData.name}'s ${skill.name} misses all targets!`, COLORS.logNeutral);
     }

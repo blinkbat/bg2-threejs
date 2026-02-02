@@ -6,7 +6,7 @@ import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, Projectile, EnemyStats, MagicMissileProjectile, TrapProjectile, FireballProjectile, StatusEffect, DamageType, UnitData } from "../core/types";
 import { HIT_DETECTION_RADIUS, COLORS, BUFF_TICK_INTERVAL } from "../core/constants";
 import { getUnitStats } from "../game/units";
-import { calculateDamage, getDirectionAndDistance, rollHit, shouldApplyPoison, getEffectiveArmor, logHit, logLifestealHit, logMiss, logPoisoned, logAoeHit, logAoeMiss, getDamageColor, logTrapTriggered, calculateStatBonus, applyStatusEffect, checkFrontShieldBlock, checkEnemyBlockChance } from "../combat/combatMath";
+import { calculateDamageWithCrit, getDirectionAndDistance, rollHit, shouldApplyPoison, getEffectiveArmor, logHit, logLifestealHit, logMiss, logPoisoned, logAoeHit, logAoeMiss, getDamageColor, logTrapTriggered, calculateStatBonus, applyStatusEffect, checkFrontShieldBlock, checkEnemyBlockChance } from "../combat/combatMath";
 import { distance } from "../game/geometry";
 import { isBlocked } from "../ai/pathfinding";
 import { ENEMY_STATS } from "../game/units";
@@ -129,7 +129,7 @@ export function updateProjectiles(
                         const targetData = getUnitStats(target);
                         const currentHp = hpTracker[target.id] ?? target.hp;
                         const statBonus = calculateStatBonus(attackerUnit, proj.damageType);
-                        const dmg = calculateDamage(damage[0] + statBonus, damage[1] + statBonus, getEffectiveArmor(target, targetData.armor), proj.damageType);
+                        const { damage: dmg } = calculateDamageWithCrit(damage[0] + statBonus, damage[1] + statBonus, getEffectiveArmor(target, targetData.armor), proj.damageType, attackerUnit);
 
                         const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now, defeatedThisFrame };
                         applyDamageToUnit(dmgCtx, target.id, tg, currentHp, dmg, targetData.name, {
@@ -249,7 +249,8 @@ export function updateProjectiles(
                         // Skip if target already dead (killed by another projectile this frame)
                         if (currentHp > 0) {
                             const statBonus = calculateStatBonus(attackerUnit, mmProj.damageType);
-                            dmgDealt = calculateDamage(mmProj.damage[0] + statBonus, mmProj.damage[1] + statBonus, getEffectiveArmor(targetUnit, targetData.armor), mmProj.damageType);
+                            const result = calculateDamageWithCrit(mmProj.damage[0] + statBonus, mmProj.damage[1] + statBonus, getEffectiveArmor(targetUnit, targetData.armor), mmProj.damageType, attackerUnit);
+                            dmgDealt = result.damage;
 
                             const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now, defeatedThisFrame };
                             const mmAttackerG = unitsRef[mmProj.attackerId];
@@ -517,11 +518,11 @@ export function updateProjectiles(
                     const targetData = getUnitStats(target);
                     const attackerData = attackerUnit ? getUnitStats(attackerUnit) : null;
 
-                    // Calculate fire damage
-                    const dmg = calculateDamage(
+                    const { damage: dmg } = calculateDamageWithCrit(
                         fbProj.damage[0], fbProj.damage[1],
                         getEffectiveArmor(target, targetData.armor),
-                        fbProj.damageType
+                        fbProj.damageType,
+                        attackerUnit
                     );
 
                     const dmgCtx: DamageContext = {
@@ -603,7 +604,7 @@ export function updateProjectiles(
 
             if (rollHit(attackerData.accuracy)) {
                 const dmgType = getBasicAttackDamageType(attackerUnit, attackerData);
-                const dmg = calculateDamage(attackerData.damage[0], attackerData.damage[1], getEffectiveArmor(targetUnit, targetData.armor), dmgType);
+                const { damage: dmg, isCrit } = calculateDamageWithCrit(attackerData.damage[0], attackerData.damage[1], getEffectiveArmor(targetUnit, targetData.armor), dmgType, attackerUnit);
                 const willPoison = attackerUnit.team === "enemy" && shouldApplyPoison(attackerData as EnemyStats);
                 const poisonDmg = willPoison && 'poisonDamage' in attackerData ? (attackerData as EnemyStats).poisonDamage : undefined;
 
@@ -623,11 +624,15 @@ export function updateProjectiles(
                     attackerName: attackerUnit.team === "player" ? attackerData.name : undefined,
                     hitMessage: { text: hitText, color: logColor },
                     targetUnit: targetUnit,
-                    attackerPosition: attackerG ? { x: attackerG.position.x, z: attackerG.position.z } : undefined
+                    attackerPosition: attackerG ? { x: attackerG.position.x, z: attackerG.position.z } : undefined,
+                    isCrit
                 });
 
                 soundFns.playHit();
 
+                if (isCrit) {
+                    addLog("Critical hit!", COLORS.damageCrit);
+                }
                 if (willPoison) {
                     addLog(logPoisoned(targetData.name), COLORS.poisonText);
                 }

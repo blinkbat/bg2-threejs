@@ -118,6 +118,7 @@ export const COLORS = {
     damagePlayer: "#4ade80",    // Green - damage dealt by player
     damageEnemy: "#f87171",     // Red - damage dealt to player
     damageNeutral: "#ff6600",   // Orange - enemy taking damage
+    damageCrit: "#ffd700",      // Gold - critical hit
 
     // Status effects
     poison: "#4a7c4a",

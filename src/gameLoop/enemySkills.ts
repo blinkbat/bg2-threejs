@@ -6,7 +6,7 @@ import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, EnemyStats, EnemySkill, EnemyHealSkill } from "../core/types";
 import { COLORS, SWIPE_ANIMATE_DURATION } from "../core/constants";
 import { getUnitStats } from "../game/units";
-import { calculateDamage, rollHit, getEffectiveArmor, logAoeHit, logAoeMiss } from "../combat/combatMath";
+import { calculateDamageWithCrit, rollHit, getEffectiveArmor, logAoeHit, logAoeMiss } from "../combat/combatMath";
 import { distance } from "../game/geometry";
 import { applyDamageToUnit, animateExpandingMesh, getAliveUnitsInRange, spawnDamageNumber, type DamageContext } from "../combat/damageEffects";
 import { soundFns } from "../audio";
@@ -16,7 +16,7 @@ import { soundFns } from "../audio";
 // =============================================================================
 
 export function executeEnemySwipe(
-    _unit: Unit,
+    unit: Unit,
     g: UnitGroup,
     skill: EnemySkill,
     enemyData: EnemyStats,
@@ -84,7 +84,7 @@ export function executeEnemySwipe(
         const targetData = getUnitStats(target);
 
         if (rollHit(enemyData.accuracy)) {
-            const dmg = calculateDamage(skill.damage[0], skill.damage[1], getEffectiveArmor(target, targetData.armor), skill.damageType);
+            const { damage: dmg } = calculateDamageWithCrit(skill.damage[0], skill.damage[1], getEffectiveArmor(target, targetData.armor), skill.damageType, unit);
             applyDamageToUnit(dmgCtx, target.id, tg, currentHp, dmg, targetData.name, { color: COLORS.damageEnemy, targetUnit: target });
             hpTracker[target.id] = Math.max(0, currentHp - dmg);
             hitCount++;

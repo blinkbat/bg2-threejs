@@ -4,6 +4,7 @@ import type { Unit, Skill, StatusEffect, DamageType, Item, CharacterStats } from
 import { isConsumable, isWeapon, isShield, isArmor, isAccessory } from "../core/types";
 import { UNIT_DATA, getAllSkills, getEffectiveUnitData, getEffectiveMaxHp, getEffectiveMaxMana, getXpForLevel } from "../game/units";
 import { getHpPercentage, getHpColor, getMana, hasStatusEffect, getEffectiveArmor } from "../combat/combatMath";
+import { getDexterityCritChance } from "../game/statBonuses";
 import { COLORS, getSkillColorClass, getSkillBorderColor } from "../core/constants";
 import { getCharacterEquipment, getPartyInventory } from "../game/equipmentState";
 import { getItem } from "../game/items";
@@ -140,13 +141,16 @@ const STAT_INFO: Record<keyof CharacterStats, { label: string; name: string; col
         label: "DEX",
         name: "Dexterity",
         color: "#2ecc71",
-        bonuses: [{ desc: "Hit Chance", rate: "+1% per 2 pts" }]
+        bonuses: [
+            { desc: "Hit Chance", rate: "+1% per 2 pts" },
+            { desc: "Crit Chance", rate: "+1% per 2 pts" }
+        ]
     },
     vitality: {
         label: "VIT",
         name: "Vitality",
         color: "#e67e22",
-        bonuses: [{ desc: "Max HP", rate: "+2 per pt" }]
+        bonuses: [{ desc: "Max HP", rate: "+1 per pt" }]
     },
     intelligence: {
         label: "INT",
@@ -154,7 +158,7 @@ const STAT_INFO: Record<keyof CharacterStats, { label: string; name: string; col
         color: "#9b59b6",
         bonuses: [
             { desc: "Max Mana", rate: "+1 per pt" },
-            { desc: "Magic Damage", rate: "+1 per 3 pts" }
+            { desc: "Magic Damage", rate: "+1 per 2 pts" }
         ]
     },
     faith: {
@@ -270,13 +274,17 @@ function StatusTab({ unit, effectiveData, onToggleAI, unitId, onIncrementStat }:
                     <span className="float-right">{effectiveData.accuracy}%</span>
                 </div>
                 <div className="card">
+                    <span className="text-muted">Crit</span>
+                    <span className="float-right">{getDexterityCritChance(unit)}%</span>
+                </div>
+                <div className="card">
                     <span className="text-muted">Armor</span>
                     <span className="float-right" style={isShielded ? { color: COLORS.shieldedText } : undefined}>
                         {displayArmor}
                         {isShielded && <span style={{ fontSize: 10, marginLeft: 4 }}>(×2)</span>}
                     </span>
                 </div>
-                <div className="card span-2">
+                <div className="card">
                     <span className="text-muted">Damage</span>
                     <span className="float-right">{effectiveData.damage[0]}-{effectiveData.damage[1]}</span>
                 </div>
