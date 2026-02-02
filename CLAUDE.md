@@ -5,6 +5,7 @@
 2. Identify existing utilities, helpers, and shared logic
 3. Locate relevant type definitions and interfaces
 4. Assume the Windows command line.
+5. BEFORE attempting substantial refactors, ask if the user would like to `git commit` first.
 
 ## Phase 2: Implementation Constraints
 
