@@ -2,84 +2,31 @@
 // AREA HELPERS - Grid generation, candles, obstacle merging
 // =============================================================================
 
-import type { Room, CandlePosition, MergedObstacle } from "../../core/types";
+import type { CandlePosition, MergedObstacle } from "../../core/types";
 import type { AreaData, ComputedAreaData } from "./types";
 
 /**
- * Carve walkable area into blocked grid.
+ * Build blocked grid from geometry grid.
+ * Walkable: . (floor)
+ * Blocked: # (wall), anything else
+ * Note: Doors are defined by transitions, not geometry chars
  */
-function carve(blocked: boolean[][], x1: number, z1: number, x2: number, z2: number): void {
-    for (let x = x1; x <= x2; x++) {
-        for (let z = z1; z <= z2; z++) {
-            if (x >= 0 && x < blocked.length && z >= 0 && z < blocked[0].length) {
+function buildBlockedFromGeometry(geometry: string[][], gridSize: number): boolean[][] {
+    const blocked: boolean[][] = Array(gridSize)
+        .fill(null)
+        .map(() => Array(gridSize).fill(true));
+
+    for (let z = 0; z < gridSize && z < geometry.length; z++) {
+        for (let x = 0; x < gridSize && x < (geometry[z]?.length ?? 0); x++) {
+            const char = geometry[z][x];
+            // Only floor is walkable
+            if (char === ".") {
                 blocked[x][z] = false;
             }
         }
     }
-}
 
-/**
- * Generate wall sconces based on room positions.
- * Places 1-2 candles per wall depending on room size.
- */
-function generateCandles(rooms: Room[], blocked: boolean[][], gridSize: number): CandlePosition[] {
-    const candles: CandlePosition[] = [];
-
-    rooms.forEach(r => {
-        // For larger rooms (>8 cells), place 2 candles per wall; otherwise just 1
-        const numCandlesX = r.w > 8 ? 2 : 1;
-        const numCandlesZ = r.h > 8 ? 2 : 1;
-
-        // South wall
-        const sWallZ = r.z - 1;
-        if (sWallZ >= 0) {
-            for (let i = 0; i < numCandlesX; i++) {
-                const xPos = r.x + (i + 0.5) * (r.w / numCandlesX);
-                const xInt = Math.floor(xPos);
-                if (blocked[xInt]?.[sWallZ]) {
-                    candles.push({ x: xPos, z: sWallZ + 0.85, dx: 0, dz: 1 });
-                }
-            }
-        }
-
-        // North wall
-        const nWallZ = r.z + r.h;
-        if (nWallZ < gridSize) {
-            for (let i = 0; i < numCandlesX; i++) {
-                const xPos = r.x + (i + 0.5) * (r.w / numCandlesX);
-                const xInt = Math.floor(xPos);
-                if (blocked[xInt]?.[nWallZ]) {
-                    candles.push({ x: xPos, z: nWallZ + 0.15, dx: 0, dz: -1 });
-                }
-            }
-        }
-
-        // West wall
-        const wWallX = r.x - 1;
-        if (wWallX >= 0) {
-            for (let i = 0; i < numCandlesZ; i++) {
-                const zPos = r.z + (i + 0.5) * (r.h / numCandlesZ);
-                const zInt = Math.floor(zPos);
-                if (blocked[wWallX]?.[zInt]) {
-                    candles.push({ x: wWallX + 0.85, z: zPos, dx: 1, dz: 0 });
-                }
-            }
-        }
-
-        // East wall
-        const eWallX = r.x + r.w;
-        if (eWallX < gridSize) {
-            for (let i = 0; i < numCandlesZ; i++) {
-                const zPos = r.z + (i + 0.5) * (r.h / numCandlesZ);
-                const zInt = Math.floor(zPos);
-                if (blocked[eWallX]?.[zInt]) {
-                    candles.push({ x: eWallX + 0.15, z: zPos, dx: -1, dz: 0 });
-                }
-            }
-        }
-    });
-
-    return candles;
+    return blocked;
 }
 
 /**
@@ -120,30 +67,33 @@ function mergeObstacles(blocked: boolean[][], gridSize: number): MergedObstacle[
  * Compute dynamic area data from static definition.
  */
 export function computeAreaData(area: AreaData): ComputedAreaData {
-    // Initialize blocked grid
-    const blocked: boolean[][] = Array(area.gridSize)
-        .fill(null)
-        .map(() => Array(area.gridSize).fill(true));
+    // Build blocked grid from geometry
+    const blocked = buildBlockedFromGeometry(area.geometry, area.gridSize);
 
-    // Carve rooms
-    area.rooms.forEach(r => carve(blocked, r.x, r.z, r.x + r.w - 1, r.z + r.h - 1));
-
-    // Carve hallways
-    area.hallways.forEach(h => carve(blocked, h.x1, h.z1, h.x2, h.z2));
-
-    // Carve transition areas (doors)
-    area.transitions.forEach(t => carve(blocked, t.x, t.z, t.x + t.w - 1, t.z + t.h - 1));
-
-    // Carve lava zones BEFORE wall merging (so they don't render as walls)
-    if (area.lavaZones) {
-        area.lavaZones.forEach(lz => carve(blocked, lz.x, lz.z, lz.x + lz.w - 1, lz.z + lz.h - 1));
+    // Also unblock terrain lava zones (they don't render as walls, but block movement separately)
+    for (let z = 0; z < area.gridSize && z < area.terrain.length; z++) {
+        for (let x = 0; x < area.gridSize && x < (area.terrain[z]?.length ?? 0); x++) {
+            if (area.terrain[z][x] === "~") {
+                blocked[x][z] = false;
+            }
+        }
     }
 
-    // Generate candles for dungeon-like areas, and include any manual candle placements
-    const generatedCandles = area.id === "dungeon"
-        ? generateCandles(area.rooms, blocked, area.gridSize)
-        : [];
-    const candlePositions = [...generatedCandles, ...(area.candles ?? [])];
+    // Unblock transition (door) cells - doors render as portals, not walls
+    area.transitions.forEach(trans => {
+        for (let dz = 0; dz < trans.h; dz++) {
+            for (let dx = 0; dx < trans.w; dx++) {
+                const x = Math.floor(trans.x) + dx;
+                const z = Math.floor(trans.z) + dz;
+                if (x >= 0 && x < area.gridSize && z >= 0 && z < area.gridSize) {
+                    blocked[x][z] = false;
+                }
+            }
+        }
+    });
+
+    // Include manual candle placements only (no auto-generation)
+    const candlePositions: CandlePosition[] = [...(area.candles ?? [])];
 
     // Merge obstacles BEFORE blocking trees/lava (so they don't become walls)
     // Note: Secret door areas remain blocked, so walls WILL render there
@@ -152,16 +102,12 @@ export function computeAreaData(area: AreaData): ComputedAreaData {
 
     // Track lava zones for pathfinding (NOT in main blocked grid - lava doesn't block LOS)
     const lavaBlocked = new Set<string>();
-    if (area.lavaZones) {
-        area.lavaZones.forEach(lz => {
-            for (let x = lz.x; x < lz.x + lz.w; x++) {
-                for (let z = lz.z; z < lz.z + lz.h; z++) {
-                    if (x >= 0 && x < area.gridSize && z >= 0 && z < area.gridSize) {
-                        lavaBlocked.add(`${x},${z}`);
-                    }
-                }
+    for (let z = 0; z < area.gridSize && z < area.terrain.length; z++) {
+        for (let x = 0; x < area.gridSize && x < (area.terrain[z]?.length ?? 0); x++) {
+            if (area.terrain[z][x] === "~") {
+                lavaBlocked.add(`${x},${z}`);
             }
-        });
+        }
     }
 
     // Block tree positions for pathing and LOS (after wall merging)

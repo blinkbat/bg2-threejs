@@ -239,6 +239,63 @@ export const playCrunch = () => {
     crunch.stop(ctx.currentTime + 0.12);
 };
 
+// Fading footsteps - for area transitions
+export const playFootsteps = () => {
+    if (isMuted()) return;
+    const ctx = getAudioCtx();
+
+    // Series of footsteps that fade out
+    const steps = 6;
+    for (let i = 0; i < steps; i++) {
+        const time = i * 0.15;  // 150ms between steps
+        const volume = 0.12 * (1 - i / steps);  // Fade out
+
+        // Low thud - foot impact
+        const thud = ctx.createOscillator();
+        const thudGain = ctx.createGain();
+        const thudFilter = ctx.createBiquadFilter();
+
+        thud.type = "sine";
+        thud.frequency.setValueAtTime(80 + Math.random() * 20, ctx.currentTime + time);
+        thud.frequency.exponentialRampToValueAtTime(40, ctx.currentTime + time + 0.08);
+
+        thudFilter.type = "lowpass";
+        thudFilter.frequency.setValueAtTime(200, ctx.currentTime + time);
+
+        const startTime = ctx.currentTime + time;
+        thudGain.gain.setValueAtTime(0, startTime);
+        thudGain.gain.linearRampToValueAtTime(volume, startTime + 0.01);
+        thudGain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.1);
+
+        thud.connect(thudFilter);
+        thudFilter.connect(thudGain);
+        thudGain.connect(ctx.destination);
+        thud.start(startTime);
+        thud.stop(startTime + 0.12);
+
+        // Scuff noise - stone floor texture
+        const bufferSize = Math.floor(ctx.sampleRate * 0.06);
+        const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const output = noiseBuffer.getChannelData(0);
+        for (let j = 0; j < bufferSize; j++) {
+            output[j] = (Math.random() * 2 - 1) * Math.exp(-j / (bufferSize * 0.3));
+        }
+        const noise = ctx.createBufferSource();
+        noise.buffer = noiseBuffer;
+        const noiseFilter = ctx.createBiquadFilter();
+        noiseFilter.type = "bandpass";
+        noiseFilter.frequency.setValueAtTime(800 + Math.random() * 400, ctx.currentTime + time);
+        noiseFilter.Q.setValueAtTime(2, ctx.currentTime + time);
+        const noiseGain = ctx.createGain();
+        noiseGain.gain.setValueAtTime(volume * 0.5, ctx.currentTime + time);
+        noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + time + 0.06);
+        noise.connect(noiseFilter);
+        noiseFilter.connect(noiseGain);
+        noiseGain.connect(ctx.destination);
+        noise.start(startTime + 0.01);
+    }
+};
+
 // Gold coin pickup - satisfying jingle
 export const playGold = () => {
     if (isMuted()) return;

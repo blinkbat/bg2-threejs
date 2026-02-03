@@ -83,65 +83,49 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     ground.name = "ground";
     scene.add(ground);
 
-    // Room floors - slightly above ground to avoid z-fighting, same material properties
-    // For coast, detect water floors by color and skip them (we'll create animated water instead)
-    const waterColors = ["#5f9ea0", "#4682b4"];  // Shallow and deep water colors
+    // Floor tiles - render based on floor grid
+    // Floor types: s=sand, d=dirt, g=grass, w=water, t=stone, .=default (gray)
     let waterMesh: THREE.Mesh | null = null;
 
-    // Lava colors that should render higher for visibility
-    const lavaColors = ["#ff4500", "#ff5500", "#ff6600"];
+    const floorColors: Record<string, string> = {
+        "s": "#c2b280",  // Sand - tan
+        "S": "#d4c490",  // Light sand
+        "d": "#8b7355",  // Dirt - brown
+        "D": "#6b5344",  // Dark dirt
+        "g": "#5a8a4a",  // Grass - green
+        "G": "#4a7a3a",  // Dark grass
+        "w": "#4a90a0",  // Water - blue
+        "W": "#3a7080",  // Deep water
+        "t": "#707070",  // Stone - gray
+        "T": "#606060",  // Dark stone
+        ".": "#555555",  // Default - gray
+    };
 
-    area.roomFloors.forEach(r => {
-        // Skip water floors on coast - we'll render them with animated shader
-        if (area.id === "coast" && waterColors.includes(r.color)) {
-            return;
+    // Render floor tiles
+    if (area.floor && area.floor.length > 0) {
+        for (let z = 0; z < area.floor.length; z++) {
+            for (let x = 0; x < area.floor[z].length; x++) {
+                const char = area.floor[z][x];
+                if (char === ".") continue;  // Skip default tiles (ground shows through)
+
+                const color = floorColors[char] ?? "#555555";
+                const isWater = char === "w" || char === "W";
+
+                const floorMat = new THREE.MeshStandardMaterial({
+                    color,
+                    metalness: isWater ? 0.3 : 0.2,
+                    roughness: isWater ? 0.4 : 0.9,
+                });
+                const tile = new THREE.Mesh(
+                    new THREE.PlaneGeometry(1, 1),
+                    floorMat
+                );
+                tile.rotation.x = -Math.PI / 2;
+                tile.position.set(x + 0.5, 0.001, z + 0.5);
+                tile.name = "ground";
+                scene.add(tile);
+            }
         }
-        const isLava = lavaColors.includes(r.color.toLowerCase());
-        const floorMat = new THREE.MeshStandardMaterial({
-            color: r.color,
-            metalness: isLava ? 0.1 : 0.2,
-            roughness: isLava ? 0.4 : 0.9,
-            emissive: isLava ? r.color : "#000000",
-            emissiveIntensity: isLava ? 0.5 : 0
-        });
-        const floor = new THREE.Mesh(
-            new THREE.PlaneGeometry(r.w, r.h),
-            floorMat
-        );
-        floor.rotation.x = -Math.PI / 2;
-        // Lava renders higher for guaranteed visibility above fog
-        const yPos = isLava ? 0.05 : 0.001;
-        floor.position.set(r.x + r.w / 2, yPos, r.z + r.h / 2);
-        floor.name = "ground";
-        scene.add(floor);
-    });
-
-    // Create water for coast area - gradient from shallow to deep
-    if (area.id === "coast") {
-        const waterW = 48;
-        const waterH = 15;
-        const waterX = 1;
-        const waterZ = 1;
-
-        // Create gradient texture using canvas
-        const waterCanvas = document.createElement("canvas");
-        waterCanvas.width = 1;
-        waterCanvas.height = 256;
-        const waterCtx = waterCanvas.getContext("2d")!;
-        const waterGradient = waterCtx.createLinearGradient(0, 0, 0, 256);
-        waterGradient.addColorStop(0, "#0a1820");   // Deep (far from shore) - very dark
-        waterGradient.addColorStop(0.5, "#1a3a4a"); // Mid - dark blue
-        waterGradient.addColorStop(1, "#4a8090");   // Shallow (near shore) - teal
-        waterCtx.fillStyle = waterGradient;
-        waterCtx.fillRect(0, 0, 1, 256);
-
-        const waterTexture = new THREE.CanvasTexture(waterCanvas);
-        const waterMat = new THREE.MeshBasicMaterial({ map: waterTexture });
-        waterMesh = new THREE.Mesh(new THREE.PlaneGeometry(waterW, waterH), waterMat);
-        waterMesh.rotation.x = -Math.PI / 2;
-        waterMesh.position.set(waterX + waterW / 2, 0.002, waterZ + waterH / 2);
-        waterMesh.name = "water";
-        scene.add(waterMesh);
     }
 
     // Torches with flames and lights (only in areas with candles)
@@ -157,10 +141,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     const candleGeo = new THREE.CylinderGeometry(0.06, 0.08, 0.3, 6);
     const flameGeo = new THREE.SphereGeometry(0.08, 4, 4);
 
-    // Group candles by room and create 1 light per room (at room center)
-    const roomLightsCreated = new Set<string>();
-
-    computed.candlePositions.forEach((pos) => {
+    computed.candlePositions.forEach((pos, index) => {
         // Each candle needs its own material for individual opacity
         const candleMat = new THREE.MeshStandardMaterial(baseCandleMat);
         const candle = new THREE.Mesh(candleGeo, candleMat);
@@ -176,26 +157,12 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         scene.add(flame);
         flames.push(flame);
 
-        // Find which room this candle belongs to and create 1 light per room
-        for (const room of area.rooms) {
-            // Check if candle is on this room's wall (within 2 cells of room boundary)
-            const inRoomX = pos.x >= room.x - 2 && pos.x <= room.x + room.w + 1;
-            const inRoomZ = pos.z >= room.z - 2 && pos.z <= room.z + room.h + 1;
-            if (inRoomX && inRoomZ) {
-                const roomKey = `${room.x},${room.z}`;
-                if (!roomLightsCreated.has(roomKey)) {
-                    roomLightsCreated.add(roomKey);
-                    // Create 1 light at room center with larger radius to cover whole room
-                    const roomCenterX = room.x + room.w / 2;
-                    const roomCenterZ = room.z + room.h / 2;
-                    const roomSize = Math.max(room.w, room.h);
-                    const light = new THREE.PointLight("#ffaa44", 15, roomSize * 0.8, 1.5);
-                    light.position.set(roomCenterX, 2.5, roomCenterZ);
-                    scene.add(light);
-                    candleLights.push(light);
-                }
-                break;
-            }
+        // Create one light per candle cluster (every 4th candle to reduce light count)
+        if (index % 4 === 0) {
+            const light = new THREE.PointLight("#ffaa44", 12, 8, 1.5);
+            light.position.set(pos.x, 2.5, pos.z);
+            scene.add(light);
+            candleLights.push(light);
         }
     });
 
@@ -422,6 +389,250 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                     rubble.rotation.y = Math.random() * Math.PI;
                     scene.add(rubble);
                 }
+            } else if (dec.type === "rock") {
+                // Large rock - irregular boulder shape
+                const rockSize = 0.75 * size;  // Slightly bigger
+                const rock = new THREE.Mesh(
+                    new THREE.DodecahedronGeometry(rockSize, 0),
+                    new THREE.MeshStandardMaterial({ color: "#5a5040", metalness: 0.1, roughness: 0.95 })
+                );
+                rock.position.set(dec.x, rockSize * 0.6, dec.z);
+                rock.rotation.set(Math.random() * 0.3, Math.random() * Math.PI, Math.random() * 0.3);
+                rock.scale.set(1, 0.7, 1.1);  // Flatten slightly
+                rock.name = "decoration";
+                scene.add(rock);
+            } else if (dec.type === "small_rock") {
+                // Small rock - pebble
+                const rockSize = 0.35 * size;  // Slightly bigger
+                const rock = new THREE.Mesh(
+                    new THREE.DodecahedronGeometry(rockSize, 0),
+                    new THREE.MeshStandardMaterial({ color: "#6a6050", metalness: 0.1, roughness: 0.95 })
+                );
+                rock.position.set(dec.x, rockSize * 0.5, dec.z);
+                rock.rotation.set(Math.random() * 0.5, Math.random() * Math.PI, Math.random() * 0.5);
+                rock.scale.set(1, 0.6, 1.2);
+                rock.name = "decoration";
+                scene.add(rock);
+            } else if (dec.type === "mushroom") {
+                // Large mushroom - stem + cap (bigger)
+                const stemHeight = 0.7 * size;
+                const stemRadius = 0.16 * size;
+                const capRadius = 0.55 * size;
+
+                // Stem
+                const stem = new THREE.Mesh(
+                    new THREE.CylinderGeometry(stemRadius * 0.8, stemRadius, stemHeight, 8),
+                    new THREE.MeshStandardMaterial({ color: "#e8dcc8", metalness: 0.0, roughness: 0.9 })
+                );
+                stem.position.set(dec.x, stemHeight / 2, dec.z);
+                scene.add(stem);
+
+                // Cap - dome shape
+                const cap = new THREE.Mesh(
+                    new THREE.SphereGeometry(capRadius, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+                    new THREE.MeshStandardMaterial({ color: "#c44", metalness: 0.0, roughness: 0.8 })
+                );
+                cap.position.set(dec.x, stemHeight, dec.z);
+                cap.name = "decoration";
+                scene.add(cap);
+
+                // White spots on cap
+                for (let j = 0; j < 5; j++) {
+                    const spot = new THREE.Mesh(
+                        new THREE.CircleGeometry(0.06 * size, 8),
+                        new THREE.MeshBasicMaterial({ color: "#fff" })
+                    );
+                    const theta = Math.random() * Math.PI * 2;
+                    const phi = Math.random() * Math.PI * 0.4;
+                    spot.position.set(
+                        dec.x + Math.sin(phi) * Math.cos(theta) * capRadius * 0.95,
+                        stemHeight + Math.cos(phi) * capRadius * 0.95,
+                        dec.z + Math.sin(phi) * Math.sin(theta) * capRadius * 0.95
+                    );
+                    spot.lookAt(dec.x, stemHeight, dec.z);
+                    scene.add(spot);
+                }
+            } else if (dec.type === "small_mushroom") {
+                // Small mushroom cluster (bigger)
+                const positions = [[0, 0], [0.2, 0.12], [-0.15, 0.15]];
+                positions.forEach(([ox, oz], j) => {
+                    const stemHeight = (0.25 + Math.random() * 0.15) * size;
+                    const stemRadius = 0.06 * size;
+                    const capRadius = 0.18 * size;
+
+                    const stem = new THREE.Mesh(
+                        new THREE.CylinderGeometry(stemRadius * 0.7, stemRadius, stemHeight, 6),
+                        new THREE.MeshStandardMaterial({ color: "#e8dcc8", metalness: 0.0, roughness: 0.9 })
+                    );
+                    stem.position.set(dec.x + ox, stemHeight / 2, dec.z + oz);
+                    scene.add(stem);
+
+                    const cap = new THREE.Mesh(
+                        new THREE.SphereGeometry(capRadius, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2),
+                        new THREE.MeshStandardMaterial({ color: j === 0 ? "#c66" : "#a55", metalness: 0.0, roughness: 0.8 })
+                    );
+                    cap.position.set(dec.x + ox, stemHeight, dec.z + oz);
+                    if (j === 0) cap.name = "decoration";
+                    scene.add(cap);
+                });
+            } else if (dec.type === "seaweed") {
+                // Large seaweed - multiple fronds radiating from center
+                const seaweedColor = "#2a6030";
+                const frondCount = 6;
+                for (let j = 0; j < frondCount; j++) {
+                    const angle = (j / frondCount) * Math.PI * 2 + Math.random() * 0.3;
+                    const frondLength = (0.5 + Math.random() * 0.2) * size;
+                    const frondWidth = 0.15 * size;
+
+                    // Each frond is a thin box tilted outward
+                    const frond = new THREE.Mesh(
+                        new THREE.BoxGeometry(frondWidth, 0.02, frondLength),
+                        new THREE.MeshStandardMaterial({ color: seaweedColor, metalness: 0.0, roughness: 0.9, side: THREE.DoubleSide })
+                    );
+                    frond.position.set(
+                        dec.x + Math.cos(angle) * frondLength * 0.4,
+                        0.15 * size,
+                        dec.z + Math.sin(angle) * frondLength * 0.4
+                    );
+                    frond.rotation.y = angle;
+                    frond.rotation.x = -0.6;  // Tilt outward
+                    scene.add(frond);
+                }
+                // Center stem
+                const stem = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.03 * size, 0.05 * size, 0.2 * size, 6),
+                    new THREE.MeshStandardMaterial({ color: "#3a4030", metalness: 0.0, roughness: 0.9 })
+                );
+                stem.position.set(dec.x, 0.1 * size, dec.z);
+                stem.name = "decoration";
+                scene.add(stem);
+            } else if (dec.type === "small_seaweed") {
+                // Small seaweed - fewer, smaller fronds
+                const seaweedColor = "#3a7040";
+                const frondCount = 4;
+                for (let j = 0; j < frondCount; j++) {
+                    const angle = (j / frondCount) * Math.PI * 2 + Math.random() * 0.4;
+                    const frondLength = (0.25 + Math.random() * 0.1) * size;
+                    const frondWidth = 0.08 * size;
+
+                    const frond = new THREE.Mesh(
+                        new THREE.BoxGeometry(frondWidth, 0.015, frondLength),
+                        new THREE.MeshStandardMaterial({ color: seaweedColor, metalness: 0.0, roughness: 0.9, side: THREE.DoubleSide })
+                    );
+                    frond.position.set(
+                        dec.x + Math.cos(angle) * frondLength * 0.35,
+                        0.08 * size,
+                        dec.z + Math.sin(angle) * frondLength * 0.35
+                    );
+                    frond.rotation.y = angle;
+                    frond.rotation.x = -0.5;
+                    if (j === 0) frond.name = "decoration";
+                    scene.add(frond);
+                }
+            } else if (dec.type === "fern") {
+                // Large bush - cluster of spheres with variation
+                const colors = ["#2a6a3a", "#3a8a4e", "#4a9a5e", "#5aaa6e", "#6aba7e"];
+                const bushScale = (1.0 + Math.random() * 1.2) * size;  // Varies 1.0 to 2.2
+
+                // Bottom layer - larger, darker spheres spreading out
+                const bottomCount = 5 + Math.floor(Math.random() * 3);
+                for (let j = 0; j < bottomCount; j++) {
+                    const angle = (j / bottomCount) * Math.PI * 2 + Math.random() * 0.5;
+                    const radius = (0.25 + Math.random() * 0.15) * bushScale;
+                    const sphereSize = (0.18 + Math.random() * 0.1) * bushScale;
+                    const color = colors[Math.floor(Math.random() * 2)];  // Darker colors
+
+                    const sphere = new THREE.Mesh(
+                        new THREE.SphereGeometry(sphereSize, 6, 5),
+                        new THREE.MeshStandardMaterial({ color, metalness: 0.0, roughness: 0.9 })
+                    );
+                    sphere.position.set(
+                        dec.x + Math.cos(angle) * radius,
+                        sphereSize * 0.7,
+                        dec.z + Math.sin(angle) * radius
+                    );
+                    if (j === 0) sphere.name = "decoration";
+                    scene.add(sphere);
+                }
+
+                // Middle layer - medium spheres
+                const midCount = 4 + Math.floor(Math.random() * 3);
+                for (let j = 0; j < midCount; j++) {
+                    const angle = (j / midCount) * Math.PI * 2 + Math.random() * 0.6;
+                    const radius = (0.1 + Math.random() * 0.15) * bushScale;
+                    const sphereSize = (0.15 + Math.random() * 0.08) * bushScale;
+                    const color = colors[1 + Math.floor(Math.random() * 2)];
+
+                    const sphere = new THREE.Mesh(
+                        new THREE.SphereGeometry(sphereSize, 6, 5),
+                        new THREE.MeshStandardMaterial({ color, metalness: 0.0, roughness: 0.85 })
+                    );
+                    sphere.position.set(
+                        dec.x + Math.cos(angle) * radius,
+                        sphereSize + 0.15 * bushScale,
+                        dec.z + Math.sin(angle) * radius
+                    );
+                    scene.add(sphere);
+                }
+
+                // Top layer - smaller, brighter spheres
+                const topCount = 2 + Math.floor(Math.random() * 2);
+                for (let j = 0; j < topCount; j++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const radius = Math.random() * 0.08 * bushScale;
+                    const sphereSize = (0.1 + Math.random() * 0.06) * bushScale;
+                    const color = colors[3 + Math.floor(Math.random() * 2)];
+
+                    const sphere = new THREE.Mesh(
+                        new THREE.SphereGeometry(sphereSize, 6, 5),
+                        new THREE.MeshStandardMaterial({ color, metalness: 0.0, roughness: 0.8 })
+                    );
+                    sphere.position.set(
+                        dec.x + Math.cos(angle) * radius,
+                        0.3 * bushScale + sphereSize,
+                        dec.z + Math.sin(angle) * radius
+                    );
+                    scene.add(sphere);
+                }
+            } else if (dec.type === "small_fern") {
+                // Small bush - simpler cluster
+                const colors = ["#3a7a4a", "#4a9a5e", "#5aaa6e", "#7aca8e"];
+                const bushScale = (0.6 + Math.random() * 0.8) * size;  // Varies 0.6 to 1.4
+
+                // Bottom spheres
+                const count = 3 + Math.floor(Math.random() * 2);
+                for (let j = 0; j < count; j++) {
+                    const angle = (j / count) * Math.PI * 2 + Math.random() * 0.5;
+                    const radius = (0.12 + Math.random() * 0.08) * bushScale;
+                    const sphereSize = (0.12 + Math.random() * 0.06) * bushScale;
+                    const color = colors[Math.floor(Math.random() * 2)];
+
+                    const sphere = new THREE.Mesh(
+                        new THREE.SphereGeometry(sphereSize, 5, 4),
+                        new THREE.MeshStandardMaterial({ color, metalness: 0.0, roughness: 0.9 })
+                    );
+                    sphere.position.set(
+                        dec.x + Math.cos(angle) * radius,
+                        sphereSize * 0.7,
+                        dec.z + Math.sin(angle) * radius
+                    );
+                    if (j === 0) sphere.name = "decoration";
+                    scene.add(sphere);
+                }
+
+                // Top accent
+                const topSize = (0.08 + Math.random() * 0.05) * bushScale;
+                const topColor = colors[2 + Math.floor(Math.random() * 2)];
+                const top = new THREE.Mesh(
+                    new THREE.SphereGeometry(topSize, 5, 4),
+                    new THREE.MeshStandardMaterial({ color: topColor, metalness: 0.0, roughness: 0.85 })
+                );
+                top.position.set(
+                    dec.x + (Math.random() - 0.5) * 0.1 * bushScale,
+                    0.15 * bushScale + topSize,
+                    dec.z + (Math.random() - 0.5) * 0.1 * bushScale
+                );
+                scene.add(top);
             }
         });
     }

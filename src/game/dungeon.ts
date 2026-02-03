@@ -44,12 +44,8 @@ export function getMergedObstacles() {
     return getComputedAreaData().mergedObstacles;
 }
 
-export function getRoomFloors() {
-    return getCurrentArea().roomFloors;
-}
-
-export function getRooms() {
-    return getCurrentArea().rooms;
+export function getFloor() {
+    return getCurrentArea().floor;
 }
 
 // For scene.ts which imports these directly
@@ -81,16 +77,16 @@ export const mergedObstacles = new Proxy([] as ReturnType<typeof getMergedObstac
     }
 });
 
-export const roomFloors = new Proxy([] as ReturnType<typeof getRoomFloors>, {
+export const floor = new Proxy([] as ReturnType<typeof getFloor>, {
     get(_target, prop) {
-        const floors = getRoomFloors();
+        const floorData = getFloor();
         if (typeof prop === "string" && !isNaN(Number(prop))) {
-            return floors[Number(prop)];
+            return floorData[Number(prop)];
         }
-        if (prop === "length") return floors.length;
-        if (prop === "forEach") return floors.forEach.bind(floors);
-        if (prop === "map") return floors.map.bind(floors);
-        if (prop === Symbol.iterator) return floors[Symbol.iterator].bind(floors);
-        return Reflect.get(floors, prop);
+        if (prop === "length") return floorData.length;
+        if (prop === "forEach") return floorData.forEach.bind(floorData);
+        if (prop === "map") return floorData.map.bind(floorData);
+        if (prop === Symbol.iterator) return floorData[Symbol.iterator].bind(floorData);
+        return Reflect.get(floorData, prop);
     }
 });

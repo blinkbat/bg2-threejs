@@ -824,6 +824,7 @@ export default function App() {
         // Store pending transition and start fade to black
         pendingTransition.current = { players, targetArea, spawn };
         setTransitionOpacity(1);
+        soundFns.playFootsteps();
 
         // After fade completes, execute the actual transition
         setTimeout(() => {

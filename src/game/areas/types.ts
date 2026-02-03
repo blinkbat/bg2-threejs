@@ -2,21 +2,13 @@
 // AREA TYPES - Interfaces and type definitions
 // =============================================================================
 
-import type { Room, CandlePosition, MergedObstacle, EnemyType } from "../../core/types";
+import type { CandlePosition, MergedObstacle, EnemyType } from "../../core/types";
 
 export type AreaId = "dungeon" | "forest" | "coast" | "ruins" | "sanctum" | "cliffs" | "magma_cave";
 
 // Default game start configuration - single source of truth
 export const DEFAULT_STARTING_AREA: AreaId = "coast";
 export const DEFAULT_SPAWN_POINT = { x: 25, z: 12 };  // Near water's edge
-
-export interface RoomFloor {
-    x: number;
-    z: number;
-    w: number;
-    h: number;
-    color: string;
-}
 
 export interface EnemySpawn {
     x: number;
@@ -57,7 +49,7 @@ export interface TreeLocation {
 export interface Decoration {
     x: number;
     z: number;
-    type: "column" | "broken_column" | "broken_wall";
+    type: "column" | "broken_column" | "broken_wall" | "rock" | "small_rock" | "mushroom" | "small_mushroom" | "seaweed" | "small_seaweed" | "fern" | "small_fern";
     rotation?: number;  // Rotation in radians (for broken walls)
     size?: number;      // Scale multiplier
 }
@@ -84,9 +76,9 @@ export interface AreaData {
     gridSize: number;
     backgroundColor: string;
     groundColor: string;
-    rooms: Room[];
-    hallways: { x1: number; z1: number; x2: number; z2: number }[];
-    roomFloors: RoomFloor[];
+    geometry: string[][];        // Raw geometry grid (# = wall, . = floor, ^v<> = doors)
+    terrain: string[][];         // Terrain grid (~ = lava, . = empty)
+    floor: string[][];           // Floor type grid (s = sand, d = dirt, g = grass, w = water, t = stone, . = default)
     enemySpawns: EnemySpawn[];
     transitions: AreaTransition[];
     chests: ChestLocation[];
@@ -94,7 +86,6 @@ export interface AreaData {
     decorations?: Decoration[];  // Columns, broken walls, etc.
     secretDoors?: SecretDoor[];  // Hidden doors that require inspection to use
     candles?: CandlePosition[];  // Manual candle placements
-    lavaZones?: LavaZone[];      // Impassable lava/magma areas (no walls, blocks movement)
     ambientLight: number;        // Ambient light intensity
     directionalLight: number;    // Directional light intensity
     hasFogOfWar: boolean;

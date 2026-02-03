@@ -10,34 +10,14 @@ export * from "./types";
 // Helpers
 export { computeAreaData } from "./helpers";
 
-// Area definitions (TypeScript)
-import { DUNGEON_AREA } from "./dungeon";
-import { FIELD_AREA } from "./forest";
-import { RUINS_AREA } from "./ruins";
-import { SANCTUM_AREA } from "./sanctum";
-import { CLIFFS_AREA } from "./cliffs";
-import { MAGMA_CAVE_AREA } from "./magmaCave";
-
-// Text-based areas - load all areas from .txt files for editor support
+// All areas loaded from .txt files
 import { TEXT_AREAS } from "./textLoader";
-const COAST_AREA = TEXT_AREAS.coast;
 
 import type { AreaId, AreaData, ComputedAreaData } from "./types";
 import { computeAreaData } from "./helpers";
 
-// Re-export individual areas for direct access if needed
-export { DUNGEON_AREA, FIELD_AREA, COAST_AREA, RUINS_AREA, SANCTUM_AREA, CLIFFS_AREA, MAGMA_CAVE_AREA };
-
-// Registry of all areas - uses text files for editor support
-export const AREAS: Record<AreaId, AreaData> = {
-    dungeon: TEXT_AREAS.dungeon,
-    forest: TEXT_AREAS.forest,
-    coast: TEXT_AREAS.coast,
-    ruins: TEXT_AREAS.ruins,
-    sanctum: TEXT_AREAS.sanctum,
-    cliffs: TEXT_AREAS.cliffs,
-    magma_cave: TEXT_AREAS.magma_cave
-};
+// Registry of all areas
+export const AREAS: Record<AreaId, AreaData> = TEXT_AREAS;
 
 // =============================================================================
 // AREA STATE MANAGEMENT

@@ -1,449 +1,13 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Link } from "react-router-dom";
 import type { AreaId, AreaData } from "../game/areas/types";
-import type { EnemyType } from "../core/types";
 import { AREAS } from "../game/areas";
 import { areaDataToText } from "./areaTextFormat";
-import { generateTextFromArea } from "../game/areas/textLoader";
 
-// =============================================================================
-// TYPES
-// =============================================================================
-
-type Tool = "paint" | "erase" | "select";
-type Layer = "geometry" | "terrain" | "props" | "entities";
-
-interface MapMetadata {
-    id: string;
-    name: string;
-    flavor: string;
-    width: number;
-    height: number;
-    background: string;
-    ground: string;
-    ambient: number;
-    directional: number;
-    fog: boolean;
-    spawnX: number;
-    spawnZ: number;
-}
-
-interface EntityDef {
-    id: string;
-    x: number;
-    z: number;
-    type: "enemy" | "chest" | "transition" | "candle" | "secret_door";
-    enemyType?: EnemyType;
-    chestGold?: number;
-    chestItems?: string;
-    chestLocked?: string;
-    transitionTarget?: AreaId;
-    transitionSpawnX?: number;
-    transitionSpawnZ?: number;
-    transitionDirection?: "north" | "south" | "east" | "west";
-    transitionW?: number;
-    transitionH?: number;
-    candleDx?: number;
-    candleDz?: number;
-    secretBlockX?: number;
-    secretBlockZ?: number;
-    secretBlockW?: number;
-    secretBlockH?: number;
-}
-
-interface TreeDef {
-    x: number;
-    z: number;
-    size: number;
-}
-
-interface DecorationDef {
-    x: number;
-    z: number;
-    type: "column" | "broken_column" | "broken_wall";
-    rotation?: number;
-    size?: number;
-}
-
-interface FloorColorDef {
-    x: number;
-    z: number;
-    w: number;
-    h: number;
-    color: string;
-}
-
-// Available areas for loading
-const AREA_IDS: AreaId[] = ["dungeon", "forest", "coast", "ruins", "sanctum", "cliffs", "magma_cave"];
-
-// Available enemy types
-const ENEMY_TYPES: EnemyType[] = [
-    "kobold", "kobold_archer", "kobold_witch_doctor", "ogre", "brood_mother", "broodling",
-    "giant_amoeba", "acid_slug", "bat", "undead_knight", "ancient_construct",
-    "feral_hound", "corrupt_druid", "skeleton_warrior", "baby_kraken", "kraken_tentacle", "magma_imp"
-];
-
-// =============================================================================
-// EDIT POPUPS
-// =============================================================================
-
-const POPUP_WIDTH = 280;
-const POPUP_MARGIN = 16;
-
-/** Hook to clamp popup position within viewport */
-function useClampedPosition(screenX: number, screenY: number) {
-    const [position, setPosition] = useState({ x: screenX, y: screenY });
-    const popupRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        const popup = popupRef.current;
-        if (!popup) return;
-
-        const rect = popup.getBoundingClientRect();
-        const vw = window.innerWidth;
-        const vh = window.innerHeight;
-
-        let x = screenX;
-        let y = screenY;
-
-        // Clamp horizontal
-        if (x + rect.width + POPUP_MARGIN > vw) {
-            x = vw - rect.width - POPUP_MARGIN;
-        }
-        if (x < POPUP_MARGIN) x = POPUP_MARGIN;
-
-        // Clamp vertical
-        if (y + rect.height + POPUP_MARGIN > vh) {
-            y = vh - rect.height - POPUP_MARGIN;
-        }
-        if (y < POPUP_MARGIN) y = POPUP_MARGIN;
-
-        setPosition({ x, y });
-    }, [screenX, screenY]);
-
-    return { popupRef, position };
-}
-
-const popupStyle: React.CSSProperties = {
-    position: "fixed",
-    background: "#2a2a3e",
-    border: "1px solid #555",
-    borderRadius: 8,
-    padding: 16,
-    zIndex: 1000,
-    minWidth: POPUP_WIDTH,
-    boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
-};
-
-const inputStyle: React.CSSProperties = {
-    padding: "6px 10px",
-    fontSize: 13,
-    background: "#333",
-    border: "1px solid #555",
-    borderRadius: 4,
-    color: "#fff",
-    width: "100%",
-};
-
-const selectStyle: React.CSSProperties = {
-    ...inputStyle,
-    cursor: "pointer",
-};
-
-const buttonStyle: React.CSSProperties = {
-    padding: "8px 16px",
-    fontSize: 13,
-    border: "none",
-    borderRadius: 4,
-    cursor: "pointer",
-};
-
-function EntityEditPopup({ entity, screenX, screenY, onSave, onClose }: {
-    entity: EntityDef;
-    screenX: number;
-    screenY: number;
-    onSave: (e: EntityDef) => void;
-    onClose: () => void;
-}) {
-    const [draft, setDraft] = useState({ ...entity });
-    const { popupRef, position } = useClampedPosition(screenX, screenY);
-
-    return (
-        <div ref={popupRef} style={{ ...popupStyle, left: position.x, top: position.y }} onClick={e => e.stopPropagation()}>
-            <h4 style={{ margin: "0 0 12px", fontSize: 15 }}>Edit {draft.type}</h4>
-
-            {draft.type === "enemy" && (
-                <label style={{ display: "block", marginBottom: 10 }}>
-                    <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Enemy Type</span>
-                    <select
-                        style={selectStyle}
-                        value={draft.enemyType || ""}
-                        onChange={e => setDraft({ ...draft, enemyType: e.target.value as EnemyType })}
-                    >
-                        {ENEMY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                </label>
-            )}
-
-            {draft.type === "chest" && (
-                <>
-                    <label style={{ display: "block", marginBottom: 10 }}>
-                        <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Gold</span>
-                        <input
-                            type="number"
-                            style={inputStyle}
-                            value={draft.chestGold || 0}
-                            onChange={e => setDraft({ ...draft, chestGold: parseInt(e.target.value) || 0 })}
-                        />
-                    </label>
-                    <label style={{ display: "block", marginBottom: 10 }}>
-                        <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Items (itemId:qty,...)</span>
-                        <input
-                            style={inputStyle}
-                            value={draft.chestItems || ""}
-                            onChange={e => setDraft({ ...draft, chestItems: e.target.value })}
-                            placeholder="smallManaPotion:2,battleaxe:1"
-                        />
-                    </label>
-                    <label style={{ display: "block", marginBottom: 10 }}>
-                        <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Locked (keyId or empty)</span>
-                        <input
-                            style={inputStyle}
-                            value={draft.chestLocked || ""}
-                            onChange={e => setDraft({ ...draft, chestLocked: e.target.value || undefined })}
-                            placeholder="rustyKey"
-                        />
-                    </label>
-                </>
-            )}
-
-            {draft.type === "transition" && (
-                <>
-                    <label style={{ display: "block", marginBottom: 10 }}>
-                        <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Target Area</span>
-                        <select
-                            style={selectStyle}
-                            value={draft.transitionTarget || ""}
-                            onChange={e => setDraft({ ...draft, transitionTarget: e.target.value as AreaId })}
-                        >
-                            {AREA_IDS.map(id => <option key={id} value={id}>{id}</option>)}
-                        </select>
-                    </label>
-                    <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-                        <label style={{ flex: 1 }}>
-                            <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Spawn X</span>
-                            <input
-                                type="number"
-                                style={inputStyle}
-                                value={draft.transitionSpawnX || 0}
-                                onChange={e => setDraft({ ...draft, transitionSpawnX: parseFloat(e.target.value) || 0 })}
-                            />
-                        </label>
-                        <label style={{ flex: 1 }}>
-                            <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Spawn Z</span>
-                            <input
-                                type="number"
-                                style={inputStyle}
-                                value={draft.transitionSpawnZ || 0}
-                                onChange={e => setDraft({ ...draft, transitionSpawnZ: parseFloat(e.target.value) || 0 })}
-                            />
-                        </label>
-                    </div>
-                    <label style={{ display: "block", marginBottom: 10 }}>
-                        <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Direction</span>
-                        <select
-                            style={selectStyle}
-                            value={draft.transitionDirection || "north"}
-                            onChange={e => setDraft({ ...draft, transitionDirection: e.target.value as "north" | "south" | "east" | "west" })}
-                        >
-                            <option value="north">north</option>
-                            <option value="south">south</option>
-                            <option value="east">east</option>
-                            <option value="west">west</option>
-                        </select>
-                    </label>
-                    <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-                        <label style={{ flex: 1 }}>
-                            <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Width</span>
-                            <input
-                                type="number"
-                                style={inputStyle}
-                                value={draft.transitionW || 1}
-                                onChange={e => setDraft({ ...draft, transitionW: parseInt(e.target.value) || 1 })}
-                            />
-                        </label>
-                        <label style={{ flex: 1 }}>
-                            <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Height</span>
-                            <input
-                                type="number"
-                                style={inputStyle}
-                                value={draft.transitionH || 1}
-                                onChange={e => setDraft({ ...draft, transitionH: parseInt(e.target.value) || 1 })}
-                            />
-                        </label>
-                    </div>
-                </>
-            )}
-
-            {draft.type === "candle" && (
-                <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-                    <label style={{ flex: 1 }}>
-                        <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Dir X</span>
-                        <input
-                            type="number"
-                            style={inputStyle}
-                            value={draft.candleDx || 0}
-                            onChange={e => setDraft({ ...draft, candleDx: parseFloat(e.target.value) || 0 })}
-                        />
-                    </label>
-                    <label style={{ flex: 1 }}>
-                        <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Dir Z</span>
-                        <input
-                            type="number"
-                            style={inputStyle}
-                            value={draft.candleDz || 0}
-                            onChange={e => setDraft({ ...draft, candleDz: parseFloat(e.target.value) || 0 })}
-                        />
-                    </label>
-                </div>
-            )}
-
-            {draft.type === "secret_door" && (
-                <>
-                    <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-                        <label style={{ flex: 1 }}>
-                            <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Block X</span>
-                            <input
-                                type="number"
-                                style={inputStyle}
-                                value={draft.secretBlockX || 0}
-                                onChange={e => setDraft({ ...draft, secretBlockX: parseInt(e.target.value) || 0 })}
-                            />
-                        </label>
-                        <label style={{ flex: 1 }}>
-                            <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Block Z</span>
-                            <input
-                                type="number"
-                                style={inputStyle}
-                                value={draft.secretBlockZ || 0}
-                                onChange={e => setDraft({ ...draft, secretBlockZ: parseInt(e.target.value) || 0 })}
-                            />
-                        </label>
-                    </div>
-                    <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-                        <label style={{ flex: 1 }}>
-                            <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Width</span>
-                            <input
-                                type="number"
-                                style={inputStyle}
-                                value={draft.secretBlockW || 1}
-                                onChange={e => setDraft({ ...draft, secretBlockW: parseInt(e.target.value) || 1 })}
-                            />
-                        </label>
-                        <label style={{ flex: 1 }}>
-                            <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Height</span>
-                            <input
-                                type="number"
-                                style={inputStyle}
-                                value={draft.secretBlockH || 1}
-                                onChange={e => setDraft({ ...draft, secretBlockH: parseInt(e.target.value) || 1 })}
-                            />
-                        </label>
-                    </div>
-                </>
-            )}
-
-            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                <button style={{ ...buttonStyle, background: "#4a9", color: "#fff" }} onClick={() => onSave(draft)}>Save</button>
-                <button style={{ ...buttonStyle, background: "#555", color: "#fff" }} onClick={onClose}>Cancel</button>
-            </div>
-        </div>
-    );
-}
-
-function TreeEditPopup({ tree, screenX, screenY, onSave, onClose }: {
-    tree: TreeDef;
-    screenX: number;
-    screenY: number;
-    onSave: (t: TreeDef) => void;
-    onClose: () => void;
-}) {
-    const [size, setSize] = useState(tree.size);
-    const { popupRef, position } = useClampedPosition(screenX, screenY);
-
-    return (
-        <div ref={popupRef} style={{ ...popupStyle, left: position.x, top: position.y }} onClick={e => e.stopPropagation()}>
-            <h4 style={{ margin: "0 0 12px", fontSize: 15 }}>Edit Tree</h4>
-            <label style={{ display: "block", marginBottom: 10 }}>
-                <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Size</span>
-                <input
-                    type="number"
-                    step="0.1"
-                    style={inputStyle}
-                    value={size}
-                    onChange={e => setSize(parseFloat(e.target.value) || 1)}
-                />
-            </label>
-            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                <button style={{ ...buttonStyle, background: "#4a9", color: "#fff" }} onClick={() => onSave({ ...tree, size })}>Save</button>
-                <button style={{ ...buttonStyle, background: "#555", color: "#fff" }} onClick={onClose}>Cancel</button>
-            </div>
-        </div>
-    );
-}
-
-function DecorationEditPopup({ decoration, screenX, screenY, onSave, onClose }: {
-    decoration: DecorationDef;
-    screenX: number;
-    screenY: number;
-    onSave: (d: DecorationDef) => void;
-    onClose: () => void;
-}) {
-    const [draft, setDraft] = useState({ ...decoration });
-    const { popupRef, position } = useClampedPosition(screenX, screenY);
-
-    return (
-        <div ref={popupRef} style={{ ...popupStyle, left: position.x, top: position.y }} onClick={e => e.stopPropagation()}>
-            <h4 style={{ margin: "0 0 12px", fontSize: 15 }}>Edit Decoration</h4>
-            <label style={{ display: "block", marginBottom: 10 }}>
-                <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Type</span>
-                <select
-                    style={selectStyle}
-                    value={draft.type}
-                    onChange={e => setDraft({ ...draft, type: e.target.value as DecorationDef["type"] })}
-                >
-                    <option value="column">column</option>
-                    <option value="broken_column">broken_column</option>
-                    <option value="broken_wall">broken_wall</option>
-                </select>
-            </label>
-            <label style={{ display: "block", marginBottom: 10 }}>
-                <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Rotation (radians)</span>
-                <input
-                    type="number"
-                    step="0.1"
-                    style={inputStyle}
-                    value={draft.rotation || 0}
-                    onChange={e => setDraft({ ...draft, rotation: parseFloat(e.target.value) || 0 })}
-                />
-            </label>
-            <label style={{ display: "block", marginBottom: 10 }}>
-                <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Size</span>
-                <input
-                    type="number"
-                    step="0.1"
-                    style={inputStyle}
-                    value={draft.size || 1}
-                    onChange={e => setDraft({ ...draft, size: parseFloat(e.target.value) || 1 })}
-                />
-            </label>
-            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                <button style={{ ...buttonStyle, background: "#4a9", color: "#fff" }} onClick={() => onSave(draft)}>Save</button>
-                <button style={{ ...buttonStyle, background: "#555", color: "#fff" }} onClick={onClose}>Cancel</button>
-            </div>
-        </div>
-    );
-}
+// Editor modules
+import type { Tool, Layer, MapMetadata, EntityDef, TreeDef, DecorationDef, EditorSnapshot } from "./types";
+import { AREA_IDS, BASE_CELL_SIZE, MAX_HISTORY } from "./constants";
+import { EntityEditPopup, TreeEditPopup, DecorationEditPopup } from "./popups";
 
 // =============================================================================
 // COMPONENT
@@ -473,6 +37,9 @@ export function MapEditor() {
     const [terrainLayer, setTerrainLayer] = useState<string[][]>(() =>
         createEmptyLayer(metadata.width, metadata.height, ".")
     );
+    const [floorLayer, setFloorLayer] = useState<string[][]>(() =>
+        createEmptyLayer(metadata.width, metadata.height, ".")
+    );
     const [propsLayer, setPropsLayer] = useState<string[][]>(() =>
         createEmptyLayer(metadata.width, metadata.height, ".")
     );
@@ -484,16 +51,17 @@ export function MapEditor() {
     const [entities, setEntities] = useState<EntityDef[]>([]);
     const [trees, setTrees] = useState<TreeDef[]>([]);
     const [decorations, setDecorations] = useState<DecorationDef[]>([]);
-    const [floorColors, setFloorColors] = useState<FloorColorDef[]>([]);
 
     // Editor state
     const [activeLayer, setActiveLayer] = useState<Layer>("geometry");
     const [activeTool, setActiveTool] = useState<Tool>("paint");
     const [activeBrush, setActiveBrush] = useState<string>("#");
+    const [brushSize, setBrushSize] = useState<number>(1);
     const [showGrid, setShowGrid] = useState(true);
     const [layerVisibility, setLayerVisibility] = useState({
         geometry: true,
         terrain: true,
+        floor: true,
         props: true,
         entities: true,
     });
@@ -502,6 +70,8 @@ export function MapEditor() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [isPainting, setIsPainting] = useState(false);
     const [zoom, setZoom] = useState(1);
+    const [isometric, setIsometric] = useState(false);
+    const ISO_ZOOM = 0.5;  // Fixed zoom for isometric view
 
     // Door drag state for click-drag to create multi-tile doors
     const [doorDrag, setDoorDrag] = useState<{ startX: number; startZ: number; endX: number; endZ: number } | null>(null);
@@ -512,30 +82,19 @@ export function MapEditor() {
     const [editingDecoration, setEditingDecoration] = useState<{ decoration: DecorationDef; index: number; screenX: number; screenY: number } | null>(null);
 
     // Undo/Redo history
-    type EditorSnapshot = {
-        geometryLayer: string[][];
-        terrainLayer: string[][];
-        propsLayer: string[][];
-        entitiesLayer: string[][];
-        entities: EntityDef[];
-        trees: TreeDef[];
-        decorations: DecorationDef[];
-        floorColors: FloorColorDef[];
-    };
-    const MAX_HISTORY = 50;
     const historyRef = useRef<EditorSnapshot[]>([]);
     const historyIndexRef = useRef(-1);
 
     const createSnapshot = useCallback((): EditorSnapshot => ({
         geometryLayer: geometryLayer.map(row => [...row]),
         terrainLayer: terrainLayer.map(row => [...row]),
+        floorLayer: floorLayer.map(row => [...row]),
         propsLayer: propsLayer.map(row => [...row]),
         entitiesLayer: entitiesLayer.map(row => [...row]),
         entities: entities.map(e => ({ ...e })),
         trees: trees.map(t => ({ ...t })),
         decorations: decorations.map(d => ({ ...d })),
-        floorColors: floorColors.map(f => ({ ...f })),
-    }), [geometryLayer, terrainLayer, propsLayer, entitiesLayer, entities, trees, decorations, floorColors]);
+    }), [geometryLayer, terrainLayer, floorLayer, propsLayer, entitiesLayer, entities, trees, decorations]);
 
     const pushHistory = useCallback(() => {
         const snapshot = createSnapshot();
@@ -553,12 +112,12 @@ export function MapEditor() {
     const applySnapshot = useCallback((snapshot: EditorSnapshot) => {
         setGeometryLayer(snapshot.geometryLayer.map(row => [...row]));
         setTerrainLayer(snapshot.terrainLayer.map(row => [...row]));
+        setFloorLayer(snapshot.floorLayer.map(row => [...row]));
         setPropsLayer(snapshot.propsLayer.map(row => [...row]));
         setEntitiesLayer(snapshot.entitiesLayer.map(row => [...row]));
         setEntities(snapshot.entities.map(e => ({ ...e })));
         setTrees(snapshot.trees.map(t => ({ ...t })));
         setDecorations(snapshot.decorations.map(d => ({ ...d })));
-        setFloorColors(snapshot.floorColors.map(f => ({ ...f })));
     }, []);
 
     const undo = useCallback(() => {
@@ -597,13 +156,57 @@ export function MapEditor() {
         return () => window.removeEventListener("keydown", handleKeyDown);
     }, [undo, redo]);
 
-    const BASE_CELL_SIZE = 28;
-    const CELL_SIZE = Math.round(BASE_CELL_SIZE * zoom);
+    // In isometric mode, lock zoom at 50%
+    const effectiveZoom = isometric ? ISO_ZOOM : zoom;
+    const CELL_SIZE = Math.round(BASE_CELL_SIZE * effectiveZoom);
+
+    // Transform mouse coordinates for isometric view
+    // Inverts rotateX(60deg) rotateZ(45deg) transformation
+    const transformMouseCoords = useCallback((clientX: number, clientY: number, rect: DOMRect): { x: number; z: number } => {
+        if (!isometric) {
+            // Normal top-down view - direct mapping
+            return {
+                x: Math.floor((clientX - rect.left) / CELL_SIZE),
+                z: Math.floor((clientY - rect.top) / CELL_SIZE)
+            };
+        }
+
+        // Isometric view - need to invert the CSS transform
+        // Transform is: rotateX(60deg) rotateZ(45deg)
+        const canvasWidth = metadata.width * CELL_SIZE;
+        const canvasHeight = metadata.height * CELL_SIZE;
+
+        // Get mouse position relative to center of the transformed container
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        const mouseX = clientX - centerX;
+        const mouseY = clientY - centerY;
+
+        // Invert rotateX(60deg) - Y is compressed by cos(60°) = 0.5
+        const cosX = Math.cos(60 * Math.PI / 180); // 0.5
+        const expandedY = mouseY / cosX;
+
+        // Invert rotateZ(45deg) - rotate back by -45°
+        const cosZ = Math.cos(-45 * Math.PI / 180);
+        const sinZ = Math.sin(-45 * Math.PI / 180);
+        const canvasX = mouseX * cosZ - expandedY * sinZ;
+        const canvasY = mouseX * sinZ + expandedY * cosZ;
+
+        // Convert from center-relative back to top-left relative
+        const finalX = canvasX + canvasWidth / 2;
+        const finalY = canvasY + canvasHeight / 2;
+
+        return {
+            x: Math.floor(finalX / CELL_SIZE),
+            z: Math.floor(finalY / CELL_SIZE)
+        };
+    }, [isometric, CELL_SIZE, metadata.width, metadata.height]);
 
     // Resize layers when dimensions change
     useEffect(() => {
         setGeometryLayer(resizeLayer(geometryLayer, metadata.width, metadata.height, "."));
         setTerrainLayer(resizeLayer(terrainLayer, metadata.width, metadata.height, "."));
+        setFloorLayer(resizeLayer(floorLayer, metadata.width, metadata.height, "."));
         setPropsLayer(resizeLayer(propsLayer, metadata.width, metadata.height, "."));
         setEntitiesLayer(resizeLayer(entitiesLayer, metadata.width, metadata.height, "."));
     }, [metadata.width, metadata.height]);
@@ -623,7 +226,8 @@ export function MapEditor() {
         ctx.fillStyle = metadata.ground;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Draw layers bottom to top
+        // Draw layers bottom to top (floor first as base, then everything on top)
+        if (layerVisibility.floor) drawLayer(ctx, floorLayer, "floor");
         if (layerVisibility.geometry) drawLayer(ctx, geometryLayer, "geometry");
         if (layerVisibility.terrain) drawLayer(ctx, terrainLayer, "terrain");
         if (layerVisibility.props) drawLayer(ctx, propsLayer, "props");
@@ -676,7 +280,7 @@ export function MapEditor() {
             );
         }
 
-    }, [geometryLayer, terrainLayer, propsLayer, entitiesLayer, metadata, showGrid, layerVisibility, activeLayer, CELL_SIZE, doorDrag]);
+    }, [geometryLayer, terrainLayer, floorLayer, propsLayer, entitiesLayer, metadata, showGrid, layerVisibility, activeLayer, CELL_SIZE, doorDrag]);
 
     function drawLayer(ctx: CanvasRenderingContext2D, layer: string[][], layerType: Layer) {
         for (let z = 0; z < layer.length; z++) {
@@ -688,12 +292,14 @@ export function MapEditor() {
                 ctx.fillStyle = color;
                 ctx.fillRect(x * CELL_SIZE + 1, z * CELL_SIZE + 1, CELL_SIZE - 2, CELL_SIZE - 2);
 
-                // Draw char label
-                ctx.fillStyle = "#fff";
-                ctx.font = "14px monospace";
-                ctx.textAlign = "center";
-                ctx.textBaseline = "middle";
-                ctx.fillText(char, x * CELL_SIZE + CELL_SIZE / 2, z * CELL_SIZE + CELL_SIZE / 2);
+                // Draw char label (skip for floor layer - just show color)
+                if (layerType !== "floor") {
+                    ctx.fillStyle = "#fff";
+                    ctx.font = "14px monospace";
+                    ctx.textAlign = "center";
+                    ctx.textBaseline = "middle";
+                    ctx.fillText(char, x * CELL_SIZE + CELL_SIZE / 2, z * CELL_SIZE + CELL_SIZE / 2);
+                }
             }
         }
     }
@@ -701,17 +307,36 @@ export function MapEditor() {
     function getCharColor(char: string, layer: Layer): string {
         if (layer === "geometry") {
             if (char === "#") return "#444";
-            if (char === ">" || char === "<" || char === "^" || char === "v") return "#4a9";
         }
         if (layer === "terrain") {
             if (char === "~") return "#f40";
             if (char === "w") return "#48f";
             if (char === "a") return "#8f0";
         }
+        if (layer === "floor") {
+            if (char === "s") return "#c2b280";  // Sand
+            if (char === "S") return "#d4c490";  // Light sand
+            if (char === "d") return "#8b7355";  // Dirt
+            if (char === "D") return "#6b5344";  // Dark dirt
+            if (char === "g") return "#5a8a4a";  // Grass
+            if (char === "G") return "#4a7a3a";  // Dark grass
+            if (char === "w") return "#4a90a0";  // Water
+            if (char === "W") return "#3a7080";  // Deep water
+            if (char === "t") return "#707070";  // Stone
+            if (char === "T") return "#606060";  // Dark stone
+        }
         if (layer === "props") {
             if (char === "T") return "#2a5";
             if (char === "C" || char === "c") return "#888";
             if (char === "W") return "#665";
+            if (char === "R") return "#6a5a4a";  // Rock - brown/gray
+            if (char === "r") return "#7a6a5a";  // Small rock - lighter
+            if (char === "M") return "#a44";     // Mushroom - red
+            if (char === "m") return "#c66";     // Small mushroom - lighter red
+            if (char === "S") return "#3a7";     // Seaweed - teal-green
+            if (char === "s") return "#4a8";     // Small seaweed - lighter
+            if (char === "F") return "#4a5";     // Fern - bright green
+            if (char === "f") return "#5b6";     // Small fern - lighter green
         }
         if (layer === "entities") {
             if (char.startsWith("E")) return "#f44";
@@ -728,24 +353,27 @@ export function MapEditor() {
         switch (layer) {
             case "geometry": return "#888";
             case "terrain": return "#f80";
+            case "floor": return "#a86";
             case "props": return "#4a4";
             case "entities": return "#f44";
         }
     }
 
-    const getActiveLayer = useCallback(() => {
+    const getActiveLayer = useCallback((): string[][] => {
         switch (activeLayer) {
             case "geometry": return geometryLayer;
             case "terrain": return terrainLayer;
+            case "floor": return floorLayer;
             case "props": return propsLayer;
             case "entities": return entitiesLayer;
         }
-    }, [activeLayer, geometryLayer, terrainLayer, propsLayer, entitiesLayer]);
+    }, [activeLayer, geometryLayer, terrainLayer, floorLayer, propsLayer, entitiesLayer]);
 
     const setActiveLayerData = useCallback((newLayer: string[][]) => {
         switch (activeLayer) {
             case "geometry": setGeometryLayer(newLayer); break;
             case "terrain": setTerrainLayer(newLayer); break;
+            case "floor": setFloorLayer(newLayer); break;
             case "props": setPropsLayer(newLayer); break;
             case "entities": setEntitiesLayer(newLayer); break;
         }
@@ -756,10 +384,21 @@ export function MapEditor() {
         if (x < 0 || x >= metadata.width || z < 0 || z >= metadata.height) return;
 
         const newLayer = layer.map(row => [...row]);
-        if (activeTool === "paint") {
-            newLayer[z][x] = activeBrush;
-        } else if (activeTool === "erase") {
-            newLayer[z][x] = ".";
+        const halfSize = Math.floor(brushSize / 2);
+
+        // Paint a square area based on brush size
+        for (let dz = -halfSize; dz < brushSize - halfSize; dz++) {
+            for (let dx = -halfSize; dx < brushSize - halfSize; dx++) {
+                const px = x + dx;
+                const pz = z + dz;
+                if (px >= 0 && px < metadata.width && pz >= 0 && pz < metadata.height) {
+                    if (activeTool === "paint") {
+                        newLayer[pz][px] = activeBrush;
+                    } else if (activeTool === "erase") {
+                        newLayer[pz][px] = ".";
+                    }
+                }
+            }
         }
         setActiveLayerData(newLayer);
 
@@ -804,17 +443,18 @@ export function MapEditor() {
                 }
             }
         }
-    }, [getActiveLayer, setActiveLayerData, activeTool, activeBrush, metadata.width, metadata.height, activeLayer, entities]);
+    }, [getActiveLayer, setActiveLayerData, activeTool, activeBrush, brushSize, metadata.width, metadata.height, activeLayer, entities]);
 
     const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
         // Ignore right-click (handled by onContextMenu)
         if (e.button !== 0) return;
+        // Disable painting in isometric view (view-only mode)
+        if (isometric) return;
 
         const rect = canvasRef.current?.getBoundingClientRect();
         if (!rect) return;
 
-        const x = Math.floor((e.clientX - rect.left) / CELL_SIZE);
-        const z = Math.floor((e.clientY - rect.top) / CELL_SIZE);
+        const { x, z } = transformMouseCoords(e.clientX, e.clientY, rect);
 
         // Push history before starting to paint
         pushHistory();
@@ -832,8 +472,7 @@ export function MapEditor() {
         const rect = canvasRef.current?.getBoundingClientRect();
         if (!rect) return;
 
-        const x = Math.floor((e.clientX - rect.left) / CELL_SIZE);
-        const z = Math.floor((e.clientY - rect.top) / CELL_SIZE);
+        const { x, z } = transformMouseCoords(e.clientX, e.clientY, rect);
 
         // Update door drag preview
         if (doorDrag) {
@@ -850,8 +489,7 @@ export function MapEditor() {
         if (doorDrag) {
             const rect = canvasRef.current?.getBoundingClientRect();
             if (rect) {
-                const x = Math.floor((e.clientX - rect.left) / CELL_SIZE);
-                const z = Math.floor((e.clientY - rect.top) / CELL_SIZE);
+                const { x, z } = transformMouseCoords(e.clientX, e.clientY, rect);
 
                 const minX = Math.min(doorDrag.startX, x);
                 const maxX = Math.max(doorDrag.startX, x);
@@ -898,8 +536,7 @@ export function MapEditor() {
         const rect = canvasRef.current?.getBoundingClientRect();
         if (!rect) return;
 
-        const x = Math.floor((e.clientX - rect.left) / CELL_SIZE);
-        const z = Math.floor((e.clientY - rect.top) / CELL_SIZE);
+        const { x, z } = transformMouseCoords(e.clientX, e.clientY, rect);
 
         // Check for entity at this position
         const entity = entities.find(ent => Math.floor(ent.x) === x && Math.floor(ent.z) === z);
@@ -969,13 +606,15 @@ export function MapEditor() {
 
         const size = area.gridSize;
 
-        // Compute geometry layer from rooms and hallways
-        const newGeometry = computeGeometryFromArea(area, size);
-        setGeometryLayer(newGeometry);
-
-        // Compute terrain layer from lava zones
-        const newTerrain = computeTerrainFromArea(area, size);
-        setTerrainLayer(newTerrain);
+        // Use geometry, terrain, and floor directly from area data
+        setGeometryLayer(area.geometry.map(row => [...row]));
+        setTerrainLayer(area.terrain.map(row => [...row]));
+        // Floor layer - use empty if not present in area data
+        if (area.floor && area.floor.length > 0) {
+            setFloorLayer(area.floor.map(row => [...row]));
+        } else {
+            setFloorLayer(createEmptyLayer(size, size, "."));
+        }
 
         // Compute props layer from trees and decorations
         const newProps = computePropsFromArea(area, size);
@@ -986,7 +625,6 @@ export function MapEditor() {
         setEntitiesLayer(newEntities);
 
         // Store detailed data that can't be shown in grid
-        setFloorColors(area.roomFloors.map(f => ({ x: f.x, z: f.z, w: f.w, h: f.h, color: f.color })));
         setTrees(area.trees.map(t => ({ x: t.x, z: t.z, size: t.size })));
         setDecorations((area.decorations ?? []).map(d => ({ x: d.x, z: d.z, type: d.type, rotation: d.rotation, size: d.size })));
 
@@ -1032,8 +670,7 @@ export function MapEditor() {
 
     const saveMap = async () => {
         const area = buildAreaDataFromEditor();
-        // Pass raw geometry and terrain layers directly to preserve exact edits
-        const content = areaDataToText(area, geometryLayer, terrainLayer);
+        const content = areaDataToText(area);
 
         setSaveStatus("saving");
         try {
@@ -1056,45 +693,7 @@ export function MapEditor() {
         }
     };
 
-    // Regenerate text file from TypeScript source (fixes any drift)
-    const regenerateFromTS = async () => {
-        const areaId = metadata.id as AreaId;
-        const content = generateTextFromArea(areaId);
-        if (!content) {
-            console.error("No TypeScript source for area:", areaId);
-            return;
-        }
-
-        setSaveStatus("saving");
-        try {
-            const res = await fetch("/__save-map", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ areaId, content }),
-            });
-            const data = await res.json();
-            if (data.success) {
-                setSaveStatus("saved");
-                // Reload the area to reflect the regenerated data
-                loadArea(areaId);
-                setTimeout(() => setSaveStatus("idle"), 2000);
-            } else {
-                console.error("Regenerate failed:", data.error);
-                setSaveStatus("error");
-            }
-        } catch (err) {
-            console.error("Regenerate error:", err);
-            setSaveStatus("error");
-        }
-    };
-
     const buildAreaDataFromEditor = (): AreaData => {
-        // Extract rooms from geometry layer
-        const { rooms, hallways } = extractRoomsFromGeometryLayer(geometryLayer);
-
-        // Extract lava zones from terrain layer
-        const lavaZones = extractLavaFromTerrainLayer(terrainLayer);
-
         // Extract trees and decorations from props layer, merging with detailed state for metadata
         const gridProps = extractPropsFromLayer(propsLayer);
         const mergedTrees: TreeLocation[] = gridProps.trees.map(gt => {
@@ -1166,15 +765,14 @@ export function MapEditor() {
             directionalLight: metadata.directional,
             hasFogOfWar: metadata.fog,
             defaultSpawn: { x: metadata.spawnX, z: metadata.spawnZ },
-            rooms,
-            hallways,
-            roomFloors: floorColors,
+            geometry: geometryLayer,
+            terrain: terrainLayer,
+            floor: floorLayer,
             enemySpawns,
             transitions: transitionList,
             chests: chestList,
             trees: mergedTrees,
             decorations: mergedDecorations.length > 0 ? mergedDecorations : undefined,
-            lavaZones: lavaZones.length > 0 ? lavaZones : undefined,
             candles: candleList.length > 0 ? candleList : undefined,
             secretDoors: secretDoorList.length > 0 ? secretDoorList : undefined,
         };
@@ -1186,10 +784,6 @@ export function MapEditor() {
                 return [
                     { char: "#", label: "Wall" },
                     { char: ".", label: "Floor" },
-                    { char: "^", label: "Door N" },
-                    { char: "v", label: "Door S" },
-                    { char: ">", label: "Door E" },
-                    { char: "<", label: "Door W" },
                 ];
             case "terrain":
                 return [
@@ -1198,6 +792,20 @@ export function MapEditor() {
                     { char: "w", label: "Water" },
                     { char: "a", label: "Acid" },
                 ];
+            case "floor":
+                return [
+                    { char: ".", label: "Default" },
+                    { char: "s", label: "Sand" },
+                    { char: "S", label: "Lt Sand" },
+                    { char: "d", label: "Dirt" },
+                    { char: "D", label: "Dk Dirt" },
+                    { char: "g", label: "Grass" },
+                    { char: "G", label: "Dk Grass" },
+                    { char: "w", label: "Water" },
+                    { char: "W", label: "Dp Water" },
+                    { char: "t", label: "Stone" },
+                    { char: "T", label: "Dk Stone" },
+                ];
             case "props":
                 return [
                     { char: ".", label: "Empty" },
@@ -1205,6 +813,14 @@ export function MapEditor() {
                     { char: "C", label: "Column" },
                     { char: "c", label: "Broken Col" },
                     { char: "W", label: "Broken Wall" },
+                    { char: "R", label: "Rock" },
+                    { char: "r", label: "Small Rock" },
+                    { char: "M", label: "Mushroom" },
+                    { char: "m", label: "Small Mush" },
+                    { char: "F", label: "Fern" },
+                    { char: "f", label: "Small Fern" },
+                    { char: "S", label: "Seaweed" },
+                    { char: "s", label: "Sm Seaweed" },
                 ];
             case "entities":
                 return [
@@ -1253,7 +869,7 @@ export function MapEditor() {
                 {/* Layer Selection */}
                 <div>
                     <h3 style={{ margin: "0 0 12px", fontSize: 16 }}>Layers</h3>
-                    {(["geometry", "terrain", "props", "entities"] as Layer[]).map(layer => (
+                    {(["geometry", "terrain", "floor", "props", "entities"] as Layer[]).map(layer => (
                         <div key={layer} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
                             <input
                                 type="checkbox"
@@ -1321,6 +937,29 @@ export function MapEditor() {
                             Redo
                         </button>
                     </div>
+                    <div style={{ marginTop: 12 }}>
+                        <span style={{ fontSize: 13 }}>Brush Size: {brushSize}x{brushSize}</span>
+                        <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                            {[1, 2, 3, 5, 8].map(size => (
+                                <button
+                                    key={size}
+                                    onClick={() => setBrushSize(size)}
+                                    style={{
+                                        flex: 1,
+                                        padding: "6px 0",
+                                        fontSize: 12,
+                                        background: brushSize === size ? "#4a9" : "#333",
+                                        color: "#fff",
+                                        border: "none",
+                                        borderRadius: 4,
+                                        cursor: "pointer",
+                                    }}
+                                >
+                                    {size}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
                 </div>
 
                 {/* Brush */}
@@ -1356,6 +995,12 @@ export function MapEditor() {
                     Show Grid
                 </label>
 
+                {/* Isometric Toggle */}
+                <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
+                    <input type="checkbox" checked={isometric} onChange={() => setIsometric(!isometric)} style={{ width: 18, height: 18 }} />
+                    Isometric View
+                </label>
+
                 {/* Zoom */}
                 <div>
                     <h3 style={{ margin: "0 0 8px", fontSize: 16 }}>Zoom: {Math.round(zoom * 100)}%</h3>
@@ -1383,37 +1028,30 @@ export function MapEditor() {
                 >
                     {saveStatus === "saving" ? "Saving..." : saveStatus === "saved" ? "Saved!" : saveStatus === "error" ? "Error" : "Save Map"}
                 </button>
-
-                {/* Regenerate from TypeScript */}
-                <button
-                    onClick={regenerateFromTS}
-                    disabled={saveStatus === "saving"}
-                    style={{
-                        padding: "10px 16px",
-                        fontSize: 13,
-                        background: "#666",
-                        color: "#fff",
-                        border: "none",
-                        borderRadius: 6,
-                        cursor: "pointer",
-                    }}
-                    title="Regenerate text file from TypeScript source (fixes any drift)"
-                >
-                    Regen from TS
-                </button>
             </div>
 
             {/* Center - Canvas */}
             <div style={{ flex: 1, overflow: "auto", padding: 16 }}>
-                <canvas
-                    ref={canvasRef}
-                    onMouseDown={handleCanvasMouseDown}
-                    onMouseMove={handleCanvasMouseMove}
-                    onMouseUp={handleCanvasMouseUp}
-                    onMouseLeave={() => { setIsPainting(false); setDoorDrag(null); }}
-                    onContextMenu={handleCanvasContextMenu}
-                    style={{ border: "1px solid #333", cursor: "crosshair" }}
-                />
+                <div style={{
+                    perspective: isometric ? "1000px" : "none",
+                    perspectiveOrigin: "center center",
+                }}>
+                    <canvas
+                        ref={canvasRef}
+                        onMouseDown={handleCanvasMouseDown}
+                        onMouseMove={handleCanvasMouseMove}
+                        onMouseUp={handleCanvasMouseUp}
+                        onMouseLeave={() => { setIsPainting(false); setDoorDrag(null); }}
+                        onContextMenu={handleCanvasContextMenu}
+                        style={{
+                            border: "1px solid #333",
+                            cursor: isometric ? "default" : "crosshair",
+                            transform: isometric ? "rotateX(60deg) rotateZ(45deg)" : "none",
+                            transformOrigin: "center center",
+                            transition: "transform 0.3s ease",
+                        }}
+                    />
+                </div>
 
                 {/* Entity Edit Popup */}
                 {editingEntity && (
@@ -1613,66 +1251,7 @@ function resizeLayer(layer: string[][], newWidth: number, newHeight: number, fil
 // AREA DATA CONVERSION HELPERS
 // =============================================================================
 
-import type { EnemySpawn, AreaTransition, ChestLocation, TreeLocation, Decoration, LavaZone } from "../game/areas/types";
-import type { Room } from "../core/types";
-
-function computeGeometryFromArea(area: AreaData, size: number): string[][] {
-    const grid: string[][] = Array.from({ length: size }, () => Array(size).fill("#"));
-
-    // Carve out rooms
-    for (const room of area.rooms) {
-        for (let z = room.z; z < room.z + room.h && z < size; z++) {
-            for (let x = room.x; x < room.x + room.w && x < size; x++) {
-                if (x >= 0 && z >= 0) grid[z][x] = ".";
-            }
-        }
-    }
-
-    // Carve out hallways
-    for (const hall of area.hallways) {
-        const minX = Math.min(hall.x1, hall.x2);
-        const maxX = Math.max(hall.x1, hall.x2);
-        const minZ = Math.min(hall.z1, hall.z2);
-        const maxZ = Math.max(hall.z1, hall.z2);
-        for (let z = minZ; z <= maxZ && z < size; z++) {
-            for (let x = minX; x <= maxX && x < size; x++) {
-                if (x >= 0 && z >= 0) grid[z][x] = ".";
-            }
-        }
-    }
-
-    // Mark transitions as doors
-    for (const trans of area.transitions) {
-        const doorChar = trans.direction === "north" ? "^" :
-                         trans.direction === "south" ? "v" :
-                         trans.direction === "east" ? ">" : "<";
-        for (let dz = 0; dz < trans.h; dz++) {
-            for (let dx = 0; dx < trans.w; dx++) {
-                const x = trans.x + dx;
-                const z = trans.z + dz;
-                if (x >= 0 && x < size && z >= 0 && z < size) grid[z][x] = doorChar;
-            }
-        }
-    }
-
-    return grid;
-}
-
-function computeTerrainFromArea(area: AreaData, size: number): string[][] {
-    const grid: string[][] = Array.from({ length: size }, () => Array(size).fill("."));
-
-    if (area.lavaZones) {
-        for (const zone of area.lavaZones) {
-            for (let z = zone.z; z < zone.z + zone.h && z < size; z++) {
-                for (let x = zone.x; x < zone.x + zone.w && x < size; x++) {
-                    if (x >= 0 && z >= 0) grid[z][x] = "~";
-                }
-            }
-        }
-    }
-
-    return grid;
-}
+import type { EnemySpawn, AreaTransition, ChestLocation, TreeLocation, Decoration } from "../game/areas/types";
 
 function computePropsFromArea(area: AreaData, size: number): string[][] {
     const grid: string[][] = Array.from({ length: size }, () => Array(size).fill("."));
@@ -1693,6 +1272,14 @@ function computePropsFromArea(area: AreaData, size: number): string[][] {
                 if (dec.type === "column") grid[z][x] = "C";
                 else if (dec.type === "broken_column") grid[z][x] = "c";
                 else if (dec.type === "broken_wall") grid[z][x] = "W";
+                else if (dec.type === "rock") grid[z][x] = "R";
+                else if (dec.type === "small_rock") grid[z][x] = "r";
+                else if (dec.type === "mushroom") grid[z][x] = "M";
+                else if (dec.type === "small_mushroom") grid[z][x] = "m";
+                else if (dec.type === "fern") grid[z][x] = "F";
+                else if (dec.type === "small_fern") grid[z][x] = "f";
+                else if (dec.type === "seaweed") grid[z][x] = "S";
+                else if (dec.type === "small_seaweed") grid[z][x] = "s";
             }
         }
     }
@@ -1756,96 +1343,6 @@ function computeEntitiesFromArea(area: AreaData, size: number): string[][] {
     return grid;
 }
 
-function extractRoomsFromGeometryLayer(geometry: string[][]): { rooms: Room[]; hallways: { x1: number; z1: number; x2: number; z2: number }[] } {
-    if (geometry.length === 0) return { rooms: [], hallways: [] };
-
-    const height = geometry.length;
-    const width = geometry[0].length;
-    const walkable: boolean[][] = Array.from({ length: height }, () => Array(width).fill(false));
-
-    for (let z = 0; z < height; z++) {
-        for (let x = 0; x < width; x++) {
-            const char = geometry[z]?.[x] ?? "#";
-            walkable[z][x] = char !== "#";
-        }
-    }
-
-    const visited: boolean[][] = Array.from({ length: height }, () => Array(width).fill(false));
-    const rooms: Room[] = [];
-
-    for (let z = 0; z < height; z++) {
-        for (let x = 0; x < width; x++) {
-            if (walkable[z][x] && !visited[z][x]) {
-                let w = 0;
-                while (x + w < width && walkable[z][x + w] && !visited[z][x + w]) w++;
-
-                let h = 1;
-                outer: while (z + h < height) {
-                    for (let dx = 0; dx < w; dx++) {
-                        if (!walkable[z + h][x + dx] || visited[z + h][x + dx]) break outer;
-                    }
-                    h++;
-                }
-
-                if (w >= 2 && h >= 2) {
-                    rooms.push({ x, z, w, h });
-                    for (let rz = z; rz < z + h; rz++) {
-                        for (let rx = x; rx < x + w; rx++) {
-                            visited[rz][rx] = true;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Remaining cells become 1x1 rooms
-    for (let z = 0; z < height; z++) {
-        for (let x = 0; x < width; x++) {
-            if (walkable[z][x] && !visited[z][x]) {
-                rooms.push({ x, z, w: 1, h: 1 });
-            }
-        }
-    }
-
-    return { rooms, hallways: [] };
-}
-
-function extractLavaFromTerrainLayer(terrain: string[][]): LavaZone[] {
-    if (terrain.length === 0) return [];
-
-    const height = terrain.length;
-    const width = terrain[0].length;
-    const visited: boolean[][] = Array.from({ length: height }, () => Array(width).fill(false));
-    const zones: LavaZone[] = [];
-
-    for (let z = 0; z < height; z++) {
-        for (let x = 0; x < width; x++) {
-            if (terrain[z][x] === "~" && !visited[z][x]) {
-                let w = 0;
-                while (x + w < width && terrain[z][x + w] === "~" && !visited[z][x + w]) w++;
-
-                let h = 1;
-                outer: while (z + h < height) {
-                    for (let dx = 0; dx < w; dx++) {
-                        if (terrain[z + h][x + dx] !== "~" || visited[z + h][x + dx]) break outer;
-                    }
-                    h++;
-                }
-
-                zones.push({ x, z, w, h });
-                for (let dz = 0; dz < h; dz++) {
-                    for (let dx = 0; dx < w; dx++) {
-                        visited[z + dz][x + dx] = true;
-                    }
-                }
-            }
-        }
-    }
-
-    return zones;
-}
-
 function extractPropsFromLayer(props: string[][]): { trees: TreeLocation[]; decorations: Decoration[] } {
     const trees: TreeLocation[] = [];
     const decorations: Decoration[] = [];
@@ -1857,6 +1354,14 @@ function extractPropsFromLayer(props: string[][]): { trees: TreeLocation[]; deco
             else if (char === "C") decorations.push({ x, z, type: "column" });
             else if (char === "c") decorations.push({ x, z, type: "broken_column" });
             else if (char === "W") decorations.push({ x, z, type: "broken_wall" });
+            else if (char === "R") decorations.push({ x, z, type: "rock" });
+            else if (char === "r") decorations.push({ x, z, type: "small_rock" });
+            else if (char === "M") decorations.push({ x, z, type: "mushroom" });
+            else if (char === "m") decorations.push({ x, z, type: "small_mushroom" });
+            else if (char === "F") decorations.push({ x, z, type: "fern" });
+            else if (char === "f") decorations.push({ x, z, type: "small_fern" });
+            else if (char === "S") decorations.push({ x, z, type: "seaweed" });
+            else if (char === "s") decorations.push({ x, z, type: "small_seaweed" });
         }
     }
 
@@ -1877,28 +1382,3 @@ function extractEntitiesFromGrid(entitiesLayer: string[][]): { enemies: { x: num
 
     return { enemies, chests };
 }
-
-// function extractEntitiesFromLayer(
-//     entitiesLayer: string[][],
-//     entityDefs: EntityDef[],
-//     _areaId: AreaId
-// ): { enemySpawns: EnemySpawn[]; chests: ChestLocation[]; transitions: AreaTransition[] } {
-//     const enemySpawns: EnemySpawn[] = [];
-//     const chests: ChestLocation[] = [];
-//     const transitions: AreaTransition[] = [];
-
-//     for (let z = 0; z < entitiesLayer.length; z++) {
-//         for (let x = 0; x < entitiesLayer[z].length; x++) {
-//             const char = entitiesLayer[z][x];
-//             if (char === "E") {
-//                 // Find matching entity def or default
-//                 const def = entityDefs.find(e => e.type === "enemy");
-//                 enemySpawns.push({ x, z, type: (def?.enemyType ?? "skeleton_warrior") as EnemyType });
-//             } else if (char === "X") {
-//                 chests.push({ x: x + 0.5, z: z + 0.5, contents: [] });
-//             }
-//         }
-//     }
-
-//     return { enemySpawns, chests, transitions };
-// }

@@ -4,13 +4,6 @@ import * as THREE from "three";
 // WORLD TYPES - Map, tiles, rendering, pathfinding
 // =============================================================================
 
-export interface Room {
-    x: number;
-    z: number;
-    w: number;
-    h: number;
-}
-
 export interface CandlePosition {
     x: number;
     z: number;

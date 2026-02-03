@@ -3,8 +3,8 @@
 // =============================================================================
 
 import { GRID_SIZE } from "../core/constants";
-import type { AreaData, AreaId, RoomFloor, EnemySpawn, AreaTransition, ChestLocation, TreeLocation, Decoration, SecretDoor, LavaZone } from "../game/areas/types";
-import type { Room, CandlePosition, EnemyType } from "../core/types";
+import type { AreaData, AreaId, EnemySpawn, AreaTransition, ChestLocation, TreeLocation, Decoration, SecretDoor } from "../game/areas/types";
+import type { CandlePosition, EnemyType } from "../core/types";
 
 // =============================================================================
 // TEXT FORMAT SPECIFICATION
@@ -26,8 +26,8 @@ import type { Room, CandlePosition, EnemyType } from "../core/types";
 // === TERRAIN ===
 // (grid with ~ for lava, . for empty)
 //
-// === FLOOR_COLORS ===
-// x,z,w,h:color
+// === FLOOR ===
+// (grid with s=sand, d=dirt, g=grass, w=water, t=stone, .=default)
 //
 // === ENEMIES ===
 // x,z:enemy_type
@@ -69,7 +69,7 @@ interface ParsedArea {
     };
     geometry: string[][];
     terrain: string[][];
-    floorColors: RoomFloor[];
+    floor: string[][];
     enemies: EnemySpawn[];
     chests: ChestLocation[];
     transitions: AreaTransition[];
@@ -77,14 +77,13 @@ interface ParsedArea {
     decorations: Decoration[];
     secretDoors: SecretDoor[];
     candles: CandlePosition[];
-    lavaZones: LavaZone[];
 }
 
 // =============================================================================
 // SERIALIZATION - AreaData to Text
 // =============================================================================
 
-export function areaDataToText(area: AreaData, rawGeometry?: string[][], rawTerrain?: string[][]): string {
+export function areaDataToText(area: AreaData): string {
     const lines: string[] = [];
     const size = area.gridSize;
 
@@ -101,26 +100,20 @@ export function areaDataToText(area: AreaData, rawGeometry?: string[][], rawTerr
     lines.push(`spawn: ${area.defaultSpawn.x},${area.defaultSpawn.z}`);
     lines.push("");
 
-    // Use raw geometry if provided, otherwise compute from rooms/hallways (for backwards compat)
-    const geometry = rawGeometry ?? computeGeometryGrid(area.rooms, area.hallways, size, area.transitions);
+    // Geometry grid
     lines.push("=== GEOMETRY ===");
-    geometry.forEach(row => lines.push(row.join("")));
+    area.geometry.forEach(row => lines.push(row.join("")));
     lines.push("");
 
-    // Use raw terrain if provided, otherwise compute from lava zones
-    const terrain = rawTerrain ?? computeTerrainGrid(area.lavaZones ?? [], size);
+    // Terrain grid
     lines.push("=== TERRAIN ===");
-    terrain.forEach(row => lines.push(row.join("")));
+    area.terrain.forEach(row => lines.push(row.join("")));
     lines.push("");
 
-    // Floor colors
-    if (area.roomFloors.length > 0) {
-        lines.push("=== FLOOR_COLORS ===");
-        area.roomFloors.forEach(floor => {
-            lines.push(`${floor.x},${floor.z},${floor.w},${floor.h}:${floor.color}`);
-        });
-        lines.push("");
-    }
+    // Floor grid
+    lines.push("=== FLOOR ===");
+    area.floor.forEach(row => lines.push(row.join("")));
+    lines.push("");
 
     // Enemies
     if (area.enemySpawns.length > 0) {
@@ -201,73 +194,6 @@ export function areaDataToText(area: AreaData, rawGeometry?: string[][], rawTerr
     return lines.join("\n");
 }
 
-function computeGeometryGrid(rooms: Room[], hallways: { x1: number; z1: number; x2: number; z2: number }[], size: number, transitions: AreaTransition[]): string[][] {
-    // Start with all walls
-    const grid: string[][] = Array.from({ length: size }, () => Array(size).fill("#"));
-
-    // Carve out rooms
-    for (const room of rooms) {
-        for (let z = room.z; z < room.z + room.h && z < size; z++) {
-            for (let x = room.x; x < room.x + room.w && x < size; x++) {
-                if (x >= 0 && z >= 0) {
-                    grid[z][x] = ".";
-                }
-            }
-        }
-    }
-
-    // Carve out hallways
-    for (const hall of hallways) {
-        const minX = Math.min(hall.x1, hall.x2);
-        const maxX = Math.max(hall.x1, hall.x2);
-        const minZ = Math.min(hall.z1, hall.z2);
-        const maxZ = Math.max(hall.z1, hall.z2);
-
-        for (let z = minZ; z <= maxZ && z < size; z++) {
-            for (let x = minX; x <= maxX && x < size; x++) {
-                if (x >= 0 && z >= 0) {
-                    grid[z][x] = ".";
-                }
-            }
-        }
-    }
-
-    // Mark transitions with door characters
-    for (const trans of transitions) {
-        const doorChar = trans.direction === "north" ? "^" :
-                         trans.direction === "south" ? "v" :
-                         trans.direction === "east" ? ">" : "<";
-
-        for (let dz = 0; dz < trans.h; dz++) {
-            for (let dx = 0; dx < trans.w; dx++) {
-                const x = trans.x + dx;
-                const z = trans.z + dz;
-                if (x >= 0 && x < size && z >= 0 && z < size) {
-                    grid[z][x] = doorChar;
-                }
-            }
-        }
-    }
-
-    return grid;
-}
-
-function computeTerrainGrid(lavaZones: LavaZone[], size: number): string[][] {
-    const grid: string[][] = Array.from({ length: size }, () => Array(size).fill("."));
-
-    for (const zone of lavaZones) {
-        for (let z = zone.z; z < zone.z + zone.h && z < size; z++) {
-            for (let x = zone.x; x < zone.x + zone.w && x < size; x++) {
-                if (x >= 0 && z >= 0) {
-                    grid[z][x] = "~";
-                }
-            }
-        }
-    }
-
-    return grid;
-}
-
 // =============================================================================
 // PARSING - Text to AreaData
 // =============================================================================
@@ -299,7 +225,7 @@ function parseTextFormat(text: string): ParsedArea {
         },
         geometry: [],
         terrain: [],
-        floorColors: [],
+        floor: [],
         enemies: [],
         chests: [],
         transitions: [],
@@ -307,7 +233,6 @@ function parseTextFormat(text: string): ParsedArea {
         decorations: [],
         secretDoors: [],
         candles: [],
-        lavaZones: [],
     };
 
     while (lineIndex < lines.length) {
@@ -343,8 +268,8 @@ function parseTextFormat(text: string): ParsedArea {
             case "terrain":
                 result.terrain.push(line.split(""));
                 break;
-            case "floor_colors":
-                parseFloorColorLine(line, result.floorColors);
+            case "floor":
+                result.floor.push(line.split(""));
                 break;
             case "enemies":
                 parseEnemyLine(line, result.enemies);
@@ -412,12 +337,6 @@ function parseMetadataLine(line: string, metadata: ParsedArea["metadata"]) {
             break;
         }
     }
-}
-
-function parseFloorColorLine(line: string, floors: RoomFloor[]) {
-    const [coords, color] = line.split(":");
-    const [x, z, w, h] = coords.split(",").map(Number);
-    floors.push({ x, z, w, h, color });
 }
 
 function parseEnemyLine(line: string, enemies: EnemySpawn[]) {
@@ -530,11 +449,12 @@ function parseCandleLine(line: string, candles: CandlePosition[]) {
 }
 
 function convertParsedToAreaData(parsed: ParsedArea): AreaData {
-    // Extract rooms from geometry grid
-    const { rooms, hallways } = extractRoomsFromGeometry(parsed.geometry);
-
-    // Extract lava zones from terrain grid
-    const lavaZones = extractLavaFromTerrain(parsed.terrain);
+    // Create default floor grid if not defined
+    const floor = parsed.floor.length > 0
+        ? parsed.floor
+        : Array.from({ length: parsed.metadata.height }, () =>
+            Array(parsed.metadata.width).fill(".")
+        );
 
     return {
         id: parsed.metadata.id,
@@ -547,9 +467,9 @@ function convertParsedToAreaData(parsed: ParsedArea): AreaData {
         directionalLight: parsed.metadata.directional,
         hasFogOfWar: parsed.metadata.fog,
         defaultSpawn: { x: parsed.metadata.spawnX, z: parsed.metadata.spawnZ },
-        rooms,
-        hallways,
-        roomFloors: parsed.floorColors,
+        geometry: parsed.geometry,
+        terrain: parsed.terrain,
+        floor,
         enemySpawns: parsed.enemies,
         transitions: parsed.transitions,
         chests: parsed.chests,
@@ -557,119 +477,5 @@ function convertParsedToAreaData(parsed: ParsedArea): AreaData {
         decorations: parsed.decorations.length > 0 ? parsed.decorations : undefined,
         secretDoors: parsed.secretDoors.length > 0 ? parsed.secretDoors : undefined,
         candles: parsed.candles.length > 0 ? parsed.candles : undefined,
-        lavaZones: lavaZones.length > 0 ? lavaZones : undefined,
     };
-}
-
-function extractRoomsFromGeometry(geometry: string[][]): { rooms: Room[]; hallways: { x1: number; z1: number; x2: number; z2: number }[] } {
-    if (geometry.length === 0) return { rooms: [], hallways: [] };
-
-    const height = geometry.length;
-    const width = geometry[0].length;
-
-    // Find all walkable cells (., ^, v, <, >)
-    const walkable: boolean[][] = Array.from({ length: height }, () => Array(width).fill(false));
-
-    for (let z = 0; z < height; z++) {
-        for (let x = 0; x < width; x++) {
-            const char = geometry[z]?.[x] ?? "#";
-            walkable[z][x] = char !== "#";
-        }
-    }
-
-    // Extract rectangular regions using greedy algorithm
-    const visited: boolean[][] = Array.from({ length: height }, () => Array(width).fill(false));
-    const rooms: Room[] = [];
-
-    for (let z = 0; z < height; z++) {
-        for (let x = 0; x < width; x++) {
-            if (walkable[z][x] && !visited[z][x]) {
-                // Find the largest rectangle starting at this point
-                const rect = findLargestRect(walkable, visited, x, z, width, height);
-                if (rect.w >= 2 && rect.h >= 2) {
-                    rooms.push(rect);
-                    // Mark as visited
-                    for (let rz = rect.z; rz < rect.z + rect.h; rz++) {
-                        for (let rx = rect.x; rx < rect.x + rect.w; rx++) {
-                            visited[rz][rx] = true;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Any remaining unvisited walkable cells become small rooms
-    for (let z = 0; z < height; z++) {
-        for (let x = 0; x < width; x++) {
-            if (walkable[z][x] && !visited[z][x]) {
-                rooms.push({ x, z, w: 1, h: 1 });
-                visited[z][x] = true;
-            }
-        }
-    }
-
-    return { rooms, hallways: [] };
-}
-
-function findLargestRect(walkable: boolean[][], visited: boolean[][], startX: number, startZ: number, maxWidth: number, maxHeight: number): Room {
-    // Expand right as far as possible
-    let w = 0;
-    while (startX + w < maxWidth && walkable[startZ][startX + w] && !visited[startZ][startX + w]) {
-        w++;
-    }
-
-    // Expand down as far as possible while maintaining width
-    let h = 1;
-    outer: while (startZ + h < maxHeight) {
-        for (let x = startX; x < startX + w; x++) {
-            if (!walkable[startZ + h][x] || visited[startZ + h][x]) {
-                break outer;
-            }
-        }
-        h++;
-    }
-
-    return { x: startX, z: startZ, w, h };
-}
-
-function extractLavaFromTerrain(terrain: string[][]): LavaZone[] {
-    if (terrain.length === 0) return [];
-
-    const height = terrain.length;
-    const width = terrain[0].length;
-    const visited: boolean[][] = Array.from({ length: height }, () => Array(width).fill(false));
-    const zones: LavaZone[] = [];
-
-    for (let z = 0; z < height; z++) {
-        for (let x = 0; x < width; x++) {
-            if (terrain[z][x] === "~" && !visited[z][x]) {
-                // Find rectangle of lava
-                let w = 0;
-                while (x + w < width && terrain[z][x + w] === "~" && !visited[z][x + w]) {
-                    w++;
-                }
-
-                let h = 1;
-                outer: while (z + h < height) {
-                    for (let dx = 0; dx < w; dx++) {
-                        if (terrain[z + h][x + dx] !== "~" || visited[z + h][x + dx]) {
-                            break outer;
-                        }
-                    }
-                    h++;
-                }
-
-                zones.push({ x, z, w, h });
-
-                for (let dz = 0; dz < h; dz++) {
-                    for (let dx = 0; dx < w; dx++) {
-                        visited[z + dz][x + dx] = true;
-                    }
-                }
-            }
-        }
-    }
-
-    return zones;
 }
