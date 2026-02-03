@@ -9,6 +9,7 @@ import { findPath } from "../ai/pathfinding";
 import { UNIT_DATA } from "../game/units";
 import { soundFns } from "../audio";
 import { executeSkill, clearTargetingMode, type SkillExecutionContext } from "../combat/skills";
+import { findClosestTargetByTeam } from "../combat/skills/helpers";
 import { disposeGeometry } from "../rendering/disposal";
 import { distanceToPoint } from "../game/geometry";
 
@@ -226,6 +227,22 @@ export function processActionQueue(
             const cooldownEnd = actionCooldownRef.current[unitId] || 0;
             if (now < cooldownEnd) {
                 continue; // Don't remove, will try again next frame
+            }
+            // For enemy-targeted skills, validate target still exists before executing
+            // This prevents "No enemy at that location" spam when target dies between queue and execute
+            if (action.skill.targetType === "enemy") {
+                const hasTarget = findClosestTargetByTeam(
+                    skillCtx.unitsStateRef.current,
+                    skillCtx.unitsRef.current,
+                    "enemy",
+                    action.targetX,
+                    action.targetZ
+                );
+                if (!hasTarget) {
+                    // Target died - silently discard and let unit re-acquire target
+                    executedUnits.push(unitId);
+                    continue;
+                }
             }
             executeSkill(skillCtx, unitId, action.skill, action.targetX, action.targetZ, action.targetId);
             executedUnits.push(unitId);

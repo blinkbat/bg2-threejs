@@ -87,6 +87,43 @@ const ENEMY_TYPES: EnemyType[] = [
 // EDIT POPUPS
 // =============================================================================
 
+const POPUP_WIDTH = 280;
+const POPUP_MARGIN = 16;
+
+/** Hook to clamp popup position within viewport */
+function useClampedPosition(screenX: number, screenY: number) {
+    const [position, setPosition] = useState({ x: screenX, y: screenY });
+    const popupRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const popup = popupRef.current;
+        if (!popup) return;
+
+        const rect = popup.getBoundingClientRect();
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+
+        let x = screenX;
+        let y = screenY;
+
+        // Clamp horizontal
+        if (x + rect.width + POPUP_MARGIN > vw) {
+            x = vw - rect.width - POPUP_MARGIN;
+        }
+        if (x < POPUP_MARGIN) x = POPUP_MARGIN;
+
+        // Clamp vertical
+        if (y + rect.height + POPUP_MARGIN > vh) {
+            y = vh - rect.height - POPUP_MARGIN;
+        }
+        if (y < POPUP_MARGIN) y = POPUP_MARGIN;
+
+        setPosition({ x, y });
+    }, [screenX, screenY]);
+
+    return { popupRef, position };
+}
+
 const popupStyle: React.CSSProperties = {
     position: "fixed",
     background: "#2a2a3e",
@@ -94,7 +131,7 @@ const popupStyle: React.CSSProperties = {
     borderRadius: 8,
     padding: 16,
     zIndex: 1000,
-    minWidth: 280,
+    minWidth: POPUP_WIDTH,
     boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
 };
 
@@ -129,9 +166,10 @@ function EntityEditPopup({ entity, screenX, screenY, onSave, onClose }: {
     onClose: () => void;
 }) {
     const [draft, setDraft] = useState({ ...entity });
+    const { popupRef, position } = useClampedPosition(screenX, screenY);
 
     return (
-        <div style={{ ...popupStyle, left: screenX, top: screenY }} onClick={e => e.stopPropagation()}>
+        <div ref={popupRef} style={{ ...popupStyle, left: position.x, top: position.y }} onClick={e => e.stopPropagation()}>
             <h4 style={{ margin: "0 0 12px", fontSize: 15 }}>Edit {draft.type}</h4>
 
             {draft.type === "enemy" && (
@@ -270,6 +308,51 @@ function EntityEditPopup({ entity, screenX, screenY, onSave, onClose }: {
                 </div>
             )}
 
+            {draft.type === "secret_door" && (
+                <>
+                    <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                        <label style={{ flex: 1 }}>
+                            <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Block X</span>
+                            <input
+                                type="number"
+                                style={inputStyle}
+                                value={draft.secretBlockX || 0}
+                                onChange={e => setDraft({ ...draft, secretBlockX: parseInt(e.target.value) || 0 })}
+                            />
+                        </label>
+                        <label style={{ flex: 1 }}>
+                            <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Block Z</span>
+                            <input
+                                type="number"
+                                style={inputStyle}
+                                value={draft.secretBlockZ || 0}
+                                onChange={e => setDraft({ ...draft, secretBlockZ: parseInt(e.target.value) || 0 })}
+                            />
+                        </label>
+                    </div>
+                    <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                        <label style={{ flex: 1 }}>
+                            <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Width</span>
+                            <input
+                                type="number"
+                                style={inputStyle}
+                                value={draft.secretBlockW || 1}
+                                onChange={e => setDraft({ ...draft, secretBlockW: parseInt(e.target.value) || 1 })}
+                            />
+                        </label>
+                        <label style={{ flex: 1 }}>
+                            <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Height</span>
+                            <input
+                                type="number"
+                                style={inputStyle}
+                                value={draft.secretBlockH || 1}
+                                onChange={e => setDraft({ ...draft, secretBlockH: parseInt(e.target.value) || 1 })}
+                            />
+                        </label>
+                    </div>
+                </>
+            )}
+
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                 <button style={{ ...buttonStyle, background: "#4a9", color: "#fff" }} onClick={() => onSave(draft)}>Save</button>
                 <button style={{ ...buttonStyle, background: "#555", color: "#fff" }} onClick={onClose}>Cancel</button>
@@ -286,9 +369,10 @@ function TreeEditPopup({ tree, screenX, screenY, onSave, onClose }: {
     onClose: () => void;
 }) {
     const [size, setSize] = useState(tree.size);
+    const { popupRef, position } = useClampedPosition(screenX, screenY);
 
     return (
-        <div style={{ ...popupStyle, left: screenX, top: screenY }} onClick={e => e.stopPropagation()}>
+        <div ref={popupRef} style={{ ...popupStyle, left: position.x, top: position.y }} onClick={e => e.stopPropagation()}>
             <h4 style={{ margin: "0 0 12px", fontSize: 15 }}>Edit Tree</h4>
             <label style={{ display: "block", marginBottom: 10 }}>
                 <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Size</span>
@@ -316,9 +400,10 @@ function DecorationEditPopup({ decoration, screenX, screenY, onSave, onClose }: 
     onClose: () => void;
 }) {
     const [draft, setDraft] = useState({ ...decoration });
+    const { popupRef, position } = useClampedPosition(screenX, screenY);
 
     return (
-        <div style={{ ...popupStyle, left: screenX, top: screenY }} onClick={e => e.stopPropagation()}>
+        <div ref={popupRef} style={{ ...popupStyle, left: position.x, top: position.y }} onClick={e => e.stopPropagation()}>
             <h4 style={{ margin: "0 0 12px", fontSize: 15 }}>Edit Decoration</h4>
             <label style={{ display: "block", marginBottom: 10 }}>
                 <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Type</span>
@@ -417,6 +502,9 @@ export function MapEditor() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [isPainting, setIsPainting] = useState(false);
     const [zoom, setZoom] = useState(1);
+
+    // Door drag state for click-drag to create multi-tile doors
+    const [doorDrag, setDoorDrag] = useState<{ startX: number; startZ: number; endX: number; endZ: number } | null>(null);
 
     // Entity editor popup
     const [editingEntity, setEditingEntity] = useState<{ entity: EntityDef; screenX: number; screenY: number } | null>(null);
@@ -564,7 +652,31 @@ export function MapEditor() {
         ctx.lineWidth = 3;
         ctx.strokeRect(0, 0, canvas.width, canvas.height);
 
-    }, [geometryLayer, terrainLayer, propsLayer, entitiesLayer, metadata, showGrid, layerVisibility, activeLayer, CELL_SIZE]);
+        // Door drag preview
+        if (doorDrag) {
+            const minX = Math.min(doorDrag.startX, doorDrag.endX);
+            const maxX = Math.max(doorDrag.startX, doorDrag.endX);
+            const minZ = Math.min(doorDrag.startZ, doorDrag.endZ);
+            const maxZ = Math.max(doorDrag.startZ, doorDrag.endZ);
+
+            ctx.fillStyle = "rgba(136, 68, 255, 0.4)";
+            ctx.fillRect(
+                minX * CELL_SIZE,
+                minZ * CELL_SIZE,
+                (maxX - minX + 1) * CELL_SIZE,
+                (maxZ - minZ + 1) * CELL_SIZE
+            );
+            ctx.strokeStyle = "#84f";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(
+                minX * CELL_SIZE,
+                minZ * CELL_SIZE,
+                (maxX - minX + 1) * CELL_SIZE,
+                (maxZ - minZ + 1) * CELL_SIZE
+            );
+        }
+
+    }, [geometryLayer, terrainLayer, propsLayer, entitiesLayer, metadata, showGrid, layerVisibility, activeLayer, CELL_SIZE, doorDrag]);
 
     function drawLayer(ctx: CanvasRenderingContext2D, layer: string[][], layerType: Layer) {
         for (let z = 0; z < layer.length; z++) {
@@ -605,6 +717,9 @@ export function MapEditor() {
             if (char.startsWith("E")) return "#f44";
             if (char.startsWith("X")) return "#ff0";
             if (char === "@") return "#4af";
+            if (char === "D") return "#84f";  // Door - purple
+            if (char === "L") return "#fa4";  // Candle - orange
+            if (char === "S") return "#4aa";  // Secret Door - teal
         }
         return "#666";
     }
@@ -647,7 +762,49 @@ export function MapEditor() {
             newLayer[z][x] = ".";
         }
         setActiveLayerData(newLayer);
-    }, [getActiveLayer, setActiveLayerData, activeTool, activeBrush, metadata.width, metadata.height]);
+
+        // For entities layer, sync the entities array for special types that need detailed config
+        if (activeLayer === "entities") {
+            const existingEntity = entities.find(e => Math.floor(e.x) === x && Math.floor(e.z) === z);
+
+            if (activeTool === "erase" && existingEntity) {
+                // Remove entity when erasing
+                setEntities(prev => prev.filter(e => e.id !== existingEntity.id));
+            } else if (activeTool === "paint") {
+                // Remove any existing entity at this position first
+                if (existingEntity) {
+                    setEntities(prev => prev.filter(e => e.id !== existingEntity.id));
+                }
+
+                // Create new entity for special types
+                const entityId = `e${Date.now()}-${x}-${z}`;
+                if (activeBrush === "D") {
+                    setEntities(prev => [...prev, {
+                        id: entityId, x, z, type: "transition",
+                        transitionTarget: AREA_IDS[0], transitionSpawnX: 5, transitionSpawnZ: 5,
+                        transitionDirection: "north", transitionW: 1, transitionH: 1
+                    }]);
+                } else if (activeBrush === "L") {
+                    setEntities(prev => [...prev, {
+                        id: entityId, x, z, type: "candle", candleDx: 0, candleDz: 1
+                    }]);
+                } else if (activeBrush === "S") {
+                    setEntities(prev => [...prev, {
+                        id: entityId, x, z, type: "secret_door",
+                        secretBlockX: x, secretBlockZ: z, secretBlockW: 1, secretBlockH: 1
+                    }]);
+                } else if (activeBrush === "E") {
+                    setEntities(prev => [...prev, {
+                        id: entityId, x, z, type: "enemy", enemyType: "skeleton_warrior"
+                    }]);
+                } else if (activeBrush === "X") {
+                    setEntities(prev => [...prev, {
+                        id: entityId, x, z, type: "chest", chestGold: 0, chestItems: ""
+                    }]);
+                }
+            }
+        }
+    }, [getActiveLayer, setActiveLayerData, activeTool, activeBrush, metadata.width, metadata.height, activeLayer, entities]);
 
     const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
         // Ignore right-click (handled by onContextMenu)
@@ -661,23 +818,78 @@ export function MapEditor() {
 
         // Push history before starting to paint
         pushHistory();
-        setIsPainting(true);
-        paintCell(x, z);
+
+        // For door brush, use drag-to-size
+        if (activeLayer === "entities" && activeBrush === "D" && activeTool === "paint") {
+            setDoorDrag({ startX: x, startZ: z, endX: x, endZ: z });
+        } else {
+            setIsPainting(true);
+            paintCell(x, z);
+        }
     };
 
     const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-        if (!isPainting) return;
-
         const rect = canvasRef.current?.getBoundingClientRect();
         if (!rect) return;
 
         const x = Math.floor((e.clientX - rect.left) / CELL_SIZE);
         const z = Math.floor((e.clientY - rect.top) / CELL_SIZE);
 
+        // Update door drag preview
+        if (doorDrag) {
+            setDoorDrag(prev => prev ? { ...prev, endX: x, endZ: z } : null);
+            return;
+        }
+
+        if (!isPainting) return;
         paintCell(x, z);
     };
 
-    const handleCanvasMouseUp = () => {
+    const handleCanvasMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
+        // Finalize door drag
+        if (doorDrag) {
+            const rect = canvasRef.current?.getBoundingClientRect();
+            if (rect) {
+                const x = Math.floor((e.clientX - rect.left) / CELL_SIZE);
+                const z = Math.floor((e.clientY - rect.top) / CELL_SIZE);
+
+                const minX = Math.min(doorDrag.startX, x);
+                const maxX = Math.max(doorDrag.startX, x);
+                const minZ = Math.min(doorDrag.startZ, z);
+                const maxZ = Math.max(doorDrag.startZ, z);
+                const w = maxX - minX + 1;
+                const h = maxZ - minZ + 1;
+
+                // Paint door cells on the grid
+                const newLayer = entitiesLayer.map(row => [...row]);
+                for (let dz = minZ; dz <= maxZ; dz++) {
+                    for (let dx = minX; dx <= maxX; dx++) {
+                        if (dx >= 0 && dx < metadata.width && dz >= 0 && dz < metadata.height) {
+                            newLayer[dz][dx] = "D";
+                        }
+                    }
+                }
+                setEntitiesLayer(newLayer);
+
+                // Remove any existing entities in this area
+                setEntities(prev => prev.filter(e => {
+                    const ex = Math.floor(e.x);
+                    const ez = Math.floor(e.z);
+                    return !(ex >= minX && ex <= maxX && ez >= minZ && ez <= maxZ);
+                }));
+
+                // Create single door entity with w/h
+                const entityId = `e${Date.now()}-${minX}-${minZ}`;
+                setEntities(prev => [...prev, {
+                    id: entityId, x: minX, z: minZ, type: "transition",
+                    transitionTarget: AREA_IDS[0], transitionSpawnX: 5, transitionSpawnZ: 5,
+                    transitionDirection: "north", transitionW: w, transitionH: h
+                }]);
+            }
+            setDoorDrag(null);
+            return;
+        }
+
         setIsPainting(false);
     };
 
@@ -820,7 +1032,8 @@ export function MapEditor() {
 
     const saveMap = async () => {
         const area = buildAreaDataFromEditor();
-        const content = areaDataToText(area);
+        // Pass raw geometry and terrain layers directly to preserve exact edits
+        const content = areaDataToText(area, geometryLayer, terrainLayer);
 
         setSaveStatus("saving");
         try {
@@ -999,6 +1212,9 @@ export function MapEditor() {
                     { char: "@", label: "Spawn" },
                     { char: "E", label: "Enemy" },
                     { char: "X", label: "Chest" },
+                    { char: "D", label: "Door" },
+                    { char: "L", label: "Candle" },
+                    { char: "S", label: "Secret Door" },
                 ];
         }
     };
@@ -1194,7 +1410,7 @@ export function MapEditor() {
                     onMouseDown={handleCanvasMouseDown}
                     onMouseMove={handleCanvasMouseMove}
                     onMouseUp={handleCanvasMouseUp}
-                    onMouseLeave={handleCanvasMouseUp}
+                    onMouseLeave={() => { setIsPainting(false); setDoorDrag(null); }}
                     onContextMenu={handleCanvasContextMenu}
                     style={{ border: "1px solid #333", cursor: "crosshair" }}
                 />
@@ -1504,6 +1720,37 @@ function computeEntitiesFromArea(area: AreaData, size: number): string[][] {
         const x = Math.floor(chest.x);
         const z = Math.floor(chest.z);
         if (x >= 0 && x < size && z >= 0 && z < size) grid[z][x] = "X";
+    }
+
+    // Transitions (doors) - fill entire door area for multi-tile doors
+    for (const trans of area.transitions) {
+        const startX = Math.floor(trans.x);
+        const startZ = Math.floor(trans.z);
+        for (let dz = 0; dz < trans.h; dz++) {
+            for (let dx = 0; dx < trans.w; dx++) {
+                const x = startX + dx;
+                const z = startZ + dz;
+                if (x >= 0 && x < size && z >= 0 && z < size) grid[z][x] = "D";
+            }
+        }
+    }
+
+    // Candles
+    if (area.candles) {
+        for (const candle of area.candles) {
+            const x = Math.floor(candle.x);
+            const z = Math.floor(candle.z);
+            if (x >= 0 && x < size && z >= 0 && z < size) grid[z][x] = "L";
+        }
+    }
+
+    // Secret doors
+    if (area.secretDoors) {
+        for (const sd of area.secretDoors) {
+            const x = Math.floor(sd.x);
+            const z = Math.floor(sd.z);
+            if (x >= 0 && x < size && z >= 0 && z < size) grid[z][x] = "S";
+        }
     }
 
     return grid;

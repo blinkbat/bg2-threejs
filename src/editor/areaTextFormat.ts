@@ -84,7 +84,7 @@ interface ParsedArea {
 // SERIALIZATION - AreaData to Text
 // =============================================================================
 
-export function areaDataToText(area: AreaData): string {
+export function areaDataToText(area: AreaData, rawGeometry?: string[][], rawTerrain?: string[][]): string {
     const lines: string[] = [];
     const size = area.gridSize;
 
@@ -101,14 +101,14 @@ export function areaDataToText(area: AreaData): string {
     lines.push(`spawn: ${area.defaultSpawn.x},${area.defaultSpawn.z}`);
     lines.push("");
 
-    // Compute geometry grid from rooms and hallways
-    const geometry = computeGeometryGrid(area.rooms, area.hallways, size, area.transitions);
+    // Use raw geometry if provided, otherwise compute from rooms/hallways (for backwards compat)
+    const geometry = rawGeometry ?? computeGeometryGrid(area.rooms, area.hallways, size, area.transitions);
     lines.push("=== GEOMETRY ===");
     geometry.forEach(row => lines.push(row.join("")));
     lines.push("");
 
-    // Terrain layer (lava zones)
-    const terrain = computeTerrainGrid(area.lavaZones ?? [], size);
+    // Use raw terrain if provided, otherwise compute from lava zones
+    const terrain = rawTerrain ?? computeTerrainGrid(area.lavaZones ?? [], size);
     lines.push("=== TERRAIN ===");
     terrain.forEach(row => lines.push(row.join("")));
     lines.push("");

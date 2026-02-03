@@ -153,6 +153,10 @@ spawn: 25,12
 === TRANSITIONS ===
 23,49,5,1:north->forest@25,2
 0,18,1,5:west->cliffs@47,25
+24,49,1,1:north->forest@5,5
+25,49,1,1:north->forest@5,5
+26,49,1,1:north->forest@5,5
+27,49,1,1:north->forest@5,5
 
 === TREES ===
 8,38:1

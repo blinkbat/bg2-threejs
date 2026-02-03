@@ -470,6 +470,15 @@ export function useInputHandlers({
                     }
                 }
             }
+            if (["F1", "F2", "F3", "F4", "F5", "F6"].includes(e.code)) {
+                e.preventDefault();
+                const slotIndex = parseInt(e.code.charAt(1)) - 1;
+                const playerUnits = stateRefs.unitsStateRef.current.filter(u => u.team === "player");
+                const unit = playerUnits[slotIndex];
+                if (unit && unit.hp > 0) {
+                    setters.setSelectedIds([unit.id]);
+                }
+            }
             if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyW", "KeyA", "KeyS", "KeyD"].includes(e.code)) {
                 mutableRefs.keysPressed.current.add(e.code);
             }

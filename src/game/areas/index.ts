@@ -18,7 +18,7 @@ import { SANCTUM_AREA } from "./sanctum";
 import { CLIFFS_AREA } from "./cliffs";
 import { MAGMA_CAVE_AREA } from "./magmaCave";
 
-// Text-based areas (testing)
+// Text-based areas - load all areas from .txt files for editor support
 import { TEXT_AREAS } from "./textLoader";
 const COAST_AREA = TEXT_AREAS.coast;
 
@@ -28,15 +28,15 @@ import { computeAreaData } from "./helpers";
 // Re-export individual areas for direct access if needed
 export { DUNGEON_AREA, FIELD_AREA, COAST_AREA, RUINS_AREA, SANCTUM_AREA, CLIFFS_AREA, MAGMA_CAVE_AREA };
 
-// Registry of all areas
+// Registry of all areas - uses text files for editor support
 export const AREAS: Record<AreaId, AreaData> = {
-    dungeon: DUNGEON_AREA,
-    forest: FIELD_AREA,
-    coast: COAST_AREA,
-    ruins: RUINS_AREA,
-    sanctum: SANCTUM_AREA,
-    cliffs: CLIFFS_AREA,
-    magma_cave: MAGMA_CAVE_AREA
+    dungeon: TEXT_AREAS.dungeon,
+    forest: TEXT_AREAS.forest,
+    coast: TEXT_AREAS.coast,
+    ruins: TEXT_AREAS.ruins,
+    sanctum: TEXT_AREAS.sanctum,
+    cliffs: TEXT_AREAS.cliffs,
+    magma_cave: TEXT_AREAS.magma_cave
 };
 
 // =============================================================================

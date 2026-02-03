@@ -411,6 +411,11 @@ export function updateUnitAI(
             }
         } else {
             g.userData.attackTarget = null;
+            // Clear any queued attack action since target is no longer valid
+            if (isPlayer && actionQueueRef && actionQueueRef[unit.id]) {
+                delete actionQueueRef[unit.id];
+                setQueuedActions?.(prev => prev.filter(q => q.unitId !== unit.id));
+            }
         }
     }
 
