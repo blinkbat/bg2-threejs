@@ -20,6 +20,8 @@ import acidSlugSpriteUrl from "../../assets/acid-slug.png";
 import amoebaLgSpriteUrl from "../../assets/amoeba-lg.png";
 import amoebaMdSpriteUrl from "../../assets/amoeba-md.png";
 import amoebaSmSpriteUrl from "../../assets/amoeba-sm.png";
+import krakenTentacleSpriteUrl from "../../assets/kraken-tentacle.png";
+import krakenBodySpriteUrl from "../../assets/kraken-body.png";
 
 // =============================================================================
 // HELPERS
@@ -53,6 +55,8 @@ let acidSlugTexture: THREE.Texture;
 let amoebaLgTexture: THREE.Texture;
 let amoebaMdTexture: THREE.Texture;
 let amoebaSmTexture: THREE.Texture;
+let krakenTentacleTexture: THREE.Texture;
+let krakenBodyTexture: THREE.Texture;
 
 function ensureTexturesLoaded(): void {
     if (texturesLoaded) return;
@@ -101,6 +105,14 @@ function ensureTexturesLoaded(): void {
     amoebaSmTexture.magFilter = THREE.NearestFilter;
     amoebaSmTexture.minFilter = THREE.NearestFilter;
 
+    krakenTentacleTexture = new THREE.TextureLoader().load(krakenTentacleSpriteUrl);
+    krakenTentacleTexture.magFilter = THREE.NearestFilter;
+    krakenTentacleTexture.minFilter = THREE.NearestFilter;
+
+    krakenBodyTexture = new THREE.TextureLoader().load(krakenBodySpriteUrl);
+    krakenBodyTexture.magFilter = THREE.NearestFilter;
+    krakenBodyTexture.minFilter = THREE.NearestFilter;
+
     texturesLoaded = true;
 }
 
@@ -137,6 +149,8 @@ function getEnemySpriteConfigs(): Record<string, SpriteConfig> {
         giant_amoeba_lg: { texture: amoebaLgTexture, width: 128, height: 128, spriteHeight: 2.4, opacity: 0.7 },
         giant_amoeba_md: { texture: amoebaMdTexture, width: 128, height: 128, spriteHeight: 1.7, opacity: 0.7 },
         giant_amoeba_sm: { texture: amoebaSmTexture, width: 128, height: 128, spriteHeight: 1.2, opacity: 0.7 },
+        kraken_tentacle: { texture: krakenTentacleTexture, width: 80, height: 128, spriteHeight: 2.0, color: 0xd8c0e8 },
+        baby_kraken: { texture: krakenBodyTexture, width: 128, height: 128, spriteHeight: 2.5, color: 0xd8c0e8 },
     };
 }
 
