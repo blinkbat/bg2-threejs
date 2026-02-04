@@ -2,12 +2,14 @@
 // EDITOR CONSTANTS
 // =============================================================================
 
-import type { AreaId } from "../game/areas/types";
+import { getAllAreaIds } from "../game/areas";
 import type { EnemyType } from "../core/types";
 import type { CSSProperties } from "react";
 
-// Available areas for loading
-export const AREA_IDS: AreaId[] = ["dungeon", "forest", "coast", "ruins", "sanctum", "cliffs", "magma_cave"];
+// Available areas for loading (dynamically determined from txt files)
+export function getAvailableAreaIds(): string[] {
+    return getAllAreaIds();
+}
 
 // Available enemy types
 export const ENEMY_TYPES: EnemyType[] = [

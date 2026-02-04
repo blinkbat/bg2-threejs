@@ -11,13 +11,16 @@ export * from "./types";
 export { computeAreaData } from "./helpers";
 
 // All areas loaded from .txt files
-import { TEXT_AREAS } from "./textLoader";
+import { TEXT_AREAS, getAllAreaIds, hasArea, registerArea, registerAreaFromText, getTextArea } from "./textLoader";
 
 import type { AreaId, AreaData, ComputedAreaData } from "./types";
 import { computeAreaData } from "./helpers";
 
 // Registry of all areas
-export const AREAS: Record<AreaId, AreaData> = TEXT_AREAS;
+export const AREAS: Record<string, AreaData> = TEXT_AREAS;
+
+// Re-export dynamic area functions for editor use
+export { getAllAreaIds, hasArea, registerArea, registerAreaFromText, getTextArea };
 
 // =============================================================================
 // AREA STATE MANAGEMENT

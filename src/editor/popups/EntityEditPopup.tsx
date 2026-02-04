@@ -7,8 +7,9 @@ import type { AreaId } from "../../game/areas/types";
 import type { EnemyType } from "../../core/types";
 import type { EntityDef } from "../types";
 import { useClampedPosition } from "../hooks/useClampedPosition";
-import { AREA_IDS, ENEMY_TYPES, popupStyle, inputStyle, selectStyle, buttonStyle } from "../constants";
+import { getAvailableAreaIds, ENEMY_TYPES, popupStyle, inputStyle, selectStyle, buttonStyle } from "../constants";
 import { ITEMS, WEAPONS, SHIELDS, ARMORS, ACCESSORIES, KEYS, CONSUMABLES } from "../../game/items";
+import { AreaMinimap } from "../components";
 
 // Organized item categories for the picker
 const ITEM_CATEGORIES = [
@@ -26,9 +27,10 @@ interface EntityEditPopupProps {
     screenY: number;
     onSave: (e: EntityDef) => void;
     onClose: () => void;
+    onNavigate?: (areaId: string) => void;
 }
 
-export function EntityEditPopup({ entity, screenX, screenY, onSave, onClose }: EntityEditPopupProps) {
+export function EntityEditPopup({ entity, screenX, screenY, onSave, onClose, onNavigate }: EntityEditPopupProps) {
     const [draft, setDraft] = useState({ ...entity });
     const { popupRef, position } = useClampedPosition(screenX, screenY);
 
@@ -69,7 +71,7 @@ export function EntityEditPopup({ entity, screenX, screenY, onSave, onClose }: E
                             value={draft.transitionTarget || ""}
                             onChange={e => setDraft({ ...draft, transitionTarget: e.target.value as AreaId })}
                         >
-                            {AREA_IDS.map(id => <option key={id} value={id}>{id}</option>)}
+                            {getAvailableAreaIds().map((id: string) => <option key={id} value={id}>{id}</option>)}
                         </select>
                     </label>
                     <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
@@ -92,6 +94,20 @@ export function EntityEditPopup({ entity, screenX, screenY, onSave, onClose }: E
                             />
                         </label>
                     </div>
+                    {/* Visual spawn picker */}
+                    {draft.transitionTarget && (
+                        <div style={{ marginBottom: 10 }}>
+                            <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Click to set spawn point:</span>
+                            <AreaMinimap
+                                areaId={draft.transitionTarget}
+                                spawnX={draft.transitionSpawnX || 0}
+                                spawnZ={draft.transitionSpawnZ || 0}
+                                onSpawnChange={(x, z) => setDraft({ ...draft, transitionSpawnX: x, transitionSpawnZ: z })}
+                                width={248}
+                                height={180}
+                            />
+                        </div>
+                    )}
                     <label style={{ display: "block", marginBottom: 10 }}>
                         <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Direction</span>
                         <select
@@ -125,6 +141,14 @@ export function EntityEditPopup({ entity, screenX, screenY, onSave, onClose }: E
                             />
                         </label>
                     </div>
+                    {onNavigate && draft.transitionTarget && (
+                        <button
+                            style={{ ...buttonStyle, background: "#48f", color: "#fff", width: "100%", marginBottom: 10 }}
+                            onClick={() => onNavigate(draft.transitionTarget!)}
+                        >
+                            Go to {draft.transitionTarget}
+                        </button>
+                    )}
                 </>
             )}
 

@@ -165,7 +165,7 @@ function Game({
     // =============================================================================
 
     const [units, setUnits] = useState<Unit[]>(createUnitsForArea);
-    const [selectedIds, setSelectedIds] = useState<number[]>([]);
+    const [selectedIds, setSelectedIds] = useState<number[]>(() => Object.keys(UNIT_DATA).map(Number));
     const [selBox, setSelBox] = useState<SelectionBox | null>(null);
     const [showPanel, setShowPanel] = useState(false);
     const [combatLog, setCombatLog] = useState<CombatLogEntry[]>(() => [{ text: `The party enters ${getCurrentArea().name}.`, color: "#f59e0b" }]);

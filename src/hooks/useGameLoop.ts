@@ -365,7 +365,8 @@ export function useGameLoop({
                             shieldIndicators,
                             unitMeshes,
                             unitOriginalColors,
-                            maxHp
+                            maxHp,
+                            billboards
                         );
                         refs.paths[unit.id] = [];
                     }

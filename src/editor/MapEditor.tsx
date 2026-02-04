@@ -1,13 +1,16 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Link } from "react-router-dom";
+import Tippy from "@tippyjs/react";
 import type { AreaId, AreaData } from "../game/areas/types";
 import { AREAS } from "../game/areas";
 import { areaDataToText } from "./areaTextFormat";
 
 // Editor modules
 import type { Tool, Layer, MapMetadata, EntityDef, TreeDef, DecorationDef, EditorSnapshot } from "./types";
-import { AREA_IDS, BASE_CELL_SIZE, MAX_HISTORY } from "./constants";
+import { getAvailableAreaIds, BASE_CELL_SIZE, MAX_HISTORY } from "./constants";
+import { registerAreaFromText } from "../game/areas";
 import { EntityEditPopup, TreeEditPopup, DecorationEditPopup } from "./popups";
+import { ConnectionsPanel } from "./panels";
 
 // =============================================================================
 // COMPONENT
@@ -280,7 +283,48 @@ export function MapEditor() {
             );
         }
 
-    }, [geometryLayer, terrainLayer, floorLayer, propsLayer, entitiesLayer, metadata, showGrid, layerVisibility, activeLayer, CELL_SIZE, doorDrag]);
+        // Draw transition labels and arrows
+        if (layerVisibility.entities) {
+            for (const entity of entities) {
+                if (entity.type !== "transition") continue;
+
+                const x = entity.x;
+                const z = entity.z;
+                const w = entity.transitionW || 1;
+                const h = entity.transitionH || 1;
+                const target = entity.transitionTarget || "?";
+                const dir = entity.transitionDirection || "north";
+
+                // Center of the transition area
+                const centerX = (x + w / 2) * CELL_SIZE;
+                const centerZ = (z + h / 2) * CELL_SIZE;
+
+                // Draw direction arrow
+                ctx.save();
+                ctx.translate(centerX, centerZ);
+                const arrowRotation = { north: -Math.PI / 2, south: Math.PI / 2, east: 0, west: Math.PI }[dir];
+                ctx.rotate(arrowRotation);
+                ctx.fillStyle = "#fff";
+                ctx.beginPath();
+                ctx.moveTo(12, 0);
+                ctx.lineTo(4, -6);
+                ctx.lineTo(4, 6);
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+
+                // Draw target label above the transition
+                ctx.fillStyle = "#000";
+                ctx.fillRect(x * CELL_SIZE, z * CELL_SIZE - 16, w * CELL_SIZE, 14);
+                ctx.fillStyle = "#4cf";
+                ctx.font = "bold 10px sans-serif";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText(target, centerX, z * CELL_SIZE - 9);
+            }
+        }
+
+    }, [geometryLayer, terrainLayer, floorLayer, propsLayer, entitiesLayer, metadata, showGrid, layerVisibility, activeLayer, CELL_SIZE, doorDrag, entities]);
 
     function drawLayer(ctx: CanvasRenderingContext2D, layer: string[][], layerType: Layer) {
         for (let z = 0; z < layer.length; z++) {
@@ -420,7 +464,7 @@ export function MapEditor() {
                 if (activeBrush === "D") {
                     setEntities(prev => [...prev, {
                         id: entityId, x, z, type: "transition",
-                        transitionTarget: AREA_IDS[0], transitionSpawnX: 5, transitionSpawnZ: 5,
+                        transitionTarget: getAvailableAreaIds()[0], transitionSpawnX: 5, transitionSpawnZ: 5,
                         transitionDirection: "north", transitionW: 1, transitionH: 1
                     }]);
                 } else if (activeBrush === "L") {
@@ -520,7 +564,7 @@ export function MapEditor() {
                 const entityId = `e${Date.now()}-${minX}-${minZ}`;
                 setEntities(prev => [...prev, {
                     id: entityId, x: minX, z: minZ, type: "transition",
-                    transitionTarget: AREA_IDS[0], transitionSpawnX: 5, transitionSpawnZ: 5,
+                    transitionTarget: getAvailableAreaIds()[0], transitionSpawnX: 5, transitionSpawnZ: 5,
                     transitionDirection: "north", transitionW: w, transitionH: h
                 }]);
             }
@@ -538,8 +582,25 @@ export function MapEditor() {
 
         const { x, z } = transformMouseCoords(e.clientX, e.clientY, rect);
 
-        // Check for entity at this position
-        const entity = entities.find(ent => Math.floor(ent.x) === x && Math.floor(ent.z) === z);
+        // Check for entity at this position (including multi-tile entities like doors)
+        const entity = entities.find(ent => {
+            const ex = Math.floor(ent.x);
+            const ez = Math.floor(ent.z);
+            // For transitions with width/height, check if click is within bounds
+            if (ent.type === "transition") {
+                const w = ent.transitionW ?? 1;
+                const h = ent.transitionH ?? 1;
+                return x >= ex && x < ex + w && z >= ez && z < ez + h;
+            }
+            // For secret doors with blocking wall dimensions
+            if (ent.type === "secret_door") {
+                const w = ent.secretBlockW ?? 1;
+                const h = ent.secretBlockH ?? 1;
+                return x >= ex && x < ex + w && z >= ez && z < ez + h;
+            }
+            // Single-cell entities
+            return ex === x && ez === z;
+        });
         if (entity) {
             setEditingEntity({ entity, screenX: e.clientX, screenY: e.clientY });
             setEditingTree(null);
@@ -661,6 +722,41 @@ export function MapEditor() {
         setEntities(entityDefs);
     };
 
+    const createNewArea = () => {
+        const newId = `area_${Date.now()}`;
+        const width = 30;
+        const height = 20;
+
+        setMetadata({
+            id: newId,
+            name: "New Area",
+            flavor: "A mysterious place.",
+            width,
+            height,
+            background: "#1a1a2e",
+            ground: "#2a2a3e",
+            ambient: 0.4,
+            directional: 0.5,
+            fog: true,
+            spawnX: 3,
+            spawnZ: 10,
+        });
+
+        setGeometryLayer(createEmptyLayer(width, height, "."));
+        setTerrainLayer(createEmptyLayer(width, height, "."));
+        setFloorLayer(createEmptyLayer(width, height, "."));
+        setPropsLayer(createEmptyLayer(width, height, "."));
+        setEntitiesLayer(createEmptyLayer(width, height, "."));
+        setEntities([]);
+        setTrees([]);
+        setDecorations([]);
+
+        // Reset history for new area
+        historyRef.current = [];
+        historyIndexRef.current = -1;
+        pushHistory();
+    };
+
     // Load coast by default on mount
     useEffect(() => {
         loadArea("coast");
@@ -681,6 +777,8 @@ export function MapEditor() {
             });
             const data = await res.json();
             if (data.success) {
+                // Register the area so it's immediately available for loading/transitions
+                registerAreaFromText(metadata.id, content);
                 setSaveStatus("saved");
                 setTimeout(() => setSaveStatus("idle"), 2000);
             } else {
@@ -860,10 +958,26 @@ export function MapEditor() {
                         defaultValue=""
                     >
                         <option value="">-- Select area --</option>
-                        {AREA_IDS.map(id => (
+                        {getAvailableAreaIds().map((id: string) => (
                             <option key={id} value={id}>{id}</option>
                         ))}
                     </select>
+                    <button
+                        onClick={createNewArea}
+                        style={{
+                            width: "100%",
+                            marginTop: 8,
+                            padding: "8px 12px",
+                            fontSize: 14,
+                            background: "#4a9",
+                            color: "#fff",
+                            border: "none",
+                            borderRadius: 4,
+                            cursor: "pointer",
+                        }}
+                    >
+                        + New Area
+                    </button>
                 </div>
 
                 {/* Layer Selection */}
@@ -922,20 +1036,22 @@ export function MapEditor() {
                         ))}
                     </div>
                     <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                        <button
-                            onClick={undo}
-                            style={{ flex: 1, padding: 8, background: "#333", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", fontSize: 12 }}
-                            title="Undo (Ctrl+Z)"
-                        >
-                            Undo
-                        </button>
-                        <button
-                            onClick={redo}
-                            style={{ flex: 1, padding: 8, background: "#333", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", fontSize: 12 }}
-                            title="Redo (Ctrl+Y)"
-                        >
-                            Redo
-                        </button>
+                        <Tippy content="Undo (Ctrl+Z)" delay={0}>
+                            <button
+                                onClick={undo}
+                                style={{ flex: 1, padding: 8, background: "#333", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", fontSize: 12 }}
+                            >
+                                Undo
+                            </button>
+                        </Tippy>
+                        <Tippy content="Redo (Ctrl+Y)" delay={0}>
+                            <button
+                                onClick={redo}
+                                style={{ flex: 1, padding: 8, background: "#333", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", fontSize: 12 }}
+                            >
+                                Redo
+                            </button>
+                        </Tippy>
                     </div>
                     <div style={{ marginTop: 12 }}>
                         <span style={{ fontSize: 13 }}>Brush Size: {brushSize}x{brushSize}</span>
@@ -967,24 +1083,24 @@ export function MapEditor() {
                     <h3 style={{ margin: "0 0 12px", fontSize: 16 }}>Brush ({activeLayer})</h3>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                         {getBrushOptions().map(opt => (
-                            <button
-                                key={opt.char}
-                                onClick={() => setActiveBrush(opt.char)}
-                                title={opt.label}
-                                style={{
-                                    width: 48,
-                                    height: 48,
-                                    background: activeBrush === opt.char ? getCharColor(opt.char, activeLayer) : "#333",
-                                    color: "#fff",
-                                    border: activeBrush === opt.char ? "2px solid #fff" : "1px solid #555",
-                                    borderRadius: 6,
-                                    cursor: "pointer",
-                                    fontFamily: "monospace",
-                                    fontSize: 20,
-                                }}
-                            >
-                                {opt.char}
-                            </button>
+                            <Tippy key={opt.char} content={opt.label} delay={0}>
+                                <button
+                                    onClick={() => setActiveBrush(opt.char)}
+                                    style={{
+                                        width: 48,
+                                        height: 48,
+                                        background: activeBrush === opt.char ? getCharColor(opt.char, activeLayer) : "#333",
+                                        color: "#fff",
+                                        border: activeBrush === opt.char ? "2px solid #fff" : "1px solid #555",
+                                        borderRadius: 6,
+                                        cursor: "pointer",
+                                        fontFamily: "monospace",
+                                        fontSize: 20,
+                                    }}
+                                >
+                                    {opt.char}
+                                </button>
+                            </Tippy>
                         ))}
                     </div>
                 </div>
@@ -1061,6 +1177,10 @@ export function MapEditor() {
                         screenY={editingEntity.screenY}
                         onSave={updateEntity}
                         onClose={() => setEditingEntity(null)}
+                        onNavigate={(areaId) => {
+                            setEditingEntity(null);
+                            loadArea(areaId);
+                        }}
                     />
                 )}
 
@@ -1217,6 +1337,18 @@ export function MapEditor() {
                             style={{ padding: 8, fontSize: 14, background: "#333", border: "1px solid #555", borderRadius: 4, color: "#fff" }}
                         />
                     </label>
+                </div>
+
+                {/* Connections Panel */}
+                <div style={{ borderTop: "1px solid #444", paddingTop: 16, marginTop: 8 }}>
+                    <ConnectionsPanel
+                        currentAreaId={metadata.id}
+                        entities={entities}
+                        onEditTransition={(entity, screenX, screenY) => {
+                            setEditingEntity({ entity, screenX, screenY });
+                        }}
+                        onNavigate={loadArea}
+                    />
                 </div>
             </div>
         </div>

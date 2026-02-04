@@ -1,31 +1,47 @@
 // =============================================================================
-// TEXT MAP LOADER - Loads and parses text-based area definitions
+// TEXT MAP LOADER - Dynamically loads all text-based area definitions
 // =============================================================================
 
 import { textToAreaData } from "../../editor/areaTextFormat";
 import type { AreaData, AreaId } from "./types";
 
-// Import all text maps using Vite's ?raw suffix
-import cliffsText from "./maps/cliffs.txt?raw";
-import dungeonText from "./maps/dungeon.txt?raw";
-import forestText from "./maps/forest.txt?raw";
-import coastText from "./maps/coast.txt?raw";
-import ruinsText from "./maps/ruins.txt?raw";
-import sanctumText from "./maps/sanctum.txt?raw";
-import magmaCaveText from "./maps/magma_cave.txt?raw";
+// Dynamically import all .txt files from the maps directory
+const textFiles = import.meta.glob("./maps/*.txt", { eager: true, query: "?raw", import: "default" }) as Record<string, string>;
 
-// Parse all text maps into AreaData
-export const TEXT_AREAS: Record<AreaId, AreaData> = {
-    cliffs: textToAreaData(cliffsText),
-    dungeon: textToAreaData(dungeonText),
-    forest: textToAreaData(forestText),
-    coast: textToAreaData(coastText),
-    ruins: textToAreaData(ruinsText),
-    sanctum: textToAreaData(sanctumText),
-    magma_cave: textToAreaData(magmaCaveText),
-};
+// Parse all text maps into AreaData, keyed by their area ID from the file content
+const areaMap = new Map<string, AreaData>();
+
+for (const [_path, content] of Object.entries(textFiles)) {
+    const areaData = textToAreaData(content);
+    areaMap.set(areaData.id, areaData);
+}
+
+// Export as a Record for backwards compatibility
+export const TEXT_AREAS: Record<string, AreaData> = Object.fromEntries(areaMap);
+
+// Get all available area IDs (dynamically determined from loaded files)
+export function getAllAreaIds(): string[] {
+    return Array.from(areaMap.keys());
+}
 
 // Get text area by ID
-export function getTextArea(areaId: AreaId): AreaData {
-    return TEXT_AREAS[areaId];
+export function getTextArea(areaId: AreaId): AreaData | undefined {
+    return areaMap.get(areaId);
+}
+
+// Check if an area exists
+export function hasArea(areaId: string): boolean {
+    return areaMap.has(areaId);
+}
+
+// Register a new area at runtime (for editor use)
+export function registerArea(areaId: string, areaData: AreaData): void {
+    areaMap.set(areaId, areaData);
+}
+
+// Register area from text content (for editor save)
+export function registerAreaFromText(areaId: string, textContent: string): AreaData {
+    const areaData = textToAreaData(textContent);
+    areaMap.set(areaId, areaData);
+    return areaData;
 }

@@ -932,7 +932,7 @@ html, body, #root {
 
 /* Tippy theme overrides */
 .tippy-box {
-    background: #1a1a2a;
+    background: #000;
     border: 1px solid #333;
     font-family: monospace;
     z-index: 99999 !important;
@@ -943,7 +943,7 @@ html, body, #root {
 }
 
 .tippy-arrow {
-    color: #1a1a2a;
+    color: #000;
 }
 
 .tippy-box[data-placement^='left'] > .tippy-arrow::before {

@@ -4,7 +4,11 @@
 
 import type { CandlePosition, MergedObstacle, EnemyType } from "../../core/types";
 
-export type AreaId = "dungeon" | "forest" | "coast" | "ruins" | "sanctum" | "cliffs" | "magma_cave";
+// Built-in areas (for autocomplete)
+export type BuiltInAreaId = "dungeon" | "forest" | "coast" | "ruins" | "sanctum" | "cliffs" | "magma_cave";
+
+// AreaId allows any string (for custom areas) while preserving autocomplete for built-in ones
+export type AreaId = BuiltInAreaId | (string & {});
 
 // Default game start configuration - single source of truth
 export const DEFAULT_STARTING_AREA: AreaId = "coast";

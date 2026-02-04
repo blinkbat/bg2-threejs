@@ -14,6 +14,13 @@ import paladinSpriteUrl from "../../assets/paladin.png";
 import thiefSpriteUrl from "../../assets/thief.png";
 import monkSpriteUrl from "../../assets/monk.png";
 
+// Import enemy sprite textures
+import vampireBatSpriteUrl from "../../assets/vampire-bat.png";
+import acidSlugSpriteUrl from "../../assets/acid-slug.png";
+import amoebaLgSpriteUrl from "../../assets/amoeba-lg.png";
+import amoebaMdSpriteUrl from "../../assets/amoeba-md.png";
+import amoebaSmSpriteUrl from "../../assets/amoeba-sm.png";
+
 // =============================================================================
 // HELPERS
 // =============================================================================
@@ -41,6 +48,11 @@ let clericTexture: THREE.Texture;
 let paladinTexture: THREE.Texture;
 let thiefTexture: THREE.Texture;
 let monkTexture: THREE.Texture;
+let vampireBatTexture: THREE.Texture;
+let acidSlugTexture: THREE.Texture;
+let amoebaLgTexture: THREE.Texture;
+let amoebaMdTexture: THREE.Texture;
+let amoebaSmTexture: THREE.Texture;
 
 function ensureTexturesLoaded(): void {
     if (texturesLoaded) return;
@@ -69,6 +81,26 @@ function ensureTexturesLoaded(): void {
     monkTexture.magFilter = THREE.NearestFilter;
     monkTexture.minFilter = THREE.NearestFilter;
 
+    vampireBatTexture = new THREE.TextureLoader().load(vampireBatSpriteUrl);
+    vampireBatTexture.magFilter = THREE.NearestFilter;
+    vampireBatTexture.minFilter = THREE.NearestFilter;
+
+    acidSlugTexture = new THREE.TextureLoader().load(acidSlugSpriteUrl);
+    acidSlugTexture.magFilter = THREE.NearestFilter;
+    acidSlugTexture.minFilter = THREE.NearestFilter;
+
+    amoebaLgTexture = new THREE.TextureLoader().load(amoebaLgSpriteUrl);
+    amoebaLgTexture.magFilter = THREE.NearestFilter;
+    amoebaLgTexture.minFilter = THREE.NearestFilter;
+
+    amoebaMdTexture = new THREE.TextureLoader().load(amoebaMdSpriteUrl);
+    amoebaMdTexture.magFilter = THREE.NearestFilter;
+    amoebaMdTexture.minFilter = THREE.NearestFilter;
+
+    amoebaSmTexture = new THREE.TextureLoader().load(amoebaSmSpriteUrl);
+    amoebaSmTexture.magFilter = THREE.NearestFilter;
+    amoebaSmTexture.minFilter = THREE.NearestFilter;
+
     texturesLoaded = true;
 }
 
@@ -77,19 +109,34 @@ interface SpriteConfig {
     width: number;
     height: number;
     offsetX?: number;
+    offsetY?: number;       // Vertical offset (negative = lower on shadow)
     color?: number;
-    emissive?: number;
+    spriteHeight?: number;  // Override default 1.8 sprite height
+    brightness?: number;    // Emissive boost for dark textures (0-1)
+    shadowSize?: number;    // Override shadow radius
+    opacity?: number;       // Transparency (0-1, default 1)
 }
 
 function getSpriteConfigs(): Record<number, SpriteConfig> {
     ensureTexturesLoaded();
     return {
-        1: { texture: barbarianTexture, width: 157, height: 195, offsetX: -0.1, emissive: 0.07 },  // Barbarian
+        1: { texture: barbarianTexture, width: 157, height: 195, offsetX: -0.1 },  // Barbarian
         2: { texture: paladinTexture, width: 128, height: 196 },    // Paladin
-        3: { texture: thiefTexture, width: 128, height: 196, offsetX: 0.1, emissive: 0.07 },  // Thief
-        4: { texture: wizardTexture, width: 110, height: 196, emissive: 0.05 },     // Wizard
+        3: { texture: thiefTexture, width: 128, height: 196, offsetX: 0.1 },  // Thief
+        4: { texture: wizardTexture, width: 110, height: 196 },     // Wizard
         5: { texture: monkTexture, width: 128, height: 196, offsetX: -0.1 },       // Monk
         6: { texture: clericTexture, width: 128, height: 196, color: 0xcccccc },   // Cleric (slightly darker)
+    };
+}
+
+function getEnemySpriteConfigs(): Record<string, SpriteConfig> {
+    ensureTexturesLoaded();
+    return {
+        bat: { texture: vampireBatTexture, width: 128, height: 128, spriteHeight: 1.4, color: 0xd2b48c, brightness: 0.2 },
+        acid_slug: { texture: acidSlugTexture, width: 160, height: 128, spriteHeight: 1.4, brightness: 0.15, offsetY: -0.3, shadowSize: 0.6 },
+        giant_amoeba_lg: { texture: amoebaLgTexture, width: 128, height: 128, spriteHeight: 2.4, opacity: 0.7 },
+        giant_amoeba_md: { texture: amoebaMdTexture, width: 128, height: 128, spriteHeight: 1.7, opacity: 0.7 },
+        giant_amoeba_sm: { texture: amoebaSmTexture, width: 128, height: 128, spriteHeight: 1.2, opacity: 0.7 },
     };
 }
 
@@ -125,29 +172,39 @@ export function createUnitSceneGroup(
     const isAmoeba = unit.enemyType === "giant_amoeba";
 
     const spriteConfigs = getSpriteConfigs();
-    const spriteConfig = spriteConfigs[unit.id];
+    const enemySpriteConfigs = getEnemySpriteConfigs();
+    // For amoebas, select sprite based on split count: lg for largest, md for medium, sm for smallest
+    let enemySpriteKey: string | undefined = unit.enemyType;
+    if (unit.enemyType === "giant_amoeba") {
+        const splitCount = unit.splitCount ?? 0;
+        if (splitCount === 0) enemySpriteKey = "giant_amoeba_lg";
+        else if (splitCount === 1) enemySpriteKey = "giant_amoeba_md";
+        else enemySpriteKey = "giant_amoeba_sm";
+    }
+    const spriteConfig = spriteConfigs[unit.id] || (enemySpriteKey ? enemySpriteConfigs[enemySpriteKey] : undefined);
 
     let unitMesh: THREE.Mesh;
     let billboard: THREE.Mesh | undefined;
 
     if (spriteConfig) {
-        // Player billboard plane that faces the camera and responds to lighting
-        const spriteHeight = 1.8;
+        // Billboard plane that faces the camera and responds to lighting
+        const spriteHeight = spriteConfig.spriteHeight ?? 1.8;
         const spriteWidth = spriteHeight * (spriteConfig.width / spriteConfig.height);
         const planeMat = new THREE.MeshStandardMaterial({
             map: spriteConfig.texture,
             color: spriteConfig.color ?? 0xffffff,
             transparent: true,
-            alphaTest: 0.5,
+            alphaTest: spriteConfig.opacity !== undefined ? 0.1 : 0.5,
+            opacity: spriteConfig.opacity ?? 1,
             side: THREE.DoubleSide,
-            metalness: 0,
-            roughness: 1,
-            emissive: 0xffffff,
-            emissiveIntensity: spriteConfig.emissive ?? 0,
-            emissiveMap: spriteConfig.emissive ? spriteConfig.texture : undefined
+            metalness: 0.3,
+            roughness: 0.6,
+            emissive: spriteConfig.brightness ? (spriteConfig.color ?? 0xffffff) : undefined,
+            emissiveIntensity: spriteConfig.brightness ?? 0,
+            emissiveMap: spriteConfig.brightness ? spriteConfig.texture : undefined,
         });
         const plane = new THREE.Mesh(new THREE.PlaneGeometry(spriteWidth, spriteHeight), planeMat);
-        plane.position.y = spriteHeight / 2;
+        plane.position.y = spriteHeight / 2 + (spriteConfig.offsetY ?? 0);
         plane.position.x = spriteConfig.offsetX ?? 0;
         plane.userData.unitId = unit.id;
         plane.userData.isBillboard = true;
@@ -189,7 +246,7 @@ export function createUnitSceneGroup(
 
     // Unit shadow - simple dark circle under unit
     // For flying units, offset shadow down so it stays on the ground
-    const shadowRadius = boxW * 0.6;
+    const shadowRadius = spriteConfig?.shadowSize ?? boxW * 0.6;
     const shadow = new THREE.Mesh(
         new THREE.CircleGeometry(shadowRadius, 16),
         new THREE.MeshBasicMaterial({ color: "#000000", transparent: true, opacity: 0.3, side: THREE.DoubleSide })
@@ -281,7 +338,8 @@ export function addUnitToScene(
     shieldIndicators: Record<number, THREE.Mesh>,
     unitMeshes: Record<number, THREE.Mesh>,
     unitOriginalColors: Record<number, THREE.Color>,
-    maxHp: Record<number, number>
+    maxHp: Record<number, number>,
+    billboards?: THREE.Mesh[]
 ): void {
     const isPlayer = unit.team === "player";
     const data = getUnitStats(unit);
@@ -294,8 +352,44 @@ export function addUnitToScene(
     const isAmoeba = unit.enemyType === "giant_amoeba";
     const isTentacle = unit.enemyType === "kraken_tentacle";
 
+    // Check for sprite config (for amoebas, select based on split count)
+    const enemySpriteConfigs = getEnemySpriteConfigs();
+    let enemySpriteKey: string | undefined = unit.enemyType;
+    if (unit.enemyType === "giant_amoeba") {
+        const splitCount = unit.splitCount ?? 0;
+        if (splitCount === 0) enemySpriteKey = "giant_amoeba_lg";
+        else if (splitCount === 1) enemySpriteKey = "giant_amoeba_md";
+        else enemySpriteKey = "giant_amoeba_sm";
+    }
+    const spriteConfig = enemySpriteKey ? enemySpriteConfigs[enemySpriteKey] : undefined;
+
     let unitMesh: THREE.Mesh;
-    if (isTentacle) {
+    if (spriteConfig && billboards) {
+        // Billboard sprite
+        const spriteHeight = spriteConfig.spriteHeight ?? 1.8;
+        const spriteWidth = spriteHeight * (spriteConfig.width / spriteConfig.height);
+        const planeMat = new THREE.MeshStandardMaterial({
+            map: spriteConfig.texture,
+            color: spriteConfig.color ?? 0xffffff,
+            transparent: true,
+            alphaTest: spriteConfig.opacity !== undefined ? 0.1 : 0.5,
+            opacity: spriteConfig.opacity ?? 1,
+            side: THREE.DoubleSide,
+            metalness: 0.3,
+            roughness: 0.6,
+            emissive: spriteConfig.brightness ? (spriteConfig.color ?? 0xffffff) : undefined,
+            emissiveIntensity: spriteConfig.brightness ?? 0,
+            emissiveMap: spriteConfig.brightness ? spriteConfig.texture : undefined,
+        });
+        const plane = new THREE.Mesh(new THREE.PlaneGeometry(spriteWidth, spriteHeight), planeMat);
+        plane.position.y = spriteHeight / 2 + (spriteConfig.offsetY ?? 0);
+        plane.position.x = spriteConfig.offsetX ?? 0;
+        plane.userData.unitId = unit.id;
+        plane.userData.isBillboard = true;
+        group.add(plane);
+        billboards.push(plane);
+        unitMesh = plane;
+    } else if (isTentacle) {
         // Tentacles use cone geometry (pointing up)
         const coneMat = new THREE.MeshStandardMaterial({
             color: data.color,
@@ -330,7 +424,7 @@ export function addUnitToScene(
 
     // Unit shadow - simple dark circle under unit
     // For flying units, offset shadow down so it stays on the ground
-    const shadowRadius = boxW * 0.6;
+    const shadowRadius = spriteConfig?.shadowSize ?? boxW * 0.6;
     const shadow = new THREE.Mesh(
         new THREE.CircleGeometry(shadowRadius, 16),
         new THREE.MeshBasicMaterial({ color: "#000000", transparent: true, opacity: 0.3, side: THREE.DoubleSide })

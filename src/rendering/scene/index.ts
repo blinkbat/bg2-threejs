@@ -128,6 +128,32 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         }
     }
 
+    // Render lava from terrain layer (~ = lava)
+    if (area.terrain && area.terrain.length > 0) {
+        const lavaMat = new THREE.MeshStandardMaterial({
+            color: "#ff4400",
+            emissive: "#ff2200",
+            emissiveIntensity: 0.8,
+            metalness: 0.4,
+            roughness: 0.3,
+        });
+        for (let z = 0; z < area.terrain.length; z++) {
+            for (let x = 0; x < (area.terrain[z]?.length ?? 0); x++) {
+                const char = area.terrain[z][x];
+                if (char === "~") {
+                    const tile = new THREE.Mesh(
+                        new THREE.PlaneGeometry(1, 1),
+                        lavaMat
+                    );
+                    tile.rotation.x = -Math.PI / 2;
+                    tile.position.set(x + 0.5, 0.002, z + 0.5);
+                    tile.name = "lava";
+                    scene.add(tile);
+                }
+            }
+        }
+    }
+
     // Torches with flames and lights (only in areas with candles)
     // PERF OPTIMIZATION: Use 1 light per room instead of per-candle (~72 -> ~9 lights)
     const flames: THREE.Mesh[] = [];
@@ -160,7 +186,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         // Create one light per candle cluster (every 4th candle to reduce light count)
         if (index % 4 === 0) {
             const light = new THREE.PointLight("#ffaa44", 12, 8, 1.5);
-            light.position.set(pos.x, 2.5, pos.z);
+            light.position.set(pos.x + pos.dx * 0.3, 2.5, pos.z + pos.dz * 0.3);
             scene.add(light);
             candleLights.push(light);
         }

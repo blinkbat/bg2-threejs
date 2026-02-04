@@ -1,0 +1,1 @@
+export { AreaMinimap } from "./AreaMinimap";
