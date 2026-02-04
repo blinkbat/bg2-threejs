@@ -7,7 +7,7 @@ import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import * as THREE from "three";
 
 // Constants & Types
-import { GRID_SIZE, setDebugSpeedMultiplier } from "./core/constants";
+import { setDebugSpeedMultiplier } from "./core/constants";
 import type { Unit, Skill, CombatLogEntry, SelectionBox, CharacterStats } from "./core/types";
 
 // Game Logic
@@ -527,8 +527,9 @@ function Game({
         if (debug) {
             const group = new THREE.Group();
             group.name = "debugGrid";
-            for (let x = 0; x <= GRID_SIZE; x += 5) {
-                for (let z = 0; z <= GRID_SIZE; z += 5) {
+            const area = getCurrentArea();
+            for (let x = 0; x <= area.gridWidth; x += 5) {
+                for (let z = 0; z <= area.gridHeight; z += 5) {
                     const marker = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
                     marker.position.set(x, 0.2, z);
                     group.add(marker);

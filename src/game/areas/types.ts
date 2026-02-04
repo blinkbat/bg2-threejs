@@ -77,7 +77,9 @@ export interface AreaData {
     id: AreaId;
     name: string;
     flavor: string;              // Short atmospheric description
-    gridSize: number;
+    gridSize: number;            // Deprecated: use gridWidth/gridHeight
+    gridWidth: number;
+    gridHeight: number;
     backgroundColor: string;
     groundColor: string;
     geometry: string[][];        // Raw geometry grid (# = wall, . = floor, ^v<> = doors)

@@ -5,7 +5,6 @@
 
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
-import { GRID_SIZE } from "../core/constants";
 import type { Unit, Skill, UnitGroup, SelectionBox } from "../core/types";
 import type { SecretDoorMesh } from "../rendering/scene";
 import type { LootBag } from "../core/types";
@@ -186,8 +185,9 @@ export function useInputHandlers({
                 if (dx !== 0 || dy !== 0) mutableRefs.didPan.current = true;
                 gameRefs.current.cameraOffset.x -= (dx + dy) * 0.03;
                 gameRefs.current.cameraOffset.z -= (dy - dx) * 0.03;
-                gameRefs.current.cameraOffset.x = Math.max(0, Math.min(GRID_SIZE, gameRefs.current.cameraOffset.x));
-                gameRefs.current.cameraOffset.z = Math.max(0, Math.min(GRID_SIZE, gameRefs.current.cameraOffset.z));
+                const area = getCurrentArea();
+                gameRefs.current.cameraOffset.x = Math.max(0, Math.min(area.gridWidth, gameRefs.current.cameraOffset.x));
+                gameRefs.current.cameraOffset.z = Math.max(0, Math.min(area.gridHeight, gameRefs.current.cameraOffset.z));
                 mutableRefs.lastMouse.current = { x: e.clientX, y: e.clientY };
                 updateCam();
             } else if (mutableRefs.isBoxSel.current) {

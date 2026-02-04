@@ -5,7 +5,7 @@
 
 import { useRef, useEffect, useState } from "react";
 import * as THREE from "three";
-import { GRID_SIZE } from "../core/constants";
+import { getCurrentArea } from "../game/areas";
 import type { Unit, FogTexture, Projectile, SwingAnimation, DamageText, UnitGroup, SanctuaryTile } from "../core/types";
 import type { AcidTile, LootBag } from "../core/types";
 import { createScene, updateChestStates, updateCamera, type DoorMesh, type SecretDoorMesh, type ChestMeshData } from "../rendering/scene";
@@ -151,7 +151,7 @@ export function useThreeScene({
         swingAnimations: [],
         damageTexts: [],
         paths: {},
-        visibility: Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(0)),
+        visibility: Array(getCurrentArea().gridWidth).fill(null).map(() => Array(getCurrentArea().gridHeight).fill(0)),
         acidTiles: new Map(),
         sanctuaryTiles: new Map(),
         lootBags: [],

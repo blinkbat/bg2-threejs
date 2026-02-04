@@ -2,7 +2,7 @@
 // GEOMETRY UTILITIES - Common spatial calculations
 // =============================================================================
 
-import { GRID_SIZE } from "../core/constants";
+import { getCurrentArea } from "./areas";
 
 /** Position with x and z coordinates (compatible with THREE.Vector3, UnitGroup.position) */
 export interface Position2D {
@@ -42,14 +42,17 @@ export function isWithinDistance(x1: number, z1: number, x2: number, z2: number,
  * Check if coordinates are within the grid bounds.
  */
 export function isWithinGrid(x: number, z: number): boolean {
-    return x >= 0 && x < GRID_SIZE && z >= 0 && z < GRID_SIZE;
+    const area = getCurrentArea();
+    return x >= 0 && x < area.gridWidth && z >= 0 && z < area.gridHeight;
 }
 
 /**
  * Clamp a value to grid bounds (with padding for unit centers).
  */
-export function clampToGrid(value: number, padding: number = 0.5): number {
-    return Math.max(padding, Math.min(GRID_SIZE - padding, value));
+export function clampToGrid(value: number, padding: number = 0.5, axis: "x" | "z" = "x"): number {
+    const area = getCurrentArea();
+    const max = axis === "x" ? area.gridWidth : area.gridHeight;
+    return Math.max(padding, Math.min(max - padding, value));
 }
 
 /**

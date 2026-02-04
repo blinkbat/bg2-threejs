@@ -654,8 +654,8 @@ export function MapEditor() {
             id: area.id,
             name: area.name,
             flavor: area.flavor,
-            width: area.gridSize,
-            height: area.gridSize,
+            width: area.gridWidth,
+            height: area.gridHeight,
             background: area.backgroundColor,
             ground: area.groundColor,
             ambient: area.ambientLight,
@@ -665,8 +665,6 @@ export function MapEditor() {
             spawnZ: area.defaultSpawn.z,
         });
 
-        const size = area.gridSize;
-
         // Use geometry, terrain, and floor directly from area data
         setGeometryLayer(area.geometry.map(row => [...row]));
         setTerrainLayer(area.terrain.map(row => [...row]));
@@ -674,15 +672,15 @@ export function MapEditor() {
         if (area.floor && area.floor.length > 0) {
             setFloorLayer(area.floor.map(row => [...row]));
         } else {
-            setFloorLayer(createEmptyLayer(size, size, "."));
+            setFloorLayer(createEmptyLayer(area.gridWidth, area.gridHeight, "."));
         }
 
         // Compute props layer from trees and decorations
-        const newProps = computePropsFromArea(area, size);
+        const newProps = computePropsFromArea(area, area.gridWidth, area.gridHeight);
         setPropsLayer(newProps);
 
         // Compute entities layer from enemies, chests, transitions
-        const newEntities = computeEntitiesFromArea(area, size);
+        const newEntities = computeEntitiesFromArea(area, area.gridWidth, area.gridHeight);
         setEntitiesLayer(newEntities);
 
         // Store detailed data that can't be shown in grid
@@ -856,7 +854,9 @@ export function MapEditor() {
             id: metadata.id as AreaId,
             name: metadata.name,
             flavor: metadata.flavor,
-            gridSize: metadata.width,
+            gridSize: Math.max(metadata.width, metadata.height),
+            gridWidth: metadata.width,
+            gridHeight: metadata.height,
             backgroundColor: metadata.background,
             groundColor: metadata.ground,
             ambientLight: metadata.ambient,
@@ -1385,14 +1385,14 @@ function resizeLayer(layer: string[][], newWidth: number, newHeight: number, fil
 
 import type { EnemySpawn, AreaTransition, ChestLocation, TreeLocation, Decoration } from "../game/areas/types";
 
-function computePropsFromArea(area: AreaData, size: number): string[][] {
-    const grid: string[][] = Array.from({ length: size }, () => Array(size).fill("."));
+function computePropsFromArea(area: AreaData, width: number, height: number): string[][] {
+    const grid: string[][] = Array.from({ length: height }, () => Array(width).fill("."));
 
     // Trees
     for (const tree of area.trees) {
         const x = Math.floor(tree.x);
         const z = Math.floor(tree.z);
-        if (x >= 0 && x < size && z >= 0 && z < size) grid[z][x] = "T";
+        if (x >= 0 && x < width && z >= 0 && z < height) grid[z][x] = "T";
     }
 
     // Decorations
@@ -1400,7 +1400,7 @@ function computePropsFromArea(area: AreaData, size: number): string[][] {
         for (const dec of area.decorations) {
             const x = Math.floor(dec.x);
             const z = Math.floor(dec.z);
-            if (x >= 0 && x < size && z >= 0 && z < size) {
+            if (x >= 0 && x < width && z >= 0 && z < height) {
                 if (dec.type === "column") grid[z][x] = "C";
                 else if (dec.type === "broken_column") grid[z][x] = "c";
                 else if (dec.type === "broken_wall") grid[z][x] = "W";
@@ -1419,26 +1419,26 @@ function computePropsFromArea(area: AreaData, size: number): string[][] {
     return grid;
 }
 
-function computeEntitiesFromArea(area: AreaData, size: number): string[][] {
-    const grid: string[][] = Array.from({ length: size }, () => Array(size).fill("."));
+function computeEntitiesFromArea(area: AreaData, width: number, height: number): string[][] {
+    const grid: string[][] = Array.from({ length: height }, () => Array(width).fill("."));
 
     // Spawn point
     const sx = Math.floor(area.defaultSpawn.x);
     const sz = Math.floor(area.defaultSpawn.z);
-    if (sx >= 0 && sx < size && sz >= 0 && sz < size) grid[sz][sx] = "@";
+    if (sx >= 0 && sx < width && sz >= 0 && sz < height) grid[sz][sx] = "@";
 
     // Enemies
     for (const enemy of area.enemySpawns) {
         const x = Math.floor(enemy.x);
         const z = Math.floor(enemy.z);
-        if (x >= 0 && x < size && z >= 0 && z < size) grid[z][x] = "E";
+        if (x >= 0 && x < width && z >= 0 && z < height) grid[z][x] = "E";
     }
 
     // Chests
     for (const chest of area.chests) {
         const x = Math.floor(chest.x);
         const z = Math.floor(chest.z);
-        if (x >= 0 && x < size && z >= 0 && z < size) grid[z][x] = "X";
+        if (x >= 0 && x < width && z >= 0 && z < height) grid[z][x] = "X";
     }
 
     // Transitions (doors) - fill entire door area for multi-tile doors
@@ -1449,7 +1449,7 @@ function computeEntitiesFromArea(area: AreaData, size: number): string[][] {
             for (let dx = 0; dx < trans.w; dx++) {
                 const x = startX + dx;
                 const z = startZ + dz;
-                if (x >= 0 && x < size && z >= 0 && z < size) grid[z][x] = "D";
+                if (x >= 0 && x < width && z >= 0 && z < height) grid[z][x] = "D";
             }
         }
     }
@@ -1459,7 +1459,7 @@ function computeEntitiesFromArea(area: AreaData, size: number): string[][] {
         for (const candle of area.candles) {
             const x = Math.floor(candle.x);
             const z = Math.floor(candle.z);
-            if (x >= 0 && x < size && z >= 0 && z < size) grid[z][x] = "L";
+            if (x >= 0 && x < width && z >= 0 && z < height) grid[z][x] = "L";
         }
     }
 
@@ -1468,7 +1468,7 @@ function computeEntitiesFromArea(area: AreaData, size: number): string[][] {
         for (const sd of area.secretDoors) {
             const x = Math.floor(sd.x);
             const z = Math.floor(sd.z);
-            if (x >= 0 && x < size && z >= 0 && z < size) grid[z][x] = "S";
+            if (x >= 0 && x < width && z >= 0 && z < height) grid[z][x] = "S";
         }
     }
 

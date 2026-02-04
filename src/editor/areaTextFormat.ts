@@ -85,13 +85,12 @@ interface ParsedArea {
 
 export function areaDataToText(area: AreaData): string {
     const lines: string[] = [];
-    const size = area.gridSize;
 
     // Metadata
     lines.push(`=== AREA: ${area.id} ===`);
     lines.push(`name: ${area.name}`);
     lines.push(`flavor: ${area.flavor}`);
-    lines.push(`size: ${size}x${size}`);
+    lines.push(`size: ${area.gridWidth}x${area.gridHeight}`);
     lines.push(`background: ${area.backgroundColor}`);
     lines.push(`ground: ${area.groundColor}`);
     lines.push(`ambient: ${area.ambientLight}`);
@@ -460,7 +459,9 @@ function convertParsedToAreaData(parsed: ParsedArea): AreaData {
         id: parsed.metadata.id,
         name: parsed.metadata.name,
         flavor: parsed.metadata.flavor,
-        gridSize: parsed.metadata.width,
+        gridSize: Math.max(parsed.metadata.width, parsed.metadata.height),
+        gridWidth: parsed.metadata.width,
+        gridHeight: parsed.metadata.height,
         backgroundColor: parsed.metadata.background,
         groundColor: parsed.metadata.ground,
         ambientLight: parsed.metadata.ambient,

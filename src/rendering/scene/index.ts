@@ -3,7 +3,7 @@
 // =============================================================================
 
 import * as THREE from "three";
-import { GRID_SIZE, FOG_SCALE } from "../../core/constants";
+import { FOG_SCALE } from "../../core/constants";
 import { getCurrentArea, getComputedAreaData } from "../../game/areas";
 import { getUnitStats } from "../../game/units";
 import type { Unit, UnitGroup, FogTexture } from "../../core/types";
@@ -32,7 +32,7 @@ import { createUnitSceneGroup } from "./units";
 // =============================================================================
 
 /**
- * Create a MeshStandardMaterial with rounded corners using onBeforeCompile
+ * Create a MeshStandardMaterial with rounded outer corners using onBeforeCompile
  * This preserves all standard lighting while adding corner rounding
  */
 function createRoundedFloorMaterial(
@@ -78,7 +78,7 @@ function createRoundedFloorMaterial(
             "#include <map_fragment>",
             `#include <map_fragment>
 
-            // Rounded corner discard
+            // Rounded corner discard (outer/convex corners)
             vec2 p = vRoundUv;
             float r = uRadius;
 
@@ -206,11 +206,11 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     // Ground - base layer for non-room areas (corridors, etc)
     const groundMat = new THREE.MeshStandardMaterial({ color: area.groundColor, metalness: 0.2, roughness: 0.9 });
     const ground = new THREE.Mesh(
-        new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE),
+        new THREE.PlaneGeometry(area.gridWidth, area.gridHeight),
         groundMat
     );
     ground.rotation.x = -Math.PI / 2;
-    ground.position.set(GRID_SIZE / 2, 0, GRID_SIZE / 2);
+    ground.position.set(area.gridWidth / 2, 0, area.gridHeight / 2);
     ground.name = "ground";
     scene.add(ground);
 
@@ -242,24 +242,32 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 const color = floorColors[char] ?? "#555555";
                 const isWater = char === "w" || char === "W";
 
-                // Get corner flags based on neighbors
-                const corners = getFloorCornerFlags(area.floor, x, z);
-                const hasRounding = corners.some(c => c > 0);
-
                 let tile: THREE.Mesh;
 
-                if (hasRounding && !isWater) {
-                    // Use rounded material that extends MeshStandardMaterial
-                    const roundedMat = createRoundedFloorMaterial(color, corners, 0.3);
-                    tile = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), roundedMat);
-                } else {
-                    // Use standard material for non-rounded tiles or water
+                if (isWater) {
+                    // Water tiles - no rounding
                     const floorMat = new THREE.MeshStandardMaterial({
                         color,
-                        metalness: isWater ? 0.3 : 0.2,
-                        roughness: isWater ? 0.4 : 0.9,
+                        metalness: 0.3,
+                        roughness: 0.4,
                     });
                     tile = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), floorMat);
+                } else {
+                    // Land gets outer corner rounding at edges
+                    const corners = getFloorCornerFlags(area.floor, x, z);
+                    const hasRounding = corners.some(c => c > 0);
+
+                    if (hasRounding) {
+                        const roundedMat = createRoundedFloorMaterial(color, corners, 0.3);
+                        tile = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), roundedMat);
+                    } else {
+                        const floorMat = new THREE.MeshStandardMaterial({
+                            color,
+                            metalness: 0.2,
+                            roughness: 0.9,
+                        });
+                        tile = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), floorMat);
+                    }
                 }
 
                 tile.rotation.x = -Math.PI / 2;
@@ -928,29 +936,33 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     const gridColor = area.id === "forest" ? "#1a3a1a" : "#444444";
     const gridOpacity = area.id === "forest" ? 0.35 : 0.25;
     const gridMat = new THREE.LineBasicMaterial({ color: gridColor, transparent: true, opacity: gridOpacity });
-    for (let i = 0; i <= GRID_SIZE; i++) {
-        scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.002, i), new THREE.Vector3(GRID_SIZE, 0.002, i)]), gridMat));
-        scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(i, 0.002, 0), new THREE.Vector3(i, 0.002, GRID_SIZE)]), gridMat));
+    // Horizontal lines (along X axis, varying Z)
+    for (let z = 0; z <= area.gridHeight; z++) {
+        scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.002, z), new THREE.Vector3(area.gridWidth, 0.002, z)]), gridMat));
+    }
+    // Vertical lines (along Z axis, varying X)
+    for (let x = 0; x <= area.gridWidth; x++) {
+        scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x, 0.002, 0), new THREE.Vector3(x, 0.002, area.gridHeight)]), gridMat));
     }
 
     // Fog of war (scaled resolution for smoother edges with linear filtering)
     const fogCanvas = document.createElement("canvas");
-    fogCanvas.width = GRID_SIZE * FOG_SCALE;
-    fogCanvas.height = GRID_SIZE * FOG_SCALE;
+    fogCanvas.width = area.gridWidth * FOG_SCALE;
+    fogCanvas.height = area.gridHeight * FOG_SCALE;
     const fogCtx = fogCanvas.getContext("2d")!;
     fogCtx.fillStyle = "#000";
-    fogCtx.fillRect(0, 0, GRID_SIZE * FOG_SCALE, GRID_SIZE * FOG_SCALE);
+    fogCtx.fillRect(0, 0, area.gridWidth * FOG_SCALE, area.gridHeight * FOG_SCALE);
     const fogTextureObj = new THREE.CanvasTexture(fogCanvas);
     fogTextureObj.magFilter = THREE.LinearFilter;
     fogTextureObj.minFilter = THREE.LinearFilter;
     const fogTexture: FogTexture = { canvas: fogCanvas, ctx: fogCtx, texture: fogTextureObj };
 
     const fogMesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE),
+        new THREE.PlaneGeometry(area.gridWidth, area.gridHeight),
         new THREE.MeshBasicMaterial({ map: fogTextureObj, transparent: true, depthWrite: false })
     );
     fogMesh.rotation.x = -Math.PI / 2;
-    fogMesh.position.set(GRID_SIZE / 2, 2.6, GRID_SIZE / 2);
+    fogMesh.position.set(area.gridWidth / 2, 2.6, area.gridHeight / 2);
     fogMesh.renderOrder = 999;
     scene.add(fogMesh);
 

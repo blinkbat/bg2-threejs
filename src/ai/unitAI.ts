@@ -547,8 +547,8 @@ export function applyWallSliding(g: UnitGroup, moveX: number, moveZ: number): vo
 
     if (!blocked[cellX]?.[cellZ]) {
         // Direct movement is valid
-        g.position.x = clampToGrid(newX);
-        g.position.z = clampToGrid(newZ);
+        g.position.x = clampToGrid(newX, 0.5, "x");
+        g.position.z = clampToGrid(newZ, 0.5, "z");
     } else {
         // Try wall sliding - move along one axis if the other is blocked
         const xOnlyX = g.position.x + moveX;
@@ -562,11 +562,11 @@ export function applyWallSliding(g: UnitGroup, moveX: number, moveZ: number): vo
         const canMoveZ = !blocked[zOnlyCellX]?.[zOnlyCellZ];
 
         if (canMoveX && Math.abs(moveX) > Math.abs(moveZ)) {
-            g.position.x = clampToGrid(xOnlyX);
+            g.position.x = clampToGrid(xOnlyX, 0.5, "x");
         } else if (canMoveZ) {
-            g.position.z = clampToGrid(zOnlyZ);
+            g.position.z = clampToGrid(zOnlyZ, 0.5, "z");
         } else if (canMoveX) {
-            g.position.x = clampToGrid(xOnlyX);
+            g.position.x = clampToGrid(xOnlyX, 0.5, "x");
         }
         // If neither axis is valid, unit doesn't move (stuck against corner)
     }

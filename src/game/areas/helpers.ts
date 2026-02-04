@@ -11,13 +11,13 @@ import type { AreaData, ComputedAreaData } from "./types";
  * Blocked: # (wall), anything else
  * Note: Doors are defined by transitions, not geometry chars
  */
-function buildBlockedFromGeometry(geometry: string[][], gridSize: number): boolean[][] {
-    const blocked: boolean[][] = Array(gridSize)
+function buildBlockedFromGeometry(geometry: string[][], gridWidth: number, gridHeight: number): boolean[][] {
+    const blocked: boolean[][] = Array(gridWidth)
         .fill(null)
-        .map(() => Array(gridSize).fill(true));
+        .map(() => Array(gridHeight).fill(true));
 
-    for (let z = 0; z < gridSize && z < geometry.length; z++) {
-        for (let x = 0; x < gridSize && x < (geometry[z]?.length ?? 0); x++) {
+    for (let z = 0; z < gridHeight && z < geometry.length; z++) {
+        for (let x = 0; x < gridWidth && x < (geometry[z]?.length ?? 0); x++) {
             const char = geometry[z][x];
             // Only floor is walkable
             if (char === ".") {
@@ -32,19 +32,19 @@ function buildBlockedFromGeometry(geometry: string[][], gridSize: number): boole
 /**
  * Merge adjacent blocked cells into larger rectangles for efficient rendering.
  */
-function mergeObstacles(blocked: boolean[][], gridSize: number): MergedObstacle[] {
+function mergeObstacles(blocked: boolean[][], gridWidth: number, gridHeight: number): MergedObstacle[] {
     const obstacles: MergedObstacle[] = [];
     const used = new Set<string>();
 
-    for (let x = 0; x < gridSize; x++) {
-        for (let z = 0; z < gridSize; z++) {
+    for (let x = 0; x < gridWidth; x++) {
+        for (let z = 0; z < gridHeight; z++) {
             if (!blocked[x][z] || used.has(`${x},${z}`)) continue;
 
             let w = 1, h = 1;
             // Expand horizontally
-            while (x + w < gridSize && blocked[x + w][z] && !used.has(`${x + w},${z}`)) w++;
+            while (x + w < gridWidth && blocked[x + w][z] && !used.has(`${x + w},${z}`)) w++;
             // Expand vertically
-            outer: while (z + h < gridSize) {
+            outer: while (z + h < gridHeight) {
                 for (let dx = 0; dx < w; dx++) {
                     if (!blocked[x + dx][z + h] || used.has(`${x + dx},${z + h}`)) break outer;
                 }
@@ -68,11 +68,11 @@ function mergeObstacles(blocked: boolean[][], gridSize: number): MergedObstacle[
  */
 export function computeAreaData(area: AreaData): ComputedAreaData {
     // Build blocked grid from geometry
-    const blocked = buildBlockedFromGeometry(area.geometry, area.gridSize);
+    const blocked = buildBlockedFromGeometry(area.geometry, area.gridWidth, area.gridHeight);
 
     // Also unblock terrain lava zones (they don't render as walls, but block movement separately)
-    for (let z = 0; z < area.gridSize && z < area.terrain.length; z++) {
-        for (let x = 0; x < area.gridSize && x < (area.terrain[z]?.length ?? 0); x++) {
+    for (let z = 0; z < area.gridHeight && z < area.terrain.length; z++) {
+        for (let x = 0; x < area.gridWidth && x < (area.terrain[z]?.length ?? 0); x++) {
             if (area.terrain[z][x] === "~") {
                 blocked[x][z] = false;
             }
@@ -85,7 +85,7 @@ export function computeAreaData(area: AreaData): ComputedAreaData {
             for (let dx = 0; dx < trans.w; dx++) {
                 const x = Math.floor(trans.x) + dx;
                 const z = Math.floor(trans.z) + dz;
-                if (x >= 0 && x < area.gridSize && z >= 0 && z < area.gridSize) {
+                if (x >= 0 && x < area.gridWidth && z >= 0 && z < area.gridHeight) {
                     blocked[x][z] = false;
                 }
             }
@@ -98,12 +98,12 @@ export function computeAreaData(area: AreaData): ComputedAreaData {
     // Merge obstacles BEFORE blocking trees/lava (so they don't become walls)
     // Note: Secret door areas remain blocked, so walls WILL render there
     // The walls get removed when the secret door is opened
-    const mergedObstacles = mergeObstacles(blocked, area.gridSize);
+    const mergedObstacles = mergeObstacles(blocked, area.gridWidth, area.gridHeight);
 
     // Track lava zones for pathfinding (NOT in main blocked grid - lava doesn't block LOS)
     const lavaBlocked = new Set<string>();
-    for (let z = 0; z < area.gridSize && z < area.terrain.length; z++) {
-        for (let x = 0; x < area.gridSize && x < (area.terrain[z]?.length ?? 0); x++) {
+    for (let z = 0; z < area.gridHeight && z < area.terrain.length; z++) {
+        for (let x = 0; x < area.gridWidth && x < (area.terrain[z]?.length ?? 0); x++) {
             if (area.terrain[z][x] === "~") {
                 lavaBlocked.add(`${x},${z}`);
             }
@@ -116,7 +116,7 @@ export function computeAreaData(area: AreaData): ComputedAreaData {
         const tx = Math.floor(tree.x);
         const tz = Math.floor(tree.z);
         // Block the cell the tree is on for pathfinding
-        if (tx >= 0 && tx < area.gridSize && tz >= 0 && tz < area.gridSize) {
+        if (tx >= 0 && tx < area.gridWidth && tz >= 0 && tz < area.gridHeight) {
             blocked[tx][tz] = true;
             treeBlocked.add(`${tx},${tz}`);
         }
@@ -126,7 +126,7 @@ export function computeAreaData(area: AreaData): ComputedAreaData {
                 for (let dz = -1; dz <= 1; dz++) {
                     if (dx === 0 && dz === 0) continue;
                     const nx = tx + dx, nz = tz + dz;
-                    if (nx >= 0 && nx < area.gridSize && nz >= 0 && nz < area.gridSize) {
+                    if (nx >= 0 && nx < area.gridWidth && nz >= 0 && nz < area.gridHeight) {
                         treeBlocked.add(`${nx},${nz}`);
                     }
                 }
@@ -141,7 +141,7 @@ export function computeAreaData(area: AreaData): ComputedAreaData {
             const dz = Math.floor(dec.z);
 
             // Block movement for all decoration types
-            if (dx >= 0 && dx < area.gridSize && dz >= 0 && dz < area.gridSize) {
+            if (dx >= 0 && dx < area.gridWidth && dz >= 0 && dz < area.gridHeight) {
                 blocked[dx][dz] = true;
 
                 // Standing columns block LoS (they're tall)

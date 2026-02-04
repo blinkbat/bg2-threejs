@@ -1,4 +1,4 @@
-import { GRID_SIZE, VISION_RADIUS, PATH_RECURSION_LIMIT, ASTAR_BLOCKED_TARGET_SEARCH, ASTAR_DIAGONAL_COST } from "../core/constants";
+import { VISION_RADIUS, PATH_RECURSION_LIMIT, ASTAR_BLOCKED_TARGET_SEARCH, ASTAR_DIAGONAL_COST } from "../core/constants";
 import { blocked } from "../game/dungeon";
 import { isTreeBlocked, isLavaBlocked } from "../game/areas";
 import { isWithinGrid } from "../game/geometry";
@@ -237,8 +237,8 @@ export function findSpawnPositions(
  * Decay all visible cells to seen state.
  */
 function decayVisibility(visibility: number[][]): void {
-    for (let x = 0; x < GRID_SIZE; x++) {
-        for (let z = 0; z < GRID_SIZE; z++) {
+    for (let x = 0; x < visibility.length; x++) {
+        for (let z = 0; z < (visibility[x]?.length ?? 0); z++) {
             if (visibility[x][z] === 2) visibility[x][z] = 1;
         }
     }
@@ -525,7 +525,7 @@ export function findPath(startX: number, startZ: number, endX: number, endZ: num
     const ex = Math.floor(endX), ez = Math.floor(endZ);
 
     if (sx === ex && sz === ez) return [{ x: endX, z: endZ }];
-    if (ex < 0 || ex >= GRID_SIZE || ez < 0 || ez >= GRID_SIZE) return null;
+    if (!isWithinGrid(ex, ez)) return null;
 
     // Target blocked - find nearest unblocked cell
     if (isBlocked(ex, ez)) {

@@ -2,11 +2,12 @@
 // TARGETING - Target acquisition, kiting behavior for ranged enemies
 // =============================================================================
 
-import { GRID_SIZE, DEFAULT_KITE_DISTANCE, DEFAULT_KITE_COOLDOWN } from "../core/constants";
+import { DEFAULT_KITE_DISTANCE, DEFAULT_KITE_COOLDOWN } from "../core/constants";
 import { findPath, isPassable } from "./pathfinding";
 import { getEnemyKiteCooldown, setEnemyKiteCooldown, setEnemyKitingUntil } from "../game/enemyState";
 import { getDirectionAndDistance } from "../combat/combatMath";
 import { distanceToPoint } from "../game/geometry";
+import { getCurrentArea } from "../game/areas";
 import type { Unit, UnitGroup, EnemyStats } from "../core/types";
 
 // =============================================================================
@@ -83,8 +84,9 @@ function findRetreatPath(
         const retreatZ = g.position.z + rotatedDz * kiteDistance;
 
         // Clamp to grid bounds
-        const clampedX = Math.max(0.5, Math.min(GRID_SIZE - 0.5, retreatX));
-        const clampedZ = Math.max(0.5, Math.min(GRID_SIZE - 0.5, retreatZ));
+        const area = getCurrentArea();
+        const clampedX = Math.max(0.5, Math.min(area.gridWidth - 0.5, retreatX));
+        const clampedZ = Math.max(0.5, Math.min(area.gridHeight - 0.5, retreatZ));
 
         // Check if destination is passable
         if (!isPassable(Math.floor(clampedX), Math.floor(clampedZ))) continue;

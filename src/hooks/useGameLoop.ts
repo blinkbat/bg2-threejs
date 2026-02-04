@@ -5,7 +5,8 @@
 
 import { useEffect, useRef, useCallback } from "react";
 import * as THREE from "three";
-import { GRID_SIZE, PAN_SPEED } from "../core/constants";
+import { PAN_SPEED } from "../core/constants";
+import { getCurrentArea } from "../game/areas";
 import type { Unit, UnitGroup } from "../core/types";
 import { updateCamera, updateWallTransparency, updateTreeFogVisibility, updateLightLOD, addUnitToScene, updateWater, updateBillboards } from "../rendering/scene";
 import { updateDynamicObstacles } from "../ai/pathfinding";
@@ -118,8 +119,9 @@ function updateKeyboardPanning(
         const len = Math.hypot(screenX, screenY);
         const worldX = ((screenX / len) + (screenY / len)) * PAN_SPEED;
         const worldZ = (-(screenX / len) + (screenY / len)) * PAN_SPEED;
-        cameraOffset.x = Math.max(0, Math.min(GRID_SIZE, cameraOffset.x + worldX));
-        cameraOffset.z = Math.max(0, Math.min(GRID_SIZE, cameraOffset.z + worldZ));
+        const area = getCurrentArea();
+        cameraOffset.x = Math.max(0, Math.min(area.gridWidth, cameraOffset.x + worldX));
+        cameraOffset.z = Math.max(0, Math.min(area.gridHeight, cameraOffset.z + worldZ));
         updateCam();
     }
 }
