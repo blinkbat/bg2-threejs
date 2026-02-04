@@ -28,6 +28,137 @@ export { getEffectiveSize, addUnitToScene, createUnitSceneGroup } from "./units"
 import { createUnitSceneGroup } from "./units";
 
 // =============================================================================
+// ROUNDED CORNER FLOOR MATERIAL
+// =============================================================================
+
+/**
+ * Create a MeshStandardMaterial with rounded corners using onBeforeCompile
+ * This preserves all standard lighting while adding corner rounding
+ */
+function createRoundedFloorMaterial(
+    color: string,
+    corners: [number, number, number, number],
+    radius: number = 0.15
+): THREE.MeshStandardMaterial {
+    const mat = new THREE.MeshStandardMaterial({
+        color,
+        metalness: 0.2,
+        roughness: 0.9,
+        transparent: true,
+    });
+
+    mat.onBeforeCompile = (shader) => {
+        // Add uniforms for corners and radius
+        shader.uniforms.uCorners = { value: new THREE.Vector4(corners[0], corners[1], corners[2], corners[3]) };
+        shader.uniforms.uRadius = { value: radius };
+
+        // Add varying for UV in vertex shader
+        shader.vertexShader = shader.vertexShader.replace(
+            "#include <common>",
+            `#include <common>
+            varying vec2 vRoundUv;`
+        );
+        shader.vertexShader = shader.vertexShader.replace(
+            "#include <uv_vertex>",
+            `#include <uv_vertex>
+            vRoundUv = uv;`
+        );
+
+        // Add corner rounding logic to fragment shader
+        shader.fragmentShader = shader.fragmentShader.replace(
+            "#include <common>",
+            `#include <common>
+            uniform vec4 uCorners;
+            uniform float uRadius;
+            varying vec2 vRoundUv;`
+        );
+
+        // Add discard logic early in fragment shader (before color calculations)
+        shader.fragmentShader = shader.fragmentShader.replace(
+            "#include <map_fragment>",
+            `#include <map_fragment>
+
+            // Rounded corner discard
+            vec2 p = vRoundUv;
+            float r = uRadius;
+
+            // Top-left corner (UV: 0,1)
+            if (uCorners.x > 0.5 && p.x < r && p.y > 1.0 - r) {
+                vec2 corner = vec2(r, 1.0 - r);
+                if (length(p - corner) > r) discard;
+            }
+
+            // Top-right corner (UV: 1,1)
+            if (uCorners.y > 0.5 && p.x > 1.0 - r && p.y > 1.0 - r) {
+                vec2 corner = vec2(1.0 - r, 1.0 - r);
+                if (length(p - corner) > r) discard;
+            }
+
+            // Bottom-right corner (UV: 1,0)
+            if (uCorners.z > 0.5 && p.x > 1.0 - r && p.y < r) {
+                vec2 corner = vec2(1.0 - r, r);
+                if (length(p - corner) > r) discard;
+            }
+
+            // Bottom-left corner (UV: 0,0)
+            if (uCorners.w > 0.5 && p.x < r && p.y < r) {
+                vec2 corner = vec2(r, r);
+                if (length(p - corner) > r) discard;
+            }`
+        );
+    };
+
+    return mat;
+}
+
+/**
+ * Check if a floor tile exists at the given position
+ */
+function hasFloorAt(floor: string[] | string[][], x: number, z: number): boolean {
+    if (z < 0 || z >= floor.length) return false;
+    const row = floor[z];
+    if (!row) return false;
+    if (x < 0 || x >= row.length) return false;
+    const char = typeof row === "string" ? row[x] : row[x];
+    return char !== " " && char !== "." && char !== undefined;
+}
+
+/**
+ * Determine which corners of a floor tile should be rounded based on neighbors
+ * A corner is rounded if both adjacent edges AND the diagonal are empty
+ * Returns [topLeft, topRight, bottomRight, bottomLeft]
+ */
+function getFloorCornerFlags(floor: string[] | string[][], x: number, z: number): [number, number, number, number] {
+    // In Three.js with rotated plane: +Z is "down" on screen, -Z is "up"
+    // UV coords: (0,0) = bottom-left, (1,1) = top-right
+    // After rotation, this maps to world coords
+
+    const hasTop = hasFloorAt(floor, x, z - 1);      // -Z direction
+    const hasBottom = hasFloorAt(floor, x, z + 1);   // +Z direction
+    const hasLeft = hasFloorAt(floor, x - 1, z);     // -X direction
+    const hasRight = hasFloorAt(floor, x + 1, z);    // +X direction
+
+    const hasTopLeft = hasFloorAt(floor, x - 1, z - 1);
+    const hasTopRight = hasFloorAt(floor, x + 1, z - 1);
+    const hasBottomLeft = hasFloorAt(floor, x - 1, z + 1);
+    const hasBottomRight = hasFloorAt(floor, x + 1, z + 1);
+
+    // Round a corner only if both adjacent edges AND diagonal are empty
+    // In UV space after plane rotation:
+    // - Top-left UV (0,1) = world (-X, -Z) corner
+    // - Top-right UV (1,1) = world (+X, -Z) corner
+    // - Bottom-right UV (1,0) = world (+X, +Z) corner
+    // - Bottom-left UV (0,0) = world (-X, +Z) corner
+
+    const roundTopLeft = (!hasTop && !hasLeft && !hasTopLeft) ? 1 : 0;
+    const roundTopRight = (!hasTop && !hasRight && !hasTopRight) ? 1 : 0;
+    const roundBottomRight = (!hasBottom && !hasRight && !hasBottomRight) ? 1 : 0;
+    const roundBottomLeft = (!hasBottom && !hasLeft && !hasBottomLeft) ? 1 : 0;
+
+    return [roundTopLeft, roundTopRight, roundBottomRight, roundBottomLeft];
+}
+
+// =============================================================================
 // MAIN SCENE CREATION
 // =============================================================================
 
@@ -101,25 +232,36 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         ".": "#555555",  // Default - gray
     };
 
-    // Render floor tiles
+    // Render floor tiles with rounded corners
     if (area.floor && area.floor.length > 0) {
         for (let z = 0; z < area.floor.length; z++) {
             for (let x = 0; x < area.floor[z].length; x++) {
                 const char = area.floor[z][x];
-                if (char === ".") continue;  // Skip default tiles (ground shows through)
+                if (char === " " || char === "." || char === undefined) continue;  // Skip empty/default tiles
 
                 const color = floorColors[char] ?? "#555555";
                 const isWater = char === "w" || char === "W";
 
-                const floorMat = new THREE.MeshStandardMaterial({
-                    color,
-                    metalness: isWater ? 0.3 : 0.2,
-                    roughness: isWater ? 0.4 : 0.9,
-                });
-                const tile = new THREE.Mesh(
-                    new THREE.PlaneGeometry(1, 1),
-                    floorMat
-                );
+                // Get corner flags based on neighbors
+                const corners = getFloorCornerFlags(area.floor, x, z);
+                const hasRounding = corners.some(c => c > 0);
+
+                let tile: THREE.Mesh;
+
+                if (hasRounding && !isWater) {
+                    // Use rounded material that extends MeshStandardMaterial
+                    const roundedMat = createRoundedFloorMaterial(color, corners, 0.3);
+                    tile = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), roundedMat);
+                } else {
+                    // Use standard material for non-rounded tiles or water
+                    const floorMat = new THREE.MeshStandardMaterial({
+                        color,
+                        metalness: isWater ? 0.3 : 0.2,
+                        roughness: isWater ? 0.4 : 0.9,
+                    });
+                    tile = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), floorMat);
+                }
+
                 tile.rotation.x = -Math.PI / 2;
                 tile.position.set(x + 0.5, 0.001, z + 0.5);
                 tile.name = "ground";
