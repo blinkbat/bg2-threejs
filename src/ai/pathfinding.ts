@@ -1,6 +1,6 @@
 import { VISION_RADIUS, PATH_RECURSION_LIMIT, ASTAR_BLOCKED_TARGET_SEARCH, ASTAR_DIAGONAL_COST } from "../core/constants";
 import { blocked } from "../game/dungeon";
-import { isTreeBlocked, isLavaBlocked } from "../game/areas";
+import { isTreeBlocked, isTerrainBlocked } from "../game/areas";
 import { isWithinGrid } from "../game/geometry";
 import type { PathNode, Unit, UnitGroup } from "../core/types";
 
@@ -131,7 +131,7 @@ export function isPassable(x: number, z: number, flying: boolean = false): boole
     if (!isWithinGrid(x, z) || isBlocked(x, z)) return false;
     // Flying units can pass over lava
     if (flying) return true;
-    return !isLavaBlocked(x, z);
+    return !isTerrainBlocked(x, z);
 }
 
 /**

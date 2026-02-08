@@ -118,6 +118,7 @@ export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, ski
                 {tab === "inventory" && (
                     <InventoryTab
                         unit={unit}
+                        units={units}
                         displayTime={displayTime}
                         consumableCooldownEnd={consumableCooldownEnd}
                         onUseConsumable={onUseConsumable}
@@ -183,6 +184,8 @@ const EFFECT_INFO: Record<string, { icon: string; color: string; description: st
     slowed: { icon: "🐌", color: "#3498db", description: "Move speed halved, cooldowns +50%" },
     energyShield: { icon: "🔮", color: "#9b59b6", description: "Absorbs damage" },
     qi_drain: { icon: "💔", color: "#e74c3c", description: "Life force draining" },
+    doom: { icon: "💀", color: COLORS.doomText, description: "Death in 10s — cure with Restoration" },
+    regen: { icon: "💚", color: COLORS.hpHigh, description: "Healing over time" },
 };
 
 /** Renders active status effects as inline icons with tooltips */
@@ -734,6 +737,7 @@ function EquipmentTab({ unitId }: { unitId: number }) {
 
 function InventoryTab({
     unit,
+    units,
     displayTime,
     consumableCooldownEnd,
     onUseConsumable,
@@ -741,6 +745,7 @@ function InventoryTab({
     gold = 0,
 }: {
     unit: Unit;
+    units: Unit[];
     displayTime: number;
     consumableCooldownEnd: number;
     onUseConsumable?: (itemId: string, targetUnitId: number) => void;
@@ -754,6 +759,7 @@ function InventoryTab({
 
     const onCooldown = consumableCooldownEnd > displayTime;
     const cooldownRemaining = onCooldown ? Math.ceil((consumableCooldownEnd - displayTime) / 1000) : 0;
+    const hasDeadAllies = units.some(u => u.team === "player" && u.hp <= 0);
 
     if (consumables.length === 0 && gold === 0) {
         return <div className="text-muted" style={{ fontSize: 13 }}>No items</div>;
@@ -778,6 +784,7 @@ function InventoryTab({
 
                 const unitAlive = unit.hp > 0;
                 const isQueued = queuedSkills.includes(item.name);
+                const isRevive = item.effect === "revive";
 
                 // Check if using would be wasteful
                 let wouldBeWasted = false;
@@ -788,15 +795,16 @@ function InventoryTab({
                     } else if (item.effect === "mana") {
                         const maxMana = getEffectiveMaxMana(unit.id, unit);
                         wouldBeWasted = (unit.mana ?? 0) >= maxMana;
+                    } else if (isRevive) {
+                        wouldBeWasted = !hasDeadAllies;
                     }
-                    // exp is never wasted
                 }
 
                 // Can click if alive and not wasted (can queue even on cooldown)
                 const canClick = unitAlive && !wouldBeWasted;
 
-                const effectColor = item.effect === "heal" ? COLORS.hpHigh : item.effect === "mana" ? COLORS.mana : "#9b59b6";
-                const effectLabel = item.effect === "heal" ? "HP" : item.effect === "mana" ? "Mana" : "XP";
+                const effectColor = item.effect === "heal" ? COLORS.hpHigh : item.effect === "mana" ? COLORS.mana : isRevive ? "#ffd700" : "#9b59b6";
+                const effectLabel = item.effect === "heal" ? "HP" : item.effect === "mana" ? "Mana" : isRevive ? "" : "XP";
                 const itemClass = `inventory-item-row ${!canClick && !isQueued ? "disabled" : ""} ${wouldBeWasted ? "wasted" : ""} ${isQueued ? "queued" : ""}`;
 
                 return (
@@ -805,13 +813,24 @@ function InventoryTab({
                         content={
                             <div className="consumable-tooltip">
                                 <div className="consumable-tooltip-desc">{item.description}</div>
-                                <div className="consumable-tooltip-row">
-                                    <span className="consumable-tooltip-label">Restores</span>
-                                    <span className="consumable-tooltip-value" style={{ color: effectColor }}>
-                                        {item.value} {effectLabel}
-                                    </span>
-                                </div>
-                                {wouldBeWasted && (
+                                {isRevive ? (
+                                    <div className="consumable-tooltip-row">
+                                        <span className="consumable-tooltip-value" style={{ color: effectColor }}>
+                                            Revive to {item.value} HP
+                                        </span>
+                                    </div>
+                                ) : (
+                                    <div className="consumable-tooltip-row">
+                                        <span className="consumable-tooltip-label">Restores</span>
+                                        <span className="consumable-tooltip-value" style={{ color: effectColor }}>
+                                            {item.value} {effectLabel}
+                                        </span>
+                                    </div>
+                                )}
+                                {wouldBeWasted && isRevive && (
+                                    <div className="consumable-tooltip-warning">No fallen allies</div>
+                                )}
+                                {wouldBeWasted && !isRevive && (
                                     <div className="consumable-tooltip-warning">Already at full {effectLabel}</div>
                                 )}
                             </div>
@@ -839,7 +858,7 @@ function InventoryTab({
                             )}
                             <div className="inventory-item-stats">
                                 <span className="inventory-item-effect" style={{ color: effectColor }}>
-                                    +{item.value} {effectLabel}
+                                    {isRevive ? "Revive" : `+${item.value} ${effectLabel}`}
                                 </span>
                                 <span className="inventory-item-qty">×{entry.quantity}</span>
                             </div>

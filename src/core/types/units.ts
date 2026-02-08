@@ -3,10 +3,10 @@
 // =============================================================================
 
 // Enemy type identifiers
-export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba" | "acid_slug" | "bat" | "undead_knight" | "ancient_construct" | "feral_hound" | "corrupt_druid" | "skeleton_warrior" | "baby_kraken" | "kraken_tentacle" | "magma_imp";
+export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba" | "acid_slug" | "bat" | "undead_knight" | "ancient_construct" | "feral_hound" | "corrupt_druid" | "skeleton_warrior" | "baby_kraken" | "kraken_tentacle" | "magma_imp" | "necromancer" | "skeleton_minion";
 
 // Status effect types
-export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed" | "qi_drain" | "energyShield" | "defiance";
+export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed" | "qi_drain" | "energyShield" | "defiance" | "doom";
 
 export interface StatusEffect {
     type: StatusEffectType;
@@ -135,6 +135,23 @@ export interface EnemyTentacleSkill {
     damageToParent: number;  // Damage dealt to kraken when tentacle is killed
 }
 
+export interface EnemyRaiseSkill {
+    spawnType: EnemyType;    // What enemy type to raise
+    cooldown: number;        // ms after all minions die before re-raising
+    spawnCount: number;      // How many to raise at once
+    spawnRange: number;      // Placement radius around the raiser
+}
+
+export interface EnemyCurseSkill {
+    name: string;
+    cooldown: number;        // ms between casts
+    range: number;           // Targeting range
+    radius: number;          // AoE radius in tiles
+    delay: number;           // ms warning before detonation
+    damage: [number, number];
+    damageType: DamageType;
+}
+
 export interface EnemyStats {
     name: string;
     hp: number;
@@ -198,6 +215,10 @@ export interface EnemyStats {
     fireballAttack?: boolean;
     // Base crit chance percentage (0 by default, enemies can crit too)
     baseCrit?: number;
+    // Optional raise skill - batch-spawns minions, re-raises when all die
+    raiseSkill?: EnemyRaiseSkill;
+    // Optional curse skill - delayed AoE at target position
+    curseSkill?: EnemyCurseSkill;
 }
 
 // =============================================================================

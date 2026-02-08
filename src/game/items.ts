@@ -216,6 +216,16 @@ export const CONSUMABLES: Record<string, ConsumableItem> = {
         value: 50,
         cooldown: 0,
     },
+    woodenAnkh: {
+        id: "woodenAnkh",
+        name: "Wooden Ankh",
+        description: "A crude ankh carved from sacred wood. Revives a fallen ally to 1 HP.",
+        category: "consumable",
+        effect: "revive",
+        value: 1,
+        cooldown: 5000,
+        targetType: "dead_ally",
+    },
 };
 
 // =============================================================================

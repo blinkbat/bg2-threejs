@@ -38,6 +38,10 @@ export const SLOW_MOVE_MULT = 0.5;         // 0.5x move speed when slowed
 // Status Effects - Defiance
 export const DEFIANCE_COOLDOWN_MULT = 0.5; // 0.5x cooldowns when under defiance buff
 
+// Status Effects - Doom (kills unit after duration expires, cured by Restoration)
+export const DOOM_DURATION = 10000;          // 10 seconds until death
+export const DOOM_TICK_INTERVAL = 1000;      // Tick every 1 second (for countdown)
+
 // Status Effects - Qi Drain (self-damage from Qi Focus)
 export const QI_DRAIN_DURATION = 10000;    // 10 seconds
 export const QI_DRAIN_TICK_INTERVAL = 1000; // tick every 1 second
@@ -139,6 +143,9 @@ export const COLORS = {
     defiance: "#c0392b",
     defianceText: "#e74c3c",
     defianceBg: "#2a1515",
+    doom: "#1a0a2a",
+    doomText: "#8b5fbf",
+    doomBg: "#120820",
     acid: "#9acd32",            // Yellow-green for acid tiles
     acidText: "#b8e060",        // Brighter for damage text
     sanctuary: "#ffd700",       // Golden for sanctuary tiles
@@ -169,7 +176,7 @@ export const COLORS = {
 // SKILL TYPE UI MAPPING - CSS class and border color by skill type
 // =============================================================================
 
-type SkillTypeForColor = "damage" | "heal" | "buff" | "taunt" | "flurry" | "debuff" | "trap" | "sanctuary" | "mana_transfer" | "smite" | "energy_shield" | "aoe_buff";
+type SkillTypeForColor = "damage" | "heal" | "buff" | "taunt" | "flurry" | "debuff" | "trap" | "sanctuary" | "mana_transfer" | "smite" | "energy_shield" | "aoe_buff" | "restoration" | "revive";
 
 /** Map skill type to CSS class for styling */
 export function getSkillColorClass(skillType: SkillTypeForColor | undefined): string {
@@ -179,6 +186,8 @@ export function getSkillColorClass(skillType: SkillTypeForColor | undefined): st
             return "skill-damage";
         case "heal":
         case "sanctuary":
+        case "restoration":
+        case "revive":
             return "skill-heal";
         case "taunt":
         case "debuff":
@@ -199,6 +208,8 @@ export function getSkillBorderColor(skillType: SkillTypeForColor | undefined): s
             return "#ef4444";  // Red
         case "heal":
         case "sanctuary":
+        case "restoration":
+        case "revive":
             return "#22c55e";  // Green
         case "taunt":
         case "debuff":

@@ -173,6 +173,7 @@ function Game({
     const [hpBarPositions, setHpBarPositions] = useState<{ positions: Record<number, { x: number; y: number; visible: boolean }>; scale: number }>({ positions: {}, scale: 1 });
     const [skillCooldowns, setSkillCooldowns] = useState<Record<string, { end: number; duration: number }>>({});
     const [targetingMode, setTargetingMode] = useState<{ casterId: number; skill: Skill } | null>(null);
+    const [consumableTargetingMode, setConsumableTargetingMode] = useState<{ userId: number; itemId: string } | null>(null);
     const [queuedActions, setQueuedActions] = useState<{ unitId: number; skillName: string }[]>([]);
     const [hoveredEnemy, setHoveredEnemy] = useState<{ id: number; x: number; y: number } | null>(null);
     const [hoveredChest, setHoveredChest] = useState<{ x: number; y: number; chestIndex: number; chestX: number; chestZ: number } | null>(null);
@@ -197,6 +198,7 @@ function Game({
     const unitsStateRef = useRef(units);
     const pausedRef = useRef(paused);
     const targetingModeRef = useRef(targetingMode);
+    const consumableTargetingModeRef = useRef(consumableTargetingMode);
     const pauseStartTimeRef = useRef<number | null>(Date.now());
     const showPanelRef = useRef(showPanel);
     const helpOpenRef = useRef(helpOpen);
@@ -210,6 +212,7 @@ function Game({
     useEffect(() => { unitsStateRef.current = units; }, [units]);
     useEffect(() => { pausedRef.current = paused; }, [paused]);
     useEffect(() => { targetingModeRef.current = targetingMode; }, [targetingMode]);
+    useEffect(() => { consumableTargetingModeRef.current = consumableTargetingMode; }, [consumableTargetingMode]);
     useEffect(() => { showPanelRef.current = showPanel; }, [showPanel]);
     useEffect(() => { helpOpenRef.current = helpOpen; }, [helpOpen]);
     useEffect(() => { skillCooldownsRef.current = skillCooldowns; }, [skillCooldowns]);
@@ -296,31 +299,31 @@ function Game({
     }), [sceneState, gameRefs, addLog]);
 
     // Execute consumable
-    const executeConsumable = useCallback((unitId: number, itemId: string): boolean => {
+    const executeConsumable = useCallback((unitId: number, itemId: string, targetId?: number): boolean => {
         const item = getItem(itemId);
         if (!item || !isConsumable(item)) return false;
 
-        const targetUnit = unitsStateRef.current.find(u => u.id === unitId);
-        if (!targetUnit || targetUnit.hp <= 0) return false;
+        const userUnit = unitsStateRef.current.find(u => u.id === unitId);
+        if (!userUnit || userUnit.hp <= 0) return false;
 
         if (item.effect === "heal") {
             const maxHp = getEffectiveMaxHp(unitId);
-            if (targetUnit.hp >= maxHp) return false;
-            const newHp = Math.min(maxHp, targetUnit.hp + item.value);
-            const healed = newHp - targetUnit.hp;
+            if (userUnit.hp >= maxHp) return false;
+            const newHp = Math.min(maxHp, userUnit.hp + item.value);
+            const healed = newHp - userUnit.hp;
             setUnits(prev => prev.map(u => u.id === unitId ? { ...u, hp: newHp } : u));
             addLog(`${UNIT_DATA[unitId].name} uses ${item.name}, restoring ${healed} HP.`, "#22c55e");
         } else if (item.effect === "mana") {
             const maxMana = UNIT_DATA[unitId].maxMana ?? 0;
-            const currentMana = targetUnit.mana ?? 0;
+            const currentMana = userUnit.mana ?? 0;
             if (currentMana >= maxMana) return false;
             const newMana = Math.min(maxMana, currentMana + item.value);
             const restored = newMana - currentMana;
             setUnits(prev => prev.map(u => u.id === unitId ? { ...u, mana: newMana } : u));
             addLog(`${UNIT_DATA[unitId].name} uses ${item.name}, restoring ${restored} Mana.`, "#3b82f6");
         } else if (item.effect === "exp") {
-            const newExp = (targetUnit.exp ?? 0) + item.value;
-            const currentLevel = targetUnit.level ?? 1;
+            const newExp = (userUnit.exp ?? 0) + item.value;
+            const currentLevel = userUnit.level ?? 1;
             const xpForNext = getXpForLevel(currentLevel + 1);
 
             if (newExp >= xpForNext) {
@@ -343,6 +346,39 @@ function Game({
             } else {
                 setUnits(prev => prev.map(u => u.id === unitId ? { ...u, exp: newExp } : u));
                 addLog(`${UNIT_DATA[unitId].name} reads ${item.name}, gaining ${item.value} XP.`, "#9b59b6");
+            }
+        } else if (item.effect === "revive") {
+            // Revive a dead ally - targetId is required
+            if (targetId === undefined) return false;
+            const deadAlly = unitsStateRef.current.find(u => u.id === targetId && u.team === "player" && u.hp <= 0);
+            if (!deadAlly) return false;
+
+            const userG = sceneState.unitGroups[unitId];
+            if (!userG) return false;
+
+            // Place revived unit next to user
+            const angle = Math.random() * Math.PI * 2;
+            const reviveX = userG.position.x + Math.cos(angle) * 1.5;
+            const reviveZ = userG.position.z + Math.sin(angle) * 1.5;
+
+            setUnits(prev => prev.map(u => {
+                if (u.id !== targetId) return u;
+                return { ...u, hp: item.value, x: reviveX, z: reviveZ, statusEffects: undefined, target: null };
+            }));
+
+            // Make the unit visible and reposition
+            const reviveG = sceneState.unitGroups[targetId];
+            if (reviveG) {
+                reviveG.visible = true;
+                reviveG.position.set(reviveX, reviveG.userData.flyHeight, reviveZ);
+                reviveG.userData.targetX = reviveX;
+                reviveG.userData.targetZ = reviveZ;
+            }
+
+            addLog(`${UNIT_DATA[unitId].name} uses ${item.name}, reviving ${UNIT_DATA[targetId].name}!`, "#ffd700");
+            soundFns.playHeal();
+            if (sceneState.scene) {
+                createLightningPillar(sceneState.scene, reviveX, reviveZ, { color: "#ffd700", duration: 600, radius: 0.3, height: 10 });
             }
         }
 
@@ -399,7 +435,7 @@ function Game({
         sceneRefs: inputSceneRefs,
         gameRefs: gameRefs as React.MutableRefObject<InputGameRefs>,
         stateRefs: {
-            unitsStateRef, selectedRef, pausedRef, targetingModeRef,
+            unitsStateRef, selectedRef, pausedRef, targetingModeRef, consumableTargetingModeRef,
             showPanelRef, helpOpenRef, openedChestsRef, hotbarAssignmentsRef, pauseStartTimeRef
         },
         mutableRefs: {
@@ -407,7 +443,7 @@ function Game({
             isDragging, didPan, isBoxSel, boxStart, boxEnd, lastMouse
         },
         setters: {
-            setSelectedIds, setSelBox, setUnits, setPaused, setTargetingMode,
+            setSelectedIds, setSelBox, setUnits, setPaused, setTargetingMode, setConsumableTargetingMode,
             setSkillCooldowns, setQueuedActions, setShowPanel, setHoveredEnemy,
             setHoveredChest, setHoveredPlayer, setHoveredDoor, setHoveredSecretDoor,
             setHoveredLootBag, setOpenedChests, setOpenedSecretDoors, setGold
@@ -587,22 +623,54 @@ function Game({
         );
     }, [doProcessQueue]);
 
-    const handleUseConsumable = useCallback((itemId: string, targetUnitId: number) => {
+    const handleUseConsumable = useCallback((itemId: string, userId: number) => {
         const item = getItem(itemId);
         if (!item || !isConsumable(item)) return;
-        const targetUnit = units.find(u => u.id === targetUnitId);
-        if (!targetUnit || targetUnit.hp <= 0) return;
+        const userUnit = units.find(u => u.id === userId);
+        if (!userUnit || userUnit.hp <= 0) return;
 
-        const now = Date.now();
-        const cooldownEnd = actionCooldownRef.current[targetUnitId] || 0;
-        if (paused || now < cooldownEnd) {
-            actionQueueRef.current[targetUnitId] = { type: "consumable", itemId };
-            setQueuedActions(prev => [...prev.filter(q => q.unitId !== targetUnitId), { unitId: targetUnitId, skillName: item.name }]);
-            addLog(`${UNIT_DATA[targetUnitId].name} prepares ${item.name}... (${paused ? "queued" : "on cooldown"})`, "#888");
+        // Targeted consumables enter targeting mode instead of immediate use
+        if (item.targetType) {
+            setConsumableTargetingMode({ userId, itemId });
             return;
         }
-        executeConsumable(targetUnitId, itemId);
+
+        const now = Date.now();
+        const cooldownEnd = actionCooldownRef.current[userId] || 0;
+        if (paused || now < cooldownEnd) {
+            actionQueueRef.current[userId] = { type: "consumable", itemId };
+            setQueuedActions(prev => [...prev.filter(q => q.unitId !== userId), { unitId: userId, skillName: item.name }]);
+            addLog(`${UNIT_DATA[userId].name} prepares ${item.name}... (${paused ? "queued" : "on cooldown"})`, "#888");
+            return;
+        }
+        executeConsumable(userId, itemId);
     }, [units, paused, addLog, executeConsumable]);
+
+    const handleConsumableTarget = useCallback((deadAllyId: number) => {
+        if (!consumableTargetingMode) return;
+        const { userId, itemId } = consumableTargetingMode;
+        setConsumableTargetingMode(null);
+
+        const item = getItem(itemId);
+        if (!item || !isConsumable(item)) return;
+
+        // Validate target is a dead ally
+        const deadAlly = units.find(u => u.id === deadAllyId && u.team === "player" && u.hp <= 0);
+        if (!deadAlly) {
+            addLog(`${UNIT_DATA[userId].name}: Must target a fallen ally!`, "#888");
+            return;
+        }
+
+        const now = Date.now();
+        const cooldownEnd = actionCooldownRef.current[userId] || 0;
+        if (paused || now < cooldownEnd) {
+            actionQueueRef.current[userId] = { type: "consumable", itemId, targetId: deadAllyId };
+            setQueuedActions(prev => [...prev.filter(q => q.unitId !== userId), { unitId: userId, skillName: item.name }]);
+            addLog(`${UNIT_DATA[userId].name} prepares ${item.name}... (${paused ? "queued" : "on cooldown"})`, "#888");
+            return;
+        }
+        executeConsumable(userId, itemId, deadAllyId);
+    }, [units, paused, addLog, executeConsumable, consumableTargetingMode]);
 
     const handleWarpToArea = useCallback((areaId: AreaId) => {
         const playerUnits = unitsStateRef.current.filter(u => u.team === "player");
@@ -660,7 +728,7 @@ function Game({
     const areaData = getCurrentArea();
 
     return (
-        <div style={{ width: "100%", height: "100vh", position: "relative", cursor: targetingMode ? "crosshair" : "default" }}>
+        <div style={{ width: "100%", height: "100vh", position: "relative", cursor: (targetingMode || consumableTargetingMode) ? "crosshair" : "default" }}>
             <div ref={containerRef} style={{ width: "100%", height: "100%", filter: paused ? "saturate(0.4) brightness(0.85)" : "none", transition: "filter 0.2s" }} />
             {selBox && <div style={{ position: "absolute", left: selBox.left, top: selBox.top, width: selBox.width, height: selBox.height, border: "1px solid #00ff00", backgroundColor: "rgba(0,255,0,0.1)", pointerEvents: "none" }} />}
 
@@ -739,7 +807,13 @@ function Game({
             <CombatLog log={combatLog} />
             <PartyBar
                 units={units} selectedIds={selectedIds} onSelect={setSelectedIds} targetingMode={targetingMode}
+                consumableTargetingMode={consumableTargetingMode}
                 onTargetUnit={(targetUnitId) => {
+                    // Handle consumable targeting (clicking dead ally portrait)
+                    if (consumableTargetingMode) {
+                        handleConsumableTarget(targetUnitId);
+                        return;
+                    }
                     if (!targetingMode || !sceneState.scene) return;
                     const skillCtx = getSkillContext();
                     handleTargetingOnUnit(

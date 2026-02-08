@@ -26,6 +26,7 @@ import {
     processAcidTiles,
     processSanctuaryTiles,
     processChargeAttacks,
+    processCurses,
     updateLeaps,
     updateTentacles,
     updateSubmergedKrakens
@@ -299,6 +300,19 @@ export function useGameLoop({
 
                 // Process charge attacks
                 processChargeAttacks(
+                    scene,
+                    stateRefs.unitsStateRef.current,
+                    unitGroups,
+                    refs.damageTexts,
+                    refs.hitFlash,
+                    callbacks.setUnits,
+                    callbacks.addLog,
+                    now,
+                    defeatedThisFrame
+                );
+
+                // Process necromancer curses
+                processCurses(
                     scene,
                     stateRefs.unitsStateRef.current,
                     unitGroups,

@@ -3,7 +3,7 @@
 // =============================================================================
 
 // Types
-export type { SpawnContext, ChargeContext, LeapContext, VinesContext, TentacleContext } from "./types";
+export type { SpawnContext, ChargeContext, LeapContext, VinesContext, TentacleContext, RaiseContext, CurseContext } from "./types";
 
 // Brood Mother
 export { trySpawnMinion } from "./broodMother";
@@ -25,6 +25,9 @@ export {
     isTentacleUnit,
     clearTentacles
 } from "./tentacle";
+
+// Necromancer Raise Dead
+export { tryRaiseDead } from "./necromancer";
 
 // Baby Kraken Submerge
 export {

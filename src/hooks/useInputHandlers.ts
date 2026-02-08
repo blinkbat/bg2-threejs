@@ -62,6 +62,7 @@ export interface InputStateRefs {
     selectedRef: React.MutableRefObject<number[]>;
     pausedRef: React.MutableRefObject<boolean>;
     targetingModeRef: React.MutableRefObject<{ casterId: number; skill: Skill } | null>;
+    consumableTargetingModeRef: React.MutableRefObject<{ userId: number; itemId: string } | null>;
     showPanelRef: React.MutableRefObject<boolean>;
     helpOpenRef: React.MutableRefObject<boolean>;
     openedChestsRef: React.MutableRefObject<Set<string>>;
@@ -87,6 +88,7 @@ export interface InputSetters {
     setUnits: React.Dispatch<React.SetStateAction<Unit[]>>;
     setPaused: React.Dispatch<React.SetStateAction<boolean>>;
     setTargetingMode: React.Dispatch<React.SetStateAction<{ casterId: number; skill: Skill } | null>>;
+    setConsumableTargetingMode: React.Dispatch<React.SetStateAction<{ userId: number; itemId: string } | null>>;
     setSkillCooldowns: React.Dispatch<React.SetStateAction<Record<string, { end: number; duration: number }>>>;
     setQueuedActions: React.Dispatch<React.SetStateAction<{ unitId: number; skillName: string }[]>>;
     setShowPanel: React.Dispatch<React.SetStateAction<boolean>>;
@@ -349,6 +351,12 @@ export function useInputHandlers({
 
             const skillCtx = callbacks.getSkillContext();
 
+            // Handle consumable targeting mode (dead units not in scene, cancel on click)
+            if (stateRefs.consumableTargetingModeRef.current) {
+                setters.setConsumableTargetingMode(null);
+                return;
+            }
+
             // Handle targeting mode
             if (stateRefs.targetingModeRef.current) {
                 for (const hit of raycaster.intersectObjects(scene.children, true)) {
@@ -446,7 +454,9 @@ export function useInputHandlers({
                 );
             }
             if (e.code === "Escape") {
-                if (stateRefs.targetingModeRef.current) {
+                if (stateRefs.consumableTargetingModeRef.current) {
+                    setters.setConsumableTargetingMode(null);
+                } else if (stateRefs.targetingModeRef.current) {
                     clearTargetingMode(setters.setTargetingMode, { current: rangeIndicator }, { current: aoeIndicator });
                 } else if (stateRefs.helpOpenRef.current) {
                     callbacks.onCloseHelp();
@@ -503,7 +513,9 @@ export function useInputHandlers({
         const onContextMenu = (e: MouseEvent) => {
             e.preventDefault();
             if (mutableRefs.didPan.current) return;
-            if (stateRefs.targetingModeRef.current) {
+            if (stateRefs.consumableTargetingModeRef.current) {
+                setters.setConsumableTargetingMode(null);
+            } else if (stateRefs.targetingModeRef.current) {
                 clearTargetingMode(setters.setTargetingMode, { current: rangeIndicator }, { current: aoeIndicator });
             }
         };

@@ -68,10 +68,11 @@ export type ConsumableSound = "gulp" | "crunch";
 // Consumable item
 export interface ConsumableItem extends ItemBase {
     category: "consumable";
-    effect: "heal" | "mana" | "exp";
+    effect: "heal" | "mana" | "exp" | "revive";
     value: number;
     cooldown: number;               // Cooldown in ms (default 5000)
     sound?: ConsumableSound;        // Sound to play on use
+    targetType?: "dead_ally";       // If set, requires targeting a unit before use
 }
 
 // Union type for all items

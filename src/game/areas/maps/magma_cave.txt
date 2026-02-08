@@ -178,6 +178,7 @@ spawn: 46,25
 
 === TRANSITIONS ===
 48,23,1,5:east->cliffs@2,30
+21,6,1,5:north->tomb@3,12
 
 === DECORATIONS ===
 5,20:broken_column,size=0.8

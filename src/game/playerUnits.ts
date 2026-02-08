@@ -41,7 +41,7 @@ export const UNIT_DATA: Record<number, UnitData> = {
     3: { name: "Thief", class: "Thief", hp: 22, maxHp: 22, mana: 18, maxMana: 18, damage: [1, 4], accuracy: 75, armor: 0, color: "#8e44ad", skills: [SKILLS.poisonDagger, SKILLS.caltrops], items: [], attackCooldown: 1500, baseCrit: 5 },
     4: { name: "Wizard", class: "Wizard", hp: 18, maxHp: 18, mana: 50, maxMana: 50, damage: [1, 4], accuracy: 60, armor: 0, color: "#3498db", skills: [SKILLS.fireball, SKILLS.magicWave, SKILLS.energyShield], items: [], attackCooldown: 3000, baseCrit: 2 },
     5: { name: "Monk", class: "Monk", hp: 28, maxHp: 28, mana: 18, maxMana: 18, damage: [1, 4], accuracy: 70, armor: 0, color: "#27ae60", skills: [SKILLS.flurryOfFists, SKILLS.qiFocus], items: [], attackCooldown: 1800 },
-    6: { name: "Cleric", class: "Cleric", hp: 26, maxHp: 26, mana: 40, maxMana: 40, damage: [1, 4], accuracy: 60, armor: 0, color: "#c0c8d0", skills: [SKILLS.heal, SKILLS.cleanse, SKILLS.thunder], items: [], attackCooldown: 2500 },
+    6: { name: "Cleric", class: "Cleric", hp: 26, maxHp: 26, mana: 40, maxMana: 40, damage: [1, 4], accuracy: 60, armor: 0, color: "#c0c8d0", skills: [SKILLS.heal, SKILLS.cleanse, SKILLS.thunder, SKILLS.restoration, SKILLS.ankh], items: [], attackCooldown: 2500 },
 };
 
 // =============================================================================

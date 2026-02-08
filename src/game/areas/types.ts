@@ -103,5 +103,5 @@ export interface ComputedAreaData {
     mergedObstacles: MergedObstacle[];
     candlePositions: CandlePosition[];
     treeBlocked: Set<string>;  // Set of "x,z" keys for tree-blocked cells (for LOS)
-    lavaBlocked: Set<string>;  // Set of "x,z" keys for lava-blocked cells (movement only, not LOS)
+    terrainBlocked: Set<string>;  // Set of "x,z" keys for terrain-blocked cells (lava, water - movement only, not LOS)
 }

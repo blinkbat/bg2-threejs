@@ -5,7 +5,7 @@
 import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, StatusEffect, StatusEffectType } from "../core/types";
 import { COLORS } from "../core/constants";
-import { getUnitStats } from "../game/units";
+import { getUnitStats, getEffectiveMaxHp } from "../game/units";
 import { handleUnitDefeat, showDamageVisual } from "../combat/damageEffects";
 import { isUnitAlive } from "../combat/combatMath";
 
@@ -123,6 +123,36 @@ export function processStatusEffects(
                         defeatedThisFrame.add(unit.id);
                         handleUnitDefeat(unit.id, unitG, unitsRef, addLog, data.name);
                     }
+                } else if (effect.type === "regen") {
+                    // Regen effect: heal per tick (healPerTick stored in shieldAmount)
+                    const healPerTick = effect.shieldAmount ?? 0;
+                    const maxHp = unit.team === "player"
+                        ? getEffectiveMaxHp(unit.id, unit)
+                        : data.hp;
+
+                    setUnits(prev => prev.map(u => {
+                        if (u.id !== unit.id) return u;
+                        const newHp = Math.min(maxHp, u.hp + healPerTick);
+                        const updatedEffects = tickEffect(u.statusEffects || [], effect.type, now, effect.tickInterval);
+                        return {
+                            ...u,
+                            hp: newHp,
+                            statusEffects: updatedEffects.length > 0 ? updatedEffects : undefined
+                        };
+                    }));
+
+                    if (healPerTick > 0) {
+                        showDamageVisual(scene, unit.id, unitG.position.x, unitG.position.z, healPerTick, COLORS.hpHigh, hitFlashRef, damageTexts, addLog, `${data.name} regenerates ${healPerTick} HP.`, now);
+                    }
+                } else if (effect.type === "doom" && effect.duration - effect.tickInterval <= 0) {
+                    // Doom expiration: kill the unit instantly
+                    setUnits(prev => prev.map(u => {
+                        if (u.id !== unit.id) return u;
+                        return { ...u, hp: 0, statusEffects: undefined };
+                    }));
+                    defeatedThisFrame.add(unit.id);
+                    handleUnitDefeat(unit.id, unitG, unitsRef, addLog, data.name);
+                    addLog(`${data.name} succumbs to Doom!`, COLORS.doomText);
                 } else {
                     // Pure duration effect: just tick down duration
                     setUnits(prev => prev.map(u => {

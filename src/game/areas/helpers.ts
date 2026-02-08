@@ -70,10 +70,11 @@ export function computeAreaData(area: AreaData): ComputedAreaData {
     // Build blocked grid from geometry
     const blocked = buildBlockedFromGeometry(area.geometry, area.gridWidth, area.gridHeight);
 
-    // Also unblock terrain lava zones (they don't render as walls, but block movement separately)
+    // Unblock terrain hazard zones (they don't render as walls, but block movement separately)
     for (let z = 0; z < area.gridHeight && z < area.terrain.length; z++) {
         for (let x = 0; x < area.gridWidth && x < (area.terrain[z]?.length ?? 0); x++) {
-            if (area.terrain[z][x] === "~") {
+            const t = area.terrain[z][x];
+            if (t === "~" || t === "w") {
                 blocked[x][z] = false;
             }
         }
@@ -100,12 +101,13 @@ export function computeAreaData(area: AreaData): ComputedAreaData {
     // The walls get removed when the secret door is opened
     const mergedObstacles = mergeObstacles(blocked, area.gridWidth, area.gridHeight);
 
-    // Track lava zones for pathfinding (NOT in main blocked grid - lava doesn't block LOS)
-    const lavaBlocked = new Set<string>();
+    // Track terrain hazard zones for pathfinding (NOT in main blocked grid - doesn't block LOS)
+    const terrainBlocked = new Set<string>();
     for (let z = 0; z < area.gridHeight && z < area.terrain.length; z++) {
         for (let x = 0; x < area.gridWidth && x < (area.terrain[z]?.length ?? 0); x++) {
-            if (area.terrain[z][x] === "~") {
-                lavaBlocked.add(`${x},${z}`);
+            const t = area.terrain[z][x];
+            if (t === "~" || t === "w") {
+                terrainBlocked.add(`${x},${z}`);
             }
         }
     }
@@ -152,5 +154,5 @@ export function computeAreaData(area: AreaData): ComputedAreaData {
         });
     }
 
-    return { blocked, mergedObstacles, candlePositions, treeBlocked, lavaBlocked };
+    return { blocked, mergedObstacles, candlePositions, treeBlocked, terrainBlocked };
 }

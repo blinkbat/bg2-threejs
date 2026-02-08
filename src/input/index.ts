@@ -58,7 +58,7 @@ export interface InputSetters {
 export type QueuedAction =
     | { type: "skill"; skill: Skill; targetX: number; targetZ: number; targetId?: number }
     | { type: "move"; targetX: number; targetZ: number }
-    | { type: "consumable"; itemId: string };
+    | { type: "consumable"; itemId: string; targetId?: number };
 
 // Map from unitId to their queued action
 export type ActionQueue = Record<number, QueuedAction>;
@@ -205,7 +205,7 @@ export function processActionQueue(
     skillCtx: SkillExecutionContext,
     setUnits: React.Dispatch<React.SetStateAction<Unit[]>>,
     setQueuedActions: React.Dispatch<React.SetStateAction<{ unitId: number; skillName: string }[]>>,
-    onConsumeItem?: (unitId: number, itemId: string) => boolean
+    onConsumeItem?: (unitId: number, itemId: string, targetId?: number) => boolean
 ): void {
     if (pausedRef.current) return;
 
@@ -264,7 +264,7 @@ export function processActionQueue(
             }
             // Execute consumable via callback
             if (onConsumeItem) {
-                const success = onConsumeItem(unitId, action.itemId);
+                const success = onConsumeItem(unitId, action.itemId, action.targetId);
                 if (success) {
                     executedUnits.push(unitId);
                 }

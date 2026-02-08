@@ -3,7 +3,7 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation, EnemyStats, EnemySpawnSkill } from "../core/types";
+import type { Unit, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation, EnemyStats, EnemySpawnSkill, EnemyRaiseSkill } from "../core/types";
 import { SKILL_SINGLE_TARGET_CHANCE, SLOW_MOVE_MULT } from "../core/constants";
 import { getUnitRadius, isInRange } from "../rendering/range";
 import { tryKite, type KiteContext } from "../ai/targeting";
@@ -26,11 +26,13 @@ export { spawnSwingIndicator, updateSwingAnimations } from "./swingAnimations";
 export { processAcidTiles, createAcidTile, clearAcidTiles } from "./acidTiles";
 export { processSanctuaryTiles, createSanctuaryTile, clearSanctuaryTiles } from "./sanctuaryTiles";
 export { processChargeAttacks, clearChargeAttacks, isUnitCharging } from "./constructCharge";
+export { processCurses, clearCurses } from "./necromancerCurse";
 import { executeEnemySwipe, executeEnemyHeal } from "./enemySkills";
 import { executeEnemyBasicAttack } from "./enemyAttack";
 import { createAcidTile, tryCreateAcidAura } from "./acidTiles";
 import { isUnitCharging } from "./constructCharge";
-import { trySpawnMinion, tryStartChargeAttack, tryLeapToTarget, isUnitLeaping, tryVinesSkill, trySpawnTentacle } from "./enemyBehaviors";
+import { trySpawnMinion, tryStartChargeAttack, tryLeapToTarget, isUnitLeaping, tryVinesSkill, trySpawnTentacle, tryRaiseDead } from "./enemyBehaviors";
+import { startCurse } from "./necromancerCurse";
 export { clearLeaps, updateLeaps, isUnitLeaping, updateTentacles, clearTentacles, trySubmergeKraken, isKrakenSubmerged, isKrakenFullySubmerged, updateSubmergedKrakens } from "./enemyBehaviors";
 export { spawnLootBag, removeLootBag, clearAllLootBags, resetLootBagIds } from "./lootBags";
 
@@ -260,12 +262,44 @@ export function updateUnitAI(
         });
     }
 
+    // Phase 1.75: Necromancer raise dead check - batch-spawns skeleton minions when all are dead
+    if (!isPlayer && 'raiseSkill' in data && data.raiseSkill) {
+        tryRaiseDead({
+            unit, g, enemyStats: data as EnemyStats, raiseSkill: data.raiseSkill as EnemyRaiseSkill,
+            unitsState, unitsRef, skillCooldowns, setSkillCooldowns, setUnits, addLog, now
+        });
+    }
+
     // Phase 1.8: Tentacle spawn check - Baby Kraken spawns tentacles toward players
     if (!isPlayer && 'tentacleSkill' in data && data.tentacleSkill) {
         trySpawnTentacle({
             unit, g, enemyStats: data as EnemyStats, tentacleSkill: data.tentacleSkill,
             unitsState, unitsRef, scene, skillCooldowns, setSkillCooldowns, setUnits, addLog, now
         });
+    }
+
+    // Phase 1.85: Necromancer curse check - delayed AoE at a player's position
+    if (!isPlayer && 'curseSkill' in data && data.curseSkill) {
+        const curseSkill = data.curseSkill;
+        const curseCooldownKey = `${unit.id}-${curseSkill.name}`;
+        const curseCooldownEnd = skillCooldowns[curseCooldownKey]?.end ?? 0;
+
+        if (now >= curseCooldownEnd) {
+            // Find a visible player target within curse range
+            const curseTargets = getAliveUnitsInRange(unitsState, unitsRef, "player", g.position.x, g.position.z, curseSkill.range, defeatedThisFrame);
+            if (curseTargets.length > 0) {
+                // Target the closest player
+                curseTargets.sort((a, b) => a.dist - b.dist);
+                const curseTarget = curseTargets[0];
+                startCurse(scene, unit.id, curseSkill, curseTarget.group.position.x, curseTarget.group.position.z, now, addLog);
+
+                const cooldownMult = getCooldownMultiplier(unit);
+                setSkillCooldowns(prev => ({
+                    ...prev,
+                    [curseCooldownKey]: { end: now + curseSkill.cooldown * cooldownMult, duration: curseSkill.cooldown }
+                }));
+            }
+        }
     }
 
     let targetX = g.position.x, targetZ = g.position.z;

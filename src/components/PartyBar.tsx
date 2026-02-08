@@ -8,6 +8,7 @@ interface PartyBarProps {
     selectedIds: number[];
     onSelect: React.Dispatch<React.SetStateAction<number[]>>;
     targetingMode?: { casterId: number; skill: Skill } | null;
+    consumableTargetingMode?: { userId: number; itemId: string } | null;
     onTargetUnit?: (targetUnitId: number) => void;
     // Hotbar props
     hotbarAssignments?: HotbarAssignments;
@@ -22,6 +23,7 @@ export function PartyBar({
     selectedIds,
     onSelect,
     targetingMode,
+    consumableTargetingMode,
     onTargetUnit,
     hotbarAssignments = {},
     onAssignSkill,
@@ -41,12 +43,19 @@ export function PartyBar({
                 const hpPct = getHpPercentage(unit.hp, effectiveMaxHp);
                 const hpColor = getHpColor(hpPct);
 
-                const isValidTarget = targetingMode && targetingMode.skill.targetType === "ally" && unit.hp > 0;
                 const isTargetingAlly = targetingMode?.skill.targetType === "ally";
+                const isTargetingDeadAlly = consumableTargetingMode !== null && consumableTargetingMode !== undefined;
+                const isValidTarget = (targetingMode && isTargetingAlly && unit.hp > 0) ||
+                    (isTargetingDeadAlly && unit.hp <= 0 && unit.team === "player");
 
                 const handleClick = (e: React.MouseEvent) => {
                     e.stopPropagation();
-                    // Dead units cannot be selected or targeted
+                    // Consumable targeting: allow clicking dead allies
+                    if (isTargetingDeadAlly && unit.hp <= 0 && onTargetUnit) {
+                        onTargetUnit(unit.id);
+                        return;
+                    }
+                    // Dead units cannot be selected or targeted for skills
                     if (unit.hp <= 0) return;
                     if (targetingMode && isTargetingAlly && onTargetUnit) {
                         onTargetUnit(unit.id);
@@ -60,7 +69,7 @@ export function PartyBar({
                     isSelected ? "selected" : "",
                     isValidTarget ? "valid-target" : "",
                     unit.hp <= 0 ? "dead" : "",
-                    isTargetingAlly ? "targeting" : ""
+                    (isTargetingAlly || isTargetingDeadAlly) ? "targeting" : ""
                 ].filter(Boolean).join(" ");
 
                 const hasUnspentPoints = (unit.statPoints ?? 0) > 0;

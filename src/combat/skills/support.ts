@@ -4,14 +4,14 @@
 
 import * as THREE from "three";
 import type { Skill, StatusEffect } from "../../core/types";
-import { COLORS, BUFF_TICK_INTERVAL, QI_DRAIN_DURATION, QI_DRAIN_TICK_INTERVAL } from "../../core/constants";
+import { COLORS, BUFF_TICK_INTERVAL, QI_DRAIN_DURATION, QI_DRAIN_TICK_INTERVAL, POISON_TICK_INTERVAL } from "../../core/constants";
 import { UNIT_DATA, getEffectiveMaxHp } from "../../game/units";
 import { getFaithHealingBonus } from "../../game/statBonuses";
 import { rollDamage, hasStatusEffect, logHeal, logBuff, logCleanse, applyStatusEffect } from "../combatMath";
 import { tryHealBark } from "../barks";
 import { getUnitRadius, isInRange } from "../../rendering/range";
 import { soundFns } from "../../audio";
-import { createAnimatedRing } from "../damageEffects";
+import { createAnimatedRing, createLightningPillar } from "../damageEffects";
 import { updateUnitWith } from "../../core/stateUtils";
 import type { SkillExecutionContext } from "./types";
 import { findClosestTargetByTeam, consumeSkill } from "./helpers";
@@ -407,6 +407,191 @@ export function executeCleanseSkill(
     if (targetG && mesh) {
         (mesh.material as THREE.MeshStandardMaterial).color.set("#ffffff");
         hitFlashRef.current[targetId] = now;
+    }
+
+    return true;
+}
+
+// =============================================================================
+// RESTORATION SKILL
+// =============================================================================
+
+/**
+ * Execute Restoration skill - removes doom, poison, and slow, then applies regen HoT.
+ */
+export function executeRestorationSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill,
+    targetX: number,
+    targetZ: number
+): boolean {
+    const { scene, unitsStateRef, unitsRef, unitMeshRef, hitFlashRef, setUnits, addLog } = ctx;
+
+    // Find closest ally to target position
+    const closest = findClosestTargetByTeam(unitsStateRef.current, unitsRef.current, "player", targetX, targetZ);
+
+    if (!closest) {
+        addLog(`${UNIT_DATA[casterId].name}: No ally at that location!`, COLORS.logNeutral);
+        return false;
+    }
+
+    const { unit: targetAlly, group: targetG } = closest;
+    const targetData = UNIT_DATA[targetAlly.id];
+    const targetId = targetAlly.id;
+
+    // Check if target actually needs restoration (has doom, poison, slow, or is not at full HP)
+    const hasDoom = hasStatusEffect(targetAlly, "doom");
+    const hasPoison = hasStatusEffect(targetAlly, "poison");
+    const hasSlow = hasStatusEffect(targetAlly, "slowed");
+    const targetMaxHp = getEffectiveMaxHp(targetAlly.id, targetAlly);
+    const needsHealing = targetAlly.hp < targetMaxHp;
+
+    if (!hasDoom && !hasPoison && !hasSlow && !needsHealing) {
+        addLog(`${UNIT_DATA[casterId].name}: ${targetData.name} doesn't need restoration!`, COLORS.logNeutral);
+        return false;
+    }
+
+    consumeSkill(ctx, casterId, skill);
+
+    const casterData = UNIT_DATA[casterId];
+    const now = Date.now();
+    const duration = skill.duration!;
+    const healPerTick = skill.healPerTick!;
+
+    // Remove doom, poison, slow and apply regen
+    const regenEffect: StatusEffect = {
+        type: "regen",
+        duration,
+        tickInterval: POISON_TICK_INTERVAL,  // 1s ticks (same interval as poison)
+        timeSinceTick: 0,
+        lastUpdateTime: now,
+        damagePerTick: 0,  // Regen heals, not damages (handled specially in status processing)
+        sourceId: casterId,
+        shieldAmount: healPerTick  // Reuse shieldAmount field to store heal-per-tick
+    };
+
+    setUnits(prev => prev.map(u => {
+        if (u.id !== targetId) return u;
+        // Remove doom, poison, slow
+        const cleansedEffects = (u.statusEffects ?? []).filter(
+            e => e.type !== "doom" && e.type !== "poison" && e.type !== "slowed"
+        );
+        return { ...u, statusEffects: applyStatusEffect(cleansedEffects, regenEffect) };
+    }));
+
+    // Log what was removed
+    const removedEffects: string[] = [];
+    if (hasDoom) removedEffects.push("Doom");
+    if (hasPoison) removedEffects.push("Poison");
+    if (hasSlow) removedEffects.push("Slow");
+
+    soundFns.playHeal();
+    if (removedEffects.length > 0) {
+        addLog(`${casterData.name}'s ${skill.name} purges ${removedEffects.join(", ")} from ${targetData.name}!`, "#ecf0f1");
+    }
+    addLog(`${targetData.name} is restored, healing over time.`, COLORS.logHeal);
+
+    // Visual effect - golden glow ring
+    createAnimatedRing(scene, targetG.position.x, targetG.position.z, "#ffd700", {
+        innerRadius: 0.3, outerRadius: 0.5, maxScale: 1.5, duration: 300
+    });
+
+    // Visual effect - golden flash on target
+    const meshRef = unitMeshRef.current[targetId];
+    if (targetG && meshRef) {
+        (meshRef.material as THREE.MeshStandardMaterial).color.set("#ffd700");
+        hitFlashRef.current[targetId] = now;
+    }
+
+    return true;
+}
+
+// =============================================================================
+// REVIVE SKILL (Ankh)
+// =============================================================================
+
+/**
+ * Execute Revive skill - revive a downed ally to 1 HP, placed next to the caster.
+ */
+export function executeReviveSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill,
+    targetX: number,
+    targetZ: number
+): boolean {
+    const { scene, unitsStateRef, unitsRef, unitMeshRef, hitFlashRef, setUnits, addLog } = ctx;
+
+    // Find closest DEAD ally to target position
+    const deadAllies = unitsStateRef.current.filter(u => u.team === "player" && u.hp <= 0);
+    if (deadAllies.length === 0) {
+        addLog(`${UNIT_DATA[casterId].name}: No fallen allies!`, COLORS.logNeutral);
+        return false;
+    }
+
+    // Find the dead ally closest to the click position
+    let closestDead: { unit: typeof deadAllies[0]; dist: number } | null = null;
+    for (const dead of deadAllies) {
+        const dg = unitsRef.current[dead.id];
+        if (!dg) continue;
+        const dx = dg.position.x - targetX;
+        const dz = dg.position.z - targetZ;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+        if (!closestDead || dist < closestDead.dist) {
+            closestDead = { unit: dead, dist };
+        }
+    }
+
+    if (!closestDead) {
+        addLog(`${UNIT_DATA[casterId].name}: No fallen ally at that location!`, COLORS.logNeutral);
+        return false;
+    }
+
+    consumeSkill(ctx, casterId, skill);
+
+    const casterData = UNIT_DATA[casterId];
+    const targetData = UNIT_DATA[closestDead.unit.id];
+    const reviveId = closestDead.unit.id;
+    const casterG = unitsRef.current[casterId];
+    const now = Date.now();
+
+    // Place revived unit next to caster
+    const reviveAngle = Math.random() * Math.PI * 2;
+    const reviveX = casterG ? casterG.position.x + Math.cos(reviveAngle) * 1.5 : targetX;
+    const reviveZ = casterG ? casterG.position.z + Math.sin(reviveAngle) * 1.5 : targetZ;
+
+    // Revive to 1 HP, clear status effects, move to caster
+    setUnits(prev => prev.map(u => {
+        if (u.id !== reviveId) return u;
+        return { ...u, hp: 1, x: reviveX, z: reviveZ, statusEffects: undefined, target: null };
+    }));
+
+    // Make the unit visible again and update position
+    const reviveG = unitsRef.current[reviveId];
+    if (reviveG) {
+        reviveG.visible = true;
+        reviveG.position.set(reviveX, reviveG.userData.flyHeight, reviveZ);
+        reviveG.userData.targetX = reviveX;
+        reviveG.userData.targetZ = reviveZ;
+    }
+
+    soundFns.playHeal();
+    addLog(`${casterData.name}'s ${skill.name} revives ${targetData.name}!`, "#ffd700");
+
+    // Visual effect - golden lightning pillar at revive location
+    createLightningPillar(scene, reviveX, reviveZ, {
+        color: "#ffd700",
+        duration: 600,
+        radius: 0.3,
+        height: 10
+    });
+
+    // Visual effect - golden flash on revived unit
+    const meshRef = unitMeshRef.current[reviveId];
+    if (meshRef) {
+        (meshRef.material as THREE.MeshStandardMaterial).color.set("#ffd700");
+        hitFlashRef.current[reviveId] = now;
     }
 
     return true;

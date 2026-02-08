@@ -30,7 +30,9 @@ export {
     executeBuffSkill,
     executeAoeBuffSkill,
     executeEnergyShieldSkill,
-    executeCleanseSkill
+    executeCleanseSkill,
+    executeRestorationSkill,
+    executeReviveSkill
 } from "./support";
 
 // Re-export utility skills
@@ -44,7 +46,7 @@ export {
 // Import for internal use
 import type { SkillExecutionContext } from "./types";
 import { executeAoeSkill, executeMeleeSkill, executeSmiteSkill, executeRangedSkill, executeFlurrySkill, executeMagicWaveSkill } from "./damage";
-import { executeHealSkill, executeManaTransferSkill, executeBuffSkill, executeAoeBuffSkill, executeEnergyShieldSkill, executeCleanseSkill } from "./support";
+import { executeHealSkill, executeManaTransferSkill, executeBuffSkill, executeAoeBuffSkill, executeEnergyShieldSkill, executeCleanseSkill, executeRestorationSkill, executeReviveSkill } from "./support";
 import { executeTauntSkill, executeDebuffSkill, executeTrapSkill, executeSanctuarySkill } from "./utility";
 
 // =============================================================================
@@ -116,6 +118,10 @@ export function executeSkill(
         return executeSmiteSkill(ctx, casterId, skill, targetX, targetZ, targetId);
     } else if (skill.type === "aoe_buff" && skill.targetType === "self") {
         return executeAoeBuffSkill(ctx, casterId, skill);
+    } else if (skill.type === "restoration" && skill.targetType === "ally") {
+        return executeRestorationSkill(ctx, casterId, skill, targetX, targetZ);
+    } else if (skill.type === "revive" && skill.targetType === "ally") {
+        return executeReviveSkill(ctx, casterId, skill, targetX, targetZ);
     }
 
     return false;

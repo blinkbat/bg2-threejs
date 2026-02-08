@@ -3,7 +3,7 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitGroup, EnemyStats, EnemySpawnSkill, EnemyChargeAttack, EnemyLeapSkill, EnemyVinesSkill, EnemyTentacleSkill, DamageText } from "../../core/types";
+import type { Unit, UnitGroup, EnemyStats, EnemySpawnSkill, EnemyChargeAttack, EnemyLeapSkill, EnemyVinesSkill, EnemyTentacleSkill, EnemyRaiseSkill, EnemyCurseSkill, DamageText } from "../../core/types";
 
 export interface SpawnContext {
     unit: Unit;
@@ -77,6 +77,34 @@ export interface TentacleContext {
     skillCooldowns: Record<string, { end: number; duration: number }>;
     setSkillCooldowns: React.Dispatch<React.SetStateAction<Record<string, { end: number; duration: number }>>>;
     setUnits: React.Dispatch<React.SetStateAction<Unit[]>>;
+    addLog: (text: string, color?: string) => void;
+    now: number;
+}
+
+export interface RaiseContext {
+    unit: Unit;
+    g: UnitGroup;
+    enemyStats: EnemyStats;
+    raiseSkill: EnemyRaiseSkill;
+    unitsState: Unit[];
+    unitsRef: Record<number, UnitGroup>;
+    skillCooldowns: Record<string, { end: number; duration: number }>;
+    setSkillCooldowns: React.Dispatch<React.SetStateAction<Record<string, { end: number; duration: number }>>>;
+    setUnits: React.Dispatch<React.SetStateAction<Unit[]>>;
+    addLog: (text: string, color?: string) => void;
+    now: number;
+}
+
+export interface CurseContext {
+    unit: Unit;
+    g: UnitGroup;
+    enemyStats: EnemyStats;
+    curseSkill: EnemyCurseSkill;
+    unitsState: Unit[];
+    unitsRef: Record<number, UnitGroup>;
+    scene: THREE.Scene;
+    skillCooldowns: Record<string, { end: number; duration: number }>;
+    setSkillCooldowns: React.Dispatch<React.SetStateAction<Record<string, { end: number; duration: number }>>>;
     addLog: (text: string, color?: string) => void;
     now: number;
 }

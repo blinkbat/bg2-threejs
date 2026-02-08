@@ -186,6 +186,30 @@ export const SKILLS: Record<string, Skill> = {
         healPerTick: 3,  // Heal per tick
         damageType: "holy"
     },
+    restoration: {
+        name: "Restoration",
+        description: "Purge doom, poison, and slow from an ally, then heal them for 3 HP per second over 10 seconds.",
+        flavor: "\"Even death's shadow retreats before the light.\"",
+        manaCost: 10,
+        cooldown: 8000,
+        type: "restoration",
+        targetType: "ally",
+        range: 8,
+        duration: 10000,   // 10 seconds of regen
+        healPerTick: 3,    // 3 HP per tick (1s ticks)
+        damageType: "holy"
+    },
+    ankh: {
+        name: "Ankh",
+        description: "Revive a fallen ally to 1 HP, placing them next to the caster.",
+        flavor: "\"Rise. Your work is not yet done.\"",
+        manaCost: 25,
+        cooldown: 30000,
+        type: "revive",
+        targetType: "ally",
+        range: 8,
+        damageType: "holy"
+    },
     qiFocus: {
         name: "Qi Focus",
         description: "Channel your life force to restore an ally's mana, at the cost of your own vitality.",

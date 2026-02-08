@@ -63,6 +63,6 @@ export function isTreeBlocked(x: number, z: number): boolean {
     return getComputedAreaData().treeBlocked.has(`${x},${z}`);
 }
 
-export function isLavaBlocked(x: number, z: number): boolean {
-    return getComputedAreaData().lavaBlocked.has(`${x},${z}`);
+export function isTerrainBlocked(x: number, z: number): boolean {
+    return getComputedAreaData().terrainBlocked.has(`${x},${z}`);
 }

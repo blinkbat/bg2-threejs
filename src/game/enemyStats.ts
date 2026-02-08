@@ -312,6 +312,57 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         moveSpeed: 0,          // Stationary - does not move
         expReward: 2
     },
+    necromancer: {
+        name: "Necromancer",
+        hp: 60,
+        maxHp: 60,
+        damage: [4, 8],            // Dark bolt damage
+        accuracy: 65,
+        armor: 0,
+        color: "#2a0a2a",          // Dark purple-black
+        aggroRange: 10,
+        attackCooldown: 2500,
+        range: 7,                  // Ranged caster
+        projectileColor: "#6b1f6b", // Dark purple bolt
+        size: 1.3,                 // Tall
+        moveSpeed: 0.6,            // Slow movement
+        expReward: 50,
+        // Kiting behavior - retreat when players get close
+        kiteTrigger: 4,
+        kiteDistance: 3,
+        kiteCooldown: 4000,
+        // Raise dead - batch spawns skeleton minions, re-raises when all die
+        raiseSkill: {
+            spawnType: "skeleton_minion",
+            cooldown: 8000,        // 8 seconds after all die before re-raising
+            spawnCount: 3,         // Raises 3 at once
+            spawnRange: 2          // Spawn within 2 tiles
+        },
+        // Area curse - delayed AoE at player position
+        curseSkill: {
+            name: "Dark Curse",
+            cooldown: 15000,       // 15 seconds between casts
+            range: 8,              // Cast range
+            radius: 2.5,           // 2.5 tile AoE radius
+            delay: 3000,           // 3 second warning before detonation
+            damage: [6, 12],
+            damageType: "chaos"
+        }
+    },
+    skeleton_minion: {
+        name: "Skeleton Minion",
+        hp: 12,
+        maxHp: 12,
+        damage: [2, 4],
+        accuracy: 50,
+        armor: 0,
+        color: "#b0b098",          // Pale bone (slightly different from warrior)
+        aggroRange: 6,
+        attackCooldown: 1800,
+        size: 0.9,                 // Smaller than warrior
+        moveSpeed: 1.0,
+        expReward: 5               // Low - summoned unit
+    },
     magma_imp: {
         name: "Magma Imp",
         hp: 25,

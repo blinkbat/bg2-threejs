@@ -631,7 +631,7 @@ export function updateProjectiles(
                 soundFns.playHit();
 
                 if (isCrit) {
-                    addLog("Critical hit!", COLORS.damageCrit);
+                    addLog(`${attackerData.name} critically hits ${targetData.name} for ${dmg} damage!`, COLORS.damageCrit);
                 }
                 if (willPoison) {
                     addLog(logPoisoned(targetData.name), COLORS.poisonText);

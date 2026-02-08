@@ -7,7 +7,7 @@ import { areaDataToText } from "./areaTextFormat";
 
 // Editor modules
 import type { Tool, Layer, MapMetadata, EntityDef, TreeDef, DecorationDef, EditorSnapshot } from "./types";
-import { getAvailableAreaIds, BASE_CELL_SIZE, MAX_HISTORY } from "./constants";
+import { getAvailableAreaIds, BASE_CELL_SIZE, MAX_HISTORY, LAYER_COLORS, LAYER_BRUSHES, PROP_TYPE_TO_CHAR, PROP_CHAR_TO_TYPE, PROP_TREE_CHARS } from "./constants";
 import { registerAreaFromText } from "../game/areas";
 import { EntityEditPopup, TreeEditPopup, DecorationEditPopup } from "./popups";
 import { ConnectionsPanel } from "./panels";
@@ -349,48 +349,7 @@ export function MapEditor() {
     }
 
     function getCharColor(char: string, layer: Layer): string {
-        if (layer === "geometry") {
-            if (char === "#") return "#444";
-        }
-        if (layer === "terrain") {
-            if (char === "~") return "#f40";
-            if (char === "w") return "#48f";
-            if (char === "a") return "#8f0";
-        }
-        if (layer === "floor") {
-            if (char === "s") return "#c2b280";  // Sand
-            if (char === "S") return "#d4c490";  // Light sand
-            if (char === "d") return "#8b7355";  // Dirt
-            if (char === "D") return "#6b5344";  // Dark dirt
-            if (char === "g") return "#5a8a4a";  // Grass
-            if (char === "G") return "#4a7a3a";  // Dark grass
-            if (char === "w") return "#4a90a0";  // Water
-            if (char === "W") return "#3a7080";  // Deep water
-            if (char === "t") return "#707070";  // Stone
-            if (char === "T") return "#606060";  // Dark stone
-        }
-        if (layer === "props") {
-            if (char === "T") return "#2a5";
-            if (char === "C" || char === "c") return "#888";
-            if (char === "W") return "#665";
-            if (char === "R") return "#6a5a4a";  // Rock - brown/gray
-            if (char === "r") return "#7a6a5a";  // Small rock - lighter
-            if (char === "M") return "#a44";     // Mushroom - red
-            if (char === "m") return "#c66";     // Small mushroom - lighter red
-            if (char === "S") return "#3a7";     // Seaweed - teal-green
-            if (char === "s") return "#4a8";     // Small seaweed - lighter
-            if (char === "F") return "#4a5";     // Fern - bright green
-            if (char === "f") return "#5b6";     // Small fern - lighter green
-        }
-        if (layer === "entities") {
-            if (char.startsWith("E")) return "#f44";
-            if (char.startsWith("X")) return "#ff0";
-            if (char === "@") return "#4af";
-            if (char === "D") return "#84f";  // Door - purple
-            if (char === "L") return "#fa4";  // Candle - orange
-            if (char === "S") return "#4aa";  // Secret Door - teal
-        }
-        return "#666";
+        return LAYER_COLORS[layer].get(char) ?? "#666";
     }
 
     function getLayerColor(layer: Layer): string {
@@ -877,60 +836,7 @@ export function MapEditor() {
     };
 
     const getBrushOptions = (): { char: string; label: string }[] => {
-        switch (activeLayer) {
-            case "geometry":
-                return [
-                    { char: "#", label: "Wall" },
-                    { char: ".", label: "Floor" },
-                ];
-            case "terrain":
-                return [
-                    { char: ".", label: "Empty" },
-                    { char: "~", label: "Lava" },
-                    { char: "w", label: "Water" },
-                    { char: "a", label: "Acid" },
-                ];
-            case "floor":
-                return [
-                    { char: ".", label: "Default" },
-                    { char: "s", label: "Sand" },
-                    { char: "S", label: "Lt Sand" },
-                    { char: "d", label: "Dirt" },
-                    { char: "D", label: "Dk Dirt" },
-                    { char: "g", label: "Grass" },
-                    { char: "G", label: "Dk Grass" },
-                    { char: "w", label: "Water" },
-                    { char: "W", label: "Dp Water" },
-                    { char: "t", label: "Stone" },
-                    { char: "T", label: "Dk Stone" },
-                ];
-            case "props":
-                return [
-                    { char: ".", label: "Empty" },
-                    { char: "T", label: "Tree" },
-                    { char: "C", label: "Column" },
-                    { char: "c", label: "Broken Col" },
-                    { char: "W", label: "Broken Wall" },
-                    { char: "R", label: "Rock" },
-                    { char: "r", label: "Small Rock" },
-                    { char: "M", label: "Mushroom" },
-                    { char: "m", label: "Small Mush" },
-                    { char: "F", label: "Fern" },
-                    { char: "f", label: "Small Fern" },
-                    { char: "S", label: "Seaweed" },
-                    { char: "s", label: "Sm Seaweed" },
-                ];
-            case "entities":
-                return [
-                    { char: ".", label: "Empty" },
-                    { char: "@", label: "Spawn" },
-                    { char: "E", label: "Enemy" },
-                    { char: "X", label: "Chest" },
-                    { char: "D", label: "Door" },
-                    { char: "L", label: "Candle" },
-                    { char: "S", label: "Secret Door" },
-                ];
-        }
+        return LAYER_BRUSHES[activeLayer];
     };
 
     return (
@@ -1388,30 +1294,19 @@ import type { EnemySpawn, AreaTransition, ChestLocation, TreeLocation, Decoratio
 function computePropsFromArea(area: AreaData, width: number, height: number): string[][] {
     const grid: string[][] = Array.from({ length: height }, () => Array(width).fill("."));
 
-    // Trees
     for (const tree of area.trees) {
         const x = Math.floor(tree.x);
         const z = Math.floor(tree.z);
         if (x >= 0 && x < width && z >= 0 && z < height) grid[z][x] = "T";
     }
 
-    // Decorations
     if (area.decorations) {
         for (const dec of area.decorations) {
             const x = Math.floor(dec.x);
             const z = Math.floor(dec.z);
             if (x >= 0 && x < width && z >= 0 && z < height) {
-                if (dec.type === "column") grid[z][x] = "C";
-                else if (dec.type === "broken_column") grid[z][x] = "c";
-                else if (dec.type === "broken_wall") grid[z][x] = "W";
-                else if (dec.type === "rock") grid[z][x] = "R";
-                else if (dec.type === "small_rock") grid[z][x] = "r";
-                else if (dec.type === "mushroom") grid[z][x] = "M";
-                else if (dec.type === "small_mushroom") grid[z][x] = "m";
-                else if (dec.type === "fern") grid[z][x] = "F";
-                else if (dec.type === "small_fern") grid[z][x] = "f";
-                else if (dec.type === "seaweed") grid[z][x] = "S";
-                else if (dec.type === "small_seaweed") grid[z][x] = "s";
+                const char = PROP_TYPE_TO_CHAR.get(dec.type);
+                if (char) grid[z][x] = char;
             }
         }
     }
@@ -1482,18 +1377,14 @@ function extractPropsFromLayer(props: string[][]): { trees: TreeLocation[]; deco
     for (let z = 0; z < props.length; z++) {
         for (let x = 0; x < props[z].length; x++) {
             const char = props[z][x];
-            if (char === "T") trees.push({ x, z, size: 1.0 });
-            else if (char === "C") decorations.push({ x, z, type: "column" });
-            else if (char === "c") decorations.push({ x, z, type: "broken_column" });
-            else if (char === "W") decorations.push({ x, z, type: "broken_wall" });
-            else if (char === "R") decorations.push({ x, z, type: "rock" });
-            else if (char === "r") decorations.push({ x, z, type: "small_rock" });
-            else if (char === "M") decorations.push({ x, z, type: "mushroom" });
-            else if (char === "m") decorations.push({ x, z, type: "small_mushroom" });
-            else if (char === "F") decorations.push({ x, z, type: "fern" });
-            else if (char === "f") decorations.push({ x, z, type: "small_fern" });
-            else if (char === "S") decorations.push({ x, z, type: "seaweed" });
-            else if (char === "s") decorations.push({ x, z, type: "small_seaweed" });
+            if (PROP_TREE_CHARS.has(char)) {
+                trees.push({ x, z, size: 1.0 });
+            } else {
+                const decType = PROP_CHAR_TO_TYPE.get(char);
+                if (decType) {
+                    decorations.push({ x, z, type: decType });
+                }
+            }
         }
     }
 

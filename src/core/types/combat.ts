@@ -13,7 +13,7 @@ export interface Skill {
     flavor?: string;       // Flavor text for tooltip
     manaCost: number;
     cooldown: number;  // ms
-    type: "damage" | "heal" | "buff" | "taunt" | "flurry" | "debuff" | "trap" | "sanctuary" | "mana_transfer" | "smite" | "energy_shield" | "aoe_buff";
+    type: "damage" | "heal" | "buff" | "taunt" | "flurry" | "debuff" | "trap" | "sanctuary" | "mana_transfer" | "smite" | "energy_shield" | "aoe_buff" | "restoration" | "revive";
     targetType: "enemy" | "ally" | "self" | "aoe";
     range: number;
     aoeRadius?: number;
