@@ -165,6 +165,9 @@ wwww....WWWWWWWWww.......
 .........................
 .........................
 
+=== ENEMIES ===
+11.5,22.5:basilisk
+
 === TRANSITIONS ===
 6,1,5,1:north->magma_cave@13,44
 

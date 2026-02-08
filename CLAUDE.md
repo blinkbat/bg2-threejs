@@ -36,21 +36,35 @@ React + Three.js ARPG. State in React (`Unit[]` via `setUnits`), 3D positions on
 | `combat/skills/helpers.ts` | `findClosestTargetByTeam()`, `consumeSkill()` |
 | `combat/skills/types.ts` | `SkillExecutionContext` |
 | `gameLoop/index.ts` | `updateUnitAI()`: targeting -> kiting -> behaviors -> attack -> movement |
-| `gameLoop/enemyAttack.ts` | `executeEnemyBasicAttack()` — melee/ranged/fireball |
+| `gameLoop/enemyAttack.ts` | `executeEnemyBasicAttack()` — melee/ranged/fireball (incl. bite) |
 | `gameLoop/enemySkills.ts` | `executeEnemySwipe()`, `executeEnemyHeal()` |
 | `gameLoop/enemyBehaviors/` | One file per ability, pattern: `try*()` returning boolean |
-| `gameLoop/statusEffects.ts` | Per-tick processing: poison, buff expiry, doom |
+| `gameLoop/statusEffects.ts` | Per-tick processing: poison, buff expiry, doom, stun |
 | `gameLoop/projectiles.ts` | Projectile movement + impact per frame |
 | `gameLoop/acidTiles.ts` | Acid tile creation, damage ticks, aura |
 | `gameLoop/sanctuaryTiles.ts` | Sanctuary healing ticks |
+| `gameLoop/necromancerCurse.ts` | Delayed circular AoE with ground warning (curse telegraph) |
+| `gameLoop/constructCharge.ts` | Construct charge attack processing |
+| `gameLoop/lootBags.ts` | Loot bag spawning, bounce animation, pickup, cleanup |
+| `gameLoop/swingAnimations.ts` | Melee swing indicator visuals |
+| `gameLoop/visuals.ts` | Status effect tints, unit visual updates |
+| `gameLoop/tileUtils.ts` | Tile-related utility functions |
+| `input/index.ts` | Action queue (`QueuedAction`), pause handling, skill queueing, `processActionQueue()` |
+| `hooks/useGameLoop.ts` | Main game loop hook — calls `updateUnitAI`, processes effects/projectiles/glares/curses |
+| `hooks/useThreeScene.ts` | Three.js scene setup/teardown, cleanup on area transitions |
+| `hooks/useInputHandlers.ts` | Mouse/keyboard input, click-to-move, skill targeting, selection |
+| `hooks/hotbarStorage.ts` | Hotbar layout persistence |
+| `components/` | React UI: `PartyBar`, `UnitPanel`, `SkillHotbar`, `HUD`, `CombatLog`, modals |
 | `ai/unitAI.ts` | `runTargetingPhase()`, `runPathFollowingPhase()`, `runMovementPhase()` |
 | `ai/pathfinding.ts` | A* on the grid |
 | `ai/targeting.ts` | `tryKite()` for ranged enemy retreat |
 | `rendering/range.ts` | `getUnitRadius()`, `isInRange()` — hitbox-aware |
+| `rendering/disposal.ts` | `disposeBasicMesh()`, `disposeGeometry()` — Three.js cleanup |
 | `rendering/scene/` | Three.js mesh creation (units, terrain, decorations) |
+| `rendering/scene/units.ts` | Unit mesh creation per enemy type |
 | `audio/` | `soundFns.playHit()`, `.playMiss()`, `.playHeal()`, etc. |
 | `editor/` | Map editor UI. `constants.ts` has `ENEMY_TYPES` from `Object.keys(ENEMY_STATS)` |
-| `game/areas/` | Area/map defs. `textLoader.ts` parses text maps, `maps/` has map files |
+| `game/areas/` | Area/map defs. `textLoader.ts` parses text maps, `helpers.ts` for blocked/terrain, `maps/` has map files |
 
 ## How-To Recipes
 
@@ -62,11 +76,13 @@ React + Three.js ARPG. State in React (`Unit[]` via `setUnits`), 3D positions on
 
 ### New Enemy Behavior
 1. Skill type on `EnemyStats` in `core/types/units.ts` (`mySkill?: EnemyMySkill`)
-2. Skill interface in `core/types/combat.ts`
-3. `gameLoop/enemyBehaviors/myBehavior.ts` -> `tryMyBehavior(ctx): boolean`
-4. Export from `gameLoop/enemyBehaviors/index.ts`
-5. Wire in `gameLoop/index.ts` `updateUnitAI()`: `if (!isPlayer && 'mySkill' in data && data.mySkill) { ... }`
-6. Set skill on enemy in `ENEMY_STATS`
+2. Skill interface in `core/types/units.ts`
+3. Context interface in `gameLoop/enemyBehaviors/types.ts`
+4. `gameLoop/enemyBehaviors/myBehavior.ts` -> `tryMyBehavior(ctx): boolean`
+5. Export from `gameLoop/enemyBehaviors/index.ts` (types + functions)
+6. Wire in `gameLoop/index.ts` `updateUnitAI()`: `if (!isPlayer && 'mySkill' in data && data.mySkill) { ... }`
+7. If per-frame processing needed (telegraphs): add `process*()` call in `hooks/useGameLoop.ts`, add `clear*()` in `hooks/useThreeScene.ts`
+8. Set skill on enemy in `ENEMY_STATS`
 
 ### New Player Skill
 1. Define in `game/skills.ts`, add to unit's skill list
@@ -75,7 +91,7 @@ React + Three.js ARPG. State in React (`Unit[]` via `setUnits`), 3D positions on
 4. Helpers: `consumeSkill`, `findClosestTargetByTeam`, `applyDamageToUnit`, `createAnimatedRing`, `createLightningPillar`, `rollHit`, `calculateDamageWithCrit`, `getEffectiveArmor`, `calculateStatBonus`
 
 ### New Status Effect
-1. `core/types/combat.ts` -> `StatusEffectType` union
+1. `core/types/units.ts` -> `StatusEffectType` union
 2. `core/constants.ts` -> duration, tick interval, colors
 3. `gameLoop/statusEffects.ts` -> tick processing
 4. `gameLoop/visuals.ts` -> visual tint
@@ -97,3 +113,4 @@ React + Three.js ARPG. State in React (`Unit[]` via `setUnits`), 3D positions on
 - **Enemy behaviors**: `try*(ctx): boolean`
 - **Cooldown key**: `` `${unitId}-${skillName}` `` via `setSkillCooldown()`
 - **Range checks**: always `isInRange()` from `rendering/range.ts` (hitbox-aware)
+- **Arc/Cone rotation**: For flat ground-plane arcs using `RingGeometry` + `rotation.x = -PI/2`, use `rotation.z = -facingAngle` where `facingAngle = atan2(dz, dx)`. Euler XYZ means Rz applies before Rx, so negation maps correctly to XZ plane. The shield mesh is a special case (`rotation.z = facing - PI/2`) due to its thetaStart.

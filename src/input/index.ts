@@ -11,6 +11,7 @@ import { soundFns } from "../audio";
 import { pauseGameClock, resumeGameClock } from "../core/gameClock";
 import { executeSkill, clearTargetingMode, type SkillExecutionContext } from "../combat/skills";
 import { findClosestTargetByTeam } from "../combat/skills/helpers";
+import { hasStatusEffect } from "../combat/combatMath";
 import { disposeGeometry } from "../rendering/disposal";
 import { distanceToPoint } from "../game/geometry";
 
@@ -218,6 +219,10 @@ export function processActionQueue(
     // Process each unit's queued action
     for (const [unitIdStr, action] of Object.entries(actionQueueRef.current)) {
         const unitId = Number(unitIdStr);
+
+        // Skip stunned units — don't execute or remove, wait for stun to wear off
+        const unit = skillCtx.unitsStateRef.current.find(u => u.id === unitId);
+        if (unit && hasStatusEffect(unit, "stunned")) continue;
 
         if (action.type === "skill") {
             const caster = skillCtx.unitsStateRef.current.find(u => u.id === unitId);

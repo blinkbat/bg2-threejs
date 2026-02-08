@@ -103,7 +103,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         biteDamage: [14, 22],
         biteCrit: 40,
         glareSkill: {
-            name: "Petrifying Glare",
+            name: "Stunning Glare",
             cooldown: 8000,
             range: 7,
             coneAngle: Math.PI / 4,

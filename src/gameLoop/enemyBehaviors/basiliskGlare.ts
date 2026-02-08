@@ -3,7 +3,7 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitGroup, DamageText, EnemyGlareSkill, EnemyStats, DamageType, StatusEffect } from "../../core/types";
+import type { Unit, UnitGroup, DamageText, EnemyStats, DamageType, StatusEffect } from "../../core/types";
 import { BUFF_TICK_INTERVAL, COLORS } from "../../core/constants";
 import { getUnitStats } from "../../game/units";
 import { getGameTime } from "../../core/gameClock";
@@ -69,7 +69,8 @@ function createConeMesh(
     mesh.rotation.x = -Math.PI / 2;
     mesh.position.set(originX, 0.05, originZ);
     // Rotate to face the target direction
-    mesh.rotation.z = facingAngle;
+    // After rotation.x=-PI/2, rotation.z rotates from +X toward -Z, so negate to match atan2
+    mesh.rotation.z = -facingAngle;
     mesh.name = "glare-cone";
     scene.add(mesh);
     return mesh;
@@ -101,8 +102,8 @@ export function tryBasiliskGlare(ctx: GlareContext): boolean {
         if (glare.casterId === unit.id) return false;
     }
 
-    // Find closest player target within range
-    const targets: { unit: Unit; group: UnitGroup; dist: number }[] = [];
+    // Find player targets within cone distance
+    const targets: { unit: Unit; group: UnitGroup; angle: number }[] = [];
     for (const target of unitsState) {
         if (target.team !== "player" || !isUnitAlive(target, new Set())) continue;
         const tg = unitsRef[target.id];
@@ -110,21 +111,45 @@ export function tryBasiliskGlare(ctx: GlareContext): boolean {
         const dx = tg.position.x - g.position.x;
         const dz = tg.position.z - g.position.z;
         const dist = Math.hypot(dx, dz);
-        if (dist <= glareSkill.range) {
-            targets.push({ unit: target, group: tg, dist });
+        if (dist <= glareSkill.coneDistance && dist > 0.1) {
+            targets.push({ unit: target, group: tg, angle: Math.atan2(dz, dx) });
         }
     }
 
     if (targets.length === 0) return false;
 
-    targets.sort((a, b) => a.dist - b.dist);
-    const primaryTarget = targets[0];
+    // Find the facing angle that hits the most targets
+    // Test each target angle AND midpoints between pairs for better coverage
+    const candidateAngles: number[] = targets.map(t => t.angle);
+    for (let i = 0; i < targets.length; i++) {
+        for (let j = i + 1; j < targets.length; j++) {
+            let diff = targets[j].angle - targets[i].angle;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            candidateAngles.push(targets[i].angle + diff / 2);
+        }
+    }
 
-    // Calculate facing angle toward target
-    const facingAngle = Math.atan2(
-        primaryTarget.group.position.z - g.position.z,
-        primaryTarget.group.position.x - g.position.x
-    );
+    let bestAngle = targets[0].angle;
+    let bestCount = 1;
+    for (const angle of candidateAngles) {
+        let count = 0;
+        for (const other of targets) {
+            let diff = other.angle - angle;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            if (Math.abs(diff) <= glareSkill.coneAngle) count++;
+        }
+        if (count > bestCount) {
+            bestCount = count;
+            bestAngle = angle;
+        }
+    }
+
+    // Prefer multi-target: 3+ always fires, 2 fires 50%, 1 fires 25%
+    if (bestCount < 3 && Math.random() > bestCount * 0.25) return false;
+
+    const facingAngle = bestAngle;
 
     // Create visual warning cone
     const mesh = createConeMesh(scene, g.position.x, g.position.z, facingAngle, glareSkill.coneAngle, glareSkill.coneDistance);
@@ -309,7 +334,7 @@ function executeGlare(
     soundFns.playHit();
     if (hitCount > 0) {
         addLog(logAoeHit(casterStats.name, glare.skillName, hitCount, totalDamage), COLORS.damageEnemy);
-        addLog(`Targets are petrified!`, COLORS.stunnedText);
+        addLog(`Targets are stunned!`, COLORS.stunnedText);
     } else {
         addLog(`${casterStats.name}'s ${glare.skillName} hits nothing!`, COLORS.logNeutral);
     }
@@ -358,8 +383,8 @@ function createGlareFlash(scene: THREE.Scene, glare: GlareState): void {
     });
     const ring = new THREE.Mesh(geometry, material);
     ring.rotation.x = -Math.PI / 2;
+    ring.rotation.z = -glare.facingAngle;
     ring.position.set(glare.coneOriginX, 0.3, glare.coneOriginZ);
-    ring.rotation.z = glare.facingAngle;
     scene.add(ring);
 
     const startTime = getGameTime();

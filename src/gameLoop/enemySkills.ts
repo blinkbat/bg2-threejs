@@ -52,7 +52,7 @@ export function executeEnemySwipe(
             hitTargets[0].group.position.z - g.position.z,
             hitTargets[0].group.position.x - g.position.x
         );
-        swipeArc.rotation.z = angle;
+        swipeArc.rotation.z = -angle;
     }
     scene.add(swipeArc);
 
