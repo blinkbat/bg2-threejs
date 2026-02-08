@@ -12,9 +12,10 @@ import {
     type TargetingContext, type PathContext, type MovementContext
 } from "../ai/unitAI";
 import { getUnitStats, getBasicAttackSkill, getAttackRange } from "../game/units";
+import { distance } from "../game/geometry";
 import type { ActionQueue } from "../input";
-import { hasStatusEffect, isUnitAlive, getCooldownMultiplier } from "../combat/combatMath";
-import { getAliveUnitsInRange } from "../combat/damageEffects";
+import { hasStatusEffect, isUnitAlive, getCooldownMultiplier, setSkillCooldown } from "../combat/combatMath";
+import { getAliveUnitsInRange, buildDamageContext } from "../combat/damageEffects";
 import { isEnemyKiting, clearEnemyKiting } from "../game/enemyState";
 import { findPath } from "../ai/pathfinding";
 
@@ -161,9 +162,7 @@ export function updateUnitAI(
             if (u.team !== "player" || u.hp <= 0) continue;
             const playerG = unitsRef[u.id];
             if (!playerG) continue;
-            const dx = playerG.position.x - g.position.x;
-            const dz = playerG.position.z - g.position.z;
-            const dist = Math.sqrt(dx * dx + dz * dz);
+            const dist = distance(playerG.position.x, playerG.position.z, g.position.x, g.position.z);
             if (dist <= slugData.aggroRange && (!closestPlayer || dist < closestPlayer.dist)) {
                 closestPlayer = { unit: u, group: playerG, dist };
             }
@@ -243,12 +242,8 @@ export function updateUnitAI(
                 setUnits, addLog
             );
             if (executed) {
-                const cooldownMult = getCooldownMultiplier(unit);
-                setSkillCooldowns(prev => ({
-                    ...prev,
-                    [healCooldownKey]: { end: now + healSkill.cooldown * cooldownMult, duration: healSkill.cooldown }
-                }));
-                actionCooldownRef[unit.id] = now + data.attackCooldown * cooldownMult;
+                setSkillCooldown(setSkillCooldowns, healCooldownKey, healSkill.cooldown, now, unit);
+                actionCooldownRef[unit.id] = now + data.attackCooldown * getCooldownMultiplier(unit);
                 return;
             }
         }
@@ -292,12 +287,7 @@ export function updateUnitAI(
                 curseTargets.sort((a, b) => a.dist - b.dist);
                 const curseTarget = curseTargets[0];
                 startCurse(scene, unit.id, curseSkill, curseTarget.group.position.x, curseTarget.group.position.z, now, addLog);
-
-                const cooldownMult = getCooldownMultiplier(unit);
-                setSkillCooldowns(prev => ({
-                    ...prev,
-                    [curseCooldownKey]: { end: now + curseSkill.cooldown * cooldownMult, duration: curseSkill.cooldown }
-                }));
+                setSkillCooldown(setSkillCooldowns, curseCooldownKey, curseSkill.cooldown, now, unit);
             }
         }
     }
@@ -378,12 +368,8 @@ export function updateUnitAI(
                                     hitFlashRef, setUnits, addLog, now, defeatedThisFrame
                                 );
                                 if (executed) {
-                                    const cooldownMult = getCooldownMultiplier(unit);
-                                    setSkillCooldowns(prev => ({
-                                        ...prev,
-                                        [enemySkillKey]: { end: now + skill.cooldown * cooldownMult, duration: skill.cooldown }
-                                    }));
-                                    actionCooldownRef[unit.id] = now + data.attackCooldown * cooldownMult;
+                                    setSkillCooldown(setSkillCooldowns, enemySkillKey, skill.cooldown, now, unit);
+                                    actionCooldownRef[unit.id] = now + data.attackCooldown * getCooldownMultiplier(unit);
                                     return;
                                 }
                             }

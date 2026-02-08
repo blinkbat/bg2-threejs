@@ -6,9 +6,9 @@ import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, EnemyStats, EnemySkill, EnemyHealSkill } from "../core/types";
 import { COLORS, SWIPE_ANIMATE_DURATION } from "../core/constants";
 import { getUnitStats } from "../game/units";
-import { calculateDamageWithCrit, rollHit, getEffectiveArmor, logAoeHit, logAoeMiss } from "../combat/combatMath";
+import { calculateDamageWithCrit, rollHit, getEffectiveArmor, logAoeHit, logAoeMiss, createHpTracker } from "../combat/combatMath";
 import { distance } from "../game/geometry";
-import { applyDamageToUnit, animateExpandingMesh, getAliveUnitsInRange, spawnDamageNumber, type DamageContext } from "../combat/damageEffects";
+import { applyDamageToUnit, animateExpandingMesh, getAliveUnitsInRange, spawnDamageNumber, buildDamageContext } from "../combat/damageEffects";
 import { soundFns } from "../audio";
 
 // =============================================================================
@@ -69,13 +69,11 @@ export function executeEnemySwipe(
 
     // Deal damage to all targets
     // Use hpTracker to handle multiple hits in same frame correctly
-    const hpTracker: Record<number, number> = {};
-    hitTargets.forEach(({ unit }) => { hpTracker[unit.id] = unit.hp; });
+    const hpTracker = createHpTracker(hitTargets.map(t => t.unit));
 
     let hitCount = 0;
     let totalDamage = 0;
-    const unitsStateRef = { current: unitsState } as React.RefObject<Unit[]>;
-    const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now, defeatedThisFrame };
+    const dmgCtx = buildDamageContext(scene, damageTexts, hitFlashRef, unitsRef, unitsState, setUnits, addLog, now, defeatedThisFrame);
     hitTargets.forEach(({ unit: target, group: tg }) => {
         // Skip if already defeated this frame
         const currentHp = hpTracker[target.id] ?? target.hp;

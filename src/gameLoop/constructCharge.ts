@@ -7,7 +7,7 @@ import type { Unit, UnitGroup, DamageText, EnemyChargeAttack, EnemyStats, Damage
 import { COLORS } from "../core/constants";
 import { getUnitStats } from "../game/units";
 import { calculateDamageWithCrit, rollHit, getEffectiveArmor, logAoeHit, isUnitAlive } from "../combat/combatMath";
-import { applyDamageToUnit, type DamageContext } from "../combat/damageEffects";
+import { applyDamageToUnit, buildDamageContext } from "../combat/damageEffects";
 import { soundFns } from "../audio";
 import { disposeBasicMesh } from "../rendering/disposal";
 
@@ -252,8 +252,7 @@ function executeChargeAttack(
     defeatedThisFrame: Set<number>
 ): void {
     const enemyData = getUnitStats(unit) as EnemyStats;
-    const unitsStateRef = { current: unitsState } as React.RefObject<Unit[]>;
-    const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now, defeatedThisFrame };
+    const dmgCtx = buildDamageContext(scene, damageTexts, hitFlashRef, unitsRef, unitsState, setUnits, addLog, now, defeatedThisFrame);
 
     // Find all player units in the cross area
     const halfWidth = Math.floor(charge.crossWidth / 2);

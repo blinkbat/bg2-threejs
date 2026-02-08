@@ -6,7 +6,7 @@ import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText } from "../../core/types";
 import { getUnitStats } from "../../game/units";
 import { soundFns } from "../../audio";
-import { getCooldownMultiplier } from "../../combat/combatMath";
+import { setSkillCooldown } from "../../combat/combatMath";
 import { COLORS } from "../../core/constants";
 import { applyDamageToUnit, type DamageContext } from "../../combat/damageEffects";
 import type { LeapContext } from "./types";
@@ -86,11 +86,7 @@ export function tryLeapToTarget(ctx: LeapContext): boolean {
 
     addLog(`Feral Hound leaps at ${targetUnit.team === "player" ? "the party" : "its target"}!`, "#cc6600");
 
-    const cooldownMult = getCooldownMultiplier(unit);
-    setSkillCooldowns(prev => ({
-        ...prev,
-        [leapKey]: { end: now + leapSkill.cooldown * cooldownMult, duration: leapSkill.cooldown }
-    }));
+    setSkillCooldown(setSkillCooldowns, leapKey, leapSkill.cooldown, now, unit);
 
     return true;
 }

@@ -2,8 +2,8 @@
 // UNIT QUERY UTILITIES - Common unit filtering and search patterns
 // =============================================================================
 
-import type { Unit, UnitGroup } from "../core/types";
-import { distanceToPoint } from "./geometry";
+import type { Unit, UnitGroup, EnemyStats } from "../core/types";
+import { distance, distanceToPoint } from "./geometry";
 
 /**
  * Find the nearest unit matching a filter condition.
@@ -79,4 +79,22 @@ export function getAliveUnitsWithGroups(
  */
 export function isAliveOnTeam(unit: Unit, team: "player" | "enemy"): boolean {
     return unit.team === team && unit.hp > 0;
+}
+
+/**
+ * Check if any player unit is within aggro range of a position.
+ * Used by spawner enemies (brood mother, necromancer) to detect players.
+ */
+export function isPlayerVisible(
+    g: UnitGroup,
+    enemyStats: EnemyStats,
+    unitsState: Unit[],
+    unitsRef: Record<number, UnitGroup>
+): boolean {
+    return unitsState.some(u => {
+        if (u.team !== "player" || u.hp <= 0) return false;
+        const playerG = unitsRef[u.id];
+        if (!playerG) return false;
+        return distance(playerG.position.x, playerG.position.z, g.position.x, g.position.z) <= enemyStats.aggroRange;
+    });
 }

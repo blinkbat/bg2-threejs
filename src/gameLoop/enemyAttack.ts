@@ -7,7 +7,7 @@ import type { Unit, UnitGroup, DamageText, Projectile, EnemyStats, SwingAnimatio
 import { COLORS } from "../core/constants";
 import { getUnitStats } from "../game/units";
 import { calculateDamageWithCrit, rollHit, shouldApplyPoison, shouldApplySlow, getEffectiveArmor, getEffectiveDamage, logHit, logLifestealHit, logMiss, logPoisoned, logSlowed } from "../combat/combatMath";
-import { createProjectile, getProjectileSpeed, applyDamageToUnit, spawnDamageNumber, type DamageContext } from "../combat/damageEffects";
+import { createProjectile, getProjectileSpeed, applyDamageToUnit, applyLifesteal, type DamageContext } from "../combat/damageEffects";
 import { soundFns } from "../audio";
 import { spawnSwingIndicator } from "./swingAnimations";
 
@@ -179,12 +179,7 @@ export function executeEnemyMeleeAttack(ctx: EnemyAttackContext): void {
 
         // Apply lifesteal heal using fresh state to avoid race condition
         if (healAmount > 0) {
-            setUnits(prev => prev.map(u => {
-                if (u.id !== attacker.id) return u;
-                // Calculate actual heal from fresh HP state
-                return { ...u, hp: Math.min(u.hp + healAmount, attackerStats.maxHp) };
-            }));
-            spawnDamageNumber(scene, attackerG.position.x, attackerG.position.z, healAmount, COLORS.logHeal, damageTexts, true);
+            applyLifesteal(scene, damageTexts, setUnits, attacker.id, attackerG.position.x, attackerG.position.z, healAmount, attackerStats.maxHp);
         }
     } else {
         soundFns.playMiss();

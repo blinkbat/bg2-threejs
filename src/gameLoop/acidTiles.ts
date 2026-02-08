@@ -9,7 +9,7 @@ import type { EnemyStats } from "../core/types";
 import { getUnitStats } from "../game/units";
 import { handleUnitDefeat, showDamageVisual } from "../combat/damageEffects";
 import { createTileMesh, updateTileFade, removeExpiredTiles, clearAllTiles, getTileKey, isUnitOnTile, type TileProcessConfig } from "./tileUtils";
-import { isUnitAlive } from "../combat/combatMath";
+import { isUnitAlive, setSkillCooldown } from "../combat/combatMath";
 
 // =============================================================================
 // CONSTANTS
@@ -204,11 +204,7 @@ export function tryCreateAcidAura(stats: EnemyStats, ctx: AcidAuraContext): bool
         }
     }
 
-    // Set cooldown
-    ctx.setSkillCooldowns(prev => ({
-        ...prev,
-        [auraCooldownKey]: { end: ctx.now + auraCooldown, duration: auraCooldown }
-    }));
+    setSkillCooldown(ctx.setSkillCooldowns, auraCooldownKey, auraCooldown, ctx.now);
 
     return true;
 }

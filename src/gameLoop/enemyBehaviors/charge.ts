@@ -2,7 +2,7 @@
 // CONSTRUCT CHARGE ATTACK BEHAVIOR - Initiates charge attacks
 // =============================================================================
 
-import { getCooldownMultiplier } from "../../combat/combatMath";
+import { setSkillCooldown } from "../../combat/combatMath";
 import { startChargeAttack } from "../constructCharge";
 import type { ChargeContext } from "./types";
 
@@ -24,11 +24,7 @@ export function tryStartChargeAttack(ctx: ChargeContext): boolean {
     // Start the charge attack
     startChargeAttack(scene, unit, g, chargeAttack, now, addLog);
 
-    const cooldownMult = getCooldownMultiplier(unit);
-    setSkillCooldowns(prev => ({
-        ...prev,
-        [chargeKey]: { end: now + chargeAttack.cooldown * cooldownMult, duration: chargeAttack.cooldown }
-    }));
+    setSkillCooldown(setSkillCooldowns, chargeKey, chargeAttack.cooldown, now, unit);
 
     return true;
 }

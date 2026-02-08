@@ -6,7 +6,7 @@ import * as THREE from "three";
 import type { Skill, StatusEffect, TrapProjectile } from "../../core/types";
 import { COLORS, BUFF_TICK_INTERVAL, TRAP_FLIGHT_DURATION, TRAP_ARC_HEIGHT, TRAP_MESH_SIZE, SANCTUARY_HEAL_PER_TICK } from "../../core/constants";
 import { UNIT_DATA, getUnitStats } from "../../game/units";
-import { rollChance, rollHit, hasStatusEffect, logTaunt, logTauntMiss, logStunned, logTrapThrown, applyStatusEffect, checkFrontShieldBlock } from "../combatMath";
+import { rollChance, rollHit, hasStatusEffect, logTaunt, logTauntMiss, logStunned, logTrapThrown, applyStatusEffect, checkEnemyDefenses } from "../combatMath";
 import { ENEMY_STATS } from "../../game/units";
 import { getUnitRadius, isInRange } from "../../rendering/range";
 import { getAliveUnits } from "../../game/unitQuery";
@@ -124,10 +124,10 @@ export function executeDebuffSkill(
     const targetData = getUnitStats(targetEnemy);
     const targetId = targetEnemy.id;
 
-    // Check for front-shield block
+    // Check for front-shield block (debuffs are non-physical, skip block chance)
     if (targetEnemy.enemyType) {
         const enemyStats = ENEMY_STATS[targetEnemy.enemyType];
-        if (checkFrontShieldBlock(enemyStats, targetEnemy.facing, casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z)) {
+        if (checkEnemyDefenses(enemyStats, targetEnemy.facing, casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z) === "frontShield") {
             soundFns.playBlock();
             addLog(`${casterData.name}'s ${skill.name} is blocked by ${targetData.name}'s shield!`, "#4488ff");
             return true;

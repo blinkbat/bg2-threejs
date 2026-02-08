@@ -6,7 +6,7 @@ import * as THREE from "three";
 import type { Unit, Skill, UnitGroup, MagicMissileProjectile } from "../../core/types";
 import { COLORS } from "../../core/constants";
 import { UNIT_DATA, getUnitStats, getEffectiveUnitData } from "../../game/units";
-import { rollChance, calculateDamageWithCrit, rollHit, getEffectiveArmor, logHit, logMiss, logPoisoned, logCast, calculateStatBonus, checkFrontShieldBlock, checkEnemyBlockChance } from "../combatMath";
+import { rollChance, calculateDamageWithCrit, rollHit, getEffectiveArmor, logHit, logMiss, logPoisoned, logCast, calculateStatBonus, checkEnemyDefenses, createHpTracker } from "../combatMath";
 import { ENEMY_STATS } from "../../game/units";
 import { getUnitRadius, isInRange } from "../../rendering/range";
 import { distanceToPoint } from "../../game/geometry";
@@ -104,14 +104,13 @@ export function executeMeleeSkill(
     // Check for enemy defensive abilities
     if (targetEnemy.enemyType) {
         const enemyStats = ENEMY_STATS[targetEnemy.enemyType];
-        if (checkFrontShieldBlock(enemyStats, targetEnemy.facing, casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z)) {
+        const defense = checkEnemyDefenses(enemyStats, targetEnemy.facing, casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, skill.damageType);
+        if (defense !== "none") {
             soundFns.playBlock();
-            addLog(`${casterData.name}'s ${skill.name} is blocked by ${targetData.name}'s shield!`, "#4488ff");
-            return true;
-        }
-        if (checkEnemyBlockChance(enemyStats, skill.damageType)) {
-            soundFns.playBlock();
-            addLog(`${targetData.name} blocks ${casterData.name}'s ${skill.name}!`, "#aaaaaa");
+            addLog(defense === "frontShield"
+                ? `${casterData.name}'s ${skill.name} is blocked by ${targetData.name}'s shield!`
+                : `${targetData.name} blocks ${casterData.name}'s ${skill.name}!`,
+                defense === "frontShield" ? "#4488ff" : "#aaaaaa");
             return true;
         }
     }
@@ -220,10 +219,11 @@ export function executeSmiteSkill(
     createLightningPillar(scene, targetG.position.x, targetG.position.z);
     soundFns.playThunder();
 
-    // Check for front-shield block
+    // Check for front-shield block (smite is non-physical, skip block chance)
     if (targetEnemy.enemyType) {
         const enemyStats = ENEMY_STATS[targetEnemy.enemyType];
-        if (checkFrontShieldBlock(enemyStats, targetEnemy.facing, casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z)) {
+        const defense = checkEnemyDefenses(enemyStats, targetEnemy.facing, casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z);
+        if (defense === "frontShield") {
             soundFns.playBlock();
             addLog(`${casterData.name}'s ${skill.name} is blocked by ${targetData.name}'s shield!`, "#4488ff");
             return true;
@@ -366,8 +366,7 @@ export function executeFlurrySkill(
 
     // Distribute hits across enemies (round-robin)
     // Track HP locally since state updates are batched
-    const hpTracker: Record<number, number> = {};
-    enemiesInRange.forEach(({ unit }) => { hpTracker[unit.id] = unit.hp; });
+    const hpTracker = createHpTracker(enemiesInRange.map(e => e.unit));
 
     // Use shared defeatedThisFrame from context to prevent hitting dead enemies
     const dmgCtx: DamageContext = {
@@ -395,7 +394,7 @@ export function executeFlurrySkill(
         // Check for front-shield block
         if (target.enemyType) {
             const enemyStats = ENEMY_STATS[target.enemyType];
-            if (checkFrontShieldBlock(enemyStats, target.facing, casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z)) {
+            if (checkEnemyDefenses(enemyStats, target.facing, casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z) === "frontShield") {
                 soundFns.playBlock();
                 continue;  // Skip this hit - blocked by shield
             }

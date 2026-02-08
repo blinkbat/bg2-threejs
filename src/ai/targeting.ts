@@ -6,8 +6,8 @@ import { DEFAULT_KITE_DISTANCE, DEFAULT_KITE_COOLDOWN } from "../core/constants"
 import { findPath, isPassable } from "./pathfinding";
 import { getEnemyKiteCooldown, setEnemyKiteCooldown, setEnemyKitingUntil } from "../game/enemyState";
 import { getDirectionAndDistance } from "../combat/combatMath";
-import { distanceToPoint } from "../game/geometry";
 import { getCurrentArea } from "../game/areas";
+import { findNearestUnit } from "../game/unitQuery";
 import type { Unit, UnitGroup, EnemyStats } from "../core/types";
 
 // =============================================================================
@@ -28,31 +28,6 @@ export interface KiteResult {
     isKiting: boolean;
 }
 
-/**
- * Find the nearest player unit to a given position.
- */
-function findNearestPlayer(
-    unitsRef: Record<number, UnitGroup>,
-    unitsState: Unit[],
-    fromX: number,
-    fromZ: number
-): { playerG: UnitGroup | null; dist: number } {
-    let nearestPlayerDist = Infinity;
-    let nearestPlayerG: UnitGroup | null = null;
-
-    for (const player of unitsState) {
-        if (player.team !== "player" || player.hp <= 0) continue;
-        const pg = unitsRef[player.id];
-        if (!pg) continue;
-        const dist = distanceToPoint(pg.position, fromX, fromZ);
-        if (dist < nearestPlayerDist) {
-            nearestPlayerDist = dist;
-            nearestPlayerG = pg;
-        }
-    }
-
-    return { playerG: nearestPlayerG, dist: nearestPlayerDist };
-}
 
 /**
  * Try to find a retreat path for a kiting enemy.
@@ -120,11 +95,9 @@ export function tryKite(ctx: KiteContext, enemyData: EnemyStats): KiteResult {
     }
 
     // Find nearest player
-    const { playerG: nearestPlayerG, dist: nearestPlayerDist } = findNearestPlayer(
-        unitsRef, unitsState, g.position.x, g.position.z
-    );
+    const nearestPlayer = findNearestUnit(unitsState, unitsRef, g.position.x, g.position.z, u => u.team === "player" && u.hp > 0);
 
-    if (!nearestPlayerG) {
+    if (!nearestPlayer) {
         return { isKiting: false };
     }
 
@@ -134,7 +107,7 @@ export function tryKite(ctx: KiteContext, enemyData: EnemyStats): KiteResult {
     const effectiveTriggerRange = recentlyHit ? kiteTrigger * 2 : kiteTrigger;
 
     // Check if player is within kite trigger range
-    if (nearestPlayerDist >= effectiveTriggerRange) {
+    if (nearestPlayer.dist >= effectiveTriggerRange) {
         return { isKiting: false };
     }
 
@@ -145,7 +118,7 @@ export function tryKite(ctx: KiteContext, enemyData: EnemyStats): KiteResult {
     const kiteCooldown = recentlyHit ? baseKiteCooldown / 2 : baseKiteCooldown;
 
     // Try to find a retreat path
-    const { path } = findRetreatPath(g, nearestPlayerG.position.x, nearestPlayerG.position.z, kiteDistance);
+    const { path } = findRetreatPath(g, nearestPlayer.group.position.x, nearestPlayer.group.position.z, kiteDistance);
 
     if (path) {
         // Skip the first waypoint if it's the start position

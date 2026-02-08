@@ -6,8 +6,9 @@ import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, EnemyCurseSkill, EnemyStats, DamageType } from "../core/types";
 import { COLORS, DOOM_DURATION, BUFF_TICK_INTERVAL } from "../core/constants";
 import { getUnitStats } from "../game/units";
+import { distance } from "../game/geometry";
 import { calculateDamageWithCrit, rollHit, getEffectiveArmor, logAoeHit, isUnitAlive } from "../combat/combatMath";
-import { applyDamageToUnit, type DamageContext } from "../combat/damageEffects";
+import { applyDamageToUnit, buildDamageContext } from "../combat/damageEffects";
 import { soundFns } from "../audio";
 import { disposeBasicMesh } from "../rendering/disposal";
 
@@ -220,8 +221,7 @@ function executeCurse(
     const accuracy = casterStats?.accuracy ?? 65;
     const casterName = casterStats?.name ?? "Necromancer";
 
-    const unitsStateRef = { current: unitsState } as React.RefObject<Unit[]>;
-    const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now, defeatedThisFrame };
+    const dmgCtx = buildDamageContext(scene, damageTexts, hitFlashRef, unitsRef, unitsState, setUnits, addLog, now, defeatedThisFrame);
 
     let hitCount = 0;
     let totalDamage = 0;
@@ -233,9 +233,7 @@ function executeCurse(
         if (!tg) return;
 
         // Check if target is within the circular AoE
-        const dx = tg.position.x - (curse.centerX + 0.5);
-        const dz = tg.position.z - (curse.centerZ + 0.5);
-        const dist = Math.sqrt(dx * dx + dz * dz);
+        const dist = distance(tg.position.x, tg.position.z, curse.centerX + 0.5, curse.centerZ + 0.5);
 
         if (dist <= curse.radius) {
             const targetData = getUnitStats(target);

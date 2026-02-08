@@ -283,6 +283,24 @@ export function getCooldownMultiplier(unit: Unit): number {
 }
 
 /**
+ * Set a skill cooldown with status-effect multiplier applied.
+ * Consolidates the common pattern of computing cooldown multiplier + calling setSkillCooldowns.
+ */
+export function setSkillCooldown(
+    setSkillCooldowns: React.Dispatch<React.SetStateAction<Record<string, { end: number; duration: number }>>>,
+    key: string,
+    baseCooldown: number,
+    now: number,
+    unit?: Unit
+): void {
+    const mult = unit ? getCooldownMultiplier(unit) : 1;
+    setSkillCooldowns(prev => ({
+        ...prev,
+        [key]: { end: now + baseCooldown * mult, duration: baseCooldown }
+    }));
+}
+
+/**
  * Get effective damage range for a unit, accounting for amoeba split weakening.
  * Each split reduces damage by 15%.
  */
@@ -476,6 +494,43 @@ export function checkEnemyBlockChance(
 ): boolean {
     if (!enemyStats.blockChance || damageType !== "physical") return false;
     return rollChance(enemyStats.blockChance);
+}
+
+/**
+ * Combined defense check: front shield block + passive block chance.
+ * Returns the type of block that occurred, or "none" if the attack gets through.
+ */
+export type DefenseResult = "none" | "frontShield" | "blockChance";
+
+export function checkEnemyDefenses(
+    enemyStats: { frontShield?: boolean; blockChance?: number },
+    enemyFacing: number | undefined,
+    attackerX: number,
+    attackerZ: number,
+    targetX: number,
+    targetZ: number,
+    damageType?: DamageType,
+    shieldBlockModifier?: number
+): DefenseResult {
+    if (checkFrontShieldBlock(enemyStats, enemyFacing, attackerX, attackerZ, targetX, targetZ, shieldBlockModifier)) {
+        return "frontShield";
+    }
+    if (damageType && checkEnemyBlockChance(enemyStats, damageType)) {
+        return "blockChance";
+    }
+    return "none";
+}
+
+/**
+ * Create an HP tracker for handling multiple hits in the same frame.
+ * Prevents stale React state from causing overkill when multiple sources deal damage simultaneously.
+ */
+export function createHpTracker(units: Unit[]): Record<number, number> {
+    const tracker: Record<number, number> = {};
+    for (const u of units) {
+        tracker[u.id] = u.hp;
+    }
+    return tracker;
 }
 
 // =============================================================================

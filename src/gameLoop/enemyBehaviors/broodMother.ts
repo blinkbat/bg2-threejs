@@ -2,35 +2,14 @@
 // BROOD MOTHER SPAWN BEHAVIOR - Spawns broodling minions
 // =============================================================================
 
-import type { Unit, UnitGroup, EnemyStats } from "../../core/types";
+import type { Unit } from "../../core/types";
 import { ENEMY_STATS } from "../../game/units";
+import { isPlayerVisible } from "../../game/unitQuery";
 import { getNextUnitId } from "../../core/unitIds";
 import { soundFns } from "../../audio";
 import { hasBroodMotherScreeched, markBroodMotherScreeched } from "../../game/enemyState";
+import { setSkillCooldown } from "../../combat/combatMath";
 import type { SpawnContext } from "./types";
-
-// =============================================================================
-// HELPERS
-// =============================================================================
-
-/**
- * Check if any player is visible to the spawner (within aggro range).
- */
-function isPlayerVisible(
-    g: UnitGroup,
-    enemyStats: EnemyStats,
-    unitsState: Unit[],
-    unitsRef: Record<number, UnitGroup>
-): boolean {
-    return unitsState.some(u => {
-        if (u.team !== "player" || u.hp <= 0) return false;
-        const playerG = unitsRef[u.id];
-        if (!playerG) return false;
-        const dx = playerG.position.x - g.position.x;
-        const dz = playerG.position.z - g.position.z;
-        return Math.sqrt(dx * dx + dz * dz) <= enemyStats.aggroRange;
-    });
-}
 
 // =============================================================================
 // SPAWN BEHAVIOR
@@ -93,10 +72,7 @@ export function trySpawnMinion(ctx: SpawnContext): boolean {
 
     addLog(`${enemyStats.name} spawns a ${ENEMY_STATS[spawnSkill.spawnType].name}!`, "#cc6600");
 
-    setSkillCooldowns(prev => ({
-        ...prev,
-        [spawnCooldownKey]: { end: now + spawnSkill.cooldown, duration: spawnSkill.cooldown }
-    }));
+    setSkillCooldown(setSkillCooldowns, spawnCooldownKey, spawnSkill.cooldown, now);
 
     return true;
 }

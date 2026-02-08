@@ -2,34 +2,13 @@
 // NECROMANCER RAISE DEAD BEHAVIOR - Batch-spawns skeleton minions
 // =============================================================================
 
-import type { Unit, UnitGroup, EnemyStats } from "../../core/types";
+import type { Unit } from "../../core/types";
 import { ENEMY_STATS } from "../../game/units";
+import { isPlayerVisible } from "../../game/unitQuery";
 import { getNextUnitId } from "../../core/unitIds";
 import { findSpawnPositions } from "../../ai/pathfinding";
+import { setSkillCooldown } from "../../combat/combatMath";
 import type { RaiseContext } from "./types";
-
-// =============================================================================
-// HELPERS
-// =============================================================================
-
-/**
- * Check if any player is visible to the necromancer (within aggro range).
- */
-function isPlayerVisible(
-    g: UnitGroup,
-    enemyStats: EnemyStats,
-    unitsState: Unit[],
-    unitsRef: Record<number, UnitGroup>
-): boolean {
-    return unitsState.some(u => {
-        if (u.team !== "player" || u.hp <= 0) return false;
-        const playerG = unitsRef[u.id];
-        if (!playerG) return false;
-        const dx = playerG.position.x - g.position.x;
-        const dz = playerG.position.z - g.position.z;
-        return Math.sqrt(dx * dx + dz * dz) <= enemyStats.aggroRange;
-    });
-}
 
 // =============================================================================
 // RAISE DEAD BEHAVIOR
@@ -78,10 +57,7 @@ export function tryRaiseDead(ctx: RaiseContext): boolean {
 
     addLog(`${enemyStats.name} raises ${raiseSkill.spawnCount} ${ENEMY_STATS[raiseSkill.spawnType].name}s from the dead!`, "#8b5fbf");
 
-    setSkillCooldowns(prev => ({
-        ...prev,
-        [raiseCooldownKey]: { end: now + raiseSkill.cooldown, duration: raiseSkill.cooldown }
-    }));
+    setSkillCooldown(setSkillCooldowns, raiseCooldownKey, raiseSkill.cooldown, now);
 
     return true;
 }

@@ -4,8 +4,9 @@
 
 import * as THREE from "three";
 import { getUnitStats } from "../../game/units";
+import { distance } from "../../game/geometry";
 import { soundFns } from "../../audio";
-import { getCooldownMultiplier } from "../../combat/combatMath";
+import { setSkillCooldown } from "../../combat/combatMath";
 import { BUFF_TICK_INTERVAL, COLORS } from "../../core/constants";
 import { applyDamageToUnit, type DamageContext } from "../../combat/damageEffects";
 import type { VinesContext } from "./types";
@@ -33,9 +34,7 @@ export function tryVinesSkill(ctx: VinesContext): boolean {
     }
 
     // Check distance to target
-    const dx = targetG.position.x - g.position.x;
-    const dz = targetG.position.z - g.position.z;
-    const dist = Math.sqrt(dx * dx + dz * dz);
+    const dist = distance(targetG.position.x, targetG.position.z, g.position.x, g.position.z);
 
     // Only cast if target is within range
     if (dist > vinesSkill.range) {
@@ -79,11 +78,7 @@ export function tryVinesSkill(ctx: VinesContext): boolean {
     // Play sound
     soundFns.playVines();
 
-    const cooldownMult = getCooldownMultiplier(unit);
-    setSkillCooldowns(prev => ({
-        ...prev,
-        [vinesKey]: { end: now + vinesSkill.cooldown * cooldownMult, duration: vinesSkill.cooldown }
-    }));
+    setSkillCooldown(setSkillCooldowns, vinesKey, vinesSkill.cooldown, now, unit);
 
     return true;
 }

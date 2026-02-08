@@ -276,6 +276,47 @@ export interface DamageContext {
     defeatedThisFrame?: Set<number>;
 }
 
+/**
+ * Build a DamageContext from common game loop parameters.
+ * Wraps a plain unitsState array into a RefObject for DamageContext compatibility.
+ */
+export function buildDamageContext(
+    scene: THREE.Scene,
+    damageTexts: DamageText[],
+    hitFlashRef: Record<number, number>,
+    unitsRef: Record<number, UnitGroup>,
+    unitsState: Unit[],
+    setUnits: React.Dispatch<React.SetStateAction<Unit[]>>,
+    addLog: (text: string, color?: string) => void,
+    now: number,
+    defeatedThisFrame?: Set<number>
+): DamageContext {
+    const unitsStateRef = { current: unitsState } as React.RefObject<Unit[]>;
+    return { scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now, defeatedThisFrame };
+}
+
+/**
+ * Apply lifesteal healing to an attacker after dealing damage.
+ * Heals the attacker and spawns a green heal number above them.
+ */
+export function applyLifesteal(
+    scene: THREE.Scene,
+    damageTexts: DamageText[],
+    setUnits: React.Dispatch<React.SetStateAction<Unit[]>>,
+    attackerId: number,
+    attackerX: number,
+    attackerZ: number,
+    healAmount: number,
+    maxHp: number
+): void {
+    if (healAmount <= 0) return;
+    setUnits(prev => prev.map(u => {
+        if (u.id !== attackerId) return u;
+        return { ...u, hp: Math.min(u.hp + healAmount, maxHp) };
+    }));
+    spawnDamageNumber(scene, attackerX, attackerZ, healAmount, COLORS.logHeal, damageTexts, true);
+}
+
 export interface DamageOptions {
     poison?: { sourceId: number; damagePerTick?: number };  // Optional custom poison damage
     slow?: { sourceId: number };  // Apply slow debuff (1.5x cooldowns, 0.5x move speed)

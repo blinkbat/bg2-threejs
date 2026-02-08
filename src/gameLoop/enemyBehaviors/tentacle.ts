@@ -5,9 +5,10 @@
 import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText } from "../../core/types";
 import { ENEMY_STATS } from "../../game/units";
+import { distance } from "../../game/geometry";
 import { getNextUnitId } from "../../core/unitIds";
 import { soundFns } from "../../audio";
-import { getCooldownMultiplier } from "../../combat/combatMath";
+import { setSkillCooldown } from "../../combat/combatMath";
 import { COLORS } from "../../core/constants";
 import { applyDamageToUnit, type DamageContext } from "../../combat/damageEffects";
 import type { TentacleContext } from "./types";
@@ -58,9 +59,7 @@ export function trySpawnTentacle(ctx: TentacleContext): boolean {
         if (u.team !== "player" || u.hp <= 0) return false;
         const playerG = unitsRef[u.id];
         if (!playerG) return false;
-        const dx = playerG.position.x - g.position.x;
-        const dz = playerG.position.z - g.position.z;
-        return Math.sqrt(dx * dx + dz * dz) <= enemyStats.aggroRange;
+        return distance(playerG.position.x, playerG.position.z, g.position.x, g.position.z) <= enemyStats.aggroRange;
     });
 
     if (visibleTargets.length === 0) {
@@ -134,11 +133,7 @@ export function trySpawnTentacle(ctx: TentacleContext): boolean {
 
     addLog(`${enemyStats.name} extends a tentacle!`, "#6b3fa0");
 
-    const cooldownMult = getCooldownMultiplier(unit);
-    setSkillCooldowns(prev => ({
-        ...prev,
-        [spawnKey]: { end: now + tentacleSkill.cooldown * cooldownMult, duration: tentacleSkill.cooldown }
-    }));
+    setSkillCooldown(setSkillCooldowns, spawnKey, tentacleSkill.cooldown, now, unit);
 
     return true;
 }

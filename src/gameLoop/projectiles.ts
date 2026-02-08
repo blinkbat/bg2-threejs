@@ -6,11 +6,11 @@ import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, Projectile, EnemyStats, MagicMissileProjectile, TrapProjectile, FireballProjectile, StatusEffect, DamageType, UnitData } from "../core/types";
 import { HIT_DETECTION_RADIUS, COLORS, BUFF_TICK_INTERVAL } from "../core/constants";
 import { getUnitStats } from "../game/units";
-import { calculateDamageWithCrit, getDirectionAndDistance, rollHit, shouldApplyPoison, getEffectiveArmor, logHit, logLifestealHit, logMiss, logPoisoned, logAoeHit, logAoeMiss, getDamageColor, logTrapTriggered, calculateStatBonus, applyStatusEffect, checkFrontShieldBlock, checkEnemyBlockChance } from "../combat/combatMath";
+import { calculateDamageWithCrit, getDirectionAndDistance, rollHit, shouldApplyPoison, getEffectiveArmor, logHit, logLifestealHit, logMiss, logPoisoned, logAoeHit, logAoeMiss, getDamageColor, logTrapTriggered, calculateStatBonus, applyStatusEffect, checkEnemyDefenses, createHpTracker } from "../combat/combatMath";
 import { distance } from "../game/geometry";
 import { isBlocked } from "../ai/pathfinding";
 import { ENEMY_STATS } from "../game/units";
-import { applyDamageToUnit, animateExpandingMesh, spawnDamageNumber, type DamageContext } from "../combat/damageEffects";
+import { applyDamageToUnit, animateExpandingMesh, buildDamageContext, applyLifesteal } from "../combat/damageEffects";
 import { soundFns } from "../audio";
 import { disposeBasicMesh } from "../rendering/disposal";
 
@@ -87,13 +87,12 @@ export function updateProjectiles(
     now: number,
     defeatedThisFrame: Set<number>
 ): Projectile[] {
-    // Create ref wrapper for DamageContext
-    const unitsStateRef = { current: unitsState } as React.RefObject<Unit[]>;
+    // Shared DamageContext for all projectile hit processing
+    const dmgCtx = buildDamageContext(scene, damageTexts, hitFlashRef, unitsRef, unitsState, setUnits, addLog, now, defeatedThisFrame);
 
     // Track HP locally during projectile updates to handle multiple hits in same frame
     // This prevents stale HP from unitsState causing multiple projectiles to "overkill"
-    const hpTracker: Record<number, number> = {};
-    unitsState.forEach(u => { hpTracker[u.id] = u.hp; });
+    const hpTracker = createHpTracker(unitsState);
 
     return projectilesRef.filter(proj => {
         // AOE projectile (like Fireball)
@@ -131,7 +130,6 @@ export function updateProjectiles(
                         const statBonus = calculateStatBonus(attackerUnit, proj.damageType);
                         const { damage: dmg } = calculateDamageWithCrit(damage[0] + statBonus, damage[1] + statBonus, getEffectiveArmor(target, targetData.armor), proj.damageType, attackerUnit);
 
-                        const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now, defeatedThisFrame };
                         applyDamageToUnit(dmgCtx, target.id, tg, currentHp, dmg, targetData.name, {
                             color: getDamageColor(target.team, true),
                             attackerName: attackerUnit?.team === "player" ? attackerData?.name : undefined,
@@ -230,12 +228,11 @@ export function updateProjectiles(
                 let shieldBlocked = false;
 
                 if (targetUnit && targetG) {
-                    // Check for front-shield block (player attacking shielded enemy)
-                    // Magic missiles only have 50% chance to be blocked by shield
+                    // Check for front-shield block (magic missiles have 50% chance to be blocked)
                     if (attackerUnit.team === "player" && targetUnit.enemyType) {
                         const enemyStats = ENEMY_STATS[targetUnit.enemyType];
                         const attackerG = unitsRef[mmProj.attackerId];
-                        if (attackerG && checkFrontShieldBlock(enemyStats, targetUnit.facing, attackerG.position.x, attackerG.position.z, targetG.position.x, targetG.position.z, 0.5)) {
+                        if (attackerG && checkEnemyDefenses(enemyStats, targetUnit.facing, attackerG.position.x, attackerG.position.z, targetG.position.x, targetG.position.z, undefined, 0.5) === "frontShield") {
                             soundFns.playBlock();
                             shieldBlocked = true;
                         }
@@ -252,8 +249,7 @@ export function updateProjectiles(
                             const result = calculateDamageWithCrit(mmProj.damage[0] + statBonus, mmProj.damage[1] + statBonus, getEffectiveArmor(targetUnit, targetData.armor), mmProj.damageType, attackerUnit);
                             dmgDealt = result.damage;
 
-                            const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now, defeatedThisFrame };
-                            const mmAttackerG = unitsRef[mmProj.attackerId];
+                                const mmAttackerG = unitsRef[mmProj.attackerId];
                             applyDamageToUnit(dmgCtx, targetUnit.id, targetG, currentHp, dmgDealt, targetData.name, {
                                 color: "#9966ff",
                                 attackerName: attackerUnit.team === "player" ? getUnitStats(attackerUnit).name : undefined,
@@ -525,10 +521,6 @@ export function updateProjectiles(
                         attackerUnit
                     );
 
-                    const dmgCtx: DamageContext = {
-                        scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef,
-                        setUnits, addLog, now, defeatedThisFrame
-                    };
                     applyDamageToUnit(dmgCtx, target.id, targetG, currentHp, dmg, targetData.name, {
                         color: getDamageColor(target.team, true),
                         attackerName: attackerData?.name,
@@ -587,16 +579,16 @@ export function updateProjectiles(
             // Check for enemy defensive abilities (player attacking shielded enemy)
             if (attackerUnit.team === "player" && targetUnit.enemyType) {
                 const enemyStats = ENEMY_STATS[targetUnit.enemyType];
-                if (attackerG && checkFrontShieldBlock(enemyStats, targetUnit.facing, attackerG.position.x, attackerG.position.z, targetG.position.x, targetG.position.z)) {
-                    soundFns.playBlock();
-                    addLog(`${attackerData.name}'s attack is blocked by ${targetData.name}'s shield!`, "#4488ff");
-                    disposeProjectile(scene, proj);
-                    return false;
-                }
                 const dmgType = getBasicAttackDamageType(attackerUnit, attackerData);
-                if (checkEnemyBlockChance(enemyStats, dmgType)) {
+                const defense = attackerG
+                    ? checkEnemyDefenses(enemyStats, targetUnit.facing, attackerG.position.x, attackerG.position.z, targetG.position.x, targetG.position.z, dmgType)
+                    : "none" as const;
+                if (defense !== "none") {
                     soundFns.playBlock();
-                    addLog(`${targetData.name} blocks ${attackerData.name}'s attack!`, "#aaaaaa");
+                    addLog(defense === "frontShield"
+                        ? `${attackerData.name}'s attack is blocked by ${targetData.name}'s shield!`
+                        : `${targetData.name} blocks ${attackerData.name}'s attack!`,
+                        defense === "frontShield" ? "#4488ff" : "#aaaaaa");
                     disposeProjectile(scene, proj);
                     return false;
                 }
@@ -617,7 +609,7 @@ export function updateProjectiles(
                     ? logLifestealHit(attackerData.name, targetData.name, dmg, healAmount)
                     : logHit(attackerData.name, "Attack", targetData.name, dmg);
 
-                const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now, defeatedThisFrame };
+                /* use shared dmgCtx */
                 applyDamageToUnit(dmgCtx, targetUnit.id, targetG, targetUnit.hp, dmg, targetData.name, {
                     color: logColor,
                     poison: willPoison ? { sourceId: attackerUnit.id, damagePerTick: poisonDmg } : undefined,
@@ -639,11 +631,7 @@ export function updateProjectiles(
 
                 // Apply lifesteal heal using fresh state to avoid race condition
                 if (healAmount > 0 && attackerG) {
-                    setUnits(prev => prev.map(u => {
-                        if (u.id !== attackerUnit.id) return u;
-                        return { ...u, hp: Math.min(u.hp + healAmount, attackerData.maxHp) };
-                    }));
-                    spawnDamageNumber(scene, attackerG.position.x, attackerG.position.z, healAmount, COLORS.logHeal, damageTexts, true);
+                    applyLifesteal(scene, damageTexts, setUnits, attackerUnit.id, attackerG.position.x, attackerG.position.z, healAmount, attackerData.maxHp);
                 }
             } else {
                 soundFns.playMiss();
