@@ -4,6 +4,7 @@
 
 import * as THREE from "three";
 import type { LootBag } from "../core/types";
+import { getGameTime } from "../core/gameClock";
 
 // =============================================================================
 // LOOT BAG ID TRACKING
@@ -93,11 +94,11 @@ export function spawnLootBag(
     // Add a small bounce animation on spawn
     const startY = 1.5;
     const endY = 0;
-    const startTime = performance.now();
+    const startTime = getGameTime();
     const duration = 500;
 
     const animate = () => {
-        const elapsed = performance.now() - startTime;
+        const elapsed = getGameTime() - startTime;
         const progress = Math.min(1, elapsed / duration);
 
         // Bounce easing - cubic out with bounce

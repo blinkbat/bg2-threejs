@@ -68,6 +68,21 @@ export function consumeSkill(ctx: SkillExecutionContext, casterId: number, skill
     const { unitsStateRef, actionCooldownRef, setSkillCooldowns, setUnits, addLog } = ctx;
     const now = Date.now();
 
+    if (skill.isCantrip) {
+        // Cantrips: fixed lockout (no status multipliers), decrement uses
+        const cooldownEnd = now + skill.cooldown;
+        actionCooldownRef.current[casterId] = cooldownEnd;
+        setSkillCooldowns(prev => ({
+            ...prev,
+            [`${casterId}-${skill.name}`]: { end: cooldownEnd, duration: skill.cooldown }
+        }));
+        updateUnitWith(setUnits, casterId, u => ({
+            mana: Math.max(0, (u.mana ?? 0) - skill.manaCost),
+            cantripUses: { ...u.cantripUses, [skill.name]: Math.max(0, (u.cantripUses?.[skill.name] ?? 0) - 1) }
+        }));
+        return;
+    }
+
     // Get caster and calculate cooldown multipliers
     const caster = unitsStateRef.current.find(u => u.id === casterId);
     // Shielded doubles cooldowns (defensive stance penalty)

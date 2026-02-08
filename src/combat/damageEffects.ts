@@ -10,6 +10,7 @@ import { distanceToPoint } from "../game/geometry";
 import { soundFns } from "../audio";
 import { cleanupUnitState } from "../ai/movement";
 import { cleanupEnemyKiteCooldown } from "../game/enemyState";
+import { getGameTime } from "../core/gameClock";
 import { logDefeated, applyPoison, applySlowed, hasStatusEffect, isUnitAlive } from "./combatMath";
 import { tryKillBark } from "./barks";
 import { getNextUnitId } from "../core/unitIds";
@@ -122,7 +123,7 @@ export function animateExpandingMesh(
         baseRadius = 0.6
     } = config;
 
-    const startTime = Date.now();
+    const startTime = getGameTime();
     let animationId: number | null = null;
     let disposed = false;
 
@@ -141,7 +142,7 @@ export function animateExpandingMesh(
     const animate = () => {
         if (disposed) return;
 
-        const elapsed = Date.now() - startTime;
+        const elapsed = getGameTime() - startTime;
         const t = Math.min(1, elapsed / duration);
         const currentScale = baseRadius + (maxScale - baseRadius) * t;
         mesh.scale.set(currentScale / baseRadius, currentScale / baseRadius, 1);
@@ -197,10 +198,10 @@ export function createLightningPillar(
     glow.position.set(x, 0.15, z);
     scene.add(glow);
 
-    const startTime = Date.now();
+    const startTime = getGameTime();
 
     const animate = () => {
-        const elapsed = Date.now() - startTime;
+        const elapsed = getGameTime() - startTime;
         const t = Math.min(1, elapsed / duration);
 
         // Flash bright at start, then fade
@@ -349,6 +350,13 @@ export function applyDamageToUnit(
 
     // Submerged krakens are invulnerable
     if (isKrakenSubmerged(targetId)) {
+        return currentHp;
+    }
+
+    // Invul status — full damage immunity (e.g. Dodge cantrip)
+    const invulUnit = targetUnit ?? unitsStateRef.current?.find(u => u.id === targetId);
+    if (invulUnit && hasStatusEffect(invulUnit, "invul")) {
+        spawnDamageNumber(scene, targetGroup.position.x, targetGroup.position.z, 0, "#ffffff", damageTexts);
         return currentHp;
     }
 

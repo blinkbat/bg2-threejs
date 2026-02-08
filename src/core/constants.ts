@@ -176,7 +176,7 @@ export const COLORS = {
 // SKILL TYPE UI MAPPING - CSS class and border color by skill type
 // =============================================================================
 
-type SkillTypeForColor = "damage" | "heal" | "buff" | "taunt" | "flurry" | "debuff" | "trap" | "sanctuary" | "mana_transfer" | "smite" | "energy_shield" | "aoe_buff" | "restoration" | "revive";
+type SkillTypeForColor = "damage" | "heal" | "buff" | "taunt" | "flurry" | "debuff" | "trap" | "sanctuary" | "mana_transfer" | "smite" | "energy_shield" | "aoe_buff" | "restoration" | "revive" | "dodge";
 
 /** Map skill type to CSS class for styling */
 export function getSkillColorClass(skillType: SkillTypeForColor | undefined): string {
@@ -195,6 +195,8 @@ export function getSkillColorClass(skillType: SkillTypeForColor | undefined): st
             return "skill-taunt";
         case "flurry":
             return "skill-flurry";
+        case "dodge":
+            return "skill-dodge";
         default:
             return "skill-buff";
     }
@@ -217,6 +219,8 @@ export function getSkillBorderColor(skillType: SkillTypeForColor | undefined): s
             return "#c0392b";  // Dark red
         case "flurry":
             return "#27ae60";  // Emerald
+        case "dodge":
+            return "#8e44ad";  // Purple (thief)
         default:
             return "#f1c40f";  // Yellow (buff)
     }

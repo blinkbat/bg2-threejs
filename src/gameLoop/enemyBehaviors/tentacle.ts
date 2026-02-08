@@ -10,6 +10,7 @@ import { getNextUnitId } from "../../core/unitIds";
 import { soundFns } from "../../audio";
 import { setSkillCooldown } from "../../combat/combatMath";
 import { COLORS } from "../../core/constants";
+import { getGameTime } from "../../core/gameClock";
 import { applyDamageToUnit, type DamageContext } from "../../combat/damageEffects";
 import type { TentacleContext } from "./types";
 
@@ -309,9 +310,9 @@ function createTentacleEmergeEffect(scene: THREE.Scene, x: number, z: number): v
     scene.add(emergeGroup);
 
     // Animate rings expanding
-    const startTime = performance.now();
+    const startTime = getGameTime();
     const animate = () => {
-        const elapsed = performance.now() - startTime;
+        const elapsed = getGameTime() - startTime;
         const progress = elapsed / TENTACLE_EMERGE_DURATION;
 
         if (progress >= 1) {

@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import Tippy from "@tippyjs/react";
 import type { Unit, Skill } from "../core/types";
 import { getAllSkills } from "../game/playerUnits";
-import { getSkillColorClass } from "../core/constants";
+import { getSkillColorClass, getSkillBorderColor } from "../core/constants";
 import type { HotbarAssignments } from "../hooks/hotbarStorage";
 
 // Re-export for backwards compatibility
@@ -51,14 +51,27 @@ function SkillSelector({ unit, slotIndex, currentSkill, onSelect, onClose }: Ski
                     {skills.map(skill => {
                         const isSelected = currentSkill === skill.name;
                         const skillColorClass = getSkillColorClass(skill.type);
+                        const borderColor = getSkillBorderColor(skill.type);
+                        const cantripUses = skill.isCantrip ? (unit.cantripUses?.[skill.name] ?? 0) : undefined;
                         return (
                             <div
                                 key={skill.name}
                                 className={`skill-selector-item ${isSelected ? "selected" : ""}`}
+                                style={{ borderColor: isSelected ? borderColor : undefined }}
                                 onClick={() => { onSelect(skill.name); onClose(); }}
                             >
-                                <span className={`skill-selector-name ${skillColorClass}`}>{skill.name}</span>
-                                {skill.manaCost > 0 && <span className="skill-selector-cost">{skill.manaCost} MP</span>}
+                                <div className="skill-selector-info">
+                                    <span className={`skill-selector-name ${skillColorClass}`}>{skill.name}</span>
+                                    {skill.isCantrip && (
+                                        <span className="skill-selector-tag">CANTRIP</span>
+                                    )}
+                                </div>
+                                <div className="skill-selector-meta">
+                                    {cantripUses !== undefined && (
+                                        <span className="skill-selector-uses">{cantripUses} uses</span>
+                                    )}
+                                    {skill.manaCost > 0 && <span className="skill-selector-cost">{skill.manaCost} MP</span>}
+                                </div>
                             </div>
                         );
                     })}
@@ -82,6 +95,7 @@ interface HotbarSlotProps {
     cooldownPct: number;
     cooldownRemaining: number;
     hasManaForSkill: boolean;
+    usesLeft?: number;
 }
 
 function HotbarSlot({
@@ -92,10 +106,13 @@ function HotbarSlot({
     onCastSkill,
     cooldownPct,
     cooldownRemaining,
-    hasManaForSkill
+    hasManaForSkill,
+    usesLeft
 }: HotbarSlotProps) {
     const isEmpty = !skill;
-    const canClick = skill && hasManaForSkill && unit.hp > 0;
+    const isCantrip = skill?.isCantrip ?? false;
+    const noUsesLeft = isCantrip && usesLeft !== undefined && usesLeft <= 0;
+    const canClick = skill && hasManaForSkill && !noUsesLeft && unit.hp > 0;
     const onCooldown = cooldownPct > 0;
 
     const handleContextMenu = (e: React.MouseEvent) => {
@@ -129,6 +146,9 @@ function HotbarSlot({
                 <div className="hotbar-tooltip">
                     <div className="hotbar-tooltip-name">{skill.name}</div>
                     {skill.manaCost > 0 && <div className="hotbar-tooltip-cost">{skill.manaCost} MP</div>}
+                    {isCantrip && usesLeft !== undefined && (
+                        <div className="hotbar-tooltip-cost">{usesLeft} uses remaining</div>
+                    )}
                     <div className="hotbar-tooltip-hint">Right-click to change</div>
                     <div className="hotbar-tooltip-hint">Press {slotIndex + 1} to use</div>
                 </div>
@@ -158,6 +178,9 @@ function HotbarSlot({
                 )}
                 {onCooldown && cooldownRemaining > 0 && (
                     <span className="hotbar-cooldown-text">{cooldownRemaining}</span>
+                )}
+                {isCantrip && usesLeft !== undefined && (
+                    <span className="hotbar-uses-badge">{usesLeft}</span>
                 )}
             </div>
         </Tippy>
@@ -206,6 +229,7 @@ export function SkillHotbar({
                 const cooldownRemaining = onCooldown ? Math.ceil((skillCooldownEnd - displayTime) / 1000) : 0;
                 const cooldownPct = onCooldown ? ((skillCooldownEnd - displayTime) / cooldownDuration) * 100 : 0;
                 const hasManaForSkill = skill ? (unit.mana ?? 0) >= skill.manaCost : false;
+                const usesLeft = skill?.isCantrip ? (unit.cantripUses?.[skill.name] ?? 0) : undefined;
 
                 return (
                     <HotbarSlot
@@ -218,6 +242,7 @@ export function SkillHotbar({
                         cooldownPct={cooldownPct}
                         cooldownRemaining={cooldownRemaining}
                         hasManaForSkill={hasManaForSkill}
+                        usesLeft={usesLeft}
                     />
                 );
             })}

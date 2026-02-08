@@ -6,6 +6,7 @@ import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, EnemyChargeAttack, EnemyStats, DamageType } from "../core/types";
 import { COLORS } from "../core/constants";
 import { getUnitStats } from "../game/units";
+import { getGameTime } from "../core/gameClock";
 import { calculateDamageWithCrit, rollHit, getEffectiveArmor, logAoeHit, isUnitAlive } from "../combat/combatMath";
 import { applyDamageToUnit, buildDamageContext } from "../combat/damageEffects";
 import { soundFns } from "../audio";
@@ -318,11 +319,11 @@ function createExplosionEffect(scene: THREE.Scene, centerX: number, centerZ: num
     scene.add(ring);
 
     // Animate expansion and fade
-    const startTime = Date.now();
+    const startTime = getGameTime();
     const duration = 400;
 
     function animate(): void {
-        const elapsed = Date.now() - startTime;
+        const elapsed = getGameTime() - startTime;
         const progress = elapsed / duration;
 
         if (progress >= 1) {

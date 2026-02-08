@@ -186,6 +186,7 @@ const EFFECT_INFO: Record<string, { icon: string; color: string; description: st
     qi_drain: { icon: "💔", color: "#e74c3c", description: "Life force draining" },
     doom: { icon: "💀", color: COLORS.doomText, description: "Death in 10s — cure with Restoration" },
     regen: { icon: "💚", color: COLORS.hpHigh, description: "Healing over time" },
+    invul: { icon: "✦", color: "#8e44ad", description: "Immune to all damage" },
 };
 
 /** Renders active status effects as inline icons with tooltips */
@@ -366,7 +367,7 @@ function getDamageTypeInfo(type: DamageType | undefined): { color: string; name:
     }
 }
 
-function SkillTooltip({ skill, isShielded }: { skill: Skill; isShielded: boolean }) {
+function SkillTooltip({ skill, isShielded, cantripUses }: { skill: Skill; isShielded: boolean; cantripUses?: number }) {
     const isRanged = skill.range > 2;
     const baseCooldown = skill.cooldown / 1000;
     const effectiveCooldown = isShielded ? baseCooldown * 2 : baseCooldown;
@@ -447,10 +448,14 @@ function SkillTooltip({ skill, isShielded }: { skill: Skill; isShielded: boolean
         lines.push({ label: "Shield HP", value: `${skill.shieldAmount}`, color: "#9b59b6" });
         lines.push({ label: "Duration", value: `${durationSec}s`, color: "#9b59b6" });
         lines.push({ label: "Weakness", value: "Chaos ×2 penetration", color: COLORS.dmgChaos });
+    } else if (skill.type === "dodge") {
+        const durationSec = Math.round(skill.duration! / 1000 * 10) / 10;
+        lines.push({ label: "Invul", value: `${durationSec}s`, color: "#8e44ad" });
+        lines.push({ label: "Dash range", value: `${skill.range}`, color: "#8e44ad" });
     }
 
-    // Range (skip for self-targeted AOE skills that use range as radius)
-    const skipRange = skill.targetType === "self" && (skill.type === "taunt" || skill.type === "flurry" || skill.type === "aoe_buff");
+    // Range (skip for self-targeted AOE skills that use range as radius, and dodge which shows it inline)
+    const skipRange = skill.type === "dodge" || (skill.targetType === "self" && (skill.type === "taunt" || skill.type === "flurry" || skill.type === "aoe_buff"));
     if (skill.range > 0 && !skipRange) {
         lines.push({ label: isRanged ? "Range" : "Melee", value: isRanged ? `${skill.range}` : "1.8" });
     }
@@ -474,12 +479,19 @@ function SkillTooltip({ skill, isShielded }: { skill: Skill; isShielded: boolean
         lines.push({ label: "Mana", value: `${skill.manaCost}`, color: COLORS.mana });
     }
 
-    // Cooldown
-    lines.push({
-        label: "Cooldown",
-        value: isShielded ? `${effectiveCooldown}s (×2)` : `${baseCooldown}s`,
-        color: isShielded ? COLORS.shieldedText : undefined
-    });
+    // Cooldown (skip for cantrips — they use charges)
+    if (!skill.isCantrip) {
+        lines.push({
+            label: "Cooldown",
+            value: isShielded ? `${effectiveCooldown}s (×2)` : `${baseCooldown}s`,
+            color: isShielded ? COLORS.shieldedText : undefined
+        });
+    }
+
+    // Cantrip uses
+    if (cantripUses !== undefined) {
+        lines.push({ label: "Uses", value: `${cantripUses} remaining`, color: "#8e44ad" });
+    }
 
     return (
         <div className="skill-tooltip">
@@ -501,6 +513,85 @@ function SkillTooltip({ skill, isShielded }: { skill: Skill; isShielded: boolean
     );
 }
 
+function SkillCard({
+    unitId, unit, skill, skillCooldowns, displayTime, paused, isShielded, isQueued, onCastSkill
+}: {
+    unitId: number;
+    unit: Unit;
+    skill: Skill;
+    skillCooldowns: Record<string, { end: number; duration: number }>;
+    displayTime: number;
+    paused: boolean;
+    isShielded: boolean;
+    isQueued: boolean;
+    onCastSkill?: (unitId: number, skill: Skill) => void;
+}) {
+    const cooldownKey = `${unitId}-${skill.name}`;
+    const cooldownData = skillCooldowns[cooldownKey];
+    const skillCooldownEnd = cooldownData?.end || 0;
+    const cooldownDuration = cooldownData?.duration || skill.cooldown;
+    const skillOnCooldown = skillCooldownEnd > displayTime;
+    const cooldownRemaining = skillOnCooldown ? Math.ceil((skillCooldownEnd - displayTime) / 1000) : 0;
+    const cooldownPct = skillOnCooldown ? ((skillCooldownEnd - displayTime) / cooldownDuration) * 100 : 0;
+    const hasManaForSkill = (unit.mana ?? 0) >= skill.manaCost;
+    const isBasicAttack = skill.name === "Attack";
+    const isRanged = skill.range > 2;
+    const cantripUses = skill.isCantrip ? (unit.cantripUses?.[skill.name] ?? 0) : undefined;
+    const noUsesLeft = skill.isCantrip && cantripUses !== undefined && cantripUses <= 0;
+    const canClick = hasManaForSkill && !noUsesLeft && unit.hp > 0;
+
+    const skillColorClass = getSkillColorClass(skill.type);
+    const skillBorderColor = getSkillBorderColor(skill.type);
+
+    const cardClass = `skill-card ${!canClick && !isQueued ? "disabled" : ""} ${isQueued ? "queued" : ""}`;
+
+    return (
+        <Tippy
+            content={<SkillTooltip skill={skill} isShielded={isShielded} cantripUses={cantripUses} />}
+            placement="left"
+            delay={[200, 0]}
+            arrow={true}
+        >
+            <div
+                className={cardClass}
+                onClick={() => canClick && onCastSkill?.(unitId, skill)}
+                style={{
+                    borderColor: isQueued ? undefined : (canClick ? skillBorderColor : "#333")
+                }}
+            >
+                {skillOnCooldown && (
+                    <div
+                        className="skill-cooldown-overlay"
+                        style={{
+                            width: `${cooldownPct}%`,
+                            background: isQueued ? "rgba(245, 158, 11, 0.4)" : "rgba(0,0,0,0.5)"
+                        }}
+                    />
+                )}
+                <div className="skill-header">
+                    <span className={`bold ${isQueued ? "skill-queued-color" : skillColorClass}`}>
+                        {skill.name}
+                        {isBasicAttack && isRanged && <span className="skill-tag">RANGED</span>}
+                        {isBasicAttack && !isRanged && <span className="skill-tag">MELEE</span>}
+                        {isQueued && <span className="skill-tag skill-tag-queued">QUEUED</span>}
+                    </span>
+                    <div className="skill-header-right">
+                        {cantripUses !== undefined && (
+                            <span className="skill-uses-badge">{cantripUses} uses</span>
+                        )}
+                        {skill.manaCost > 0 && <span className="mana-cost">{skill.manaCost} MP</span>}
+                    </div>
+                </div>
+                {skillOnCooldown && (
+                    <div className="skill-cooldown-text" style={isQueued ? { color: "#f59e0b" } : undefined}>
+                        {cooldownRemaining}s{paused && " (paused)"}{isShielded && " (×2)"}
+                    </div>
+                )}
+            </div>
+        </Tippy>
+    );
+}
+
 function SkillsTab({
     unitId, unit, skillCooldowns, displayTime, paused, queuedSkills, onCastSkill
 }: {
@@ -513,74 +604,49 @@ function SkillsTab({
     onCastSkill?: (unitId: number, skill: Skill) => void;
 }) {
     const isShielded = hasStatusEffect(unit, "shielded");
+    const allSkills = getAllSkills(unitId);
+    const cantrips = allSkills.filter(s => s.isCantrip);
+    const regularSkills = allSkills.filter(s => !s.isCantrip);
 
     return (
         <div className="flex flex-col gap-8">
             <EffectsDisplay unit={unit} />
 
-            {getAllSkills(unitId).map((skill: Skill, i: number) => {
-                const cooldownKey = `${unitId}-${skill.name}`;
-                const cooldownData = skillCooldowns[cooldownKey];
-                const skillCooldownEnd = cooldownData?.end || 0;
-                const cooldownDuration = cooldownData?.duration || skill.cooldown;
-                // This skill has an active cooldown animation
-                const skillOnCooldown = skillCooldownEnd > displayTime;
-                const cooldownRemaining = skillOnCooldown ? Math.ceil((skillCooldownEnd - displayTime) / 1000) : 0;
-                const cooldownPct = skillOnCooldown ? ((skillCooldownEnd - displayTime) / cooldownDuration) * 100 : 0;
-                const hasManaForSkill = (unit.mana ?? 0) >= skill.manaCost;
-                const isQueued = queuedSkills.includes(skill.name);
-                const isBasicAttack = skill.name === "Attack";
-                const isRanged = skill.range > 2;
-                // Can click if has mana and alive (clicking queues the skill)
-                const canClick = hasManaForSkill && unit.hp > 0;
+            {cantrips.length > 0 && (
+                <>
+                    <div className="skills-section-label">Cantrips</div>
+                    {cantrips.map((skill: Skill, i: number) => (
+                        <SkillCard
+                            key={`cantrip-${i}`}
+                            unitId={unitId}
+                            unit={unit}
+                            skill={skill}
+                            skillCooldowns={skillCooldowns}
+                            displayTime={displayTime}
+                            paused={paused}
+                            isShielded={isShielded}
+                            isQueued={queuedSkills.includes(skill.name)}
+                            onCastSkill={onCastSkill}
+                        />
+                    ))}
+                    <div className="skills-section-label">Skills</div>
+                </>
+            )}
 
-                const skillColorClass = getSkillColorClass(skill.type);
-                const skillBorderColor = getSkillBorderColor(skill.type);
-
-                const cardClass = `skill-card ${!canClick && !isQueued ? "disabled" : ""} ${isQueued ? "queued" : ""}`;
-
-                return (
-                    <Tippy
-                        key={i}
-                        content={<SkillTooltip skill={skill} isShielded={isShielded} />}
-                        placement="left"
-                        delay={[200, 0]}
-                        arrow={true}
-                    >
-                        <div
-                            className={cardClass}
-                            onClick={() => canClick && onCastSkill?.(unitId, skill)}
-                            style={{
-                                borderColor: isQueued ? undefined : (canClick ? skillBorderColor : "#333")
-                            }}
-                        >
-                            {skillOnCooldown && (
-                                <div
-                                    className="skill-cooldown-overlay"
-                                    style={{
-                                        width: `${cooldownPct}%`,
-                                        background: isQueued ? "rgba(245, 158, 11, 0.4)" : "rgba(0,0,0,0.5)"
-                                    }}
-                                />
-                            )}
-                            <div className="skill-header">
-                                <span className={`bold ${isQueued ? "skill-queued-color" : skillColorClass}`}>
-                                    {skill.name}
-                                    {isBasicAttack && isRanged && <span className="skill-tag">RANGED</span>}
-                                    {isBasicAttack && !isRanged && <span className="skill-tag">MELEE</span>}
-                                    {isQueued && <span className="skill-tag skill-tag-queued">QUEUED</span>}
-                                </span>
-                                {skill.manaCost > 0 && <span className="mana-cost">{skill.manaCost} MP</span>}
-                            </div>
-                            {skillOnCooldown && (
-                                <div className="skill-cooldown-text" style={isQueued ? { color: "#f59e0b" } : undefined}>
-                                    {cooldownRemaining}s{paused && " (paused)"}{isShielded && " (×2)"}
-                                </div>
-                            )}
-                        </div>
-                    </Tippy>
-                );
-            })}
+            {regularSkills.map((skill: Skill, i: number) => (
+                <SkillCard
+                    key={`skill-${i}`}
+                    unitId={unitId}
+                    unit={unit}
+                    skill={skill}
+                    skillCooldowns={skillCooldowns}
+                    displayTime={displayTime}
+                    paused={paused}
+                    isShielded={isShielded}
+                    isQueued={queuedSkills.includes(skill.name)}
+                    onCastSkill={onCastSkill}
+                />
+            ))}
         </div>
     );
 }

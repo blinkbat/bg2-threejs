@@ -6,6 +6,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import * as THREE from "three";
 import { PAN_SPEED } from "../core/constants";
+import { updateGameClock } from "../core/gameClock";
 import { getCurrentArea } from "../game/areas";
 import type { Unit, UnitGroup } from "../core/types";
 import { updateCamera, updateWallTransparency, updateTreeFogVisibility, updateLightLOD, addUnitToScene, updateWater, updateBillboards } from "../rendering/scene";
@@ -221,6 +222,7 @@ export function useGameLoop({
         const animate = () => {
             animId = requestAnimationFrame(animate);
             const now = Date.now();
+            updateGameClock();
             const refs = gameRefs.current;
 
             // FPS counter

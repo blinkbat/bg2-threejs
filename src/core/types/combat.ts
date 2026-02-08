@@ -13,7 +13,7 @@ export interface Skill {
     flavor?: string;       // Flavor text for tooltip
     manaCost: number;
     cooldown: number;  // ms
-    type: "damage" | "heal" | "buff" | "taunt" | "flurry" | "debuff" | "trap" | "sanctuary" | "mana_transfer" | "smite" | "energy_shield" | "aoe_buff" | "restoration" | "revive";
+    type: "damage" | "heal" | "buff" | "taunt" | "flurry" | "debuff" | "trap" | "sanctuary" | "mana_transfer" | "smite" | "energy_shield" | "aoe_buff" | "restoration" | "revive" | "dodge";
     targetType: "enemy" | "ally" | "self" | "aoe";
     range: number;
     aoeRadius?: number;
@@ -36,6 +36,10 @@ export interface Skill {
     stunChance?: number;              // 0-100 percent chance to apply stun on hit
     selfDamage?: [number, number];    // Damage range to apply to caster (for Qi Focus)
     trapDamage?: [number, number];    // Damage dealt when trap triggers
+
+    // Cantrip properties
+    isCantrip?: boolean;              // Uses charges instead of cooldowns, bypasses action cooldown
+    maxUses?: number;                 // Max charges per day
 }
 
 export interface CombatLogEntry {

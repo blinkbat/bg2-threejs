@@ -222,5 +222,19 @@ export const SKILLS: Record<string, Skill> = {
         manaRange: [10, 14],  // Mana to give
         selfDamage: [20, 30],  // HP cost to caster over time
         damageType: "physical"
+    },
+    dodge: {
+        name: "Dodge",
+        description: "Dash to a nearby location, briefly becoming invulnerable.",
+        flavor: "\"Catch me if you can.\"",
+        manaCost: 5,
+        cooldown: 500,     // Tiny lockout to prevent double-tap
+        type: "dodge",
+        targetType: "aoe", // Ground-targeted
+        range: 4,          // Max dash distance
+        duration: 1200,    // Invul window in ms
+        damageType: "physical",
+        isCantrip: true,
+        maxUses: 2
     }
 };

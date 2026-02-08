@@ -6,7 +6,7 @@
 export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba" | "acid_slug" | "bat" | "undead_knight" | "ancient_construct" | "feral_hound" | "corrupt_druid" | "skeleton_warrior" | "baby_kraken" | "kraken_tentacle" | "magma_imp" | "necromancer" | "skeleton_minion";
 
 // Status effect types
-export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed" | "qi_drain" | "energyShield" | "defiance" | "doom";
+export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed" | "qi_drain" | "energyShield" | "defiance" | "doom" | "invul";
 
 export interface StatusEffect {
     type: StatusEffectType;
@@ -50,6 +50,7 @@ export interface Unit {
     spawnedBy?: number;  // ID of the unit that spawned this one (for broodlings)
     splitCount?: number;  // For amoebas - how many times this lineage has split (affects size)
     facing?: number;  // Direction unit is facing in radians (for front-shielded enemies)
+    cantripUses?: Record<string, number>;  // Remaining cantrip charges keyed by skill name
 }
 
 import type { Skill } from "./combat";

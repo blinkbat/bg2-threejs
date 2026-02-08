@@ -7,6 +7,7 @@ import type { Unit, UnitGroup, DamageText, EnemyCurseSkill, EnemyStats, DamageTy
 import { COLORS, DOOM_DURATION, BUFF_TICK_INTERVAL } from "../core/constants";
 import { getUnitStats } from "../game/units";
 import { distance } from "../game/geometry";
+import { getGameTime } from "../core/gameClock";
 import { calculateDamageWithCrit, rollHit, getEffectiveArmor, logAoeHit, isUnitAlive } from "../combat/combatMath";
 import { applyDamageToUnit, buildDamageContext } from "../combat/damageEffects";
 import { soundFns } from "../audio";
@@ -306,11 +307,11 @@ function createCurseExplosion(scene: THREE.Scene, centerX: number, centerZ: numb
     ring.position.set(centerX + 0.5, 0.3, centerZ + 0.5);
     scene.add(ring);
 
-    const startTime = Date.now();
+    const startTime = getGameTime();
     const duration = 500;
 
     function animate(): void {
-        const elapsed = Date.now() - startTime;
+        const elapsed = getGameTime() - startTime;
         const progress = elapsed / duration;
 
         if (progress >= 1) {

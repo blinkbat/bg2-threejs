@@ -8,6 +8,7 @@ import { distance } from "../../game/geometry";
 import { soundFns } from "../../audio";
 import { setSkillCooldown } from "../../combat/combatMath";
 import { BUFF_TICK_INTERVAL, COLORS } from "../../core/constants";
+import { getGameTime } from "../../core/gameClock";
 import { applyDamageToUnit, type DamageContext } from "../../combat/damageEffects";
 import type { VinesContext } from "./types";
 
@@ -121,9 +122,9 @@ function createVinesEffect(scene: THREE.Scene, x: number, z: number, duration: n
     scene.add(vinesGroup);
 
     // Animate and remove after duration
-    const startTime = performance.now();
+    const startTime = getGameTime();
     const animate = () => {
-        const elapsed = performance.now() - startTime;
+        const elapsed = getGameTime() - startTime;
         const progress = elapsed / duration;
 
         if (progress >= 1) {

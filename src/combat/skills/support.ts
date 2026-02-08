@@ -3,7 +3,7 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Skill, StatusEffect } from "../../core/types";
+import type { Skill, StatusEffect, StatusEffectType } from "../../core/types";
 import { COLORS, BUFF_TICK_INTERVAL, QI_DRAIN_DURATION, QI_DRAIN_TICK_INTERVAL, POISON_TICK_INTERVAL } from "../../core/constants";
 import { UNIT_DATA, getEffectiveMaxHp } from "../../game/playerUnits";
 import { getFaithHealingBonus } from "../../game/statBonuses";
@@ -170,6 +170,85 @@ export function executeManaTransferSkill(
 }
 
 // =============================================================================
+// BUFF TEMPLATE SYSTEM
+// =============================================================================
+
+interface BuffTemplate {
+    effectType: StatusEffectType;
+    ringColor: string;
+    ringOpts: { innerRadius?: number; outerRadius?: number; maxScale: number; duration?: number };
+    sound: () => void;
+    logMessage: (casterName: string, skillName: string, allyCount?: number) => string;
+    logColor: string;
+    extraEffectFields?: Partial<StatusEffect>;
+    aoe?: boolean;
+}
+
+/**
+ * Shared buff application: consumeSkill → build effect → apply to targets → sound + log + ring.
+ * Handles both self-buffs and AoE buffs via the `aoe` flag on the template.
+ */
+function applyBuffFromTemplate(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill,
+    template: BuffTemplate
+): boolean {
+    const { scene, unitsStateRef, unitsRef, setUnits, addLog } = ctx;
+
+    const casterG = unitsRef.current[casterId];
+    if (!casterG) return false;
+
+    consumeSkill(ctx, casterId, skill);
+
+    const casterData = UNIT_DATA[casterId];
+    const now = Date.now();
+
+    const effect: StatusEffect = {
+        type: template.effectType,
+        duration: skill.duration!,
+        tickInterval: BUFF_TICK_INTERVAL,
+        timeSinceTick: 0,
+        lastUpdateTime: now,
+        damagePerTick: 0,
+        sourceId: casterId,
+        ...template.extraEffectFields
+    };
+
+    if (template.aoe) {
+        // Find all player allies within range
+        const allies = unitsStateRef.current.filter(u => u.team === "player" && u.hp > 0);
+        const alliesInRange: number[] = [];
+        for (const ally of allies) {
+            const allyG = unitsRef.current[ally.id];
+            if (!allyG) continue;
+            const allyRadius = getUnitRadius(ally);
+            if (isInRange(casterG.position.x, casterG.position.z, allyG.position.x, allyG.position.z, allyRadius, skill.range)) {
+                alliesInRange.push(ally.id);
+            }
+        }
+
+        setUnits(prev => prev.map(u =>
+            alliesInRange.includes(u.id) ? { ...u, statusEffects: applyStatusEffect(u.statusEffects, effect) } : u
+        ));
+
+        template.sound();
+        addLog(template.logMessage(casterData.name, skill.name, alliesInRange.length), template.logColor);
+    } else {
+        setUnits(prev => prev.map(u =>
+            u.id === casterId ? { ...u, statusEffects: applyStatusEffect(u.statusEffects, effect) } : u
+        ));
+
+        template.sound();
+        addLog(template.logMessage(casterData.name, skill.name), template.logColor);
+    }
+
+    createAnimatedRing(scene, casterG.position.x, casterG.position.z, template.ringColor, template.ringOpts);
+
+    return true;
+}
+
+// =============================================================================
 // BUFF SKILL (self-buff like Raise Shield)
 // =============================================================================
 
@@ -181,41 +260,14 @@ export function executeBuffSkill(
     casterId: number,
     skill: Skill
 ): boolean {
-    const { scene, unitsRef, setUnits, addLog } = ctx;
-
-    const casterG = unitsRef.current[casterId];
-    if (!casterG) return false;
-
-    consumeSkill(ctx, casterId, skill);
-
-    const casterData = UNIT_DATA[casterId];
-    const duration = skill.duration!;  // Duration in ms
-    const now = Date.now();
-
-    // Apply the buff as a status effect
-    const shieldedEffect: StatusEffect = {
-        type: "shielded",
-        duration,
-        tickInterval: BUFF_TICK_INTERVAL,
-        timeSinceTick: 0,
-        lastUpdateTime: now,
-        damagePerTick: 0,
-        sourceId: casterId
-    };
-    setUnits(prev => prev.map(u =>
-        u.id === casterId ? { ...u, statusEffects: applyStatusEffect(u.statusEffects, shieldedEffect) } : u
-    ));
-
-    // Play sound and log
-    soundFns.playHeal();  // Reuse heal sound for buff activation
-    addLog(logBuff(casterData.name, skill.name), "#f1c40f");
-
-    // Visual effect - golden glow ring
-    createAnimatedRing(scene, casterG.position.x, casterG.position.z, "#f1c40f", {
-        innerRadius: 0.3, outerRadius: 0.5, maxScale: 1.5, duration: 300
+    return applyBuffFromTemplate(ctx, casterId, skill, {
+        effectType: "shielded",
+        ringColor: "#f1c40f",
+        ringOpts: { innerRadius: 0.3, outerRadius: 0.5, maxScale: 1.5, duration: 300 },
+        sound: soundFns.playHeal,
+        logMessage: (name, skillName) => logBuff(name, skillName),
+        logColor: "#f1c40f",
     });
-
-    return true;
 }
 
 // =============================================================================
@@ -230,56 +282,15 @@ export function executeAoeBuffSkill(
     casterId: number,
     skill: Skill
 ): boolean {
-    const { scene, unitsStateRef, unitsRef, setUnits, addLog } = ctx;
-
-    const casterG = unitsRef.current[casterId];
-    if (!casterG) return false;
-
-    consumeSkill(ctx, casterId, skill);
-
-    const casterData = UNIT_DATA[casterId];
-    const duration = skill.duration!;  // Duration in ms
-    const now = Date.now();
-
-    // Find all player allies within range FIRST (outside setUnits)
-    const allies = unitsStateRef.current.filter(u => u.team === "player" && u.hp > 0);
-    const alliesInRange: number[] = [];
-
-    allies.forEach(ally => {
-        const allyG = unitsRef.current[ally.id];
-        if (!allyG) return;
-
-        // Check if ally is within range (using hitbox-aware range check)
-        const allyRadius = getUnitRadius(ally);
-        if (isInRange(casterG.position.x, casterG.position.z, allyG.position.x, allyG.position.z, allyRadius, skill.range)) {
-            alliesInRange.push(ally.id);
-        }
+    return applyBuffFromTemplate(ctx, casterId, skill, {
+        effectType: "defiance",
+        ringColor: "#c0392b",
+        ringOpts: { innerRadius: 0.5, outerRadius: skill.range, maxScale: 2, duration: 400 },
+        sound: soundFns.playWarcry,
+        logMessage: (name, skillName, count) => `${name} rallies ${count} allies with ${skillName}!`,
+        logColor: "#c0392b",
+        aoe: true,
     });
-
-    // Apply buff to all allies in range
-    const defianceEffect: StatusEffect = {
-        type: "defiance",
-        duration,
-        tickInterval: BUFF_TICK_INTERVAL,
-        timeSinceTick: 0,
-        lastUpdateTime: now,
-        damagePerTick: 0,
-        sourceId: casterId
-    };
-    setUnits(prev => prev.map(u =>
-        alliesInRange.includes(u.id) ? { ...u, statusEffects: applyStatusEffect(u.statusEffects, defianceEffect) } : u
-    ));
-
-    // Play sound and log
-    soundFns.playWarcry();  // Use warcry sound for battle cry
-    addLog(`${casterData.name} rallies ${alliesInRange.length} allies with ${skill.name}!`, "#c0392b");
-
-    // Visual effect - red battle cry ring expanding outward
-    createAnimatedRing(scene, casterG.position.x, casterG.position.z, "#c0392b", {
-        innerRadius: 0.5, outerRadius: skill.range, maxScale: 2, duration: 400
-    });
-
-    return true;
 }
 
 // =============================================================================
@@ -294,43 +305,15 @@ export function executeEnergyShieldSkill(
     casterId: number,
     skill: Skill
 ): boolean {
-    const { scene, unitsRef, setUnits, addLog } = ctx;
-
-    const casterG = unitsRef.current[casterId];
-    if (!casterG) return false;
-
-    consumeSkill(ctx, casterId, skill);
-
-    const casterData = UNIT_DATA[casterId];
-    const shieldAmount = skill.shieldAmount!;  // Max shield HP
-    const duration = skill.duration!;          // Duration in ms
-    const now = Date.now();
-
-    // Apply the energy shield as a status effect
-    const shieldEffect: StatusEffect = {
-        type: "energyShield",
-        duration,
-        tickInterval: BUFF_TICK_INTERVAL,
-        timeSinceTick: 0,
-        lastUpdateTime: now,
-        damagePerTick: 0,
-        sourceId: casterId,
-        shieldAmount
-    };
-    setUnits(prev => prev.map(u =>
-        u.id === casterId ? { ...u, statusEffects: applyStatusEffect(u.statusEffects, shieldEffect) } : u
-    ));
-
-    // Play whoosh sound and log
-    soundFns.playEnergyShield();
-    addLog(`${casterData.name} conjures an Energy Shield!`, "#9b59b6");
-
-    // Visual effect - expanding cyan ring
-    createAnimatedRing(scene, casterG.position.x, casterG.position.z, "#66ccff", {
-        innerRadius: 0.2, outerRadius: 0.6, maxScale: 1.8, duration: 350
+    return applyBuffFromTemplate(ctx, casterId, skill, {
+        effectType: "energyShield",
+        ringColor: "#66ccff",
+        ringOpts: { innerRadius: 0.2, outerRadius: 0.6, maxScale: 1.8, duration: 350 },
+        sound: soundFns.playEnergyShield,
+        logMessage: (name) => `${name} conjures an Energy Shield!`,
+        logColor: "#9b59b6",
+        extraEffectFields: { shieldAmount: skill.shieldAmount! },
     });
-
-    return true;
 }
 
 // =============================================================================

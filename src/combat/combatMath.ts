@@ -3,7 +3,7 @@
 // =============================================================================
 
 import type { Unit, UnitData, EnemyStats, StatusEffect, StatusEffectType, DamageType } from "../core/types";
-import { POISON_DURATION, POISON_TICK_INTERVAL, POISON_DAMAGE_PER_TICK, SLOW_DURATION, BUFF_TICK_INTERVAL, COLORS, SLOW_COOLDOWN_MULT, DEFIANCE_COOLDOWN_MULT } from "../core/constants";
+import { POISON_DURATION, POISON_TICK_INTERVAL, POISON_DAMAGE_PER_TICK, SLOW_DURATION, BUFF_TICK_INTERVAL, COLORS, SLOW_COOLDOWN_MULT, SLOW_MOVE_MULT, DEFIANCE_COOLDOWN_MULT } from "../core/constants";
 import { getStrengthDamageBonus, getIntelligenceMagicDamageBonus, getFaithHolyDamageBonus, getDexterityCritChance, CRIT_MULTIPLIER } from "../game/statBonuses";
 
 // =============================================================================
@@ -313,6 +313,17 @@ export function getEffectiveDamage(unit: Unit, baseDamage: [number, number]): [n
         ];
     }
     return baseDamage;
+}
+
+/**
+ * Get effective speed multiplier for a unit, accounting for pinned (0), base moveSpeed, and slow (0.5x).
+ * Consolidates the 3x duplicated speed calculation from the game loop.
+ */
+export function getEffectiveSpeedMultiplier(unit: Unit, data: EnemyStats | UnitData): number {
+    if (hasStatusEffect(unit, "pinned")) return 0;
+    const base = "moveSpeed" in data ? (data as EnemyStats).moveSpeed ?? 1 : 1;
+    const slow = hasStatusEffect(unit, "slowed") ? SLOW_MOVE_MULT : 1;
+    return base * slow;
 }
 
 /**

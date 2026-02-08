@@ -29,6 +29,10 @@ export {
 // Necromancer Raise Dead
 export { tryRaiseDead } from "./necromancer";
 
+// Acid Slug Patrol
+export { tryAcidSlugPatrol, processAcidTrailAndAura } from "./acidSlug";
+export type { AcidSlugContext } from "./acidSlug";
+
 // Baby Kraken Submerge
 export {
     trySubmergeKraken,

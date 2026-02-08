@@ -61,6 +61,7 @@ interface PersistedPlayer {
     stats?: CharacterStats;
     statPoints?: number;
     statusEffects?: Unit["statusEffects"];
+    cantripUses?: Record<string, number>;
 }
 
 interface GameProps {
@@ -131,7 +132,10 @@ function Game({
                 team: "player" as const,
                 target: null,
                 aiEnabled: true,
-                statusEffects: persisted?.statusEffects
+                statusEffects: persisted?.statusEffects,
+                cantripUses: persisted?.cantripUses ?? data.skills
+                    .filter(s => s.isCantrip && s.maxUses)
+                    .reduce<Record<string, number>>((acc, s) => ({ ...acc, [s.name]: s.maxUses! }), {})
             };
         });
 
@@ -406,7 +410,8 @@ function Game({
         const playerUnits = unitsStateRef.current.filter(u => u.team === "player");
         const persistedState: PersistedPlayer[] = playerUnits.map(u => ({
             id: u.id, hp: u.hp, mana: u.mana, level: u.level, exp: u.exp,
-            stats: u.stats, statPoints: u.statPoints, statusEffects: u.statusEffects
+            stats: u.stats, statPoints: u.statPoints, statusEffects: u.statusEffects,
+            cantripUses: u.cantripUses
         }));
         onAreaTransition(persistedState, transition.targetArea, transition.targetSpawn);
     }, [onAreaTransition]);
@@ -593,6 +598,10 @@ function Game({
     const handleCastSkill = useCallback((casterId: number, skill: Skill) => {
         const caster = units.find(u => u.id === casterId);
         if (!caster || caster.hp <= 0 || (caster.mana ?? 0) < skill.manaCost) return;
+        if (skill.isCantrip && (caster.cantripUses?.[skill.name] ?? 0) <= 0) {
+            addLog(`${UNIT_DATA[casterId].name}: No uses remaining!`, "#888");
+            return;
+        }
         const casterG = sceneState.unitGroups[casterId];
         if (!casterG || !sceneState.scene) return;
 
@@ -676,7 +685,8 @@ function Game({
         const playerUnits = unitsStateRef.current.filter(u => u.team === "player");
         const persistedState: PersistedPlayer[] = playerUnits.map(u => ({
             id: u.id, hp: u.hp, mana: u.mana, level: u.level, exp: u.exp,
-            stats: u.stats, statPoints: u.statPoints, statusEffects: u.statusEffects
+            stats: u.stats, statPoints: u.statPoints, statusEffects: u.statusEffects,
+            cantripUses: u.cantripUses
         }));
         onAreaTransition(persistedState, areaId, AREAS[areaId].defaultSpawn);
     }, [onAreaTransition]);

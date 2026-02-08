@@ -43,11 +43,15 @@ export {
     executeSanctuarySkill
 } from "./utility";
 
+// Re-export movement skills
+export { executeDodgeSkill } from "./movement";
+
 // Import for internal use
 import type { SkillExecutionContext } from "./types";
 import { executeAoeSkill, executeMeleeSkill, executeSmiteSkill, executeRangedSkill, executeFlurrySkill, executeMagicWaveSkill } from "./damage";
 import { executeHealSkill, executeManaTransferSkill, executeBuffSkill, executeAoeBuffSkill, executeEnergyShieldSkill, executeCleanseSkill, executeRestorationSkill, executeReviveSkill } from "./support";
 import { executeTauntSkill, executeDebuffSkill, executeTrapSkill, executeSanctuarySkill } from "./utility";
+import { executeDodgeSkill } from "./movement";
 
 // =============================================================================
 // MAIN SKILL ROUTER
@@ -122,6 +126,8 @@ export function executeSkill(
         return executeRestorationSkill(ctx, casterId, skill, targetX, targetZ);
     } else if (skill.type === "revive" && skill.targetType === "ally") {
         return executeReviveSkill(ctx, casterId, skill, targetX, targetZ);
+    } else if (skill.type === "dodge") {
+        return executeDodgeSkill(ctx, casterId, skill, targetX, targetZ);
     }
 
     return false;

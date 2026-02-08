@@ -57,82 +57,149 @@ export function executeAoeSkill(
 }
 
 // =============================================================================
-// MELEE SKILL (e.g. Poison Dagger)
+// DELIVERY TYPES FOR TARGETED DAMAGE SKILLS
+// =============================================================================
+
+export type DamageDelivery =
+    | { mode: "melee" }
+    | { mode: "ranged" }
+    | { mode: "smite" };
+
+// =============================================================================
+// UNIFIED TARGETED DAMAGE SKILL
 // =============================================================================
 
 /**
- * Execute a melee single-target enemy skill (like Poison Dagger)
+ * Execute a targeted single-enemy damage skill.
+ * Handles the shared pipeline: find target → range check → consume → delivery-specific effects.
+ *
+ * Delivery modes:
+ * - melee: swing animation, full defense check (shield + block), hit roll + damage
+ * - smite: lightning pillar, front-shield-only defense check, hit roll + damage
+ * - ranged: spawns projectile (hit resolved on impact, no roll here)
  */
-export function executeMeleeSkill(
+export function executeTargetedDamageSkill(
     ctx: SkillExecutionContext,
     casterId: number,
     skill: Skill,
     targetX: number,
-    targetZ: number
+    targetZ: number,
+    delivery: DamageDelivery,
+    targetUnitId?: number
 ): boolean {
-    const { scene, unitsStateRef, unitsRef, hitFlashRef, damageTexts, setUnits, addLog, defeatedThisFrame, swingAnimationsRef } = ctx;
+    const { scene, unitsStateRef, unitsRef, hitFlashRef, damageTexts, setUnits, addLog, defeatedThisFrame, swingAnimationsRef, projectilesRef } = ctx;
 
-    // Find closest enemy to target position
-    const closest = findClosestTargetByTeam(unitsStateRef.current, unitsRef.current, "enemy", targetX, targetZ);
+    // --- Phase 1: Find target ---
+    let targetEnemy: Unit | undefined;
+    let targetG: UnitGroup | undefined;
 
-    if (!closest) {
-        addLog(`${UNIT_DATA[casterId].name}: No enemy at that location!`, COLORS.logNeutral);
-        return false;
+    // Smite can track by unit ID (moving targets)
+    if (targetUnitId !== undefined) {
+        targetEnemy = unitsStateRef.current.find(u => u.id === targetUnitId && u.team === "enemy");
+        targetG = unitsRef.current[targetUnitId];
     }
 
-    const { unit: targetEnemy, group: targetG } = closest;
-    const casterG = unitsRef.current[casterId];
+    // Fall back to position-based search
+    if (!targetEnemy || !targetG) {
+        const closest = findClosestTargetByTeam(unitsStateRef.current, unitsRef.current, "enemy", targetX, targetZ);
+        if (!closest) {
+            addLog(`${UNIT_DATA[casterId].name}: No enemy at that location!`, COLORS.logNeutral);
+            return false;
+        }
+        targetEnemy = closest.unit;
+        targetG = closest.group;
+    }
 
+    const casterG = unitsRef.current[casterId];
     if (!casterG) return false;
 
-    // Check if in melee range (hitbox-aware)
+    // --- Phase 2: Range check ---
     const targetRadius = getUnitRadius(targetEnemy);
     if (!isInRange(casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, targetRadius, skill.range + 0.5)) {
         addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, COLORS.logNeutral);
         return false;
     }
 
+    // --- Phase 3: Consume skill ---
     const now = Date.now();
     consumeSkill(ctx, casterId, skill);
-
-    // Spawn swing animation for melee attacks
-    spawnSwingIndicator(scene, casterG, targetG, true, swingAnimationsRef.current, now);
 
     const casterData = UNIT_DATA[casterId];
     const targetData = getUnitStats(targetEnemy);
     const targetId = targetEnemy.id;
 
-    // Check for enemy defensive abilities
+    // --- Phase 4: Delivery-specific effects ---
+
+    // Ranged: spawn projectile and return (no hit roll here)
+    if (delivery.mode === "ranged") {
+        const effectiveData = getEffectiveUnitData(casterId);
+        const projectile = createProjectile(scene, "ranged", casterG.position.x, casterG.position.z, effectiveData.projectileColor);
+        projectilesRef.current.push({
+            type: "basic",
+            mesh: projectile,
+            attackerId: casterId,
+            targetId: targetEnemy.id,
+            speed: getProjectileSpeed("ranged")
+        });
+        soundFns.playAttack();
+        return true;
+    }
+
+    // Melee: swing animation
+    if (delivery.mode === "melee") {
+        spawnSwingIndicator(scene, casterG, targetG, true, swingAnimationsRef.current, now);
+    }
+
+    // Smite: lightning pillar
+    if (delivery.mode === "smite") {
+        createLightningPillar(scene, targetG.position.x, targetG.position.z);
+        soundFns.playThunder();
+    }
+
+    // --- Phase 5: Defense check ---
     if (targetEnemy.enemyType) {
         const enemyStats = ENEMY_STATS[targetEnemy.enemyType];
-        const defense = checkEnemyDefenses(enemyStats, targetEnemy.facing, casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, skill.damageType);
-        if (defense !== "none") {
-            soundFns.playBlock();
-            addLog(defense === "frontShield"
-                ? `${casterData.name}'s ${skill.name} is blocked by ${targetData.name}'s shield!`
-                : `${targetData.name} blocks ${casterData.name}'s ${skill.name}!`,
-                defense === "frontShield" ? "#4488ff" : "#aaaaaa");
-            return true;
+        if (delivery.mode === "melee") {
+            // Full defense check: front shield + block chance
+            const defense = checkEnemyDefenses(enemyStats, targetEnemy.facing, casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, skill.damageType);
+            if (defense !== "none") {
+                soundFns.playBlock();
+                addLog(defense === "frontShield"
+                    ? `${casterData.name}'s ${skill.name} is blocked by ${targetData.name}'s shield!`
+                    : `${targetData.name} blocks ${casterData.name}'s ${skill.name}!`,
+                    defense === "frontShield" ? "#4488ff" : "#aaaaaa");
+                return true;
+            }
+        } else {
+            // Smite: front-shield only (non-physical, skip block chance)
+            const defense = checkEnemyDefenses(enemyStats, targetEnemy.facing, casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z);
+            if (defense === "frontShield") {
+                soundFns.playBlock();
+                addLog(`${casterData.name}'s ${skill.name} is blocked by ${targetData.name}'s shield!`, "#4488ff");
+                return true;
+            }
         }
     }
 
-    // Roll to hit
+    // --- Phase 6: Hit resolution ---
     if (rollHit(casterData.accuracy)) {
         const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
         const statBonus = calculateStatBonus(casterUnit, skill.damageType);
-        const { damage: dmg, isCrit } = calculateDamageWithCrit(skill.damageRange![0] + statBonus, skill.damageRange![1] + statBonus, getEffectiveArmor(targetEnemy, targetData.armor), skill.damageType, casterUnit);
-        const willPoison = skill.poisonChance ? rollChance(skill.poisonChance) : false;
+        const { damage: dmg, isCrit } = calculateDamageWithCrit(
+            skill.damageRange![0] + statBonus, skill.damageRange![1] + statBonus,
+            getEffectiveArmor(targetEnemy, targetData.armor), skill.damageType, casterUnit
+        );
+        const willPoison = delivery.mode === "melee" && skill.poisonChance ? rollChance(skill.poisonChance) : false;
 
-        // Read fresh HP from current state to avoid stale data race condition
+        // Read fresh HP to avoid stale data race condition
         const freshTarget = unitsStateRef.current.find(u => u.id === targetId);
         const currentHp = freshTarget?.hp ?? targetEnemy.hp;
 
         // Skip if target was already defeated this frame
         if (currentHp <= 0 || defeatedThisFrame.has(targetId)) {
-            return true; // Skill consumed but target already dead
+            return true;
         }
 
-        // Use shared defeatedThisFrame from context
         const dmgCtx: DamageContext = {
             scene, damageTexts: damageTexts.current, hitFlashRef: hitFlashRef.current,
             unitsRef: unitsRef.current, unitsStateRef, setUnits, addLog, now, defeatedThisFrame
@@ -147,7 +214,9 @@ export function executeMeleeSkill(
             isCrit
         });
 
-        soundFns.playHit();
+        if (delivery.mode === "melee") {
+            soundFns.playHit();
+        }
 
         if (willPoison) {
             addLog(logPoisoned(targetData.name), COLORS.poisonText);
@@ -161,166 +230,22 @@ export function executeMeleeSkill(
 }
 
 // =============================================================================
-// SMITE SKILL (e.g. Thunder)
+// THIN WRAPPERS - Preserve existing API surface
 // =============================================================================
 
-/**
- * Execute a smite skill (like Thunder) - instant-hit ranged damage with visual effect
- * @param targetUnitId Optional target unit ID - if provided, tracks enemy by ID even if they move
- */
-export function executeSmiteSkill(
-    ctx: SkillExecutionContext,
-    casterId: number,
-    skill: Skill,
-    targetX: number,
-    targetZ: number,
-    targetUnitId?: number
-): boolean {
-    const { scene, unitsStateRef, unitsRef, hitFlashRef, damageTexts, setUnits, addLog, defeatedThisFrame } = ctx;
-
-    let targetEnemy: Unit | undefined;
-    let targetG: UnitGroup | undefined;
-
-    // If we have a specific target ID, find that enemy (tracks moving targets)
-    if (targetUnitId !== undefined) {
-        targetEnemy = unitsStateRef.current.find(u => u.id === targetUnitId && u.team === "enemy");
-        targetG = unitsRef.current[targetUnitId];
-    }
-
-    // Fall back to position-based search if no target ID or target not found
-    if (!targetEnemy || !targetG) {
-        const closest = findClosestTargetByTeam(unitsStateRef.current, unitsRef.current, "enemy", targetX, targetZ);
-        if (!closest) {
-            addLog(`${UNIT_DATA[casterId].name}: No enemy at that location!`, COLORS.logNeutral);
-            return false;
-        }
-        targetEnemy = closest.unit;
-        targetG = closest.group;
-    }
-
-    const casterG = unitsRef.current[casterId];
-
-    if (!casterG) return false;
-
-    // Check if in range (hitbox-aware)
-    const targetRadius = getUnitRadius(targetEnemy);
-    if (!isInRange(casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, targetRadius, skill.range + 0.5)) {
-        addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, COLORS.logNeutral);
-        return false;
-    }
-
-    const now = Date.now();
-    consumeSkill(ctx, casterId, skill);
-
-    const casterData = UNIT_DATA[casterId];
-    const targetData = getUnitStats(targetEnemy);
-    const targetId = targetEnemy.id;
-
-    // Create lightning pillar visual at target location
-    createLightningPillar(scene, targetG.position.x, targetG.position.z);
-    soundFns.playThunder();
-
-    // Check for front-shield block (smite is non-physical, skip block chance)
-    if (targetEnemy.enemyType) {
-        const enemyStats = ENEMY_STATS[targetEnemy.enemyType];
-        const defense = checkEnemyDefenses(enemyStats, targetEnemy.facing, casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z);
-        if (defense === "frontShield") {
-            soundFns.playBlock();
-            addLog(`${casterData.name}'s ${skill.name} is blocked by ${targetData.name}'s shield!`, "#4488ff");
-            return true;
-        }
-    }
-
-    // Roll to hit
-    if (rollHit(casterData.accuracy)) {
-        const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
-        const statBonus = calculateStatBonus(casterUnit, skill.damageType);
-        const { damage: dmg, isCrit } = calculateDamageWithCrit(skill.damageRange![0] + statBonus, skill.damageRange![1] + statBonus, getEffectiveArmor(targetEnemy, targetData.armor), skill.damageType, casterUnit);
-
-        // Read fresh HP from current state
-        const freshTarget = unitsStateRef.current.find(u => u.id === targetId);
-        const currentHp = freshTarget?.hp ?? targetEnemy.hp;
-
-        // Skip if target was already defeated this frame
-        if (currentHp <= 0 || defeatedThisFrame.has(targetId)) {
-            return true;
-        }
-
-        const dmgCtx: DamageContext = {
-            scene, damageTexts: damageTexts.current, hitFlashRef: hitFlashRef.current,
-            unitsRef: unitsRef.current, unitsStateRef, setUnits, addLog, now, defeatedThisFrame
-        };
-        applyDamageToUnit(dmgCtx, targetId, targetG, currentHp, dmg, targetData.name, {
-            color: COLORS.damagePlayer,
-            attackerName: casterData.name,
-            hitMessage: { text: logHit(casterData.name, skill.name, targetData.name, dmg) + (isCrit ? " Critical hit!" : ""), color: isCrit ? COLORS.damageCrit : COLORS.damagePlayer },
-            targetUnit: targetEnemy,
-            attackerPosition: { x: casterG.position.x, z: casterG.position.z },
-            isCrit
-        });
-    } else {
-        soundFns.playMiss();
-        addLog(logMiss(casterData.name, skill.name, targetData.name), COLORS.logNeutral);
-    }
-
-    return true;
+/** Execute a melee single-target damage skill (like Poison Dagger) */
+export function executeMeleeSkill(ctx: SkillExecutionContext, casterId: number, skill: Skill, targetX: number, targetZ: number): boolean {
+    return executeTargetedDamageSkill(ctx, casterId, skill, targetX, targetZ, { mode: "melee" });
 }
 
-// =============================================================================
-// RANGED SKILL (basic ranged attack)
-// =============================================================================
+/** Execute a smite skill (like Thunder) - instant-hit ranged damage with lightning pillar */
+export function executeSmiteSkill(ctx: SkillExecutionContext, casterId: number, skill: Skill, targetX: number, targetZ: number, targetUnitId?: number): boolean {
+    return executeTargetedDamageSkill(ctx, casterId, skill, targetX, targetZ, { mode: "smite" }, targetUnitId);
+}
 
-/**
- * Execute a ranged single-target damage skill (basic attack for ranged units)
- */
-export function executeRangedSkill(
-    ctx: SkillExecutionContext,
-    casterId: number,
-    skill: Skill,
-    targetX: number,
-    targetZ: number
-): boolean {
-    const { scene, unitsStateRef, unitsRef, projectilesRef, addLog } = ctx;
-
-    // Find closest enemy to target position
-    const closest = findClosestTargetByTeam(unitsStateRef.current, unitsRef.current, "enemy", targetX, targetZ);
-
-    if (!closest) {
-        addLog(`${UNIT_DATA[casterId].name}: No enemy at that location!`, COLORS.logNeutral);
-        return false;
-    }
-
-    const { unit: targetEnemy, group: targetG } = closest;
-    const casterG = unitsRef.current[casterId];
-
-    if (!casterG) return false;
-
-    // Check if in range (hitbox-aware)
-    const targetRadius = getUnitRadius(targetEnemy);
-    if (!isInRange(casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, targetRadius, skill.range + 0.5)) {
-        addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, COLORS.logNeutral);
-        return false;
-    }
-
-    consumeSkill(ctx, casterId, skill);
-
-    // Use effective data to get equipment-derived projectile color
-    const effectiveData = getEffectiveUnitData(casterId);
-
-    // Create projectile toward target
-    const projectile = createProjectile(scene, "ranged", casterG.position.x, casterG.position.z, effectiveData.projectileColor);
-
-    projectilesRef.current.push({
-        type: "basic",
-        mesh: projectile,
-        attackerId: casterId,
-        targetId: targetEnemy.id,
-        speed: getProjectileSpeed("ranged")
-    });
-
-    soundFns.playAttack();
-
-    return true;
+/** Execute a ranged single-target damage skill (basic attack for ranged units) */
+export function executeRangedSkill(ctx: SkillExecutionContext, casterId: number, skill: Skill, targetX: number, targetZ: number): boolean {
+    return executeTargetedDamageSkill(ctx, casterId, skill, targetX, targetZ, { mode: "ranged" });
 }
 
 // =============================================================================

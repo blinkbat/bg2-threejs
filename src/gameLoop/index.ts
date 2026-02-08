@@ -4,7 +4,7 @@
 
 import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation, EnemyStats, EnemySpawnSkill, EnemyRaiseSkill } from "../core/types";
-import { SKILL_SINGLE_TARGET_CHANCE, SLOW_MOVE_MULT } from "../core/constants";
+import { SKILL_SINGLE_TARGET_CHANCE } from "../core/constants";
 import { getUnitRadius, isInRange } from "../rendering/range";
 import { tryKite, type KiteContext } from "../ai/targeting";
 import {
@@ -13,12 +13,10 @@ import {
 } from "../ai/unitAI";
 import { getUnitStats, getAttackRange } from "../game/units";
 import { getBasicAttackSkill } from "../game/playerUnits";
-import { distance } from "../game/geometry";
 import type { ActionQueue } from "../input";
-import { hasStatusEffect, isUnitAlive, getCooldownMultiplier, setSkillCooldown } from "../combat/combatMath";
-import { getAliveUnitsInRange, buildDamageContext } from "../combat/damageEffects";
+import { hasStatusEffect, isUnitAlive, getCooldownMultiplier, setSkillCooldown, getEffectiveSpeedMultiplier } from "../combat/combatMath";
+import { getAliveUnitsInRange } from "../combat/damageEffects";
 import { isEnemyKiting, clearEnemyKiting } from "../game/enemyState";
-import { findPath } from "../ai/pathfinding";
 
 // Re-export from split modules
 export { updateDamageTexts, updateHitFlash, updatePoisonVisuals, updateEnergyShieldVisuals, updateFogOfWar, resetFogCache } from "./visuals";
@@ -31,9 +29,8 @@ export { processChargeAttacks, clearChargeAttacks, isUnitCharging } from "./cons
 export { processCurses, clearCurses } from "./necromancerCurse";
 import { executeEnemySwipe, executeEnemyHeal } from "./enemySkills";
 import { executeEnemyBasicAttack } from "./enemyAttack";
-import { createAcidTile, tryCreateAcidAura } from "./acidTiles";
 import { isUnitCharging } from "./constructCharge";
-import { trySpawnMinion, tryStartChargeAttack, tryLeapToTarget, isUnitLeaping, tryVinesSkill, trySpawnTentacle, tryRaiseDead } from "./enemyBehaviors";
+import { trySpawnMinion, tryStartChargeAttack, tryLeapToTarget, isUnitLeaping, tryVinesSkill, trySpawnTentacle, tryRaiseDead, tryAcidSlugPatrol, processAcidTrailAndAura } from "./enemyBehaviors";
 import { startCurse } from "./necromancerCurse";
 export { clearLeaps, updateLeaps, isUnitLeaping, updateTentacles, clearTentacles, trySubmergeKraken, isKrakenSubmerged, isKrakenFullySubmerged, updateSubmergedKrakens } from "./enemyBehaviors";
 export { spawnLootBag, removeLootBag, clearAllLootBags, resetLootBagIds } from "./lootBags";
@@ -120,8 +117,7 @@ export function updateUnitAI(
             // Still kiting - just do path following and movement
             const pathCtx: PathContext = { unit, g, pathsRef, moveStartRef, now, isPlayer };
             const pathResult = runPathFollowingPhase(pathCtx);
-            const speedMultiplier = !isPlayer && 'moveSpeed' in data ? (data as EnemyStats).moveSpeed : undefined;
-            const movementCtx: MovementContext = { unit, g, unitsRef, unitsState, targetX: pathResult.targetX, targetZ: pathResult.targetZ, speedMultiplier };
+            const movementCtx: MovementContext = { unit, g, unitsRef, unitsState, targetX: pathResult.targetX, targetZ: pathResult.targetZ, speedMultiplier: getEffectiveSpeedMultiplier(unit, data) };
             runMovementPhase(movementCtx);
             return;
         }
@@ -146,8 +142,7 @@ export function updateUnitAI(
             // Jump directly to path following and movement
             const pathCtx: PathContext = { unit, g, pathsRef, moveStartRef, now, isPlayer };
             const pathResult = runPathFollowingPhase(pathCtx);
-            const speedMultiplier = enemyData.moveSpeed;
-            const movementCtx: MovementContext = { unit, g, unitsRef, unitsState, targetX: pathResult.targetX, targetZ: pathResult.targetZ, speedMultiplier };
+            const movementCtx: MovementContext = { unit, g, unitsRef, unitsState, targetX: pathResult.targetX, targetZ: pathResult.targetZ, speedMultiplier: getEffectiveSpeedMultiplier(unit, enemyData) };
             runMovementPhase(movementCtx);
             return;
         }
@@ -155,79 +150,11 @@ export function updateUnitAI(
 
     // Phase 1.55: Acid slug patrol - circle around players spreading acid instead of attacking
     if (!isPlayer && unit.enemyType === "acid_slug" && acidTilesRef) {
-        const slugData = data as EnemyStats;
-
-        // Find closest player
-        let closestPlayer: { unit: Unit; group: UnitGroup; dist: number } | null = null;
-        for (const u of unitsState) {
-            if (u.team !== "player" || u.hp <= 0) continue;
-            const playerG = unitsRef[u.id];
-            if (!playerG) continue;
-            const dist = distance(playerG.position.x, playerG.position.z, g.position.x, g.position.z);
-            if (dist <= slugData.aggroRange && (!closestPlayer || dist < closestPlayer.dist)) {
-                closestPlayer = { unit: u, group: playerG, dist };
-            }
-        }
-
-        if (closestPlayer) {
-            // Clear attack target - slugs don't attack
-            g.userData.attackTarget = null;
-
-            // Check if we need a new patrol destination (no path or reached destination)
-            const currentPath = pathsRef[unit.id];
-            const needsNewDestination = !currentPath || currentPath.length === 0;
-
-            if (needsNewDestination) {
-                // Pick a random point around the player to patrol to
-                const patrolRadius = 3 + Math.random() * 3;  // 3-6 units away from player
-                const patrolAngle = Math.random() * Math.PI * 2;
-                const patrolX = closestPlayer.group.position.x + Math.cos(patrolAngle) * patrolRadius;
-                const patrolZ = closestPlayer.group.position.z + Math.sin(patrolAngle) * patrolRadius;
-
-                const path = findPath(
-                    Math.floor(g.position.x), Math.floor(g.position.z),
-                    Math.floor(patrolX), Math.floor(patrolZ)
-                );
-                if (path && path.length > 0) {
-                    pathsRef[unit.id] = path;
-                    moveStartRef[unit.id] = { time: now, x: g.position.x, z: g.position.z };
-                }
-            }
-
-            // Continue to movement phase (skip attack logic)
-            // Track old position for acid trail
-            const oldGridX = Math.floor(g.position.x);
-            const oldGridZ = Math.floor(g.position.z);
-
-            // Path following
-            const pathCtx: PathContext = { unit, g, pathsRef, moveStartRef, now, isPlayer };
-            const pathResult = runPathFollowingPhase(pathCtx);
-
-            // Movement
-            const baseSpeedMultiplier = slugData.moveSpeed ?? 1;
-            const slowMultiplier = hasStatusEffect(unit, "slowed") ? SLOW_MOVE_MULT : 1;
-            const speedMultiplier = hasStatusEffect(unit, "pinned") ? 0 : baseSpeedMultiplier * slowMultiplier;
-            const movementCtx: MovementContext = { unit, g, unitsRef, unitsState, targetX: pathResult.targetX, targetZ: pathResult.targetZ, speedMultiplier };
-            runMovementPhase(movementCtx);
-
-            // Acid trail when moving
-            const newGridX = Math.floor(g.position.x);
-            const newGridZ = Math.floor(g.position.z);
-            const movedCell = newGridX !== oldGridX || newGridZ !== oldGridZ;
-
-            if (slugData.acidTrail && movedCell) {
-                createAcidTile(scene, acidTilesRef, oldGridX, oldGridZ, unit.id, now);
-            }
-
-            // Acid aura when stationary
-            if (!movedCell) {
-                tryCreateAcidAura(slugData, {
-                    scene, acidTiles: acidTilesRef, skillCooldowns, setSkillCooldowns,
-                    unitId: unit.id, centerX: newGridX, centerZ: newGridZ, now
-                });
-            }
-
-            return;  // Skip normal attack behavior
+        if (tryAcidSlugPatrol({
+            unit, g, slugData: data as EnemyStats, unitsState, unitsRef, pathsRef, moveStartRef,
+            scene, skillCooldowns, setSkillCooldowns, acidTilesRef, now
+        })) {
+            return;
         }
     }
 
@@ -457,31 +384,14 @@ export function updateUnitAI(
 
     // Phase 4: Movement - move toward target with avoidance and wall sliding
     // Pinned units cannot move (speed = 0), slowed units move at half speed
-    const baseSpeedMultiplier = !isPlayer && 'moveSpeed' in data ? (data as EnemyStats).moveSpeed : undefined;
-    const slowMultiplier = hasStatusEffect(unit, "slowed") ? SLOW_MOVE_MULT : 1;
-    const speedMultiplier = hasStatusEffect(unit, "pinned") ? 0 : (baseSpeedMultiplier ?? 1) * slowMultiplier;
-    const movementCtx: MovementContext = { unit, g, unitsRef, unitsState, targetX, targetZ, speedMultiplier };
+    const movementCtx: MovementContext = { unit, g, unitsRef, unitsState, targetX, targetZ, speedMultiplier: getEffectiveSpeedMultiplier(unit, data) };
     runMovementPhase(movementCtx);
 
     // Phase 5: Acid slug - create acid trail when moving, aura when stationary
     if (!isPlayer && acidTilesRef) {
-        const enemyStats = data as EnemyStats;
         const newGridX = Math.floor(g.position.x);
         const newGridZ = Math.floor(g.position.z);
-        const movedCell = newGridX !== oldGridX || newGridZ !== oldGridZ;
-
-        // Acid trail - leave acid on cells we move through
-        if (enemyStats.acidTrail && movedCell) {
-            createAcidTile(scene, acidTilesRef, oldGridX, oldGridZ, unit.id, now);
-        }
-
-        // Acid aura - periodically create acid around self when NOT moving
-        if (!movedCell) {
-            tryCreateAcidAura(enemyStats, {
-                scene, acidTiles: acidTilesRef, skillCooldowns, setSkillCooldowns,
-                unitId: unit.id, centerX: newGridX, centerZ: newGridZ, now
-            });
-        }
+        processAcidTrailAndAura(data as EnemyStats, scene, acidTilesRef, skillCooldowns, setSkillCooldowns, unit.id, oldGridX, oldGridZ, newGridX, newGridZ, now);
     }
 }
 

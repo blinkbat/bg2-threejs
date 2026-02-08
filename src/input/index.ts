@@ -8,6 +8,7 @@ import { getUnitRadius, isInRange } from "../rendering/range";
 import { findPath } from "../ai/pathfinding";
 import { UNIT_DATA } from "../game/playerUnits";
 import { soundFns } from "../audio";
+import { pauseGameClock, resumeGameClock } from "../core/gameClock";
 import { executeSkill, clearTargetingMode, type SkillExecutionContext } from "../combat/skills";
 import { findClosestTargetByTeam } from "../combat/skills/helpers";
 import { disposeGeometry } from "../rendering/disposal";
@@ -78,7 +79,8 @@ export function togglePause(
     setters.setPaused(p => !p);
 
     if (wasPaused && !state.pausedRef.current) {
-        // Unpausing - adjust cooldowns to account for paused time
+        // Unpausing - resume game clock and adjust cooldowns
+        resumeGameClock();
         if (refs.pauseStartTimeRef.current !== null) {
             const pausedDuration = Date.now() - refs.pauseStartTimeRef.current;
             adjustCooldownsForPause(refs.actionCooldownRef, setters.setSkillCooldowns, pausedDuration);
@@ -87,7 +89,8 @@ export function togglePause(
         // Create new defeatedThisFrame for unpause processing (not part of main game loop)
         processActionQueue(new Set<number>());
     } else {
-        // Pausing - record when we paused
+        // Pausing - freeze game clock and record when we paused
+        pauseGameClock();
         refs.pauseStartTimeRef.current = Date.now();
     }
 }
@@ -224,8 +227,9 @@ export function processActionQueue(
                 continue;
             }
             // Keep in queue if on cooldown - will be processed next frame
+            // Cantrips bypass action cooldown (they use charges instead)
             const cooldownEnd = actionCooldownRef.current[unitId] || 0;
-            if (now < cooldownEnd) {
+            if (!action.skill.isCantrip && now < cooldownEnd) {
                 continue; // Don't remove, will try again next frame
             }
             // For enemy-targeted skills, validate target still exists before executing
@@ -350,10 +354,10 @@ export function queueOrExecuteSkill(
     addLog: (text: string, color?: string) => void,
     targetId?: number
 ): boolean {
-    // Check cooldown
+    // Check cooldown (cantrips bypass action cooldown — they use charges instead)
     const now = Date.now();
     const cooldownEnd = refs.actionCooldownRef.current[casterId] || 0;
-    const onCooldown = now < cooldownEnd;
+    const onCooldown = !skill.isCantrip && now < cooldownEnd;
 
     // Queue when paused OR on cooldown - execute immediately otherwise
     if (state.pausedRef.current || onCooldown) {
