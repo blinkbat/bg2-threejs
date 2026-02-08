@@ -41,9 +41,6 @@ export function getAttackRange(unit: Unit): number {
 // SPAWN LOCATIONS
 // =============================================================================
 
-// Ogre spawn - center of the map (great hall, now 16x16 at x:16-31, z:16-31)
-const ogreSpawn = { x: 24.5, z: 24.5 };
-
 // Kobold spawn locations across the dungeon (updated for larger rooms)
 const koboldSpawns = [
     // Room D - kobold lair (NE corner, x:36-47, z:36-47) - 4 kobolds
@@ -85,6 +82,9 @@ const witchDoctorSpawns = [
     // Room C - SE (supporting kobolds)
     { x: 43.5, z: 8.5 },
 ];
+
+// Ogre spawn - center of the map (great hall, now 16x16 at x:16-31, z:16-31)
+const ogreSpawn = { x: 24.5, z: 24.5 };
 
 // =============================================================================
 // INITIAL UNIT CREATION
