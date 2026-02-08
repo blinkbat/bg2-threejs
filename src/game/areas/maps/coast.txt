@@ -1,5 +1,5 @@
 === AREA: coast ===
-name: The Coast
+name: Seaswept Coastline
 flavor: Salt air fills your lungs as waves crash against the shore.
 size: 50x50
 background: #87CEEB
