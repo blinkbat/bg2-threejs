@@ -5,7 +5,8 @@
 import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, StatusEffect, StatusEffectType } from "../core/types";
 import { COLORS } from "../core/constants";
-import { getUnitStats, getEffectiveMaxHp } from "../game/units";
+import { getUnitStats } from "../game/units";
+import { getEffectiveMaxHp } from "../game/playerUnits";
 import { handleUnitDefeat, showDamageVisual } from "../combat/damageEffects";
 import { isUnitAlive } from "../combat/combatMath";
 

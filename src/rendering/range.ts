@@ -4,7 +4,8 @@
 
 import type { Unit, UnitGroup } from "../core/types";
 import { DEFAULT_UNIT_RADIUS } from "../core/constants";
-import { UNIT_DATA, ENEMY_STATS } from "../game/units";
+import { UNIT_DATA } from "../game/playerUnits";
+import { ENEMY_STATS } from "../game/enemyStats";
 
 /**
  * Get the hitbox radius for a unit based on its size property.

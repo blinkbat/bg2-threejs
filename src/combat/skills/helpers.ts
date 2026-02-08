@@ -3,7 +3,7 @@
 // =============================================================================
 
 import type { Unit, UnitGroup, Skill } from "../../core/types";
-import { UNIT_DATA } from "../../game/units";
+import { UNIT_DATA } from "../../game/playerUnits";
 import { hasStatusEffect, getCooldownMultiplier } from "../combatMath";
 import { distanceToPoint } from "../../game/geometry";
 import { getAliveUnits } from "../../game/unitQuery";

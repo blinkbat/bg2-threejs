@@ -11,7 +11,8 @@ import {
     runTargetingPhase, runPathFollowingPhase, runMovementPhase, recalculatePathIfNeeded,
     type TargetingContext, type PathContext, type MovementContext
 } from "../ai/unitAI";
-import { getUnitStats, getBasicAttackSkill, getAttackRange } from "../game/units";
+import { getUnitStats, getAttackRange } from "../game/units";
+import { getBasicAttackSkill } from "../game/playerUnits";
 import { distance } from "../game/geometry";
 import type { ActionQueue } from "../input";
 import { hasStatusEffect, isUnitAlive, getCooldownMultiplier, setSkillCooldown } from "../combat/combatMath";

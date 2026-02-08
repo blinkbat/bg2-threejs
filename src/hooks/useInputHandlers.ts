@@ -11,7 +11,7 @@ import type { LootBag } from "../core/types";
 import { updateCamera } from "../rendering/scene";
 import { blocked } from "../game/dungeon";
 import { getCurrentArea, getBlocked, type AreaTransition } from "../game/areas";
-import { getBasicAttackSkill, getAllSkills } from "../game/units";
+import { getBasicAttackSkill, getAllSkills } from "../game/playerUnits";
 import { getItem } from "../game/items";
 import { isKey } from "../core/types";
 import { soundFns } from "../audio";

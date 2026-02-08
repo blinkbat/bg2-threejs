@@ -4,7 +4,7 @@
 
 import * as THREE from "three";
 import type { Unit, UnitGroup } from "../../core/types";
-import { ENEMY_STATS } from "../../game/units";
+import { ENEMY_STATS } from "../../game/enemyStats";
 import { soundFns } from "../../audio";
 
 // =============================================================================

@@ -5,7 +5,7 @@
 import * as THREE from "three";
 import type { Skill, StatusEffect } from "../../core/types";
 import { COLORS, BUFF_TICK_INTERVAL, QI_DRAIN_DURATION, QI_DRAIN_TICK_INTERVAL, POISON_TICK_INTERVAL } from "../../core/constants";
-import { UNIT_DATA, getEffectiveMaxHp } from "../../game/units";
+import { UNIT_DATA, getEffectiveMaxHp } from "../../game/playerUnits";
 import { getFaithHealingBonus } from "../../game/statBonuses";
 import { rollDamage, hasStatusEffect, logHeal, logBuff, logCleanse, applyStatusEffect } from "../combatMath";
 import { tryHealBark } from "../barks";

@@ -1,5 +1,5 @@
 import type { Unit, Skill } from "../core/types";
-import { UNIT_DATA, getEffectiveMaxHp } from "../game/units";
+import { UNIT_DATA, getEffectiveMaxHp } from "../game/playerUnits";
 import { getHpPercentage, getHpColor } from "../combat/combatMath";
 import { SkillHotbar, type HotbarAssignments } from "./SkillHotbar";
 

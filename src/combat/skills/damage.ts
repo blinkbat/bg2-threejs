@@ -5,9 +5,10 @@
 import * as THREE from "three";
 import type { Unit, Skill, UnitGroup, MagicMissileProjectile } from "../../core/types";
 import { COLORS } from "../../core/constants";
-import { UNIT_DATA, getUnitStats, getEffectiveUnitData } from "../../game/units";
+import { UNIT_DATA, getEffectiveUnitData } from "../../game/playerUnits";
+import { getUnitStats } from "../../game/units";
 import { rollChance, calculateDamageWithCrit, rollHit, getEffectiveArmor, logHit, logMiss, logPoisoned, logCast, calculateStatBonus, checkEnemyDefenses, createHpTracker } from "../combatMath";
-import { ENEMY_STATS } from "../../game/units";
+import { ENEMY_STATS } from "../../game/enemyStats";
 import { getUnitRadius, isInRange } from "../../rendering/range";
 import { distanceToPoint } from "../../game/geometry";
 import { getAliveUnits } from "../../game/unitQuery";

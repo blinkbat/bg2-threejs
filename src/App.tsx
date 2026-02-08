@@ -12,12 +12,12 @@ import type { Unit, Skill, CombatLogEntry, SelectionBox, CharacterStats } from "
 
 // Game Logic
 import { getCurrentArea, getCurrentAreaId, setCurrentArea, AREAS, DEFAULT_STARTING_AREA, DEFAULT_SPAWN_POINT, type AreaId, type AreaTransition } from "./game/areas";
-import { UNIT_DATA, ENEMY_STATS } from "./game/units";
+import { UNIT_DATA, getEffectiveMaxHp } from "./game/playerUnits";
+import { ENEMY_STATS } from "./game/enemyStats";
 import { initializeEquipmentState, getPartyInventory, setPartyInventory, getAllEquipment, setAllEquipment } from "./game/equipmentState";
 import { removeFromInventory } from "./game/equipment";
 import { getItem } from "./game/items";
 import { isConsumable } from "./core/types";
-import { getEffectiveMaxHp } from "./game/units";
 import { updateChestStates } from "./rendering/scene";
 import { soundFns } from "./audio";
 import { findSpawnPositions } from "./ai/pathfinding";

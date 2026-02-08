@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import Tippy from "@tippyjs/react";
 import type { Unit, Skill } from "../core/types";
-import { getAllSkills } from "../game/units";
+import { getAllSkills } from "../game/playerUnits";
 import { getSkillColorClass } from "../core/constants";
 import type { HotbarAssignments } from "../hooks/hotbarStorage";
 

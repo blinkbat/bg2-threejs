@@ -13,7 +13,8 @@ import { cleanupEnemyKiteCooldown } from "../game/enemyState";
 import { logDefeated, applyPoison, applySlowed, hasStatusEffect, isUnitAlive } from "./combatMath";
 import { tryKillBark } from "./barks";
 import { getNextUnitId } from "../core/unitIds";
-import { ENEMY_STATS, getXpForLevel } from "../game/units";
+import { ENEMY_STATS } from "../game/enemyStats";
+import { getXpForLevel } from "../game/playerUnits";
 import { trySubmergeKraken, isKrakenSubmerged } from "../gameLoop/enemyBehaviors";
 
 // =============================================================================

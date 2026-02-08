@@ -9,7 +9,7 @@ import { getUnitStats } from "../game/units";
 import { calculateDamageWithCrit, getDirectionAndDistance, rollHit, shouldApplyPoison, getEffectiveArmor, logHit, logLifestealHit, logMiss, logPoisoned, logAoeHit, logAoeMiss, getDamageColor, logTrapTriggered, calculateStatBonus, applyStatusEffect, checkEnemyDefenses, createHpTracker } from "../combat/combatMath";
 import { distance } from "../game/geometry";
 import { isBlocked } from "../ai/pathfinding";
-import { ENEMY_STATS } from "../game/units";
+import { ENEMY_STATS } from "../game/enemyStats";
 import { applyDamageToUnit, animateExpandingMesh, buildDamageContext, applyLifesteal } from "../combat/damageEffects";
 import { soundFns } from "../audio";
 import { disposeBasicMesh } from "../rendering/disposal";

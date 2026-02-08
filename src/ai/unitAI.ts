@@ -18,7 +18,8 @@ import {
 } from "./movement";
 import { getUnitRadius } from "../rendering/range";
 import { clampToGrid, distanceBetween } from "../game/geometry";
-import { getAttackRange, ENEMY_STATS } from "../game/units";
+import { getAttackRange } from "../game/units";
+import { ENEMY_STATS } from "../game/enemyStats";
 import { isUnitAlive } from "../combat/combatMath";
 import { isKrakenSubmerged } from "../gameLoop/enemyBehaviors";
 import type { Unit, UnitGroup } from "../core/types";

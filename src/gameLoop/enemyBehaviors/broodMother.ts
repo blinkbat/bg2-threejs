@@ -3,7 +3,7 @@
 // =============================================================================
 
 import type { Unit } from "../../core/types";
-import { ENEMY_STATS } from "../../game/units";
+import { ENEMY_STATS } from "../../game/enemyStats";
 import { isPlayerVisible } from "../../game/unitQuery";
 import { getNextUnitId } from "../../core/unitIds";
 import { soundFns } from "../../audio";

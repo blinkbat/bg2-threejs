@@ -5,7 +5,7 @@
 import * as THREE from "three";
 import type { Skill } from "../../core/types";
 import { COLORS } from "../../core/constants";
-import { UNIT_DATA, getEffectiveUnitData } from "../../game/units";
+import { UNIT_DATA, getEffectiveUnitData } from "../../game/playerUnits";
 
 // Re-export types
 export type { SkillExecutionContext } from "./types";

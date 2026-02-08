@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import Tippy from "@tippyjs/react";
 import type { Unit, Skill, StatusEffect, DamageType, Item, CharacterStats } from "../core/types";
 import { isConsumable, isWeapon, isShield, isArmor, isAccessory } from "../core/types";
-import { UNIT_DATA, getAllSkills, getEffectiveUnitData, getEffectiveMaxHp, getEffectiveMaxMana, getXpForLevel } from "../game/units";
+import { UNIT_DATA, getAllSkills, getEffectiveUnitData, getEffectiveMaxHp, getEffectiveMaxMana, getXpForLevel } from "../game/playerUnits";
 import { getHpPercentage, getHpColor, getMana, hasStatusEffect, getEffectiveArmor } from "../combat/combatMath";
 import { getDexterityCritChance } from "../game/statBonuses";
 import { COLORS, getSkillColorClass, getSkillBorderColor } from "../core/constants";
