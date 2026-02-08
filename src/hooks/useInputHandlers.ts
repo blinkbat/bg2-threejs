@@ -10,7 +10,7 @@ import type { SecretDoorMesh } from "../rendering/scene";
 import type { LootBag } from "../core/types";
 import { updateCamera } from "../rendering/scene";
 import { blocked } from "../game/dungeon";
-import { getCurrentArea, getBlocked, type AreaTransition } from "../game/areas";
+import { getCurrentArea, getBlocked, isTerrainBlocked, type AreaTransition } from "../game/areas";
 import { getBasicAttackSkill, getAllSkills } from "../game/playerUnits";
 import { getItem } from "../game/items";
 import { isKey } from "../core/types";
@@ -310,7 +310,7 @@ export function useInputHandlers({
                         if (h.object.name === "ground" && stateRefs.selectedRef.current.length > 0) {
                             const gx = Math.floor(h.point.x) + 0.5;
                             const gz = Math.floor(h.point.z) + 0.5;
-                            if (blocked[Math.floor(gx)]?.[Math.floor(gz)]) break;
+                            if (blocked[Math.floor(gx)]?.[Math.floor(gz)] || isTerrainBlocked(Math.floor(gx), Math.floor(gz))) break;
                             if (moveMarker) {
                                 moveMarker.position.set(gx, 0.05, gz);
                                 moveMarker.visible = true;

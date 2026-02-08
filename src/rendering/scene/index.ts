@@ -225,7 +225,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         "D": "#6b5344",  // Dark dirt
         "g": "#5a8a4a",  // Grass - green
         "G": "#4a7a3a",  // Dark grass
-        "w": "#4a90a0",  // Water - blue
+        "w": "#4a90a0",  // Water - light blue
         "W": "#3a7080",  // Deep water
         "t": "#707070",  // Stone - gray
         "T": "#606060",  // Dark stone
@@ -278,7 +278,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         }
     }
 
-    // Render lava from terrain layer (~ = lava)
+    // Render lava and water from terrain layer (~ = lava, w = water)
     if (area.terrain && area.terrain.length > 0) {
         const lavaMat = new THREE.MeshStandardMaterial({
             color: "#ff4400",
@@ -286,6 +286,11 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
             emissiveIntensity: 0.8,
             metalness: 0.4,
             roughness: 0.3,
+        });
+        const terrainWaterMat = new THREE.MeshStandardMaterial({
+            color: "#1a3848",
+            metalness: 0.3,
+            roughness: 0.4,
         });
         for (let z = 0; z < area.terrain.length; z++) {
             for (let x = 0; x < (area.terrain[z]?.length ?? 0); x++) {
@@ -298,6 +303,15 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                     tile.rotation.x = -Math.PI / 2;
                     tile.position.set(x + 0.5, 0.002, z + 0.5);
                     tile.name = "lava";
+                    scene.add(tile);
+                } else if (char === "w") {
+                    const tile = new THREE.Mesh(
+                        new THREE.PlaneGeometry(1, 1),
+                        terrainWaterMat
+                    );
+                    tile.rotation.x = -Math.PI / 2;
+                    tile.position.set(x + 0.5, 0.002, z + 0.5);
+                    tile.name = "ground";
                     scene.add(tile);
                 }
             }
@@ -590,10 +604,15 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 rock.name = "decoration";
                 scene.add(rock);
             } else if (dec.type === "mushroom") {
-                // Large mushroom - stem + cap (bigger)
-                const stemHeight = 0.7 * size;
-                const stemRadius = 0.16 * size;
-                const capRadius = 0.55 * size;
+                // Large mushroom - stem + cap with randomized proportions
+                const sizeJitter = 0.8 + Math.random() * 0.4;  // 0.8-1.2x
+                const stemHeight = (0.5 + Math.random() * 0.4) * size * sizeJitter;
+                const stemRadius = (0.12 + Math.random() * 0.08) * size * sizeJitter;
+                const capRadius = (0.4 + Math.random() * 0.3) * size * sizeJitter;
+                const capColors = ["#c44", "#b33", "#a52", "#c55", "#943"];
+                const capColor = capColors[Math.floor(Math.random() * capColors.length)];
+                const tiltX = (Math.random() - 0.5) * 0.15;
+                const tiltZ = (Math.random() - 0.5) * 0.15;
 
                 // Stem
                 const stem = new THREE.Mesh(
@@ -601,25 +620,32 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                     new THREE.MeshStandardMaterial({ color: "#e8dcc8", metalness: 0.0, roughness: 0.9 })
                 );
                 stem.position.set(dec.x, stemHeight / 2, dec.z);
+                stem.rotation.x = tiltX;
+                stem.rotation.z = tiltZ;
                 scene.add(stem);
 
-                // Cap - dome shape
+                // Cap - dome shape with random flatness
+                const capFlatness = 0.3 + Math.random() * 0.2;  // How much of hemisphere to show
                 const cap = new THREE.Mesh(
-                    new THREE.SphereGeometry(capRadius, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
-                    new THREE.MeshStandardMaterial({ color: "#c44", metalness: 0.0, roughness: 0.8 })
+                    new THREE.SphereGeometry(capRadius, 12, 8, 0, Math.PI * 2, 0, Math.PI * capFlatness),
+                    new THREE.MeshStandardMaterial({ color: capColor, metalness: 0.0, roughness: 0.8 })
                 );
                 cap.position.set(dec.x, stemHeight, dec.z);
+                cap.rotation.x = tiltX;
+                cap.rotation.z = tiltZ;
                 cap.name = "decoration";
                 scene.add(cap);
 
-                // White spots on cap
-                for (let j = 0; j < 5; j++) {
+                // White spots on cap (random count)
+                const spotCount = 3 + Math.floor(Math.random() * 5);
+                for (let j = 0; j < spotCount; j++) {
+                    const spotSize = (0.04 + Math.random() * 0.04) * size * sizeJitter;
                     const spot = new THREE.Mesh(
-                        new THREE.CircleGeometry(0.06 * size, 8),
+                        new THREE.CircleGeometry(spotSize, 8),
                         new THREE.MeshBasicMaterial({ color: "#fff" })
                     );
                     const theta = Math.random() * Math.PI * 2;
-                    const phi = Math.random() * Math.PI * 0.4;
+                    const phi = Math.random() * Math.PI * capFlatness * 0.85;
                     spot.position.set(
                         dec.x + Math.sin(phi) * Math.cos(theta) * capRadius * 0.95,
                         stemHeight + Math.cos(phi) * capRadius * 0.95,
@@ -629,28 +655,40 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                     scene.add(spot);
                 }
             } else if (dec.type === "small_mushroom") {
-                // Small mushroom cluster (bigger)
-                const positions = [[0, 0], [0.2, 0.12], [-0.15, 0.15]];
-                positions.forEach(([ox, oz], j) => {
-                    const stemHeight = (0.25 + Math.random() * 0.15) * size;
-                    const stemRadius = 0.06 * size;
-                    const capRadius = 0.18 * size;
+                // Small mushroom cluster with randomized count and layout
+                const clusterCount = 2 + Math.floor(Math.random() * 3);  // 2-4 mushrooms
+                const capColors = ["#c66", "#a55", "#b64", "#c77", "#a44"];
+                for (let j = 0; j < clusterCount; j++) {
+                    const angle = (j / clusterCount) * Math.PI * 2 + Math.random() * 0.5;
+                    const spread = 0.1 + Math.random() * 0.15;
+                    const ox = j === 0 ? 0 : Math.cos(angle) * spread;
+                    const oz = j === 0 ? 0 : Math.sin(angle) * spread;
+                    const sizeJitter = 0.7 + Math.random() * 0.6;
+                    const stemHeight = (0.2 + Math.random() * 0.2) * size * sizeJitter;
+                    const stemRadius = (0.04 + Math.random() * 0.04) * size * sizeJitter;
+                    const capRadius = (0.12 + Math.random() * 0.12) * size * sizeJitter;
+                    const tiltX = (Math.random() - 0.5) * 0.2;
+                    const tiltZ = (Math.random() - 0.5) * 0.2;
 
                     const stem = new THREE.Mesh(
                         new THREE.CylinderGeometry(stemRadius * 0.7, stemRadius, stemHeight, 6),
                         new THREE.MeshStandardMaterial({ color: "#e8dcc8", metalness: 0.0, roughness: 0.9 })
                     );
                     stem.position.set(dec.x + ox, stemHeight / 2, dec.z + oz);
+                    stem.rotation.x = tiltX;
+                    stem.rotation.z = tiltZ;
                     scene.add(stem);
 
                     const cap = new THREE.Mesh(
-                        new THREE.SphereGeometry(capRadius, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2),
-                        new THREE.MeshStandardMaterial({ color: j === 0 ? "#c66" : "#a55", metalness: 0.0, roughness: 0.8 })
+                        new THREE.SphereGeometry(capRadius, 8, 6, 0, Math.PI * 2, 0, Math.PI * (0.3 + Math.random() * 0.2)),
+                        new THREE.MeshStandardMaterial({ color: capColors[Math.floor(Math.random() * capColors.length)], metalness: 0.0, roughness: 0.8 })
                     );
                     cap.position.set(dec.x + ox, stemHeight, dec.z + oz);
+                    cap.rotation.x = tiltX;
+                    cap.rotation.z = tiltZ;
                     if (j === 0) cap.name = "decoration";
                     scene.add(cap);
-                });
+                }
             } else if (dec.type === "seaweed") {
                 // Large seaweed - multiple fronds radiating from center
                 const seaweedColor = "#2a6030";

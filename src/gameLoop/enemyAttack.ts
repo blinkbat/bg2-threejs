@@ -6,8 +6,9 @@ import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, Projectile, EnemyStats, SwingAnimation, FireballProjectile } from "../core/types";
 import { COLORS } from "../core/constants";
 import { getUnitStats } from "../game/units";
-import { calculateDamageWithCrit, rollHit, shouldApplyPoison, shouldApplySlow, getEffectiveArmor, getEffectiveDamage, logHit, logLifestealHit, logMiss, logPoisoned, logSlowed } from "../combat/combatMath";
+import { calculateDamageWithCrit, rollHit, rollChance, rollDamage, getEffectiveArmor, getEffectiveDamage, shouldApplyPoison, shouldApplySlow, logHit, logLifestealHit, logMiss, logPoisoned, logSlowed } from "../combat/combatMath";
 import { createProjectile, getProjectileSpeed, applyDamageToUnit, applyLifesteal, type DamageContext } from "../combat/damageEffects";
+import { CRIT_MULTIPLIER } from "../game/statBonuses";
 import { soundFns } from "../audio";
 import { spawnSwingIndicator } from "./swingAnimations";
 
@@ -145,8 +146,24 @@ export function executeEnemyMeleeAttack(ctx: EnemyAttackContext): void {
     spawnSwingIndicator(scene, attackerG, targetG, false, swingAnimations, now);
 
     if (rollHit(attackerStats.accuracy)) {
-        const effectiveDamage = getEffectiveDamage(attacker, attackerStats.damage);
-        const { damage: dmg } = calculateDamageWithCrit(effectiveDamage[0], effectiveDamage[1], getEffectiveArmor(target, targetData.armor), "physical", attacker);
+        // Check for bite attack (random chance to bite instead of claw)
+        const isBite = attackerStats.biteChance && attackerStats.biteDamage && rollChance(attackerStats.biteChance);
+        const baseDamage = isBite ? attackerStats.biteDamage! : attackerStats.damage;
+        const effectiveDamage = getEffectiveDamage(attacker, baseDamage);
+
+        let dmg: number;
+        let isCrit: boolean;
+        if (isBite && attackerStats.biteCrit) {
+            // Bite has its own crit chance (not from baseCrit)
+            const rawDmg = rollDamage(effectiveDamage[0], effectiveDamage[1]);
+            isCrit = rollChance(attackerStats.biteCrit);
+            const critDmg = isCrit ? Math.floor(rawDmg * CRIT_MULTIPLIER) : rawDmg;
+            dmg = Math.max(1, critDmg - getEffectiveArmor(target, targetData.armor));
+        } else {
+            ({ damage: dmg, isCrit } = calculateDamageWithCrit(effectiveDamage[0], effectiveDamage[1], getEffectiveArmor(target, targetData.armor), "physical", attacker));
+        }
+
+        const attackName = isBite ? "Bite" : "Attack";
         const willPoison = shouldApplyPoison(attackerStats);
         const willSlow = shouldApplySlow(attackerStats);
         const poisonDmg = willPoison ? attackerStats.poisonDamage : undefined;
@@ -158,7 +175,7 @@ export function executeEnemyMeleeAttack(ctx: EnemyAttackContext): void {
         // Custom log for lifesteal attacks
         const hitText = healAmount > 0
             ? logLifestealHit(attackerStats.name, targetData.name, dmg, healAmount)
-            : logHit(attackerStats.name, "Attack", targetData.name, dmg);
+            : logHit(attackerStats.name, attackName, targetData.name, dmg);
 
         const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now, defeatedThisFrame };
         applyDamageToUnit(dmgCtx, target.id, targetG, target.hp, dmg, targetData.name, {
@@ -166,7 +183,8 @@ export function executeEnemyMeleeAttack(ctx: EnemyAttackContext): void {
             poison: willPoison ? { sourceId: attacker.id, damagePerTick: poisonDmg } : undefined,
             slow: willSlow ? { sourceId: attacker.id } : undefined,
             hitMessage: { text: hitText, color: COLORS.damageEnemy },
-            targetUnit: target
+            targetUnit: target,
+            isCrit
         });
 
         soundFns.playHit();

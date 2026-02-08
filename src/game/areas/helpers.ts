@@ -136,15 +136,18 @@ export function computeAreaData(area: AreaData): ComputedAreaData {
         }
     });
 
-    // Block decoration positions for pathing (all types) and LOS (tall things only)
+    // Block decoration positions for pathing (large types) and LOS (tall things only)
+    const nonBlockingDecorations = new Set(["small_rock", "mushroom", "small_mushroom", "fern", "small_fern", "seaweed", "small_seaweed"]);
     if (area.decorations) {
         area.decorations.forEach(dec => {
             const dx = Math.floor(dec.x);
             const dz = Math.floor(dec.z);
 
-            // Block movement for all decoration types
             if (dx >= 0 && dx < area.gridWidth && dz >= 0 && dz < area.gridHeight) {
-                blocked[dx][dz] = true;
+                // Only block movement for large decorations
+                if (!nonBlockingDecorations.has(dec.type)) {
+                    blocked[dx][dz] = true;
+                }
 
                 // Standing columns block LoS (they're tall)
                 if (dec.type === "column") {

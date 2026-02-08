@@ -1,6 +1,6 @@
 === AREA: tomb ===
 name: Unmarked Tomb
-flavor: A mysterious place.
+flavor: The smell of death wafts through this chamber.
 size: 40x20
 background: #1a1a2e
 ground: #3a313f

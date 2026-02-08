@@ -3,7 +3,7 @@
 // =============================================================================
 
 // Types
-export type { SpawnContext, ChargeContext, LeapContext, VinesContext, TentacleContext, RaiseContext, CurseContext } from "./types";
+export type { SpawnContext, ChargeContext, LeapContext, VinesContext, TentacleContext, RaiseContext, CurseContext, GlareContext } from "./types";
 
 // Brood Mother
 export { trySpawnMinion } from "./broodMother";
@@ -32,6 +32,9 @@ export { tryRaiseDead } from "./necromancer";
 // Acid Slug Patrol
 export { tryAcidSlugPatrol, processAcidTrailAndAura } from "./acidSlug";
 export type { AcidSlugContext } from "./acidSlug";
+
+// Basilisk Glare
+export { tryBasiliskGlare, processGlares, clearGlares } from "./basiliskGlare";
 
 // Baby Kraken Submerge
 export {

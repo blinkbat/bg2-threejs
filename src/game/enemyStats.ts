@@ -85,6 +85,35 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         lifesteal: 0.5,    // Heals for 50% of damage dealt
         expReward: 18
     },
+    basilisk: {
+        name: "Basilisk Youngling",
+        hp: 180,
+        maxHp: 180,
+        damage: [8, 14],
+        accuracy: 70,
+        armor: 3,
+        color: "#22aa22",
+        aggroRange: 10,
+        attackCooldown: 2200,
+        moveSpeed: 0.7,
+        size: 1.8,
+        expReward: 100,
+        baseCrit: 5,
+        biteChance: 20,
+        biteDamage: [14, 22],
+        biteCrit: 40,
+        glareSkill: {
+            name: "Petrifying Glare",
+            cooldown: 8000,
+            range: 7,
+            coneAngle: Math.PI / 4,
+            coneDistance: 5,
+            delay: 1500,
+            damage: [6, 12],
+            damageType: "chaos",
+            stunDuration: 2500
+        }
+    },
     brood_mother: {
         name: "Brood Mother",
         hp: 45,

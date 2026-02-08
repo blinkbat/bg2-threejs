@@ -28,6 +28,7 @@ import {
     processSanctuaryTiles,
     processChargeAttacks,
     processCurses,
+    processGlares,
     updateLeaps,
     updateTentacles,
     updateSubmergedKrakens
@@ -315,6 +316,19 @@ export function useGameLoop({
 
                 // Process necromancer curses
                 processCurses(
+                    scene,
+                    stateRefs.unitsStateRef.current,
+                    unitGroups,
+                    refs.damageTexts,
+                    refs.hitFlash,
+                    callbacks.setUnits,
+                    callbacks.addLog,
+                    now,
+                    defeatedThisFrame
+                );
+
+                // Process basilisk glares
+                processGlares(
                     scene,
                     stateRefs.unitsStateRef.current,
                     unitGroups,

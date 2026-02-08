@@ -30,9 +30,9 @@ export { processCurses, clearCurses } from "./necromancerCurse";
 import { executeEnemySwipe, executeEnemyHeal } from "./enemySkills";
 import { executeEnemyBasicAttack } from "./enemyAttack";
 import { isUnitCharging } from "./constructCharge";
-import { trySpawnMinion, tryStartChargeAttack, tryLeapToTarget, isUnitLeaping, tryVinesSkill, trySpawnTentacle, tryRaiseDead, tryAcidSlugPatrol, processAcidTrailAndAura } from "./enemyBehaviors";
+import { trySpawnMinion, tryStartChargeAttack, tryLeapToTarget, isUnitLeaping, tryVinesSkill, trySpawnTentacle, tryRaiseDead, tryAcidSlugPatrol, processAcidTrailAndAura, tryBasiliskGlare } from "./enemyBehaviors";
 import { startCurse } from "./necromancerCurse";
-export { clearLeaps, updateLeaps, isUnitLeaping, updateTentacles, clearTentacles, trySubmergeKraken, isKrakenSubmerged, isKrakenFullySubmerged, updateSubmergedKrakens } from "./enemyBehaviors";
+export { clearLeaps, updateLeaps, isUnitLeaping, updateTentacles, clearTentacles, trySubmergeKraken, isKrakenSubmerged, isKrakenFullySubmerged, updateSubmergedKrakens, processGlares, clearGlares } from "./enemyBehaviors";
 export { spawnLootBag, removeLootBag, clearAllLootBags, resetLootBagIds } from "./lootBags";
 
 // Re-export unit ID utilities for backwards compatibility
@@ -218,6 +218,14 @@ export function updateUnitAI(
                 setSkillCooldown(setSkillCooldowns, curseCooldownKey, curseSkill.cooldown, now, unit);
             }
         }
+    }
+
+    // Phase 1.86: Basilisk glare check - telegraphed cone stun
+    if (!isPlayer && 'glareSkill' in data && data.glareSkill) {
+        tryBasiliskGlare({
+            unit, g, enemyStats: data as EnemyStats, glareSkill: data.glareSkill,
+            unitsState, unitsRef, scene, skillCooldowns, setSkillCooldowns, addLog, now
+        });
     }
 
     let targetX = g.position.x, targetZ = g.position.z;

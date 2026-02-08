@@ -3,7 +3,7 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitGroup, EnemyStats, EnemySpawnSkill, EnemyChargeAttack, EnemyLeapSkill, EnemyVinesSkill, EnemyTentacleSkill, EnemyRaiseSkill, EnemyCurseSkill, DamageText } from "../../core/types";
+import type { Unit, UnitGroup, EnemyStats, EnemySpawnSkill, EnemyChargeAttack, EnemyLeapSkill, EnemyVinesSkill, EnemyTentacleSkill, EnemyRaiseSkill, EnemyCurseSkill, EnemyGlareSkill, DamageText } from "../../core/types";
 
 export interface SpawnContext {
     unit: Unit;
@@ -100,6 +100,20 @@ export interface CurseContext {
     g: UnitGroup;
     enemyStats: EnemyStats;
     curseSkill: EnemyCurseSkill;
+    unitsState: Unit[];
+    unitsRef: Record<number, UnitGroup>;
+    scene: THREE.Scene;
+    skillCooldowns: Record<string, { end: number; duration: number }>;
+    setSkillCooldowns: React.Dispatch<React.SetStateAction<Record<string, { end: number; duration: number }>>>;
+    addLog: (text: string, color?: string) => void;
+    now: number;
+}
+
+export interface GlareContext {
+    unit: Unit;
+    g: UnitGroup;
+    enemyStats: EnemyStats;
+    glareSkill: EnemyGlareSkill;
     unitsState: Unit[];
     unitsRef: Record<number, UnitGroup>;
     scene: THREE.Scene;

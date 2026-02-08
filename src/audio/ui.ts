@@ -248,7 +248,7 @@ export const playFootsteps = () => {
     const steps = 6;
     for (let i = 0; i < steps; i++) {
         const time = i * 0.15;  // 150ms between steps
-        const volume = 0.12 * (1 - i / steps);  // Fade out
+        const volume = 0.3 * (1 - i / steps);  // Fade out
 
         // Low thud - foot impact
         const thud = ctx.createOscillator();

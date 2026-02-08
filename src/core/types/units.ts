@@ -3,7 +3,7 @@
 // =============================================================================
 
 // Enemy type identifiers
-export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba" | "acid_slug" | "bat" | "undead_knight" | "ancient_construct" | "feral_hound" | "corrupt_druid" | "skeleton_warrior" | "baby_kraken" | "kraken_tentacle" | "magma_imp" | "necromancer" | "skeleton_minion";
+export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba" | "acid_slug" | "basilisk" | "bat" | "undead_knight" | "ancient_construct" | "feral_hound" | "corrupt_druid" | "skeleton_warrior" | "baby_kraken" | "kraken_tentacle" | "magma_imp" | "necromancer" | "skeleton_minion";
 
 // Status effect types
 export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed" | "qi_drain" | "energyShield" | "defiance" | "doom" | "invul";
@@ -153,6 +153,18 @@ export interface EnemyCurseSkill {
     damageType: DamageType;
 }
 
+export interface EnemyGlareSkill {
+    name: string;
+    cooldown: number;        // ms between casts
+    range: number;           // max distance to target to trigger
+    coneAngle: number;       // half-angle in radians (e.g. Math.PI/4 for 45° half = 90° total cone)
+    coneDistance: number;     // how far the cone extends
+    delay: number;           // ms telegraph before stun fires
+    damage: [number, number];
+    damageType: DamageType;
+    stunDuration: number;    // ms stun applied on hit
+}
+
 export interface EnemyStats {
     name: string;
     hp: number;
@@ -220,6 +232,12 @@ export interface EnemyStats {
     raiseSkill?: EnemyRaiseSkill;
     // Optional curse skill - delayed AoE at target position
     curseSkill?: EnemyCurseSkill;
+    // Optional glare skill - cone-shaped telegraphed stun
+    glareSkill?: EnemyGlareSkill;
+    // Optional bite attack - random chance per melee attack to bite instead of claw
+    biteChance?: number;           // 0-100, percent chance to bite per attack
+    biteDamage?: [number, number]; // Override damage range for bite
+    biteCrit?: number;             // Override crit chance for bite
 }
 
 // =============================================================================
