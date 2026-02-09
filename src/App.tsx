@@ -45,6 +45,7 @@ import { type HotbarAssignments, loadHotbarAssignments, saveHotbarAssignments } 
 import { CombatLog } from "./components/CombatLog";
 import { HUD } from "./components/HUD";
 import { FormationIndicator } from "./components/FormationIndicator";
+import { loadFormationOrder, saveFormationOrder } from "./hooks/formationStorage";
 import { HelpModal } from "./components/HelpModal";
 import { SaveLoadModal } from "./components/SaveLoadModal";
 import { type SaveSlotData, SAVE_VERSION, saveGame, loadGame } from "./game/saveLoad";
@@ -111,16 +112,23 @@ function Game({
     // Create initial units
     const createUnitsForArea = useCallback((): Unit[] => {
         const area = getCurrentArea();
-        const playerIds = Object.keys(UNIT_DATA).map(Number);
+        const allPlayerIds = Object.keys(UNIT_DATA).map(Number);
         const spawn = spawnPoint ?? DEFAULT_SPAWN_POINT;
-        const spawnPositions = findSpawnPositions(spawn.x, spawn.z, playerIds.length, spawnDirection);
+        // Sort player IDs by formation order so slot 0 (tip) goes to the right unit
+        const fOrder = loadFormationOrder();
+        const playerIds = [...allPlayerIds].sort((a, b) => {
+            const ai = fOrder.indexOf(a);
+            const bi = fOrder.indexOf(b);
+            return (ai === -1 ? 100 + a : ai) - (bi === -1 ? 100 + b : bi);
+        });
+        const spawnPositions = findSpawnPositions(spawn.x, spawn.z, playerIds.length, spawnDirection ?? "south");
         const INITIAL_XP_VALUES = [0, 10, 15, 20, 25, 30];
 
         const players: Unit[] = playerIds.map((id, i) => {
             const data = UNIT_DATA[id];
             const persisted = persistedPlayers?.find(p => p.id === id);
             const pos = spawnPositions[i] ?? { x: spawn.x, z: spawn.z };
-            const initialExp = persisted?.exp ?? (INITIAL_XP_VALUES[i] ?? 0);
+            const initialExp = persisted?.exp ?? (INITIAL_XP_VALUES[id] ?? 0);
             return {
                 id,
                 x: pos.x,
@@ -195,6 +203,7 @@ function Game({
     const [debug, setDebug] = useState(false);
     const [fastMove, setFastMove] = useState(false);
     const [hotbarAssignments, setHotbarAssignments] = useState<HotbarAssignments>(loadHotbarAssignments);
+    const [formationOrder, setFormationOrder] = useState<number[]>(loadFormationOrder);
 
     // =============================================================================
     // STATE SYNC REFS
@@ -211,6 +220,7 @@ function Game({
     const skillCooldownsRef = useRef(skillCooldowns);
     const openedChestsRef = useRef(openedChests);
     const hotbarAssignmentsRef = useRef(hotbarAssignments);
+    const formationOrderRef = useRef(formationOrder);
     const handleCastSkillRef = useRef<((unitId: number, skill: Skill) => void) | null>(null);
 
     // Sync refs with state
@@ -224,6 +234,7 @@ function Game({
     useEffect(() => { skillCooldownsRef.current = skillCooldowns; }, [skillCooldowns]);
     useEffect(() => { openedChestsRef.current = openedChests; }, [openedChests]);
     useEffect(() => { hotbarAssignmentsRef.current = hotbarAssignments; }, [hotbarAssignments]);
+    useEffect(() => { formationOrderRef.current = formationOrder; }, [formationOrder]);
 
     // =============================================================================
     // MUTABLE REFS FOR INPUT
@@ -443,7 +454,8 @@ function Game({
         gameRefs: gameRefs as React.MutableRefObject<InputGameRefs>,
         stateRefs: {
             unitsStateRef, selectedRef, pausedRef, targetingModeRef, consumableTargetingModeRef,
-            showPanelRef, helpOpenRef, openedChestsRef, hotbarAssignmentsRef, pauseStartTimeRef
+            showPanelRef, helpOpenRef, openedChestsRef, hotbarAssignmentsRef, pauseStartTimeRef,
+            formationOrderRef
         },
         mutableRefs: {
             actionQueueRef, actionCooldownRef, keysPressed,
@@ -539,7 +551,8 @@ function Game({
             return {
                 players: playerUnits.map(u => ({
                     id: u.id, hp: u.hp, mana: u.mana, level: u.level, exp: u.exp,
-                    stats: u.stats, statPoints: u.statPoints, statusEffects: u.statusEffects
+                    stats: u.stats, statPoints: u.statPoints, statusEffects: u.statusEffects,
+                    cantripUses: u.cantripUses
                 })),
                 currentAreaId: getCurrentAreaId(),
                 openedChests: openedChestsRef.current,
@@ -777,7 +790,7 @@ function Game({
                 );
             })()}
 
-            {hoveredChest && <div className="enemy-tooltip" style={{ left: hoveredChest.x + 12, top: hoveredChest.y - 10 }}><div className="enemy-tooltip-name">Chest</div></div>}
+            {hoveredChest && <div className="enemy-tooltip" style={{ left: hoveredChest.x + 12, top: hoveredChest.y - 10 }}><div className="enemy-tooltip-name">{openedChests.has(`${getCurrentAreaId()}-${hoveredChest.chestIndex}`) ? "Empty Chest" : "Chest"}</div></div>}
 
             {hoveredPlayer && (() => {
                 const player = units.find(u => u.id === hoveredPlayer.id);
@@ -817,7 +830,7 @@ function Game({
             {/* UI Components */}
             <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onPause={() => setPaused(true)} onShowHelp={onShowHelp} onRestart={onRestart} onSaveClick={onSaveClick} onLoadClick={onLoadClick} debug={debug} onToggleDebug={() => setDebug(d => !d)} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} onToggleFastMove={() => setFastMove(f => !f)} fastMoveEnabled={fastMove} otherModalOpen={helpOpen || saveLoadOpen} hasSelection={selectedIds.length > 0} />
             <CombatLog log={combatLog} />
-            <FormationIndicator units={units} />
+            <FormationIndicator units={units} formationOrder={formationOrder} />
             <PartyBar
                 units={units} selectedIds={selectedIds} onSelect={setSelectedIds} targetingMode={targetingMode}
                 consumableTargetingMode={consumableTargetingMode}
@@ -849,6 +862,8 @@ function Game({
                     });
                 }}
                 onCastSkill={handleCastSkill} skillCooldowns={skillCooldowns} paused={paused}
+                formationOrder={formationOrder}
+                onReorderFormation={(newOrder) => { setFormationOrder(newOrder); saveFormationOrder(newOrder); }}
             />
             {showPanel && selectedIds.length === 1 && (
                 <UnitPanel
@@ -944,7 +959,8 @@ export default function App() {
             players: state.players, currentAreaId: state.currentAreaId,
             openedChests: Array.from(state.openedChests), openedSecretDoors: Array.from(state.openedSecretDoors),
             killedEnemies: Array.from(state.killedEnemies), gold: state.gold,
-            equipment: getAllEquipment(), inventory: getPartyInventory()
+            equipment: getAllEquipment(), inventory: getPartyInventory(),
+            hotbarAssignments: loadHotbarAssignments(), formationOrder: loadFormationOrder()
         };
         saveGame(slot, saveData);
     };
@@ -962,6 +978,9 @@ export default function App() {
         setInitialGold(saveData.gold);
         setPersistedPlayers(saveData.players);
         setSpawnPoint(area.defaultSpawn);
+        // Restore UI state to localStorage so Game reads it on remount
+        if (saveData.hotbarAssignments) saveHotbarAssignments(saveData.hotbarAssignments);
+        if (saveData.formationOrder) saveFormationOrder(saveData.formationOrder);
         setGameKey(k => k + 1);
     };
 
@@ -974,7 +993,8 @@ export default function App() {
             players: state.players, currentAreaId: state.currentAreaId,
             openedChests: Array.from(state.openedChests), openedSecretDoors: Array.from(state.openedSecretDoors),
             killedEnemies: Array.from(state.killedEnemies), gold: state.gold,
-            equipment: getAllEquipment(), inventory: getPartyInventory()
+            equipment: getAllEquipment(), inventory: getPartyInventory(),
+            hotbarAssignments: loadHotbarAssignments(), formationOrder: loadFormationOrder()
         };
     };
 

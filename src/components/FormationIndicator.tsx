@@ -20,13 +20,23 @@ const SLOT_POSITIONS: { col: number; row: number }[] = [
 
 interface FormationIndicatorProps {
     units: Unit[];
+    formationOrder: number[];
 }
 
-export function FormationIndicator({ units }: FormationIndicatorProps) {
-    // Only show player units sorted by ID (matches formation slot assignment)
-    const players = units
-        .filter(u => u.team === "player")
-        .sort((a, b) => a.id - b.id);
+/** Sort players by formation order, falling back to ID order for unknowns. */
+function sortByFormation(players: Unit[], formationOrder: number[]): Unit[] {
+    return [...players].sort((a, b) => {
+        const ai = formationOrder.indexOf(a.id);
+        const bi = formationOrder.indexOf(b.id);
+        return (ai === -1 ? 100 + a.id : ai) - (bi === -1 ? 100 + b.id : bi);
+    });
+}
+
+export function FormationIndicator({ units, formationOrder }: FormationIndicatorProps) {
+    const players = sortByFormation(
+        units.filter(u => u.team === "player"),
+        formationOrder
+    );
 
     if (players.length <= 1) return null;
 

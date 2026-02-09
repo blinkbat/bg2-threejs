@@ -312,7 +312,8 @@ export function buildMoveTargets(
     unitsState: Unit[],
     unitsRef: Record<number, UnitGroup>,
     gx: number,
-    gz: number
+    gz: number,
+    formationOrder: number[] = []
 ): { id: number; x: number; z: number; delay: number }[] {
     const alive = selectedIds
         .map(uid => unitsState.find(u => u.id === uid))
@@ -343,10 +344,14 @@ export function buildMoveTargets(
     const facingAngle = Math.atan2(dz, dx);
     const positions = getFormationPositions(gx, gz, facingAngle, alive.length);
 
-    // Fixed slot assignment: sort by unit ID so Barbarian (1) gets tip, etc.
+    // Slot assignment: use custom formation order, fallback to ID order
     // Row stagger: back rows wait so they don't overtake the front
     const ROW_DELAY = 400; // ms between rows
-    const sorted = [...alive].sort((a, b) => a.id - b.id);
+    const sorted = [...alive].sort((a, b) => {
+        const ai = formationOrder.indexOf(a.id);
+        const bi = formationOrder.indexOf(b.id);
+        return (ai === -1 ? 100 + a.id : ai) - (bi === -1 ? 100 + b.id : bi);
+    });
     const result: { id: number; x: number; z: number; delay: number }[] = [];
 
     for (let i = 0; i < sorted.length; i++) {

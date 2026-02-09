@@ -4,6 +4,7 @@
 
 import type { CharacterEquipment, PartyInventory, CharacterStats, StatusEffect } from "../core/types";
 import type { AreaId } from "./areas";
+import type { HotbarAssignments } from "../hooks/localStorage";
 
 // =============================================================================
 // CONSTANTS
@@ -27,6 +28,7 @@ export interface SavedPlayer {
     stats?: CharacterStats;
     statPoints?: number;
     statusEffects?: StatusEffect[];
+    cantripUses?: Record<string, number>;
 }
 
 /** Complete save slot data */
@@ -48,6 +50,10 @@ export interface SaveSlotData {
     // Equipment & inventory
     equipment: Record<number, CharacterEquipment>;
     inventory: PartyInventory;
+
+    // UI state (optional for backwards compat with old saves)
+    hotbarAssignments?: HotbarAssignments;
+    formationOrder?: number[];
 }
 
 /** Minimal slot info for UI display */

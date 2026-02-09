@@ -68,6 +68,7 @@ export interface InputStateRefs {
     openedChestsRef: React.MutableRefObject<Set<string>>;
     hotbarAssignmentsRef: React.MutableRefObject<HotbarAssignments>;
     pauseStartTimeRef: React.MutableRefObject<number | null>;
+    formationOrderRef: React.MutableRefObject<number[]>;
 }
 
 export interface InputMutableRefs {
@@ -318,7 +319,7 @@ export function useInputHandlers({
                                 gameRefs.current.moveMarkerStart = Date.now();
                             }
                             soundFns.playMove();
-                            const moveTargets = buildMoveTargets(stateRefs.selectedRef.current, stateRefs.unitsStateRef.current, unitGroups, gx, gz);
+                            const moveTargets = buildMoveTargets(stateRefs.selectedRef.current, stateRefs.unitsStateRef.current, unitGroups, gx, gz, stateRefs.formationOrderRef.current);
                             const useDirectMove = moveTargets.length > 1;
                             const moveNow = Date.now();
                             moveTargets.forEach(t => {
@@ -487,9 +488,19 @@ export function useInputHandlers({
                 e.preventDefault();
                 const slotIndex = parseInt(e.code.charAt(1)) - 1;
                 const playerUnits = stateRefs.unitsStateRef.current.filter(u => u.team === "player");
-                const unit = playerUnits[slotIndex];
-                if (unit && unit.hp > 0) {
-                    setters.setSelectedIds([unit.id]);
+                const playerIds = playerUnits.map(u => u.id);
+                const order = stateRefs.formationOrderRef.current;
+                // Build effective order: saved order filtered to living, then append unknowns
+                const effective = order.filter(id => playerIds.includes(id));
+                for (const id of playerIds) {
+                    if (!effective.includes(id)) effective.push(id);
+                }
+                const unitId = effective[slotIndex];
+                if (unitId !== undefined) {
+                    const unit = playerUnits.find(u => u.id === unitId);
+                    if (unit && unit.hp > 0) {
+                        setters.setSelectedIds([unitId]);
+                    }
                 }
             }
             if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyW", "KeyA", "KeyS", "KeyD"].includes(e.code)) {
