@@ -72,9 +72,11 @@ export function PartyBar({
     const [contextMenu, setContextMenu] = useState<{ unitId: number; x: number; y: number } | null>(null);
     const contextMenuRef = useRef<HTMLDivElement>(null);
 
-    // Drag state
+    // Drag state — insertIdx is the gap index (0 = before first, N = after last)
     const dragIdRef = useRef<number | null>(null);
-    const [dragOverId, setDragOverId] = useState<number | null>(null);
+    const [draggingId, setDraggingId] = useState<number | null>(null);
+    const [insertIdx, setInsertIdx] = useState<number | null>(null);
+    const barRef = useRef<HTMLDivElement>(null);
 
     // Close context menu on click-away or Escape
     useEffect(() => {
@@ -100,163 +102,222 @@ export function PartyBar({
         setContextMenu(null);
     }, [effectiveOrder, onReorderFormation]);
 
+    /** Compute the insert gap from a clientX anywhere in the bar */
+    const computeInsertIdxFromX = useCallback((fromId: number, clientX: number) => {
+        if (!barRef.current) return null;
+        const portraits = barRef.current.querySelectorAll<HTMLElement>(".party-portrait");
+        // Find which gap the cursor is closest to
+        let gap = portraits.length; // default: after last
+        for (let i = 0; i < portraits.length; i++) {
+            const rect = portraits[i].getBoundingClientRect();
+            const mid = rect.left + rect.width / 2;
+            if (clientX < mid) { gap = i; break; }
+        }
+        // No-op check: dropping here wouldn't move the unit
+        const fromIdx = effectiveOrder.indexOf(fromId);
+        if (fromIdx === -1) return null;
+        if (gap === fromIdx || gap === fromIdx + 1) return null;
+        return gap;
+    }, [effectiveOrder]);
+
+    /** Execute the drop at the current insertIdx */
+    const executeDrop = useCallback(() => {
+        const fromId = dragIdRef.current;
+        const gap = insertIdx;
+        dragIdRef.current = null;
+        setDraggingId(null);
+        setInsertIdx(null);
+        if (fromId === null || gap === null) return;
+        const fromIdx = effectiveOrder.indexOf(fromId);
+        if (fromIdx === -1) return;
+        const newOrder = effectiveOrder.filter(id => id !== fromId);
+        // Adjust gap for the removal
+        const adjustedGap = gap > fromIdx ? gap - 1 : gap;
+        newOrder.splice(adjustedGap, 0, fromId);
+        onReorderFormation?.(newOrder);
+    }, [effectiveOrder, insertIdx, onReorderFormation]);
+
     // Sort playerUnits by effective formation order for rendering
     const sortedUnits = [...playerUnits].sort((a, b) => effectiveOrder.indexOf(a.id) - effectiveOrder.indexOf(b.id));
 
-    return (
-        <div className="party-bar glass-panel">
-            {sortedUnits.map((unit: Unit, renderIndex: number) => {
-                const data = UNIT_DATA[unit.id];
-                if (!data) return null;
-                const isSelected = selectedIds.includes(unit.id);
-                const effectiveMaxHp = getEffectiveMaxHp(unit.id, unit);
-                const hpPct = getHpPercentage(unit.hp, effectiveMaxHp);
-                const hpColor = getHpColor(hpPct);
+    // Dragged unit color for the spacer bar
+    const dragColor = draggingId !== null ? (UNIT_DATA[draggingId]?.color ?? "#999") : "#999";
 
-                const isTargetingAlly = targetingMode?.skill.targetType === "ally";
-                const isTargetingDeadAlly = consumableTargetingMode !== null && consumableTargetingMode !== undefined;
-                const isValidTarget = (targetingMode && isTargetingAlly && unit.hp > 0) ||
-                    (isTargetingDeadAlly && unit.hp <= 0 && unit.team === "player");
+    // Spacer element — a real flex child that receives drag events
+    const spacer = (
+        <div
+            key="drop-spacer"
+            className="drop-spacer"
+            style={{ "--drop-color": dragColor } as React.CSSProperties}
+            onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
+            onDrop={(e) => { e.preventDefault(); executeDrop(); }}
+        />
+    );
 
-                const handleClick = (e: React.MouseEvent) => {
-                    e.stopPropagation();
-                    if (isTargetingDeadAlly && unit.hp <= 0 && onTargetUnit) {
-                        onTargetUnit(unit.id);
-                        return;
-                    }
-                    if (unit.hp <= 0) return;
-                    if (targetingMode && isTargetingAlly && onTargetUnit) {
-                        onTargetUnit(unit.id);
-                        return;
-                    }
-                    onSelect(e.shiftKey ? (prev: number[]) => prev.includes(unit.id) ? prev.filter((i: number) => i !== unit.id) : [...prev, unit.id] : [unit.id]);
-                };
+    // Build elements array with spacer inserted at the active gap
+    const elements: React.ReactNode[] = [];
+    sortedUnits.forEach((unit: Unit, renderIndex: number) => {
+        // Insert spacer before this portrait if needed
+        if (insertIdx === renderIndex) elements.push(spacer);
 
-                const handleContextMenu = (e: React.MouseEvent) => {
+        const data = UNIT_DATA[unit.id];
+        if (!data) return;
+        const isSelected = selectedIds.includes(unit.id);
+        const effectiveMaxHp = getEffectiveMaxHp(unit.id, unit);
+        const hpPct = getHpPercentage(unit.hp, effectiveMaxHp);
+        const hpColor = getHpColor(hpPct);
+
+        const isTargetingAlly = targetingMode?.skill.targetType === "ally";
+        const isTargetingDeadAlly = consumableTargetingMode !== null && consumableTargetingMode !== undefined;
+        const isValidTarget = (targetingMode && isTargetingAlly && unit.hp > 0) ||
+            (isTargetingDeadAlly && unit.hp <= 0 && unit.team === "player");
+
+        const handleClick = (e: React.MouseEvent) => {
+            e.stopPropagation();
+            if (isTargetingDeadAlly && unit.hp <= 0 && onTargetUnit) {
+                onTargetUnit(unit.id);
+                return;
+            }
+            if (unit.hp <= 0) return;
+            if (targetingMode && isTargetingAlly && onTargetUnit) {
+                onTargetUnit(unit.id);
+                return;
+            }
+            onSelect(e.shiftKey ? (prev: number[]) => prev.includes(unit.id) ? prev.filter((i: number) => i !== unit.id) : [...prev, unit.id] : [unit.id]);
+        };
+
+        const handleContextMenu = (e: React.MouseEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setContextMenu({ unitId: unit.id, x: e.clientX, y: e.clientY });
+        };
+
+        const orderIdx = effectiveOrder.indexOf(unit.id);
+        const isDragSource = draggingId === unit.id;
+
+        const portraitClass = [
+            "party-portrait",
+            isSelected ? "selected" : "",
+            isValidTarget ? "valid-target" : "",
+            unit.hp <= 0 ? "dead" : "",
+            (isTargetingAlly || isTargetingDeadAlly) ? "targeting" : "",
+            isDragSource ? "dragging" : ""
+        ].filter(Boolean).join(" ");
+
+        const hasUnspentPoints = (unit.statPoints ?? 0) > 0;
+        const showHotbar = isSelected && selectedIds.length === 1 && onAssignSkill;
+
+        elements.push(
+            <div
+                key={unit.id}
+                className={portraitClass}
+                onClick={handleClick}
+                onContextMenu={handleContextMenu}
+                draggable={unit.hp > 0}
+                onDragStart={(e) => {
+                    dragIdRef.current = unit.id;
+                    setDraggingId(unit.id);
+                    e.dataTransfer.effectAllowed = "move";
+                }}
+                onDragEnd={() => {
+                    dragIdRef.current = null;
+                    setDraggingId(null);
+                    setInsertIdx(null);
+                }}
+                onDragOver={(e) => {
                     e.preventDefault();
-                    e.stopPropagation();
-                    setContextMenu({ unitId: unit.id, x: e.clientX, y: e.clientY });
-                };
-
-                const orderIdx = effectiveOrder.indexOf(unit.id);
-
-                const portraitClass = [
-                    "party-portrait",
-                    isSelected ? "selected" : "",
-                    isValidTarget ? "valid-target" : "",
-                    unit.hp <= 0 ? "dead" : "",
-                    (isTargetingAlly || isTargetingDeadAlly) ? "targeting" : "",
-                    dragOverId === unit.id ? "drag-over" : ""
-                ].filter(Boolean).join(" ");
-
-                const hasUnspentPoints = (unit.statPoints ?? 0) > 0;
-                const showHotbar = isSelected && selectedIds.length === 1 && onAssignSkill;
-
-                return (
-                    <div
-                        key={unit.id}
-                        className={portraitClass}
-                        onClick={handleClick}
-                        onContextMenu={handleContextMenu}
-                        draggable
-                        onDragStart={(e) => {
-                            dragIdRef.current = unit.id;
-                            e.dataTransfer.effectAllowed = "move";
-                            // Make the portrait semi-transparent while dragging
-                            requestAnimationFrame(() => {
-                                (e.target as HTMLElement).classList.add("dragging");
-                            });
-                        }}
-                        onDragEnd={(e) => {
-                            (e.target as HTMLElement).classList.remove("dragging");
-                            dragIdRef.current = null;
-                            setDragOverId(null);
-                        }}
-                        onDragOver={(e) => {
-                            e.preventDefault();
-                            e.dataTransfer.dropEffect = "move";
-                            if (dragIdRef.current !== null && dragIdRef.current !== unit.id) {
-                                setDragOverId(unit.id);
-                            }
-                        }}
-                        onDragLeave={() => {
-                            if (dragOverId === unit.id) setDragOverId(null);
-                        }}
-                        onDrop={(e) => {
-                            e.preventDefault();
-                            setDragOverId(null);
-                            const fromId = dragIdRef.current;
-                            if (fromId === null || fromId === unit.id) return;
-                            const fromIdx = effectiveOrder.indexOf(fromId);
-                            const toIdx = effectiveOrder.indexOf(unit.id);
-                            if (fromIdx === -1 || toIdx === -1) return;
-                            const newOrder = [...effectiveOrder];
-                            [newOrder[fromIdx], newOrder[toIdx]] = [newOrder[toIdx], newOrder[fromIdx]];
-                            onReorderFormation?.(newOrder);
-                            dragIdRef.current = null;
-                        }}
-                    >
-                        {/* Show hotbar above selected unit */}
-                        {showHotbar && (
-                            <div className="party-bar-hotbar">
-                                <SkillHotbar
-                                    unit={unit}
-                                    hotbarAssignments={hotbarAssignments}
-                                    onAssignSkill={onAssignSkill}
-                                    onCastSkill={onCastSkill}
-                                    skillCooldowns={skillCooldowns}
-                                    paused={paused}
-                                />
-                            </div>
-                        )}
-                        <div className="portrait-icon" style={{ background: data.color }}>
-                            <span className="portrait-fkey">F{renderIndex + 1}</span>
-                            {data.name[0]}
-                            {hasUnspentPoints && <span className="levelup-badge">+</span>}
-                            {unit.statusEffects && unit.statusEffects.length > 0 && (
-                                <div className="portrait-effects">
-                                    {unit.statusEffects.map((e, i) => {
-                                        const info = EFFECT_ICONS[e.type];
-                                        return (
-                                            <span key={i} className="portrait-effect-icon" style={{ color: info.color }}>
-                                                {info.icon}
-                                            </span>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </div>
-                        <div className="progress-bar-sm portrait-hp">
-                            <div className="progress-fill" style={{ width: `${Math.max(0, hpPct)}%`, background: hpColor }} />
-                        </div>
-                        <div className="portrait-name">{data.name}</div>
-
-                        {/* Context menu */}
-                        {contextMenu && contextMenu.unitId === unit.id && (
-                            <div
-                                ref={contextMenuRef}
-                                className="formation-context-menu glass-panel"
-                                style={{ left: 0, bottom: "100%" }}
-                            >
-                                <button
-                                    className="formation-ctx-btn"
-                                    disabled={orderIdx <= 0}
-                                    onClick={(e) => { e.stopPropagation(); swapFormation(unit.id, -1); }}
-                                >
-                                    Move Left
-                                </button>
-                                <button
-                                    className="formation-ctx-btn"
-                                    disabled={orderIdx >= effectiveOrder.length - 1}
-                                    onClick={(e) => { e.stopPropagation(); swapFormation(unit.id, 1); }}
-                                >
-                                    Move Right
-                                </button>
-                            </div>
-                        )}
+                    e.dataTransfer.dropEffect = "move";
+                    if (dragIdRef.current !== null && dragIdRef.current !== unit.id) {
+                        setInsertIdx(computeInsertIdxFromX(dragIdRef.current, e.clientX));
+                    }
+                }}
+                onDrop={(e) => {
+                    e.preventDefault();
+                    executeDrop();
+                }}
+            >
+                {/* Show hotbar above selected unit */}
+                {showHotbar && (
+                    <div className="party-bar-hotbar">
+                        <SkillHotbar
+                            unit={unit}
+                            hotbarAssignments={hotbarAssignments}
+                            onAssignSkill={onAssignSkill}
+                            onCastSkill={onCastSkill}
+                            skillCooldowns={skillCooldowns}
+                            paused={paused}
+                        />
                     </div>
-                );
-            })}
+                )}
+                <div className="portrait-icon" style={{ background: data.color }}>
+                    <span className="portrait-fkey">F{renderIndex + 1}</span>
+                    {data.name[0]}
+                    {hasUnspentPoints && <span className="levelup-badge">+</span>}
+                    {unit.statusEffects && unit.statusEffects.length > 0 && (
+                        <div className="portrait-effects">
+                            {unit.statusEffects.map((e, i) => {
+                                const info = EFFECT_ICONS[e.type];
+                                return (
+                                    <span key={i} className="portrait-effect-icon" style={{ color: info.color }}>
+                                        {info.icon}
+                                    </span>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+                <div className="progress-bar-sm portrait-hp">
+                    <div className="progress-fill" style={{ width: `${Math.max(0, hpPct)}%`, background: hpColor }} />
+                </div>
+                <div className="portrait-name">{data.name}</div>
+
+                {/* Context menu */}
+                {contextMenu && contextMenu.unitId === unit.id && (
+                    <div
+                        ref={contextMenuRef}
+                        className="formation-context-menu glass-panel"
+                        style={{ left: 0, bottom: "100%" }}
+                    >
+                        <button
+                            className="formation-ctx-btn"
+                            disabled={orderIdx <= 0}
+                            onClick={(e) => { e.stopPropagation(); swapFormation(unit.id, -1); }}
+                        >
+                            Move Left
+                        </button>
+                        <button
+                            className="formation-ctx-btn"
+                            disabled={orderIdx >= effectiveOrder.length - 1}
+                            onClick={(e) => { e.stopPropagation(); swapFormation(unit.id, 1); }}
+                        >
+                            Move Right
+                        </button>
+                    </div>
+                )}
+            </div>
+        );
+    });
+
+    // Spacer after last portrait
+    if (insertIdx === sortedUnits.length) elements.push(spacer);
+
+    return (
+        <div
+            ref={barRef}
+            className="party-bar glass-panel"
+            onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                if (dragIdRef.current !== null) {
+                    setInsertIdx(computeInsertIdxFromX(dragIdRef.current, e.clientX));
+                }
+            }}
+            onDrop={(e) => { e.preventDefault(); executeDrop(); }}
+            onDragLeave={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) setInsertIdx(null);
+            }}
+        >
+            {elements}
         </div>
     );
 }

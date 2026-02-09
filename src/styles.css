@@ -1377,11 +1377,23 @@ html, body, #root {
 
 .party-portrait.dragging {
     opacity: 0.3;
+    border-style: dashed;
+    border-color: #666;
 }
 
-.party-portrait.drag-over {
-    border-color: #f1c40f;
-    background: rgba(241, 196, 15, 0.15);
+.drop-spacer {
+    width: 14px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+}
+
+.drop-spacer::after {
+    content: "";
+    width: 3px;
+    background: var(--drop-color, #999);
+    border-radius: 2px;
 }
 
 .formation-context-menu {
