@@ -62,56 +62,56 @@ function ensureTexturesLoaded(): void {
     if (texturesLoaded) return;
 
     wizardTexture = new THREE.TextureLoader().load(wizardSpriteUrl);
-    wizardTexture.magFilter = THREE.NearestFilter;
-    wizardTexture.minFilter = THREE.NearestFilter;
+    wizardTexture.magFilter = THREE.LinearFilter;
+    wizardTexture.minFilter = THREE.LinearFilter;
 
     barbarianTexture = new THREE.TextureLoader().load(barbarianSpriteUrl);
-    barbarianTexture.magFilter = THREE.NearestFilter;
-    barbarianTexture.minFilter = THREE.NearestFilter;
+    barbarianTexture.magFilter = THREE.LinearFilter;
+    barbarianTexture.minFilter = THREE.LinearFilter;
 
     clericTexture = new THREE.TextureLoader().load(clericSpriteUrl);
-    clericTexture.magFilter = THREE.NearestFilter;
-    clericTexture.minFilter = THREE.NearestFilter;
+    clericTexture.magFilter = THREE.LinearFilter;
+    clericTexture.minFilter = THREE.LinearFilter;
 
     paladinTexture = new THREE.TextureLoader().load(paladinSpriteUrl);
-    paladinTexture.magFilter = THREE.NearestFilter;
-    paladinTexture.minFilter = THREE.NearestFilter;
+    paladinTexture.magFilter = THREE.LinearFilter;
+    paladinTexture.minFilter = THREE.LinearFilter;
 
     thiefTexture = new THREE.TextureLoader().load(thiefSpriteUrl);
-    thiefTexture.magFilter = THREE.NearestFilter;
-    thiefTexture.minFilter = THREE.NearestFilter;
+    thiefTexture.magFilter = THREE.LinearFilter;
+    thiefTexture.minFilter = THREE.LinearFilter;
 
     monkTexture = new THREE.TextureLoader().load(monkSpriteUrl);
-    monkTexture.magFilter = THREE.NearestFilter;
-    monkTexture.minFilter = THREE.NearestFilter;
+    monkTexture.magFilter = THREE.LinearFilter;
+    monkTexture.minFilter = THREE.LinearFilter;
 
     vampireBatTexture = new THREE.TextureLoader().load(vampireBatSpriteUrl);
-    vampireBatTexture.magFilter = THREE.NearestFilter;
-    vampireBatTexture.minFilter = THREE.NearestFilter;
+    vampireBatTexture.magFilter = THREE.LinearFilter;
+    vampireBatTexture.minFilter = THREE.LinearFilter;
 
     acidSlugTexture = new THREE.TextureLoader().load(acidSlugSpriteUrl);
-    acidSlugTexture.magFilter = THREE.NearestFilter;
-    acidSlugTexture.minFilter = THREE.NearestFilter;
+    acidSlugTexture.magFilter = THREE.LinearFilter;
+    acidSlugTexture.minFilter = THREE.LinearFilter;
 
     amoebaLgTexture = new THREE.TextureLoader().load(amoebaLgSpriteUrl);
-    amoebaLgTexture.magFilter = THREE.NearestFilter;
-    amoebaLgTexture.minFilter = THREE.NearestFilter;
+    amoebaLgTexture.magFilter = THREE.LinearFilter;
+    amoebaLgTexture.minFilter = THREE.LinearFilter;
 
     amoebaMdTexture = new THREE.TextureLoader().load(amoebaMdSpriteUrl);
-    amoebaMdTexture.magFilter = THREE.NearestFilter;
-    amoebaMdTexture.minFilter = THREE.NearestFilter;
+    amoebaMdTexture.magFilter = THREE.LinearFilter;
+    amoebaMdTexture.minFilter = THREE.LinearFilter;
 
     amoebaSmTexture = new THREE.TextureLoader().load(amoebaSmSpriteUrl);
-    amoebaSmTexture.magFilter = THREE.NearestFilter;
-    amoebaSmTexture.minFilter = THREE.NearestFilter;
+    amoebaSmTexture.magFilter = THREE.LinearFilter;
+    amoebaSmTexture.minFilter = THREE.LinearFilter;
 
     krakenTentacleTexture = new THREE.TextureLoader().load(krakenTentacleSpriteUrl);
-    krakenTentacleTexture.magFilter = THREE.NearestFilter;
-    krakenTentacleTexture.minFilter = THREE.NearestFilter;
+    krakenTentacleTexture.magFilter = THREE.LinearFilter;
+    krakenTentacleTexture.minFilter = THREE.LinearFilter;
 
     krakenBodyTexture = new THREE.TextureLoader().load(krakenBodySpriteUrl);
-    krakenBodyTexture.magFilter = THREE.NearestFilter;
-    krakenBodyTexture.minFilter = THREE.NearestFilter;
+    krakenBodyTexture.magFilter = THREE.LinearFilter;
+    krakenBodyTexture.minFilter = THREE.LinearFilter;
 
     texturesLoaded = true;
 }
@@ -132,12 +132,40 @@ interface SpriteConfig {
 function getSpriteConfigs(): Record<number, SpriteConfig> {
     ensureTexturesLoaded();
     return {
-        1: { texture: barbarianTexture, width: 157, height: 195, offsetX: -0.1 },  // Barbarian
-        2: { texture: paladinTexture, width: 128, height: 196 },    // Paladin
-        3: { texture: thiefTexture, width: 128, height: 196, offsetX: 0.1 },  // Thief
-        4: { texture: wizardTexture, width: 110, height: 196 },     // Wizard
-        5: { texture: monkTexture, width: 128, height: 196, offsetX: -0.1 },       // Monk
-        6: { texture: clericTexture, width: 128, height: 196, color: 0xcccccc },   // Cleric (slightly darker)
+        1: { texture: barbarianTexture, width: 157, height: 195, offsetX: -0.1, brightness: 0.07 },  // Barbarian
+        2: { texture: paladinTexture, width: 128, height: 196, brightness: 0.07 },    // Paladin
+        3: { texture: thiefTexture, width: 128, height: 196, offsetX: 0.1, brightness: 0.07 },  // Thief
+        4: { texture: wizardTexture, width: 110, height: 196, brightness: 0.07 },     // Wizard
+        5: { texture: monkTexture, width: 128, height: 196, offsetX: -0.1, brightness: 0.07 },       // Monk
+        6: { texture: clericTexture, width: 128, height: 196, color: 0xcccccc, brightness: 0.07 },   // Cleric
+    };
+}
+
+function applySpriteEdgeBlur(material: THREE.MeshStandardMaterial, textureWidth: number, textureHeight: number): void {
+    material.customProgramCacheKey = () => "sprite_edge_blur";
+    material.onBeforeCompile = (shader) => {
+        shader.uniforms.uTexelSize = {
+            value: new THREE.Vector2(1.0 / textureWidth, 1.0 / textureHeight)
+        };
+        shader.fragmentShader = shader.fragmentShader.replace(
+            "#include <common>",
+            "#include <common>\nuniform vec2 uTexelSize;"
+        );
+        shader.fragmentShader = shader.fragmentShader.replace(
+            "#include <alphatest_fragment>",
+            [
+                "{",
+                "    float a = diffuseColor.a;",
+                "    float aL = texture2D(map, vMapUv + vec2(-1.0, 0.0) * uTexelSize).a;",
+                "    float aR = texture2D(map, vMapUv + vec2( 1.0, 0.0) * uTexelSize).a;",
+                "    float aU = texture2D(map, vMapUv + vec2(0.0,  1.0) * uTexelSize).a;",
+                "    float aD = texture2D(map, vMapUv + vec2(0.0, -1.0) * uTexelSize).a;",
+                "    float blurA = (a * 2.0 + aL + aR + aU + aD) / 6.0;",
+                "    if (blurA < 0.01) discard;",
+                "    diffuseColor.a = blurA;",
+                "}",
+            ].join("\n")
+        );
     };
 }
 
@@ -208,7 +236,7 @@ export function createUnitSceneGroup(
             map: spriteConfig.texture,
             color: spriteConfig.color ?? 0xffffff,
             transparent: true,
-            alphaTest: spriteConfig.opacity !== undefined ? 0.1 : 0.5,
+            alphaTest: 0.01,
             opacity: spriteConfig.opacity ?? 1,
             side: THREE.DoubleSide,
             metalness: 0.3,
@@ -217,6 +245,7 @@ export function createUnitSceneGroup(
             emissiveIntensity: spriteConfig.brightness ?? 0,
             emissiveMap: spriteConfig.brightness ? spriteConfig.texture : undefined,
         });
+        applySpriteEdgeBlur(planeMat, spriteConfig.width, spriteConfig.height);
         const plane = new THREE.Mesh(new THREE.PlaneGeometry(spriteWidth, spriteHeight), planeMat);
         plane.position.y = spriteHeight / 2 + (spriteConfig.offsetY ?? 0);
         plane.position.x = spriteConfig.offsetX ?? 0;
@@ -386,7 +415,7 @@ export function addUnitToScene(
             map: spriteConfig.texture,
             color: spriteConfig.color ?? 0xffffff,
             transparent: true,
-            alphaTest: spriteConfig.opacity !== undefined ? 0.1 : 0.5,
+            alphaTest: 0.01,
             opacity: spriteConfig.opacity ?? 1,
             side: THREE.DoubleSide,
             metalness: 0.3,
@@ -395,6 +424,7 @@ export function addUnitToScene(
             emissiveIntensity: spriteConfig.brightness ?? 0,
             emissiveMap: spriteConfig.brightness ? spriteConfig.texture : undefined,
         });
+        applySpriteEdgeBlur(planeMat, spriteConfig.width, spriteConfig.height);
         const plane = new THREE.Mesh(new THREE.PlaneGeometry(spriteWidth, spriteHeight), planeMat);
         plane.position.y = spriteHeight / 2 + (spriteConfig.offsetY ?? 0);
         plane.position.x = spriteConfig.offsetX ?? 0;

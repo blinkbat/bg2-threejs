@@ -1299,6 +1299,11 @@ html, body, #root {
     font-size: 16px;
 }
 
+.unit-name:only-child {
+    font-size: 19px;
+    line-height: 1.6;
+}
+
 .unit-class {
     font-size: 13px;
     opacity: 0.8;

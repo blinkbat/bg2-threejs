@@ -69,7 +69,7 @@ export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, ski
                 <div className="unit-avatar" style={{ color: data.color }}>{data.name[0]}</div>
                 <div className="unit-info">
                     <div className="unit-name">{data.name}</div>
-                    <div className="unit-class">{data.class}</div>
+                    {data.name !== data.class && <div className="unit-class">{data.class}</div>}
                 </div>
                 <div className="close-btn" onClick={onClose}>×</div>
             </div>
