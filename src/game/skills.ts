@@ -71,14 +71,14 @@ export const SKILLS: Record<string, Skill> = {
     },
     defiance: {
         name: "Defiance",
-        description: "Rally nearby allies with a fierce battle cry, boosting armor but halving cooldowns for a time.",
+        description: "Rally nearby allies with a fierce battle cry, boosting armor and speeding actions for a time.",
         flavor: "\"Stand with me, and we shall not fall!\" - Kvel of the North",
-        manaCost: 12,
+        manaCost: 15,
         cooldown: 5000,
         type: "aoe_buff",
         targetType: "self",  // centered on caster
         range: 5,  // buff radius
-        duration: 20000,
+        duration: 10000,
         armorBonus: 3,
         damageType: "physical"
     },
