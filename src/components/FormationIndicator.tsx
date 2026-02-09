@@ -31,7 +31,7 @@ export function FormationIndicator({ units }: FormationIndicatorProps) {
     if (players.length <= 1) return null;
 
     return (
-        <div className="formation-indicator">
+        <div className="formation-indicator glass-panel">
             <div className="formation-label">Formation</div>
             <div className="formation-grid">
                 {players.map((unit, slotIndex) => {

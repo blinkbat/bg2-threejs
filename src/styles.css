@@ -1542,9 +1542,6 @@ html, body, #root {
     position: absolute;
     bottom: 12px;
     right: 12px;
-    background: rgba(0, 0, 0, 0.65);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 6px;
     padding: 6px 8px;
     pointer-events: none;
 }
@@ -1552,10 +1549,11 @@ html, body, #root {
 .formation-label {
     text-align: center;
     font-size: 9px;
-    color: #888;
+    color: #999;
     text-transform: uppercase;
     letter-spacing: 1px;
     margin-bottom: 4px;
+    font-family: monospace;
 }
 
 .formation-grid {
@@ -1570,18 +1568,19 @@ html, body, #root {
 .formation-slot {
     width: 18px;
     height: 18px;
-    border-radius: 3px;
+    border-radius: 4px;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 10px;
     font-weight: bold;
-    color: #000;
-    text-shadow: 0 0 2px rgba(255, 255, 255, 0.3);
+    color: #fff;
+    text-shadow: 1px 1px 2px #000;
+    border: 1px solid rgba(61, 61, 92, 0.5);
 }
 
 .formation-slot-dead {
-    opacity: 0.35;
+    opacity: 0.3;
     color: #666;
 }
 
