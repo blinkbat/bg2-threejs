@@ -325,6 +325,12 @@ export function useInputHandlers({
                             moveTargets.forEach(t => {
                                 const notBefore = t.delay ? moveNow + t.delay : undefined;
                                 mutableRefs.actionQueueRef.current[t.id] = { type: "move", targetX: t.x, targetZ: t.z, direct: useDirectMove, notBefore };
+                                // Clear attack target immediately so delayed rows don't keep
+                                // fighting while waiting for their notBefore to arrive
+                                if (unitGroups[t.id]) {
+                                    unitGroups[t.id].userData.attackTarget = null;
+                                    unitGroups[t.id].userData.pendingMove = true;
+                                }
                             });
                             if (stateRefs.pausedRef.current) {
                                 callbacks.addLog(`Move queued for ${moveTargets.length} unit${moveTargets.length !== 1 ? "s" : ""}.`, "#888");

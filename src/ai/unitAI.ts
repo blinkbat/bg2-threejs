@@ -368,7 +368,7 @@ export function runTargetingPhase(ctx: TargetingContext): void {
 
     // Determine if we should look for a new target
     const hasActivePath = pathsRef[unit.id]?.length > 0;
-    const isExecutingMoveCommand = hasActivePath && g.userData.attackTarget === null;
+    const isExecutingMoveCommand = (hasActivePath || g.userData.pendingMove) && g.userData.attackTarget === null;
     const canAutoTarget = shouldAutoTarget && !targetStillValid && !isExecutingMoveCommand;
     const canScan = canScanForTargets(unit.id, now);
 

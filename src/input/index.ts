@@ -13,6 +13,7 @@ import { executeSkill, clearTargetingMode, type SkillExecutionContext } from "..
 import { findClosestTargetByTeam } from "../combat/skills/helpers";
 import { hasStatusEffect } from "../combat/combatMath";
 import { getFormationPositions } from "../game/formation";
+import { MOVE_SPEED } from "../core/constants";
 import { disposeGeometry } from "../rendering/disposal";
 import { distanceToPoint } from "../game/geometry";
 
@@ -153,7 +154,10 @@ export function executeMove(
 ): void {
     targets.forEach(t => {
         assignPath(unitsRef, pathsRef, moveStartRef, t.id, t.x, t.z, direct);
-        if (unitsRef[t.id]) unitsRef[t.id].userData.attackTarget = null;
+        if (unitsRef[t.id]) {
+            unitsRef[t.id].userData.attackTarget = null;
+            unitsRef[t.id].userData.pendingMove = false;
+        }
     });
     setUnits(prev => prev.map(u => targets.some(t => t.id === u.id) ? { ...u, target: null } : u));
 }
@@ -345,23 +349,31 @@ export function buildMoveTargets(
     const positions = getFormationPositions(gx, gz, facingAngle, alive.length);
 
     // Slot assignment: use custom formation order, fallback to ID order
-    // Row stagger: back rows wait so they don't overtake the front
-    const ROW_DELAY = 400; // ms between rows
     const sorted = [...alive].sort((a, b) => {
         const ai = formationOrder.indexOf(a.id);
         const bi = formationOrder.indexOf(b.id);
         return (ai === -1 ? 100 + a.id : ai) - (bi === -1 ? 100 + b.id : bi);
     });
-    const result: { id: number; x: number; z: number; delay: number }[] = [];
 
+    // Distance-based stagger: units with shorter paths delay so everyone
+    // arrives at roughly the same time, preserving formation shape in transit
+    const UNITS_PER_SEC = MOVE_SPEED * 40;
+    let maxDist = 0;
+    const entries: { id: number; x: number; z: number; dist: number }[] = [];
     for (let i = 0; i < sorted.length; i++) {
         const pos = positions[i] ?? { x: gx, z: gz };
-        // Row from slot: 0→row0, 1-2→row1, 3-5→row2
-        const row = i === 0 ? 0 : i <= 2 ? 1 : 2;
-        result.push({ id: sorted[i].id, x: pos.x, z: pos.z, delay: row * ROW_DELAY });
+        const g = unitsRef[sorted[i].id];
+        const d = g ? Math.hypot(pos.x - g.position.x, pos.z - g.position.z) : 0;
+        entries.push({ id: sorted[i].id, x: pos.x, z: pos.z, dist: d });
+        if (d > maxDist) maxDist = d;
     }
 
-    return result;
+    return entries.map(e => ({
+        id: e.id,
+        x: e.x,
+        z: e.z,
+        delay: maxDist > 0 ? Math.round((maxDist - e.dist) / UNITS_PER_SEC * 1000) : 0,
+    }));
 }
 
 // =============================================================================
