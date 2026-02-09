@@ -318,9 +318,12 @@ export function useInputHandlers({
                                 gameRefs.current.moveMarkerStart = Date.now();
                             }
                             soundFns.playMove();
-                            const moveTargets = buildMoveTargets(stateRefs.selectedRef.current, stateRefs.unitsStateRef.current, gx, gz);
+                            const moveTargets = buildMoveTargets(stateRefs.selectedRef.current, stateRefs.unitsStateRef.current, unitGroups, gx, gz);
+                            const useDirectMove = moveTargets.length > 1;
+                            const moveNow = Date.now();
                             moveTargets.forEach(t => {
-                                mutableRefs.actionQueueRef.current[t.id] = { type: "move", targetX: t.x, targetZ: t.z };
+                                const notBefore = t.delay ? moveNow + t.delay : undefined;
+                                mutableRefs.actionQueueRef.current[t.id] = { type: "move", targetX: t.x, targetZ: t.z, direct: useDirectMove, notBefore };
                             });
                             if (stateRefs.pausedRef.current) {
                                 callbacks.addLog(`Move queued for ${moveTargets.length} unit${moveTargets.length !== 1 ? "s" : ""}.`, "#888");

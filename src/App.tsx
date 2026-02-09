@@ -44,6 +44,7 @@ import { UnitPanel } from "./components/UnitPanel";
 import { type HotbarAssignments, loadHotbarAssignments, saveHotbarAssignments } from "./components/SkillHotbar";
 import { CombatLog } from "./components/CombatLog";
 import { HUD } from "./components/HUD";
+import { FormationIndicator } from "./components/FormationIndicator";
 import { HelpModal } from "./components/HelpModal";
 import { SaveLoadModal } from "./components/SaveLoadModal";
 import { type SaveSlotData, SAVE_VERSION, saveGame, loadGame } from "./game/saveLoad";
@@ -66,13 +67,14 @@ interface PersistedPlayer {
 
 interface GameProps {
     onRestart: () => void;
-    onAreaTransition: (players: PersistedPlayer[], targetArea: AreaId, spawn: { x: number; z: number }) => void;
+    onAreaTransition: (players: PersistedPlayer[], targetArea: AreaId, spawn: { x: number; z: number }, direction?: "north" | "south" | "east" | "west") => void;
     onShowHelp: () => void;
     onCloseHelp: () => void;
     helpOpen: boolean;
     saveLoadOpen: boolean;
     persistedPlayers: PersistedPlayer[] | null;
     spawnPoint: { x: number; z: number } | null;
+    spawnDirection?: "north" | "south" | "east" | "west";
     onSaveClick: () => void;
     onLoadClick: () => void;
     gameStateRef: React.MutableRefObject<(() => SaveableGameState) | null>;
@@ -98,7 +100,7 @@ export interface SaveableGameState {
 
 function Game({
     onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, saveLoadOpen,
-    persistedPlayers, spawnPoint, onSaveClick, onLoadClick, gameStateRef,
+    persistedPlayers, spawnPoint, spawnDirection, onSaveClick, onLoadClick, gameStateRef,
     initialOpenedChests, initialOpenedSecretDoors, initialGold, initialKilledEnemies, onReady
 }: GameProps) {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -111,7 +113,7 @@ function Game({
         const area = getCurrentArea();
         const playerIds = Object.keys(UNIT_DATA).map(Number);
         const spawn = spawnPoint ?? DEFAULT_SPAWN_POINT;
-        const spawnPositions = findSpawnPositions(spawn.x, spawn.z, playerIds.length);
+        const spawnPositions = findSpawnPositions(spawn.x, spawn.z, playerIds.length, spawnDirection);
         const INITIAL_XP_VALUES = [0, 10, 15, 20, 25, 30];
 
         const players: Unit[] = playerIds.map((id, i) => {
@@ -162,7 +164,7 @@ function Game({
         const allUnits = [...players, ...enemies];
         initializeUnitIdCounter(allUnits);
         return allUnits;
-    }, [persistedPlayers, spawnPoint, initialKilledEnemies]);
+    }, [persistedPlayers, spawnPoint, spawnDirection, initialKilledEnemies]);
 
     // =============================================================================
     // REACT STATE
@@ -413,7 +415,7 @@ function Game({
             stats: u.stats, statPoints: u.statPoints, statusEffects: u.statusEffects,
             cantripUses: u.cantripUses
         }));
-        onAreaTransition(persistedState, transition.targetArea, transition.targetSpawn);
+        onAreaTransition(persistedState, transition.targetArea, transition.targetSpawn, transition.direction);
     }, [onAreaTransition]);
 
     // =============================================================================
@@ -815,6 +817,7 @@ function Game({
             {/* UI Components */}
             <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onPause={() => setPaused(true)} onShowHelp={onShowHelp} onRestart={onRestart} onSaveClick={onSaveClick} onLoadClick={onLoadClick} debug={debug} onToggleDebug={() => setDebug(d => !d)} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} onToggleFastMove={() => setFastMove(f => !f)} fastMoveEnabled={fastMove} otherModalOpen={helpOpen || saveLoadOpen} hasSelection={selectedIds.length > 0} />
             <CombatLog log={combatLog} />
+            <FormationIndicator units={units} />
             <PartyBar
                 units={units} selectedIds={selectedIds} onSelect={setSelectedIds} targetingMode={targetingMode}
                 consumableTargetingMode={consumableTargetingMode}
@@ -881,6 +884,7 @@ export default function App() {
     const [showHelp, setShowHelp] = useState(true);
     const [persistedPlayers, setPersistedPlayers] = useState<PersistedPlayer[] | null>(null);
     const [spawnPoint, setSpawnPoint] = useState<{ x: number; z: number } | null>(null);
+    const [spawnDirection, setSpawnDirection] = useState<"north" | "south" | "east" | "west" | undefined>(undefined);
     const [showSaveLoad, setShowSaveLoad] = useState(false);
     const [saveLoadMode, setSaveLoadMode] = useState<"save" | "load">("save");
     const [initialOpenedChests, setInitialOpenedChests] = useState<Set<string> | null>(null);
@@ -891,11 +895,12 @@ export default function App() {
 
     // Transition overlay state
     const [transitionOpacity, setTransitionOpacity] = useState(0);
-    const pendingTransition = useRef<{ players: PersistedPlayer[]; targetArea: AreaId; spawn: { x: number; z: number } } | null>(null);
+    const pendingTransition = useRef<{ players: PersistedPlayer[]; targetArea: AreaId; spawn: { x: number; z: number }; direction?: "north" | "south" | "east" | "west" } | null>(null);
 
     const handleFullRestart = () => {
         setPersistedPlayers(null);
         setSpawnPoint(null);
+        setSpawnDirection(undefined);
         setInitialOpenedChests(null);
         setInitialOpenedSecretDoors(null);
         setInitialGold(null);
@@ -905,18 +910,19 @@ export default function App() {
         setGameKey(k => k + 1);
     };
 
-    const handleAreaTransition = (players: PersistedPlayer[], targetArea: AreaId, spawn: { x: number; z: number }) => {
+    const handleAreaTransition = (players: PersistedPlayer[], targetArea: AreaId, spawn: { x: number; z: number }, direction?: "north" | "south" | "east" | "west") => {
         // Store pending transition and start fade to black
-        pendingTransition.current = { players, targetArea, spawn };
+        pendingTransition.current = { players, targetArea, spawn, direction };
         setTransitionOpacity(1);
         soundFns.playFootsteps();
 
         // After fade completes, execute the actual transition
         setTimeout(() => {
             if (pendingTransition.current) {
-                const { players: p, targetArea: area, spawn: s } = pendingTransition.current;
+                const { players: p, targetArea: area, spawn: s, direction: dir } = pendingTransition.current;
                 setPersistedPlayers(p);
                 setSpawnPoint(s);
+                setSpawnDirection(dir);
                 setCurrentArea(area);
                 setGameKey(k => k + 1);
             }
@@ -978,7 +984,7 @@ export default function App() {
                 key={gameKey} onRestart={handleFullRestart} onAreaTransition={handleAreaTransition}
                 onShowHelp={() => setShowHelp(true)} onCloseHelp={() => setShowHelp(false)}
                 helpOpen={showHelp} saveLoadOpen={showSaveLoad}
-                persistedPlayers={persistedPlayers} spawnPoint={spawnPoint}
+                persistedPlayers={persistedPlayers} spawnPoint={spawnPoint} spawnDirection={spawnDirection}
                 onSaveClick={() => { setSaveLoadMode("save"); setShowSaveLoad(true); }}
                 onLoadClick={() => { setSaveLoadMode("load"); setShowSaveLoad(true); }}
                 gameStateRef={gameStateRef}

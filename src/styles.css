@@ -1390,6 +1390,17 @@ html, body, #root {
     position: relative;
 }
 
+.portrait-fkey {
+    position: absolute;
+    top: 1px;
+    left: 3px;
+    font-size: 11px;
+    font-family: monospace;
+    color: white;
+    text-shadow: 1px 1px 1px #000;
+    line-height: 1;
+}
+
 .portrait-effects {
     position: absolute;
     bottom: 1px;
@@ -1522,6 +1533,56 @@ html, body, #root {
     background: rgba(80, 120, 80, 0.4);
     border-color: rgba(100, 200, 100, 0.3);
     color: #9f9;
+}
+
+/* -----------------------------------------------------------------------------
+   FORMATION INDICATOR
+   ----------------------------------------------------------------------------- */
+.formation-indicator {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    background: rgba(0, 0, 0, 0.65);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    padding: 6px 8px;
+    pointer-events: none;
+}
+
+.formation-label {
+    text-align: center;
+    font-size: 9px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+}
+
+.formation-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 20px);
+    grid-template-rows: repeat(3, 20px);
+    gap: 2px;
+    justify-items: center;
+    align-items: center;
+}
+
+.formation-slot {
+    width: 18px;
+    height: 18px;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: bold;
+    color: #000;
+    text-shadow: 0 0 2px rgba(255, 255, 255, 0.3);
+}
+
+.formation-slot-dead {
+    opacity: 0.35;
+    color: #666;
 }
 
 /* -----------------------------------------------------------------------------

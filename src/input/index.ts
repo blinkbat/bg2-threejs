@@ -12,6 +12,7 @@ import { pauseGameClock, resumeGameClock } from "../core/gameClock";
 import { executeSkill, clearTargetingMode, type SkillExecutionContext } from "../combat/skills";
 import { findClosestTargetByTeam } from "../combat/skills/helpers";
 import { hasStatusEffect } from "../combat/combatMath";
+import { getFormationPositions } from "../game/formation";
 import { disposeGeometry } from "../rendering/disposal";
 import { distanceToPoint } from "../game/geometry";
 
@@ -59,7 +60,7 @@ export interface InputSetters {
 // Note: attacks are just skills now - no separate "attack" type
 export type QueuedAction =
     | { type: "skill"; skill: Skill; targetX: number; targetZ: number; targetId?: number }
-    | { type: "move"; targetX: number; targetZ: number }
+    | { type: "move"; targetX: number; targetZ: number; direct?: boolean; notBefore?: number }
     | { type: "consumable"; itemId: string; targetId?: number };
 
 // Map from unitId to their queued action
@@ -125,13 +126,19 @@ export function assignPath(
     moveStartRef: Record<number, { time: number; x: number; z: number }>,
     unitId: number,
     targetX: number,
-    targetZ: number
+    targetZ: number,
+    direct: boolean = false
 ): void {
     const g = unitsRef[unitId];
     if (!g) return;
-    const path = findPath(g.position.x, g.position.z, targetX, targetZ);
-    pathsRef[unitId] = path ? path.slice(1) : [];
-    if (path && path.length > 0) {
+    if (direct) {
+        // Direct movement — skip A*, just walk straight to target
+        pathsRef[unitId] = [{ x: targetX, z: targetZ }];
+    } else {
+        const path = findPath(g.position.x, g.position.z, targetX, targetZ);
+        pathsRef[unitId] = path ? path.slice(1) : [];
+    }
+    if (pathsRef[unitId].length > 0) {
         moveStartRef[unitId] = { time: Date.now(), x: g.position.x, z: g.position.z };
     }
 }
@@ -141,10 +148,11 @@ export function executeMove(
     pathsRef: Record<number, { x: number; z: number }[]>,
     moveStartRef: Record<number, { time: number; x: number; z: number }>,
     setUnits: React.Dispatch<React.SetStateAction<Unit[]>>,
-    targets: { id: number; x: number; z: number }[]
+    targets: { id: number; x: number; z: number }[],
+    direct: boolean = false
 ): void {
     targets.forEach(t => {
-        assignPath(unitsRef, pathsRef, moveStartRef, t.id, t.x, t.z);
+        assignPath(unitsRef, pathsRef, moveStartRef, t.id, t.x, t.z, direct);
         if (unitsRef[t.id]) unitsRef[t.id].userData.attackTarget = null;
     });
     setUnits(prev => prev.map(u => targets.some(t => t.id === u.id) ? { ...u, target: null } : u));
@@ -256,8 +264,9 @@ export function processActionQueue(
             executeSkill(skillCtx, unitId, action.skill, action.targetX, action.targetZ, action.targetId);
             executedUnits.push(unitId);
         } else if (action.type === "move") {
-            // Move can execute immediately
-            executeMove(unitsRef, pathsRef, moveStartRef, setUnits, [{ id: unitId, x: action.targetX, z: action.targetZ }]);
+            // Respect row stagger delay for formation moves
+            if (action.notBefore && now < action.notBefore) continue;
+            executeMove(unitsRef, pathsRef, moveStartRef, setUnits, [{ id: unitId, x: action.targetX, z: action.targetZ }], action.direct);
             executedUnits.push(unitId);
         } else if (action.type === "consumable") {
             const user = skillCtx.unitsStateRef.current.find(u => u.id === unitId);
@@ -301,14 +310,53 @@ export function processActionQueue(
 export function buildMoveTargets(
     selectedIds: number[],
     unitsState: Unit[],
+    unitsRef: Record<number, UnitGroup>,
     gx: number,
     gz: number
-): { id: number; x: number; z: number }[] {
-    // All selected alive units move to the clicked point
-    return selectedIds
+): { id: number; x: number; z: number; delay: number }[] {
+    const alive = selectedIds
         .map(uid => unitsState.find(u => u.id === uid))
-        .filter((u): u is Unit => u !== undefined && u.hp > 0)
-        .map(u => ({ id: u.id, x: gx, z: gz }));
+        .filter((u): u is Unit => u !== undefined && u.hp > 0);
+
+    // Single unit — move directly, no formation
+    if (alive.length <= 1) {
+        return alive.map(u => ({ id: u.id, x: gx, z: gz, delay: 0 }));
+    }
+
+    // Compute party center from live 3D positions
+    let cx = 0, cz = 0, count = 0;
+    for (const u of alive) {
+        const g = unitsRef[u.id];
+        if (g) { cx += g.position.x; cz += g.position.z; count++; }
+    }
+    if (count > 0) { cx /= count; cz /= count; }
+
+    // If click is very close to party center, skip formation (angle is unstable)
+    const dx = gx - cx;
+    const dz = gz - cz;
+    const dist = Math.hypot(dx, dz);
+    if (dist < 1.5) {
+        return alive.map(u => ({ id: u.id, x: gx, z: gz, delay: 0 }));
+    }
+
+    // Facing angle: from party center toward clicked point
+    const facingAngle = Math.atan2(dz, dx);
+    const positions = getFormationPositions(gx, gz, facingAngle, alive.length);
+
+    // Fixed slot assignment: sort by unit ID so Barbarian (1) gets tip, etc.
+    // Row stagger: back rows wait so they don't overtake the front
+    const ROW_DELAY = 400; // ms between rows
+    const sorted = [...alive].sort((a, b) => a.id - b.id);
+    const result: { id: number; x: number; z: number; delay: number }[] = [];
+
+    for (let i = 0; i < sorted.length; i++) {
+        const pos = positions[i] ?? { x: gx, z: gz };
+        // Row from slot: 0→row0, 1-2→row1, 3-5→row2
+        const row = i === 0 ? 0 : i <= 2 ? 1 : 2;
+        result.push({ id: sorted[i].id, x: pos.x, z: pos.z, delay: row * ROW_DELAY });
+    }
+
+    return result;
 }
 
 // =============================================================================

@@ -107,6 +107,7 @@ export function PartyBar({
                             </div>
                         )}
                         <div className="portrait-icon" style={{ background: data.color }}>
+                            <span className="portrait-fkey">F{playerUnits.indexOf(unit) + 1}</span>
                             {data.name[0]}
                             {hasUnspentPoints && <span className="levelup-badge">+</span>}
                             {unit.statusEffects && unit.statusEffects.length > 0 && (

@@ -459,8 +459,12 @@ export function runPathFollowingPhase(ctx: PathContext): { targetX: number; targ
         }
 
         // Stuck detection - give up if barely moving or jittering
+        // Skip for player move commands (no attack target) to preserve formation movement
+        const isPlayerMoveCommand = isPlayer && g.userData.attackTarget === null;
         const moveStart = moveStartRef[unit.id];
-        const stuckResult = checkIfStuck(unit.id, g.position.x, g.position.z, moveStart, now);
+        const stuckResult = isPlayerMoveCommand
+            ? { isStuck: false, isReallyStuck: false, isJittering: false }
+            : checkIfStuck(unit.id, g.position.x, g.position.z, moveStart, now);
 
         if (stuckResult.isReallyStuck || stuckResult.isStuck || stuckResult.isJittering) {
             pathsRef[unit.id] = [];
@@ -493,9 +497,14 @@ export interface MovementContext {
 
 /**
  * Calculate avoidance vector from nearby units.
+ * Disabled for player units on move commands (no attack target) to preserve formation.
  */
 export function calculateAvoidance(ctx: MovementContext, desiredX: number, desiredZ: number): { avoidX: number; avoidZ: number } {
     const { unit, g, unitsRef } = ctx;
+
+    // Player move commands: only hard separation (no steering) to preserve formation
+    const formationMove = unit.team === "player" && g.userData.attackTarget === null;
+
     const myRadius = getUnitRadius(unit);
     let avoidX = 0, avoidZ = 0;
 
@@ -513,23 +522,24 @@ export function calculateAvoidance(ctx: MovementContext, desiredX: number, desir
         const oDist = Math.hypot(ox, oz);
 
         if (oDist < combinedRadius * AVOIDANCE_RANGE_MULTIPLIER && oDist > MOVEMENT_MIN_MAGNITUDE) {
-            const dot = (ox * desiredX + oz * desiredZ) / oDist;
-
             // Hard separation when overlapping - push directly away
             if (oDist < combinedRadius) {
                 const sepStrength = (combinedRadius - oDist) / combinedRadius;
                 avoidX -= (ox / oDist) * sepStrength * AVOIDANCE_OVERLAP_STRENGTH;
                 avoidZ -= (oz / oDist) * sepStrength * AVOIDANCE_OVERLAP_STRENGTH;
             }
-            // Steering when unit is ahead and close
-            else if (dot > AVOIDANCE_STEER_THRESHOLD) {
-                const steerStrength = (combinedRadius * AVOIDANCE_RANGE_MULTIPLIER - oDist) / (combinedRadius * AVOIDANCE_STEER_STRENGTH);
-                // Use XOR of unit IDs to determine which unit steers which way
-                const steerRight = (unit.id ^ Number(otherId)) % 2 === 0;
-                const perpX = steerRight ? -desiredZ : desiredZ;
-                const perpZ = steerRight ? desiredX : -desiredX;
-                avoidX += perpX * steerStrength * AVOIDANCE_STEER_STRENGTH;
-                avoidZ += perpZ * steerStrength * AVOIDANCE_STEER_STRENGTH;
+            // Steering when unit is ahead and close (skip for formation moves)
+            else if (!formationMove) {
+                const dot = (ox * desiredX + oz * desiredZ) / oDist;
+                if (dot > AVOIDANCE_STEER_THRESHOLD) {
+                    const steerStrength = (combinedRadius * AVOIDANCE_RANGE_MULTIPLIER - oDist) / (combinedRadius * AVOIDANCE_STEER_STRENGTH);
+                    // Use XOR of unit IDs to determine which unit steers which way
+                    const steerRight = (unit.id ^ Number(otherId)) % 2 === 0;
+                    const perpX = steerRight ? -desiredZ : desiredZ;
+                    const perpZ = steerRight ? desiredX : -desiredX;
+                    avoidX += perpX * steerStrength * AVOIDANCE_STEER_STRENGTH;
+                    avoidZ += perpZ * steerStrength * AVOIDANCE_STEER_STRENGTH;
+                }
             }
         }
     }
