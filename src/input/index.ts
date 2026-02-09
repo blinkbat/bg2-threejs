@@ -323,8 +323,8 @@ export function buildMoveTargets(
         .map(uid => unitsState.find(u => u.id === uid))
         .filter((u): u is Unit => u !== undefined && u.hp > 0);
 
-    // Single unit — move directly, no formation
-    if (alive.length <= 1) {
+    // Fewer than 3 units — move directly, no formation
+    if (alive.length < 3) {
         return alive.map(u => ({ id: u.id, x: gx, z: gz, delay: 0 }));
     }
 
@@ -355,24 +355,23 @@ export function buildMoveTargets(
         return (ai === -1 ? 100 + a.id : ai) - (bi === -1 ? 100 + b.id : bi);
     });
 
-    // Distance-based stagger: units with shorter paths delay so everyone
-    // arrives at roughly the same time, preserving formation shape in transit
+    // Distance-based stagger: back-row units with shorter paths delay so the
+    // formation arrives together. Front unit (slot 0) is the baseline — never waits.
     const UNITS_PER_SEC = MOVE_SPEED * 40;
-    let maxDist = 0;
     const entries: { id: number; x: number; z: number; dist: number }[] = [];
     for (let i = 0; i < sorted.length; i++) {
         const pos = positions[i] ?? { x: gx, z: gz };
         const g = unitsRef[sorted[i].id];
         const d = g ? Math.hypot(pos.x - g.position.x, pos.z - g.position.z) : 0;
         entries.push({ id: sorted[i].id, x: pos.x, z: pos.z, dist: d });
-        if (d > maxDist) maxDist = d;
     }
 
+    const frontDist = entries[0].dist;
     return entries.map(e => ({
         id: e.id,
         x: e.x,
         z: e.z,
-        delay: maxDist > 0 ? Math.round((maxDist - e.dist) / UNITS_PER_SEC * 1000) : 0,
+        delay: frontDist > 0 ? Math.max(0, Math.round((frontDist - e.dist) / UNITS_PER_SEC * 1000)) : 0,
     }));
 }
 

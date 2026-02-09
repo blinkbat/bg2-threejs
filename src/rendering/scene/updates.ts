@@ -52,6 +52,12 @@ export function updateWater(_waterMesh: THREE.Mesh | null, _time: number): void 
 export function updateBillboards(billboards: THREE.Mesh[], camera: THREE.Camera): void {
     for (const billboard of billboards) {
         billboard.quaternion.copy(camera.quaternion);
+        const group = billboard.parent as UnitGroup | null;
+        if (group?.userData?.facingRight === false) {
+            billboard.scale.x = -Math.abs(billboard.scale.x);
+        } else {
+            billboard.scale.x = Math.abs(billboard.scale.x);
+        }
     }
 }
 

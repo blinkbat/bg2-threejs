@@ -19,7 +19,7 @@ import { getAliveUnitsInRange } from "../combat/damageEffects";
 import { isEnemyKiting, clearEnemyKiting } from "../game/enemyState";
 
 // Re-export from split modules
-export { updateDamageTexts, updateHitFlash, updatePoisonVisuals, updateEnergyShieldVisuals, updateFogOfWar, resetFogCache } from "./visuals";
+export { updateDamageTexts, updateHitFlash, updatePoisonVisuals, updateEnergyShieldVisuals, updateFogOfWar, resetFogCache, updateSpriteFacing, resetSpriteFacing } from "./visuals";
 export { processStatusEffects } from "./statusEffects";
 export { updateProjectiles } from "./projectiles";
 export { spawnSwingIndicator, updateSwingAnimations } from "./swingAnimations";

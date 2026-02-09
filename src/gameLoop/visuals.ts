@@ -235,3 +235,81 @@ export function updateFogOfWar(
         g.visible = u.hp > 0 && vis === 2 && !isKrakenFullySubmerged(u.id);
     });
 }
+
+// =============================================================================
+// SPRITE FACING DIRECTION
+// =============================================================================
+
+// Track previous X position and last flip time per unit
+const prevX = new Map<number, number>();
+const prevZ = new Map<number, number>();
+const lastFlipTime = new Map<number, number>();
+
+const FACING_MOVE_THRESHOLD = 0.01;
+const FACING_FLIP_COOLDOWN = 300; // ms — prevent jittery flips
+
+/**
+ * Update facingRight on each UnitGroup based on movement direction or attack target position.
+ * Movement takes priority; when idle, face toward attack target.
+ * Facing changes are rate-limited to prevent jitter.
+ */
+export function updateSpriteFacing(
+    unitsState: Unit[],
+    unitsRef: Record<number, UnitGroup>
+): void {
+    const now = Date.now();
+
+    for (const unit of unitsState) {
+        if (unit.hp <= 0) continue;
+        const g = unitsRef[unit.id];
+        if (!g) continue;
+
+        const curX = g.position.x;
+        const lastX = prevX.get(unit.id);
+        prevX.set(unit.id, curX);
+
+        let wantRight: boolean | undefined;
+
+        if (lastX !== undefined) {
+            const dx = curX - lastX;
+            const dz = g.position.z - (prevZ.get(unit.id) ?? g.position.z);
+            // Project onto iso camera right vector (+X, -Z)
+            const screenDx = dx - dz;
+            if (Math.abs(screenDx) > FACING_MOVE_THRESHOLD) {
+                wantRight = screenDx > 0;
+            }
+        }
+        prevZ.set(unit.id, g.position.z);
+
+        // Not moving — face attack target if any
+        if (wantRight === undefined && g.userData.attackTarget !== null) {
+            const targetG = unitsRef[g.userData.attackTarget];
+            if (targetG) {
+                const dx = targetG.position.x - curX;
+                const dz = targetG.position.z - g.position.z;
+                const screenDx = dx - dz;
+                if (Math.abs(screenDx) > 0.1) {
+                    wantRight = screenDx > 0;
+                }
+            }
+        }
+
+        // Apply with cooldown
+        if (wantRight !== undefined && wantRight !== g.userData.facingRight) {
+            const last = lastFlipTime.get(unit.id) ?? 0;
+            if (now - last >= FACING_FLIP_COOLDOWN) {
+                g.userData.facingRight = wantRight;
+                lastFlipTime.set(unit.id, now);
+            }
+        }
+    }
+}
+
+/**
+ * Clear cached previous positions (call on area transition / game restart).
+ */
+export function resetSpriteFacing(): void {
+    prevX.clear();
+    prevZ.clear();
+    lastFlipTime.clear();
+}

@@ -31,7 +31,8 @@ import {
     processGlares,
     updateLeaps,
     updateTentacles,
-    updateSubmergedKrakens
+    updateSubmergedKrakens,
+    updateSpriteFacing
 } from "../gameLoop";
 import type { ActionQueue } from "../input";
 import type { ThreeSceneState, GameRefs } from "./useThreeScene";
@@ -446,6 +447,9 @@ export function useGameLoop({
 
             // Water animation
             updateWater(waterMesh, now);
+
+            // Sprite facing direction (before billboard rotation so scale is current)
+            updateSpriteFacing(stateRefs.unitsStateRef.current, unitGroups);
 
             // Billboard rotation
             updateBillboards(billboards, camera);
