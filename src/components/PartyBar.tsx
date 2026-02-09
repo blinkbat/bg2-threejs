@@ -267,7 +267,7 @@ export function PartyBar({
                     )}
                 </div>
                 <div className="progress-bar-sm portrait-hp">
-                    <div className="progress-fill" style={{ width: `${Math.max(0, hpPct)}%`, background: hpColor }} />
+                    <div className="progress-fill" style={{ width: `${Math.max(0, hpPct)}%`, backgroundColor: hpColor }} />
                 </div>
                 <div className="portrait-name">{data.name}</div>
 

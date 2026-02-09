@@ -11,7 +11,7 @@ import { UNIT_DATA, getEffectiveUnitData } from "../../game/playerUnits";
 export type { SkillExecutionContext } from "./types";
 
 // Re-export helpers
-export { findClosestUnit, findClosestTargetByTeam, consumeSkill } from "./helpers";
+export { findClosestUnit, findClosestTargetByTeam, findAndValidateAllyTarget, findAndValidateEnemyTarget, consumeSkill } from "./helpers";
 
 // Re-export damage skills
 export {

@@ -908,8 +908,8 @@ export default function App() {
     const [initialKilledEnemies, setInitialKilledEnemies] = useState<Set<string> | null>(null);
     const gameStateRef = useRef<(() => SaveableGameState) | null>(null);
 
-    // Transition overlay state
-    const [transitionOpacity, setTransitionOpacity] = useState(0);
+    // Transition overlay state (starts opaque so initial load fades in from black)
+    const [transitionOpacity, setTransitionOpacity] = useState(1);
     const pendingTransition = useRef<{ players: PersistedPlayer[]; targetArea: AreaId; spawn: { x: number; z: number }; direction?: "north" | "south" | "east" | "west" } | null>(null);
 
     const handleFullRestart = () => {

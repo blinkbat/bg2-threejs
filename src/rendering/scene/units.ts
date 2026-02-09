@@ -3,7 +3,7 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitGroup } from "../../core/types";
+import type { Unit, UnitGroup, EnemyStats } from "../../core/types";
 import { getUnitStats } from "../../game/units";
 
 // Import player sprite textures
@@ -58,60 +58,30 @@ let amoebaSmTexture: THREE.Texture;
 let krakenTentacleTexture: THREE.Texture;
 let krakenBodyTexture: THREE.Texture;
 
-function ensureTexturesLoaded(): void {
+function loadFilteredTexture(url: string): THREE.Texture {
+    const tex = new THREE.TextureLoader().load(url);
+    tex.magFilter = THREE.LinearFilter;
+    tex.minFilter = THREE.LinearFilter;
+    return tex;
+}
+
+/** Eagerly load all sprite textures. Call early to avoid first-frame pop-in. */
+export function ensureTexturesLoaded(): void {
     if (texturesLoaded) return;
 
-    wizardTexture = new THREE.TextureLoader().load(wizardSpriteUrl);
-    wizardTexture.magFilter = THREE.LinearFilter;
-    wizardTexture.minFilter = THREE.LinearFilter;
-
-    barbarianTexture = new THREE.TextureLoader().load(barbarianSpriteUrl);
-    barbarianTexture.magFilter = THREE.LinearFilter;
-    barbarianTexture.minFilter = THREE.LinearFilter;
-
-    clericTexture = new THREE.TextureLoader().load(clericSpriteUrl);
-    clericTexture.magFilter = THREE.LinearFilter;
-    clericTexture.minFilter = THREE.LinearFilter;
-
-    paladinTexture = new THREE.TextureLoader().load(paladinSpriteUrl);
-    paladinTexture.magFilter = THREE.LinearFilter;
-    paladinTexture.minFilter = THREE.LinearFilter;
-
-    thiefTexture = new THREE.TextureLoader().load(thiefSpriteUrl);
-    thiefTexture.magFilter = THREE.LinearFilter;
-    thiefTexture.minFilter = THREE.LinearFilter;
-
-    monkTexture = new THREE.TextureLoader().load(monkSpriteUrl);
-    monkTexture.magFilter = THREE.LinearFilter;
-    monkTexture.minFilter = THREE.LinearFilter;
-
-    vampireBatTexture = new THREE.TextureLoader().load(vampireBatSpriteUrl);
-    vampireBatTexture.magFilter = THREE.LinearFilter;
-    vampireBatTexture.minFilter = THREE.LinearFilter;
-
-    acidSlugTexture = new THREE.TextureLoader().load(acidSlugSpriteUrl);
-    acidSlugTexture.magFilter = THREE.LinearFilter;
-    acidSlugTexture.minFilter = THREE.LinearFilter;
-
-    amoebaLgTexture = new THREE.TextureLoader().load(amoebaLgSpriteUrl);
-    amoebaLgTexture.magFilter = THREE.LinearFilter;
-    amoebaLgTexture.minFilter = THREE.LinearFilter;
-
-    amoebaMdTexture = new THREE.TextureLoader().load(amoebaMdSpriteUrl);
-    amoebaMdTexture.magFilter = THREE.LinearFilter;
-    amoebaMdTexture.minFilter = THREE.LinearFilter;
-
-    amoebaSmTexture = new THREE.TextureLoader().load(amoebaSmSpriteUrl);
-    amoebaSmTexture.magFilter = THREE.LinearFilter;
-    amoebaSmTexture.minFilter = THREE.LinearFilter;
-
-    krakenTentacleTexture = new THREE.TextureLoader().load(krakenTentacleSpriteUrl);
-    krakenTentacleTexture.magFilter = THREE.LinearFilter;
-    krakenTentacleTexture.minFilter = THREE.LinearFilter;
-
-    krakenBodyTexture = new THREE.TextureLoader().load(krakenBodySpriteUrl);
-    krakenBodyTexture.magFilter = THREE.LinearFilter;
-    krakenBodyTexture.minFilter = THREE.LinearFilter;
+    wizardTexture = loadFilteredTexture(wizardSpriteUrl);
+    barbarianTexture = loadFilteredTexture(barbarianSpriteUrl);
+    clericTexture = loadFilteredTexture(clericSpriteUrl);
+    paladinTexture = loadFilteredTexture(paladinSpriteUrl);
+    thiefTexture = loadFilteredTexture(thiefSpriteUrl);
+    monkTexture = loadFilteredTexture(monkSpriteUrl);
+    vampireBatTexture = loadFilteredTexture(vampireBatSpriteUrl);
+    acidSlugTexture = loadFilteredTexture(acidSlugSpriteUrl);
+    amoebaLgTexture = loadFilteredTexture(amoebaLgSpriteUrl);
+    amoebaMdTexture = loadFilteredTexture(amoebaMdSpriteUrl);
+    amoebaSmTexture = loadFilteredTexture(amoebaSmSpriteUrl);
+    krakenTentacleTexture = loadFilteredTexture(krakenTentacleSpriteUrl);
+    krakenBodyTexture = loadFilteredTexture(krakenBodySpriteUrl);
 
     texturesLoaded = true;
 }
@@ -132,7 +102,7 @@ interface SpriteConfig {
 function getSpriteConfigs(): Record<number, SpriteConfig> {
     ensureTexturesLoaded();
     return {
-        1: { texture: barbarianTexture, width: 157, height: 195, offsetX: -0.1, brightness: 0.07 },  // Barbarian
+        1: { texture: barbarianTexture, width: 196, height: 195, offsetX: -0.1, brightness: 0.07 },  // Barbarian
         2: { texture: paladinTexture, width: 128, height: 196, brightness: 0.07 },    // Paladin
         3: { texture: thiefTexture, width: 128, height: 196, offsetX: 0.1, brightness: 0.07 },  // Thief
         4: { texture: wizardTexture, width: 110, height: 196, brightness: 0.07 },     // Wizard
@@ -174,16 +144,38 @@ function getEnemySpriteConfigs(): Record<string, SpriteConfig> {
     return {
         bat: { texture: vampireBatTexture, width: 128, height: 128, spriteHeight: 1.4, color: 0xd2b48c, brightness: 0.2 },
         acid_slug: { texture: acidSlugTexture, width: 160, height: 128, spriteHeight: 1.4, brightness: 0.15, offsetY: -0.3, shadowSize: 0.6 },
-        giant_amoeba_lg: { texture: amoebaLgTexture, width: 128, height: 128, spriteHeight: 2.4, opacity: 0.7 },
-        giant_amoeba_md: { texture: amoebaMdTexture, width: 128, height: 128, spriteHeight: 1.7, opacity: 0.7 },
-        giant_amoeba_sm: { texture: amoebaSmTexture, width: 128, height: 128, spriteHeight: 1.2, opacity: 0.7 },
+        giant_amoeba_lg: { texture: amoebaLgTexture, width: 128, height: 128, spriteHeight: 2.4, opacity: 0.55 },
+        giant_amoeba_md: { texture: amoebaMdTexture, width: 128, height: 128, spriteHeight: 1.7, opacity: 0.55 },
+        giant_amoeba_sm: { texture: amoebaSmTexture, width: 128, height: 128, spriteHeight: 1.2, opacity: 0.55 },
         kraken_tentacle: { texture: krakenTentacleTexture, width: 80, height: 128, spriteHeight: 2.0, color: 0xd8c0e8 },
         baby_kraken: { texture: krakenBodyTexture, width: 128, height: 128, spriteHeight: 2.5, color: 0xd8c0e8 },
     };
 }
 
 // =============================================================================
-// UNIT MESH CREATION
+// SPRITE CONFIG RESOLUTION
+// =============================================================================
+
+function resolveSpriteConfig(unit: Unit): SpriteConfig | undefined {
+    const spriteConfigs = getSpriteConfigs();
+    const enemySpriteConfigs = getEnemySpriteConfigs();
+
+    // Player sprites are keyed by unit ID
+    if (spriteConfigs[unit.id]) return spriteConfigs[unit.id];
+
+    // Enemy sprites keyed by type (amoebas vary by split count)
+    let enemySpriteKey: string | undefined = unit.enemyType;
+    if (unit.enemyType === "giant_amoeba") {
+        const splitCount = unit.splitCount ?? 0;
+        if (splitCount === 0) enemySpriteKey = "giant_amoeba_lg";
+        else if (splitCount === 1) enemySpriteKey = "giant_amoeba_md";
+        else enemySpriteKey = "giant_amoeba_sm";
+    }
+    return enemySpriteKey ? enemySpriteConfigs[enemySpriteKey] : undefined;
+}
+
+// =============================================================================
+// SHARED UNIT GROUP BUILDER
 // =============================================================================
 
 interface UnitCreationResult {
@@ -196,12 +188,14 @@ interface UnitCreationResult {
 }
 
 /**
- * Create a unit's scene group with mesh, selection ring, and other indicators.
+ * Build a complete unit group with mesh, shadow, light, rings, and shield indicator.
+ * Single source of truth for unit visual creation — used by both initial scene setup
+ * and dynamic spawning.
  */
-export function createUnitSceneGroup(
+function buildUnitGroup(
     scene: THREE.Scene,
     unit: Unit,
-    billboards: THREE.Mesh[]
+    billboards?: THREE.Mesh[]
 ): UnitCreationResult {
     const isPlayer = unit.team === "player";
     const data = getUnitStats(unit);
@@ -213,22 +207,12 @@ export function createUnitSceneGroup(
     const boxW = 0.6 * size;
     const isAmoeba = unit.enemyType === "giant_amoeba";
 
-    const spriteConfigs = getSpriteConfigs();
-    const enemySpriteConfigs = getEnemySpriteConfigs();
-    // For amoebas, select sprite based on split count: lg for largest, md for medium, sm for smallest
-    let enemySpriteKey: string | undefined = unit.enemyType;
-    if (unit.enemyType === "giant_amoeba") {
-        const splitCount = unit.splitCount ?? 0;
-        if (splitCount === 0) enemySpriteKey = "giant_amoeba_lg";
-        else if (splitCount === 1) enemySpriteKey = "giant_amoeba_md";
-        else enemySpriteKey = "giant_amoeba_sm";
-    }
-    const spriteConfig = spriteConfigs[unit.id] || (enemySpriteKey ? enemySpriteConfigs[enemySpriteKey] : undefined);
+    const spriteConfig = resolveSpriteConfig(unit);
 
     let unitMesh: THREE.Mesh;
     let billboard: THREE.Mesh | undefined;
 
-    if (spriteConfig) {
+    if (spriteConfig && billboards) {
         // Billboard plane that faces the camera and responds to lighting
         const spriteHeight = spriteConfig.spriteHeight ?? 1.8;
         const spriteWidth = spriteHeight * (spriteConfig.width / spriteConfig.height);
@@ -274,7 +258,7 @@ export function createUnitSceneGroup(
             metalness: isAmoeba ? 0.1 : 0.5,
             roughness: isAmoeba ? 0.2 : 0.4,
             transparent: isAmoeba,
-            opacity: isAmoeba ? 0.6 : 1.0
+            opacity: isAmoeba ? 0.45 : 1.0
         });
         const box = new THREE.Mesh(new THREE.BoxGeometry(boxW, boxH, boxW), boxMat);
         box.position.y = boxH / 2;
@@ -365,12 +349,24 @@ export function createUnitSceneGroup(
 }
 
 // =============================================================================
-// ADD UNIT TO SCENE (for dynamically spawned units)
+// PUBLIC API
 // =============================================================================
 
 /**
+ * Create a unit's scene group with mesh, selection ring, and other indicators.
+ * Used during initial area setup for all units.
+ */
+export function createUnitSceneGroup(
+    scene: THREE.Scene,
+    unit: Unit,
+    billboards: THREE.Mesh[]
+): UnitCreationResult {
+    return buildUnitGroup(scene, unit, billboards);
+}
+
+/**
  * Dynamically add a unit to the scene (for spawned units like broodlings).
- * Returns the group and mesh so they can be tracked in refs.
+ * Wires the created meshes into the provided ref dictionaries.
  */
 export function addUnitToScene(
     scene: THREE.Scene,
@@ -384,152 +380,19 @@ export function addUnitToScene(
     maxHp: Record<number, number>,
     billboards?: THREE.Mesh[]
 ): void {
-    const isPlayer = unit.team === "player";
+    const result = buildUnitGroup(scene, unit, billboards);
     const data = getUnitStats(unit);
-    const baseSize = (!isPlayer && "size" in data && data.size) ? data.size : 1;
-    const size = getEffectiveSize(unit, baseSize);
-    const group = new THREE.Group();
 
-    const boxH = isPlayer ? 1 : (size > 1 ? 1.8 : 0.6);
-    const boxW = 0.6 * size;
-    const isAmoeba = unit.enemyType === "giant_amoeba";
-    const isTentacle = unit.enemyType === "kraken_tentacle";
-
-    // Check for sprite config (for amoebas, select based on split count)
-    const enemySpriteConfigs = getEnemySpriteConfigs();
-    let enemySpriteKey: string | undefined = unit.enemyType;
-    if (unit.enemyType === "giant_amoeba") {
-        const splitCount = unit.splitCount ?? 0;
-        if (splitCount === 0) enemySpriteKey = "giant_amoeba_lg";
-        else if (splitCount === 1) enemySpriteKey = "giant_amoeba_md";
-        else enemySpriteKey = "giant_amoeba_sm";
-    }
-    const spriteConfig = enemySpriteKey ? enemySpriteConfigs[enemySpriteKey] : undefined;
-
-    let unitMesh: THREE.Mesh;
-    if (spriteConfig && billboards) {
-        // Billboard sprite
-        const spriteHeight = spriteConfig.spriteHeight ?? 1.8;
-        const spriteWidth = spriteHeight * (spriteConfig.width / spriteConfig.height);
-        const planeMat = new THREE.MeshStandardMaterial({
-            map: spriteConfig.texture,
-            color: spriteConfig.color ?? 0xffffff,
-            transparent: true,
-            alphaTest: 0.01,
-            opacity: spriteConfig.opacity ?? 1,
-            side: THREE.DoubleSide,
-            metalness: 0.3,
-            roughness: 0.6,
-            emissive: spriteConfig.brightness ? (spriteConfig.color ?? 0xffffff) : undefined,
-            emissiveIntensity: spriteConfig.brightness ?? 0,
-            emissiveMap: spriteConfig.brightness ? spriteConfig.texture : undefined,
-        });
-        applySpriteEdgeBlur(planeMat, spriteConfig.width, spriteConfig.height);
-        const plane = new THREE.Mesh(new THREE.PlaneGeometry(spriteWidth, spriteHeight), planeMat);
-        plane.position.y = spriteHeight / 2 + (spriteConfig.offsetY ?? 0);
-        plane.position.x = spriteConfig.offsetX ?? 0;
-        plane.userData.unitId = unit.id;
-        plane.userData.isBillboard = true;
-        group.add(plane);
-        billboards.push(plane);
-        unitMesh = plane;
-    } else if (isTentacle) {
-        // Tentacles use cone geometry (pointing up)
-        const coneMat = new THREE.MeshStandardMaterial({
-            color: data.color,
-            metalness: 0.3,
-            roughness: 0.6
-        });
-        const cone = new THREE.Mesh(new THREE.ConeGeometry(boxW * 0.5, boxH * 1.5, 8), coneMat);
-        cone.position.y = boxH * 0.75;
-        cone.userData.unitId = unit.id;
-        group.add(cone);
-        unitMesh = cone;
-    } else {
-        const boxMat = new THREE.MeshStandardMaterial({
-            color: data.color,
-            metalness: isAmoeba ? 0.1 : 0.5,
-            roughness: isAmoeba ? 0.2 : 0.4,
-            transparent: isAmoeba,
-            opacity: isAmoeba ? 0.6 : 1.0
-        });
-        const box = new THREE.Mesh(new THREE.BoxGeometry(boxW, boxH, boxW), boxMat);
-        box.position.y = boxH / 2;
-        box.userData.unitId = unit.id;
-        group.add(box);
-        unitMesh = box;
-    }
-    unitMeshes[unit.id] = unitMesh;
+    unitGroups[unit.id] = result.group;
+    unitMeshes[unit.id] = result.mesh;
     unitOriginalColors[unit.id] = new THREE.Color(data.color);
+    selectRings[unit.id] = result.selectRing;
+    maxHp[unit.id] = (data as EnemyStats).maxHp ?? data.maxHp;
 
-    // Determine fly height early (needed for shadow positioning)
-    const isFlying = !isPlayer && "flying" in data && data.flying;
-    const flyHeight = isFlying ? 1.2 : 0;
-
-    // Unit shadow - simple dark circle under unit
-    // For flying units, offset shadow down so it stays on the ground
-    const shadowRadius = spriteConfig?.shadowSize ?? boxW * 0.6;
-    const shadow = new THREE.Mesh(
-        new THREE.CircleGeometry(shadowRadius, 16),
-        new THREE.MeshBasicMaterial({ color: "#000000", transparent: true, opacity: 0.3, side: THREE.DoubleSide })
-    );
-    shadow.rotation.x = -Math.PI / 2;
-    shadow.position.y = 0.004 - flyHeight;
-    group.add(shadow);
-
-    // All units get subtle innate light (enemies dimmer than players)
-    const lightIntensity = isPlayer ? 0.15 : 0.08;
-    const unitLight = new THREE.PointLight(data.color, lightIntensity, 2, 2);
-    unitLight.position.y = boxH / 2;
-    group.add(unitLight);
-
-    const selInner = 0.5 * size;
-    const selOuter = 0.55 * size;
-    const sel = new THREE.Mesh(
-        new THREE.RingGeometry(selInner, selOuter, 32),
-        new THREE.MeshBasicMaterial({ color: "#00ff00", side: THREE.DoubleSide })
-    );
-    sel.rotation.x = -Math.PI / 2;
-    sel.position.y = 0.03;
-    sel.visible = false;
-    group.add(sel);
-    selectRings[unit.id] = sel;
-
-    // Target ring (red) for enemies - shows when player targets them
-    if (!isPlayer) {
-        const targetRing = new THREE.Mesh(
-            new THREE.RingGeometry(selInner, selOuter, 32),
-            new THREE.MeshBasicMaterial({ color: "#ff0000", side: THREE.DoubleSide, transparent: true, opacity: 1 })
-        );
-        targetRing.rotation.x = -Math.PI / 2;
-        targetRing.position.y = 0.03;
-        targetRing.visible = false;
-        group.add(targetRing);
-        targetRings[unit.id] = targetRing;
-
-        // Front shield indicator - half-disc showing protected direction
-        if ("frontShield" in data && data.frontShield) {
-            const shieldRadius = size * 0.7;
-            const shieldGeom = new THREE.CircleGeometry(shieldRadius, 16, -Math.PI / 2, Math.PI);
-            const shieldMat = new THREE.MeshBasicMaterial({
-                color: "#4488ff",
-                transparent: true,
-                opacity: 0.4,
-                side: THREE.DoubleSide
-            });
-            const shieldDisc = new THREE.Mesh(shieldGeom, shieldMat);
-            shieldDisc.rotation.x = -Math.PI / 2;
-            shieldDisc.position.y = 0.02;
-            group.add(shieldDisc);
-            shieldIndicators[unit.id] = shieldDisc;
-        }
+    if (result.targetRing) {
+        targetRings[unit.id] = result.targetRing;
     }
-
-    maxHp[unit.id] = data.maxHp;
-
-    // Set position (flyHeight determined earlier for shadow)
-    group.position.set(unit.x, flyHeight, unit.z);
-    group.userData = { unitId: unit.id, targetX: unit.x, targetZ: unit.z, attackTarget: null, flyHeight };
-    scene.add(group);
-    unitGroups[unit.id] = group as UnitGroup;
+    if (result.shieldIndicator) {
+        shieldIndicators[unit.id] = result.shieldIndicator;
+    }
 }

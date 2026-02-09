@@ -5,59 +5,50 @@
 import * as THREE from "three";
 import type { Unit, UnitGroup, EnemyStats, EnemySpawnSkill, EnemyChargeAttack, EnemyLeapSkill, EnemyVinesSkill, EnemyTentacleSkill, EnemyRaiseSkill, EnemyCurseSkill, EnemyGlareSkill, DamageText } from "../../core/types";
 
-export interface SpawnContext {
+// =============================================================================
+// BASE CONTEXT — shared fields across all enemy behaviors
+// =============================================================================
+
+export interface BehaviorBaseContext {
     unit: Unit;
     g: UnitGroup;
     enemyStats: EnemyStats;
+    skillCooldowns: Record<string, { end: number; duration: number }>;
+    setSkillCooldowns: React.Dispatch<React.SetStateAction<Record<string, { end: number; duration: number }>>>;
+    addLog: (text: string, color?: string) => void;
+    now: number;
+}
+
+// =============================================================================
+// PER-BEHAVIOR CONTEXTS — extend base with behavior-specific fields
+// =============================================================================
+
+export interface SpawnContext extends BehaviorBaseContext {
     spawnSkill: EnemySpawnSkill;
     unitsState: Unit[];
     unitsRef: Record<number, UnitGroup>;
-    skillCooldowns: Record<string, { end: number; duration: number }>;
-    setSkillCooldowns: React.Dispatch<React.SetStateAction<Record<string, { end: number; duration: number }>>>;
     setUnits: React.Dispatch<React.SetStateAction<Unit[]>>;
-    addLog: (text: string, color?: string) => void;
-    now: number;
 }
 
-export interface ChargeContext {
-    unit: Unit;
-    g: UnitGroup;
+export interface ChargeContext extends BehaviorBaseContext {
     chargeAttack: EnemyChargeAttack;
     scene: THREE.Scene;
-    skillCooldowns: Record<string, { end: number; duration: number }>;
-    setSkillCooldowns: React.Dispatch<React.SetStateAction<Record<string, { end: number; duration: number }>>>;
-    addLog: (text: string, color?: string) => void;
-    now: number;
 }
 
-export interface LeapContext {
-    unit: Unit;
-    g: UnitGroup;
-    enemyStats: EnemyStats;
+export interface LeapContext extends BehaviorBaseContext {
     leapSkill: EnemyLeapSkill;
     targetUnit: Unit;
     targetG: UnitGroup;
     scene: THREE.Scene;
-    skillCooldowns: Record<string, { end: number; duration: number }>;
-    setSkillCooldowns: React.Dispatch<React.SetStateAction<Record<string, { end: number; duration: number }>>>;
     setUnits: React.Dispatch<React.SetStateAction<Unit[]>>;
-    addLog: (text: string, color?: string) => void;
-    now: number;
 }
 
-export interface VinesContext {
-    unit: Unit;
-    g: UnitGroup;
-    enemyStats: EnemyStats;
+export interface VinesContext extends BehaviorBaseContext {
     vinesSkill: EnemyVinesSkill;
     targetUnit: Unit;
     targetG: UnitGroup;
     scene: THREE.Scene;
-    skillCooldowns: Record<string, { end: number; duration: number }>;
-    setSkillCooldowns: React.Dispatch<React.SetStateAction<Record<string, { end: number; duration: number }>>>;
     setUnits: React.Dispatch<React.SetStateAction<Unit[]>>;
-    addLog: (text: string, color?: string) => void;
-    now: number;
     // Damage context for proper death handling
     damageTexts: DamageText[];
     hitFlashRef: Record<number, number>;
@@ -66,59 +57,31 @@ export interface VinesContext {
     defeatedThisFrame: Set<number>;
 }
 
-export interface TentacleContext {
-    unit: Unit;
-    g: UnitGroup;
-    enemyStats: EnemyStats;
+export interface TentacleContext extends BehaviorBaseContext {
     tentacleSkill: EnemyTentacleSkill;
     unitsState: Unit[];
     unitsRef: Record<number, UnitGroup>;
     scene: THREE.Scene;
-    skillCooldowns: Record<string, { end: number; duration: number }>;
-    setSkillCooldowns: React.Dispatch<React.SetStateAction<Record<string, { end: number; duration: number }>>>;
     setUnits: React.Dispatch<React.SetStateAction<Unit[]>>;
-    addLog: (text: string, color?: string) => void;
-    now: number;
 }
 
-export interface RaiseContext {
-    unit: Unit;
-    g: UnitGroup;
-    enemyStats: EnemyStats;
+export interface RaiseContext extends BehaviorBaseContext {
     raiseSkill: EnemyRaiseSkill;
     unitsState: Unit[];
     unitsRef: Record<number, UnitGroup>;
-    skillCooldowns: Record<string, { end: number; duration: number }>;
-    setSkillCooldowns: React.Dispatch<React.SetStateAction<Record<string, { end: number; duration: number }>>>;
     setUnits: React.Dispatch<React.SetStateAction<Unit[]>>;
-    addLog: (text: string, color?: string) => void;
-    now: number;
 }
 
-export interface CurseContext {
-    unit: Unit;
-    g: UnitGroup;
-    enemyStats: EnemyStats;
+export interface CurseContext extends BehaviorBaseContext {
     curseSkill: EnemyCurseSkill;
     unitsState: Unit[];
     unitsRef: Record<number, UnitGroup>;
     scene: THREE.Scene;
-    skillCooldowns: Record<string, { end: number; duration: number }>;
-    setSkillCooldowns: React.Dispatch<React.SetStateAction<Record<string, { end: number; duration: number }>>>;
-    addLog: (text: string, color?: string) => void;
-    now: number;
 }
 
-export interface GlareContext {
-    unit: Unit;
-    g: UnitGroup;
-    enemyStats: EnemyStats;
+export interface GlareContext extends BehaviorBaseContext {
     glareSkill: EnemyGlareSkill;
     unitsState: Unit[];
     unitsRef: Record<number, UnitGroup>;
     scene: THREE.Scene;
-    skillCooldowns: Record<string, { end: number; duration: number }>;
-    setSkillCooldowns: React.Dispatch<React.SetStateAction<Record<string, { end: number; duration: number }>>>;
-    addLog: (text: string, color?: string) => void;
-    now: number;
 }

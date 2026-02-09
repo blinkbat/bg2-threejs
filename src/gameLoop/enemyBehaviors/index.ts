@@ -3,7 +3,11 @@
 // =============================================================================
 
 // Types
-export type { SpawnContext, ChargeContext, LeapContext, VinesContext, TentacleContext, RaiseContext, CurseContext, GlareContext } from "./types";
+export type { BehaviorBaseContext, SpawnContext, ChargeContext, LeapContext, VinesContext, TentacleContext, RaiseContext, CurseContext, GlareContext } from "./types";
+export type { PreAttackContext } from "./preAttack";
+
+// Pre-attack dispatch (fire-and-forget behaviors)
+export { runPreAttackBehaviors } from "./preAttack";
 
 // Brood Mother
 export { trySpawnMinion } from "./broodMother";
@@ -28,6 +32,9 @@ export {
 
 // Necromancer Raise Dead
 export { tryRaiseDead } from "./necromancer";
+
+// Necromancer Curse
+export { tryCurse } from "./curse";
 
 // Acid Slug Patrol
 export { tryAcidSlugPatrol, processAcidTrailAndAura } from "./acidSlug";

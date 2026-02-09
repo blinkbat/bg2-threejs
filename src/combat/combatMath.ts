@@ -301,6 +301,21 @@ export function setSkillCooldown(
 }
 
 /**
+ * Check if a skill is off cooldown and ready to use.
+ * Consolidates the repeated pattern: build key → lookup → compare to now.
+ */
+export function isCooldownReady(
+    skillCooldowns: Record<string, { end: number; duration: number }>,
+    unitId: number,
+    skillName: string,
+    now: number
+): boolean {
+    const key = `${unitId}-${skillName}`;
+    const cooldownEnd = skillCooldowns[key]?.end ?? 0;
+    return now >= cooldownEnd;
+}
+
+/**
  * Get effective damage range for a unit, accounting for amoeba split weakening.
  * Each split reduces damage by 15%.
  */

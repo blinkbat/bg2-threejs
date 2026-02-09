@@ -77,7 +77,7 @@ export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, ski
             <div className="unit-bars">
                 <div className="bar-label">HP: {Math.max(0, unit.hp)} / {effectiveMaxHp}</div>
                 <div className="progress-bar">
-                    <div className="progress-fill" style={{ width: `${Math.max(0, hpPct)}%`, background: hpColor }} />
+                    <div className="progress-fill" style={{ width: `${Math.max(0, hpPct)}%`, backgroundColor: hpColor }} />
                 </div>
                 {hasMana && (
                     <>

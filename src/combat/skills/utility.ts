@@ -15,7 +15,7 @@ import { soundFns } from "../../audio";
 import { createAnimatedRing } from "../damageEffects";
 import { createSanctuaryTile } from "../../gameLoop/sanctuaryTiles";
 import type { SkillExecutionContext } from "./types";
-import { findClosestTargetByTeam, consumeSkill } from "./helpers";
+import { findAndValidateEnemyTarget, consumeSkill } from "./helpers";
 
 // =============================================================================
 // TAUNT SKILL (Warcry)
@@ -90,17 +90,13 @@ export function executeDebuffSkill(
     targetX: number,
     targetZ: number
 ): boolean {
-    const { unitsStateRef, unitsRef, hitFlashRef, setUnits, addLog } = ctx;
+    const { unitsRef, hitFlashRef, setUnits, addLog } = ctx;
 
     // Find closest enemy to target position
-    const closest = findClosestTargetByTeam(unitsStateRef.current, unitsRef.current, "enemy", targetX, targetZ);
+    const target = findAndValidateEnemyTarget(ctx, casterId, targetX, targetZ);
+    if (!target) return false;
 
-    if (!closest) {
-        addLog(`${UNIT_DATA[casterId].name}: No enemy at that location!`, COLORS.logNeutral);
-        return false;
-    }
-
-    const { unit: targetEnemy, group: targetG } = closest;
+    const { unit: targetEnemy, group: targetG } = target;
     const casterG = unitsRef.current[casterId];
 
     if (!casterG) return false;

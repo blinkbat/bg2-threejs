@@ -16,7 +16,7 @@ import { soundFns } from "../../audio";
 import { createProjectile, getProjectileSpeed, applyDamageToUnit, createAnimatedRing, createLightningPillar, type DamageContext } from "../damageEffects";
 import { spawnSwingIndicator } from "../../gameLoop/swingAnimations";
 import type { SkillExecutionContext } from "./types";
-import { findClosestTargetByTeam, consumeSkill } from "./helpers";
+import { findAndValidateEnemyTarget, consumeSkill } from "./helpers";
 
 // =============================================================================
 // AOE DAMAGE SKILL (e.g. Fireball)
@@ -101,11 +101,8 @@ export function executeTargetedDamageSkill(
 
     // Fall back to position-based search
     if (!targetEnemy || !targetG) {
-        const closest = findClosestTargetByTeam(unitsStateRef.current, unitsRef.current, "enemy", targetX, targetZ);
-        if (!closest) {
-            addLog(`${UNIT_DATA[casterId].name}: No enemy at that location!`, COLORS.logNeutral);
-            return false;
-        }
+        const closest = findAndValidateEnemyTarget(ctx, casterId, targetX, targetZ);
+        if (!closest) return false;
         targetEnemy = closest.unit;
         targetG = closest.group;
     }

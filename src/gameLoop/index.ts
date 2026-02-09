@@ -3,8 +3,8 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation, EnemyStats, EnemySpawnSkill, EnemyRaiseSkill } from "../core/types";
-import { SKILL_SINGLE_TARGET_CHANCE } from "../core/constants";
+import type { Unit, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation, EnemyStats } from "../core/types";
+import { SKILL_SINGLE_TARGET_CHANCE, FORMATION_SLOW_SPEED } from "../core/constants";
 import { getUnitRadius, isInRange } from "../rendering/range";
 import { tryKite, type KiteContext } from "../ai/targeting";
 import {
@@ -14,7 +14,7 @@ import {
 import { getUnitStats, getAttackRange } from "../game/units";
 import { getBasicAttackSkill } from "../game/playerUnits";
 import type { ActionQueue } from "../input";
-import { hasStatusEffect, isUnitAlive, getCooldownMultiplier, setSkillCooldown, getEffectiveSpeedMultiplier } from "../combat/combatMath";
+import { hasStatusEffect, isUnitAlive, getCooldownMultiplier, setSkillCooldown, isCooldownReady, getEffectiveSpeedMultiplier } from "../combat/combatMath";
 import { getAliveUnitsInRange } from "../combat/damageEffects";
 import { isEnemyKiting, clearEnemyKiting } from "../game/enemyState";
 
@@ -30,8 +30,7 @@ export { processCurses, clearCurses } from "./necromancerCurse";
 import { executeEnemySwipe, executeEnemyHeal } from "./enemySkills";
 import { executeEnemyBasicAttack } from "./enemyAttack";
 import { isUnitCharging } from "./constructCharge";
-import { trySpawnMinion, tryStartChargeAttack, tryLeapToTarget, isUnitLeaping, tryVinesSkill, trySpawnTentacle, tryRaiseDead, tryAcidSlugPatrol, processAcidTrailAndAura, tryBasiliskGlare } from "./enemyBehaviors";
-import { startCurse } from "./necromancerCurse";
+import { tryStartChargeAttack, tryLeapToTarget, isUnitLeaping, tryVinesSkill, tryAcidSlugPatrol, processAcidTrailAndAura, runPreAttackBehaviors } from "./enemyBehaviors";
 export { clearLeaps, updateLeaps, isUnitLeaping, updateTentacles, clearTentacles, trySubmergeKraken, isKrakenSubmerged, isKrakenFullySubmerged, updateSubmergedKrakens, processGlares, clearGlares } from "./enemyBehaviors";
 export { spawnLootBag, removeLootBag, clearAllLootBags, resetLootBagIds } from "./lootBags";
 
@@ -161,70 +160,25 @@ export function updateUnitAI(
     // Phase 1.6: Enemy heal check - healer enemies try to heal injured allies
     if (!isPlayer && 'healSkill' in data && data.healSkill) {
         const healSkill = data.healSkill;
-        const healCooldownKey = `${unit.id}-${healSkill.name}`;
-        const healCooldownEnd = skillCooldowns[healCooldownKey]?.end || 0;
-        if (now >= healCooldownEnd) {
+        if (isCooldownReady(skillCooldowns, unit.id, healSkill.name, now)) {
             const executed = executeEnemyHeal(
                 unit, g, healSkill, data as EnemyStats,
                 unitsRef, unitsState, scene, damageTexts,
                 setUnits, addLog
             );
             if (executed) {
-                setSkillCooldown(setSkillCooldowns, healCooldownKey, healSkill.cooldown, now, unit);
+                setSkillCooldown(setSkillCooldowns, `${unit.id}-${healSkill.name}`, healSkill.cooldown, now, unit);
                 actionCooldownRef[unit.id] = now + data.attackCooldown * getCooldownMultiplier(unit);
                 return;
             }
         }
     }
 
-    // Phase 1.7: Enemy spawn check - spawner enemies (Brood Mother) spawn minions when they see players
-    if (!isPlayer && 'spawnSkill' in data && data.spawnSkill) {
-        trySpawnMinion({
-            unit, g, enemyStats: data as EnemyStats, spawnSkill: data.spawnSkill as EnemySpawnSkill,
-            unitsState, unitsRef, skillCooldowns, setSkillCooldowns, setUnits, addLog, now
-        });
-    }
-
-    // Phase 1.75: Necromancer raise dead check - batch-spawns skeleton minions when all are dead
-    if (!isPlayer && 'raiseSkill' in data && data.raiseSkill) {
-        tryRaiseDead({
-            unit, g, enemyStats: data as EnemyStats, raiseSkill: data.raiseSkill as EnemyRaiseSkill,
-            unitsState, unitsRef, skillCooldowns, setSkillCooldowns, setUnits, addLog, now
-        });
-    }
-
-    // Phase 1.8: Tentacle spawn check - Baby Kraken spawns tentacles toward players
-    if (!isPlayer && 'tentacleSkill' in data && data.tentacleSkill) {
-        trySpawnTentacle({
-            unit, g, enemyStats: data as EnemyStats, tentacleSkill: data.tentacleSkill,
-            unitsState, unitsRef, scene, skillCooldowns, setSkillCooldowns, setUnits, addLog, now
-        });
-    }
-
-    // Phase 1.85: Necromancer curse check - delayed AoE at a player's position
-    if (!isPlayer && 'curseSkill' in data && data.curseSkill) {
-        const curseSkill = data.curseSkill;
-        const curseCooldownKey = `${unit.id}-${curseSkill.name}`;
-        const curseCooldownEnd = skillCooldowns[curseCooldownKey]?.end ?? 0;
-
-        if (now >= curseCooldownEnd) {
-            // Find a visible player target within curse range
-            const curseTargets = getAliveUnitsInRange(unitsState, unitsRef, "player", g.position.x, g.position.z, curseSkill.range, defeatedThisFrame);
-            if (curseTargets.length > 0) {
-                // Target the closest player
-                curseTargets.sort((a, b) => a.dist - b.dist);
-                const curseTarget = curseTargets[0];
-                startCurse(scene, unit.id, curseSkill, curseTarget.group.position.x, curseTarget.group.position.z, now, addLog);
-                setSkillCooldown(setSkillCooldowns, curseCooldownKey, curseSkill.cooldown, now, unit);
-            }
-        }
-    }
-
-    // Phase 1.86: Basilisk glare check - telegraphed cone stun
-    if (!isPlayer && 'glareSkill' in data && data.glareSkill) {
-        tryBasiliskGlare({
-            unit, g, enemyStats: data as EnemyStats, glareSkill: data.glareSkill,
-            unitsState, unitsRef, scene, skillCooldowns, setSkillCooldowns, addLog, now
+    // Phase 1.7-1.86: Fire-and-forget pre-attack behaviors (spawn, raise, tentacle, curse, glare)
+    if (!isPlayer) {
+        runPreAttackBehaviors({
+            unit, g, enemyStats: data as EnemyStats, unitsState, unitsRef,
+            scene, setUnits, skillCooldowns, setSkillCooldowns, addLog, now
         });
     }
 
@@ -277,7 +231,7 @@ export function updateUnitAI(
                     // Check if enemy has a charge attack and it's ready
                     if (!isPlayer && 'chargeAttack' in data && data.chargeAttack) {
                         if (tryStartChargeAttack({
-                            unit, g, chargeAttack: data.chargeAttack, scene,
+                            unit, g, enemyStats: data as EnemyStats, chargeAttack: data.chargeAttack, scene,
                             skillCooldowns, setSkillCooldowns, addLog, now
                         })) {
                             return;
@@ -392,7 +346,26 @@ export function updateUnitAI(
 
     // Phase 4: Movement - move toward target with avoidance and wall sliding
     // Pinned units cannot move (speed = 0), slowed units move at half speed
-    const movementCtx: MovementContext = { unit, g, unitsRef, unitsState, targetX, targetZ, speedMultiplier: getEffectiveSpeedMultiplier(unit, data) };
+    let speedMult = getEffectiveSpeedMultiplier(unit, data);
+    // Formation: crawl until the row ahead is further along than us, then full speed
+    const ramp = isPlayer ? g.userData.formationRamp : undefined;
+    if (ramp) {
+        const aheadG = unitsRef[ramp.leaderId];
+        if (!aheadG) {
+            delete g.userData.formationRamp;
+        } else {
+            const aheadRemain = Math.hypot(ramp.leaderTargetX - aheadG.position.x, ramp.leaderTargetZ - aheadG.position.z);
+            const myRemain = Math.hypot(targetX - g.position.x, targetZ - g.position.z);
+            if (aheadRemain < myRemain) {
+                // Row ahead is further along — full speed, done with ramp
+                delete g.userData.formationRamp;
+            } else {
+                // Row ahead is behind us or even — crawl
+                speedMult *= FORMATION_SLOW_SPEED;
+            }
+        }
+    }
+    const movementCtx: MovementContext = { unit, g, unitsRef, unitsState, targetX, targetZ, speedMultiplier: speedMult };
     runMovementPhase(movementCtx);
 
     // Phase 5: Acid slug - create acid trail when moving, aura when stationary

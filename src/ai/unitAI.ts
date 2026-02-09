@@ -7,7 +7,8 @@ import {
     getDebugSpeedMultiplier,
     AVOIDANCE_RANGE_MULTIPLIER, AVOIDANCE_OVERLAP_STRENGTH,
     AVOIDANCE_STEER_THRESHOLD, AVOIDANCE_STEER_STRENGTH,
-    MOVEMENT_MIN_DIST, MOVEMENT_MIN_MAGNITUDE
+    MOVEMENT_MIN_DIST, MOVEMENT_MIN_MAGNITUDE,
+    PLAYER_MOVE_TIMEOUT_MS
 } from "../core/constants";
 import { blocked } from "../game/dungeon";
 import { findPath } from "./pathfinding";
@@ -459,11 +460,12 @@ export function runPathFollowingPhase(ctx: PathContext): { targetX: number; targ
         }
 
         // Stuck detection - give up if barely moving or jittering
-        // Skip for player move commands (no attack target) to preserve formation movement
+        // Player move commands use a longer absolute timeout to avoid
+        // giving up too quickly during crowded formation movement
         const isPlayerMoveCommand = isPlayer && g.userData.attackTarget === null;
         const moveStart = moveStartRef[unit.id];
         const stuckResult = isPlayerMoveCommand
-            ? { isStuck: false, isReallyStuck: false, isJittering: false }
+            ? { isStuck: false, isReallyStuck: !!(moveStart && (now - moveStart.time) > PLAYER_MOVE_TIMEOUT_MS), isJittering: false }
             : checkIfStuck(unit.id, g.position.x, g.position.z, moveStart, now);
 
         if (stuckResult.isReallyStuck || stuckResult.isStuck || stuckResult.isJittering) {

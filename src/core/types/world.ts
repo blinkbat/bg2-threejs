@@ -60,6 +60,11 @@ export interface UnitGroup extends THREE.Group {
         lastHitTime?: number;  // Timestamp when unit last took damage (for kiting AI)
         lastDamageSource?: { x: number; z: number; time: number };  // Position of last attacker (for shield facing)
         pendingMove?: boolean;  // Set when formation move is queued with delay, cleared on execution
+        formationRamp?: {               // Crawl until row-ahead unit is further along
+            leaderId: number;           // Unit in the row ahead to watch
+            leaderTargetX: number;      // That unit's formation target X
+            leaderTargetZ: number;      // That unit's formation target Z
+        };
         facingRight?: boolean;  // Sprite facing direction (true = right, default)
     };
 }

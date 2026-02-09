@@ -24,8 +24,8 @@ export {
 } from "./updates";
 
 // Re-export unit functions
-export { getEffectiveSize, addUnitToScene, createUnitSceneGroup } from "./units";
-import { createUnitSceneGroup } from "./units";
+export { getEffectiveSize, addUnitToScene, createUnitSceneGroup, ensureTexturesLoaded } from "./units";
+import { createUnitSceneGroup, ensureTexturesLoaded } from "./units";
 
 // =============================================================================
 // ROUNDED CORNER FLOOR MATERIAL
@@ -163,6 +163,9 @@ function getFloorCornerFlags(floor: string[] | string[][], x: number, z: number)
 // =============================================================================
 
 export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs {
+    // Front-load texture decoding before building meshes
+    ensureTexturesLoaded();
+
     const area = getCurrentArea();
     const computed = getComputedAreaData();
 

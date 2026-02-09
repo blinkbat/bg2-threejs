@@ -14,7 +14,7 @@ import { soundFns } from "../../audio";
 import { createAnimatedRing, createLightningPillar } from "../damageEffects";
 import { updateUnitWith } from "../../core/stateUtils";
 import type { SkillExecutionContext } from "./types";
-import { findClosestTargetByTeam, consumeSkill } from "./helpers";
+import { findAndValidateAllyTarget, consumeSkill } from "./helpers";
 
 // =============================================================================
 // HEAL SKILL (single ally)
@@ -30,17 +30,12 @@ export function executeHealSkill(
     targetX: number,
     targetZ: number
 ): boolean {
-    const { unitsStateRef, unitsRef, unitMeshRef, hitFlashRef, setUnits, addLog } = ctx;
+    const { unitsStateRef, unitMeshRef, hitFlashRef, setUnits, addLog } = ctx;
 
-    // Find closest ally to target position
-    const closest = findClosestTargetByTeam(unitsStateRef.current, unitsRef.current, "player", targetX, targetZ);
+    const target = findAndValidateAllyTarget(ctx, casterId, targetX, targetZ);
+    if (!target) return false;
 
-    if (!closest) {
-        addLog(`${UNIT_DATA[casterId].name}: No ally at that location!`, COLORS.logNeutral);
-        return false;
-    }
-
-    const { unit: targetAlly, group: targetG } = closest;
+    const { unit: targetAlly, group: targetG } = target;
     const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
     const targetMaxHp = getEffectiveMaxHp(targetAlly.id, targetAlly);
     if (targetAlly.hp >= targetMaxHp) {
@@ -87,15 +82,10 @@ export function executeManaTransferSkill(
 ): boolean {
     const { unitsStateRef, unitsRef, unitMeshRef, hitFlashRef, setUnits, addLog } = ctx;
 
-    // Find closest ally to target position
-    const closest = findClosestTargetByTeam(unitsStateRef.current, unitsRef.current, "player", targetX, targetZ);
+    const target = findAndValidateAllyTarget(ctx, casterId, targetX, targetZ);
+    if (!target) return false;
 
-    if (!closest) {
-        addLog(`${UNIT_DATA[casterId].name}: No ally at that location!`, COLORS.logNeutral);
-        return false;
-    }
-
-    const { unit: targetAlly, group: targetG } = closest;
+    const { unit: targetAlly, group: targetG } = target;
     const casterG = unitsRef.current[casterId];
     const caster = unitsStateRef.current.find(u => u.id === casterId);
 
@@ -330,17 +320,12 @@ export function executeCleanseSkill(
     targetX: number,
     targetZ: number
 ): boolean {
-    const { scene, unitsStateRef, unitsRef, unitMeshRef, hitFlashRef, setUnits, addLog } = ctx;
+    const { scene, unitMeshRef, hitFlashRef, setUnits, addLog } = ctx;
 
-    // Find closest ally to target position
-    const closest = findClosestTargetByTeam(unitsStateRef.current, unitsRef.current, "player", targetX, targetZ);
+    const allyTarget = findAndValidateAllyTarget(ctx, casterId, targetX, targetZ);
+    if (!allyTarget) return false;
 
-    if (!closest) {
-        addLog(`${UNIT_DATA[casterId].name}: No ally at that location!`, COLORS.logNeutral);
-        return false;
-    }
-
-    const { unit: targetAlly, group: targetG } = closest;
+    const { unit: targetAlly, group: targetG } = allyTarget;
     const targetData = UNIT_DATA[targetAlly.id];
     const targetId = targetAlly.id;
     const now = Date.now();
@@ -409,17 +394,12 @@ export function executeRestorationSkill(
     targetX: number,
     targetZ: number
 ): boolean {
-    const { scene, unitsStateRef, unitsRef, unitMeshRef, hitFlashRef, setUnits, addLog } = ctx;
+    const { scene, unitMeshRef, hitFlashRef, setUnits, addLog } = ctx;
 
-    // Find closest ally to target position
-    const closest = findClosestTargetByTeam(unitsStateRef.current, unitsRef.current, "player", targetX, targetZ);
+    const allyTarget = findAndValidateAllyTarget(ctx, casterId, targetX, targetZ);
+    if (!allyTarget) return false;
 
-    if (!closest) {
-        addLog(`${UNIT_DATA[casterId].name}: No ally at that location!`, COLORS.logNeutral);
-        return false;
-    }
-
-    const { unit: targetAlly, group: targetG } = closest;
+    const { unit: targetAlly, group: targetG } = allyTarget;
     const targetData = UNIT_DATA[targetAlly.id];
     const targetId = targetAlly.id;
 

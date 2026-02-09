@@ -321,15 +321,34 @@ export function useInputHandlers({
                             soundFns.playMove();
                             const moveTargets = buildMoveTargets(stateRefs.selectedRef.current, stateRefs.unitsStateRef.current, unitGroups, gx, gz, stateRefs.formationOrderRef.current);
                             const useDirectMove = moveTargets.length > 1;
-                            const moveNow = Date.now();
-                            moveTargets.forEach(t => {
-                                const notBefore = t.delay ? moveNow + t.delay : undefined;
-                                mutableRefs.actionQueueRef.current[t.id] = { type: "move", targetX: t.x, targetZ: t.z, direct: useDirectMove, notBefore };
-                                // Clear attack target immediately so delayed rows don't keep
-                                // fighting while waiting for their notBefore to arrive
+                            // Row-based speed ramp: each unit crawls until the row
+                            // ahead is in place, then snaps to full speed.
+                            // Wedge rows: [0] | [1,2] | [3,4,5] | ...
+                            // Row N starts at index N*(N+1)/2
+                            const getRow = (i: number) => Math.floor((-1 + Math.sqrt(1 + 8 * i)) / 2);
+                            moveTargets.forEach((t, i) => {
+                                mutableRefs.actionQueueRef.current[t.id] = { type: "move", targetX: t.x, targetZ: t.z, direct: useDirectMove };
                                 if (unitGroups[t.id]) {
                                     unitGroups[t.id].userData.attackTarget = null;
                                     unitGroups[t.id].userData.pendingMove = true;
+                                    const row = getRow(i);
+                                    if (row > 0) {
+                                        // Watch first unit of the previous row
+                                        const prevRowStart = (row - 1) * row / 2;
+                                        const ahead = moveTargets[prevRowStart];
+                                        const aheadG = unitGroups[ahead.id];
+                                        if (aheadG) {
+                                            unitGroups[t.id].userData.formationRamp = {
+                                                leaderId: ahead.id,
+                                                leaderTargetX: ahead.x,
+                                                leaderTargetZ: ahead.z,
+                                            };
+                                        } else {
+                                            delete unitGroups[t.id].userData.formationRamp;
+                                        }
+                                    } else {
+                                        delete unitGroups[t.id].userData.formationRamp;
+                                    }
                                 }
                             });
                             if (stateRefs.pausedRef.current) {

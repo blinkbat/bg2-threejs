@@ -3,6 +3,7 @@
 // =============================================================================
 
 import type { Unit, UnitGroup, Skill } from "../../core/types";
+import { COLORS } from "../../core/constants";
 import { UNIT_DATA } from "../../game/playerUnits";
 import { hasStatusEffect, getCooldownMultiplier } from "../combatMath";
 import { distanceToPoint } from "../../game/geometry";
@@ -49,6 +50,56 @@ export function findClosestTargetByTeam(
 ): { unit: Unit; group: UnitGroup } | null {
     const aliveUnits = getAliveUnits(units, team);
     return findClosestUnit(aliveUnits, unitsRef, targetX, targetZ, maxDist);
+}
+
+// =============================================================================
+// ALLY TARGET VALIDATION
+// =============================================================================
+
+/**
+ * Find and validate an ally target at a position.
+ * Consolidates the repeated pattern across heal/cleanse/restoration/mana_transfer:
+ *   findClosestTargetByTeam → null guard → "No ally at that location!" log.
+ *
+ * Returns the target unit + group, or null if none found (with log emitted).
+ */
+export function findAndValidateAllyTarget(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    targetX: number,
+    targetZ: number
+): { unit: Unit; group: UnitGroup } | null {
+    const closest = findClosestTargetByTeam(ctx.unitsStateRef.current, ctx.unitsRef.current, "player", targetX, targetZ);
+    if (!closest) {
+        ctx.addLog(`${UNIT_DATA[casterId].name}: No ally at that location!`, COLORS.logNeutral);
+        return null;
+    }
+    return { unit: closest.unit, group: closest.group };
+}
+
+// =============================================================================
+// ENEMY TARGET VALIDATION
+// =============================================================================
+
+/**
+ * Find and validate an enemy target at a position.
+ * Consolidates the repeated pattern across debuff/targeted-damage:
+ *   findClosestTargetByTeam → null guard → "No enemy at that location!" log.
+ *
+ * Returns the target unit + group, or null if none found (with log emitted).
+ */
+export function findAndValidateEnemyTarget(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    targetX: number,
+    targetZ: number
+): { unit: Unit; group: UnitGroup } | null {
+    const closest = findClosestTargetByTeam(ctx.unitsStateRef.current, ctx.unitsRef.current, "enemy", targetX, targetZ);
+    if (!closest) {
+        ctx.addLog(`${UNIT_DATA[casterId].name}: No enemy at that location!`, COLORS.logNeutral);
+        return null;
+    }
+    return { unit: closest.unit, group: closest.group };
 }
 
 // =============================================================================
