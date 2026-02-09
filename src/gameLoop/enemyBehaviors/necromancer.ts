@@ -40,7 +40,7 @@ export function tryRaiseDead(ctx: RaiseContext): boolean {
     }
 
     // Batch-spawn all minions at once, ensuring passable positions
-    const spawnPositions = findSpawnPositions(g.position.x, g.position.z, raiseSkill.spawnCount, raiseSkill.spawnRange);
+    const spawnPositions = findSpawnPositions(g.position.x, g.position.z, raiseSkill.spawnCount, "north");
     const newMinions: Unit[] = spawnPositions.map(pos => ({
         id: getNextUnitId(),
         x: pos.x,
