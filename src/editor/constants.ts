@@ -14,7 +14,7 @@ export function getAvailableAreaIds(): string[] {
 }
 
 // Available enemy types (derived from ENEMY_STATS keys)
-export const ENEMY_TYPES: EnemyType[] = Object.keys(ENEMY_STATS) as EnemyType[];
+export const ENEMY_TYPES: EnemyType[] = (Object.keys(ENEMY_STATS) as EnemyType[]).sort();
 
 // =============================================================================
 // LAYER BRUSH REGISTRIES - Single source of truth for editor tiles

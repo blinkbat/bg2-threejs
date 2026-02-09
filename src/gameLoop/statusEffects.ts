@@ -7,7 +7,7 @@ import type { Unit, UnitGroup, DamageText, StatusEffect, StatusEffectType } from
 import { COLORS } from "../core/constants";
 import { getUnitStats } from "../game/units";
 import { getEffectiveMaxHp } from "../game/playerUnits";
-import { handleUnitDefeat, showDamageVisual } from "../combat/damageEffects";
+import { handleUnitDefeat, showDamageVisual, spawnDamageNumber } from "../combat/damageEffects";
 import { isUnitAlive } from "../combat/combatMath";
 
 // =============================================================================
@@ -143,7 +143,8 @@ export function processStatusEffects(
                     }));
 
                     if (healPerTick > 0) {
-                        showDamageVisual(scene, unit.id, unitG.position.x, unitG.position.z, healPerTick, COLORS.hpHigh, hitFlashRef, damageTexts, addLog, `${data.name} regenerates ${healPerTick} HP.`, now);
+                        spawnDamageNumber(scene, unitG.position.x, unitG.position.z, healPerTick, COLORS.hpHigh, damageTexts, true);
+                        addLog(`${data.name} regenerates ${healPerTick} HP.`, COLORS.hpHigh);
                     }
                 } else if (effect.type === "doom" && effect.duration - effect.tickInterval <= 0) {
                     // Doom expiration: kill the unit instantly

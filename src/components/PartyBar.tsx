@@ -1,7 +1,23 @@
-import type { Unit, Skill } from "../core/types";
+import type { Unit, Skill, StatusEffectType } from "../core/types";
+import { COLORS } from "../core/constants";
 import { UNIT_DATA, getEffectiveMaxHp } from "../game/playerUnits";
 import { getHpPercentage, getHpColor } from "../combat/combatMath";
 import { SkillHotbar, type HotbarAssignments } from "./SkillHotbar";
+
+const EFFECT_ICONS: Record<StatusEffectType, { icon: string; color: string }> = {
+    poison: { icon: "☠", color: COLORS.poisonText },
+    shielded: { icon: "🛡", color: COLORS.shieldedText },
+    stunned: { icon: "💫", color: COLORS.stunnedText },
+    cleansed: { icon: "✨", color: COLORS.cleansedText },
+    defiance: { icon: "⚔", color: COLORS.defianceText },
+    pinned: { icon: "📌", color: "#c0392b" },
+    slowed: { icon: "🐌", color: "#3498db" },
+    energyShield: { icon: "🔮", color: "#9b59b6" },
+    qi_drain: { icon: "💔", color: "#e74c3c" },
+    doom: { icon: "💀", color: COLORS.doomText },
+    regen: { icon: "💚", color: COLORS.hpHigh },
+    invul: { icon: "✦", color: "#8e44ad" },
+};
 
 interface PartyBarProps {
     units: Unit[];
@@ -93,6 +109,18 @@ export function PartyBar({
                         <div className="portrait-icon" style={{ background: data.color }}>
                             {data.name[0]}
                             {hasUnspentPoints && <span className="levelup-badge">+</span>}
+                            {unit.statusEffects && unit.statusEffects.length > 0 && (
+                                <div className="portrait-effects">
+                                    {unit.statusEffects.map((e, i) => {
+                                        const info = EFFECT_ICONS[e.type];
+                                        return (
+                                            <span key={i} className="portrait-effect-icon" style={{ color: info.color }}>
+                                                {info.icon}
+                                            </span>
+                                        );
+                                    })}
+                                </div>
+                            )}
                         </div>
                         <div className="progress-bar-sm portrait-hp">
                             <div className="progress-fill" style={{ width: `${Math.max(0, hpPct)}%`, background: hpColor }} />

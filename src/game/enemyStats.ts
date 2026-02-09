@@ -151,6 +151,20 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         moveSpeed: 1.8,  // 50% faster than normal
         expReward: 2
     },
+    chittering_crabling: {
+        name: "Chittering Crabling",
+        hp: 18,
+        maxHp: 18,
+        damage: [2, 4],
+        accuracy: 60,
+        armor: 2,              // Hard shell
+        color: "#c45a3c",      // Reddish-orange (crab shell)
+        aggroRange: 6,
+        attackCooldown: 1400,  // Fast snipping
+        size: 0.7,             // Small
+        moveSpeed: 1.2,        // Quick scuttler
+        expReward: 10
+    },
     corrupt_druid: {
         name: "Corrupt Druid",
         hp: 125,
@@ -395,6 +409,25 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         moveSpeed: 0.9,
         expReward: 20,
         blockChance: 35        // 35% chance to block physical damage
+    },
+    spine_spitter: {
+        name: "Spine Spitter",
+        hp: 14,
+        maxHp: 14,
+        damage: [3, 6],
+        accuracy: 60,
+        armor: 0,
+        color: "#7a6b4e",      // Sandy brown (spiny creature)
+        aggroRange: 8,
+        attackCooldown: 2200,
+        range: 6,              // Ranged
+        projectileColor: "#5c4a2a",  // Dark spine
+        size: 0.9,
+        moveSpeed: 0.8,        // Slightly slow
+        expReward: 12,
+        kiteTrigger: 3,
+        kiteDistance: 3,
+        kiteCooldown: 3500
     },
     undead_knight: {
         name: "Undead Knight",
