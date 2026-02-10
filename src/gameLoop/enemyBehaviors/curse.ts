@@ -12,7 +12,7 @@ import type { CurseContext } from "./types";
  * @returns true if a curse was started
  */
 export function tryCurse(ctx: CurseContext): boolean {
-    const { unit, g, enemyStats, curseSkill, unitsState, unitsRef, scene, skillCooldowns, setSkillCooldowns, addLog, now } = ctx;
+    const { unit, g, curseSkill, unitsState, unitsRef, scene, skillCooldowns, setSkillCooldowns, addLog, now } = ctx;
 
     const cooldownKey = `${unit.id}-${curseSkill.name}`;
     if (!isCooldownReady(skillCooldowns, unit.id, curseSkill.name, now)) {

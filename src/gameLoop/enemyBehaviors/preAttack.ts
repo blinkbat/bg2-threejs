@@ -3,7 +3,7 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitGroup, EnemyStats, DamageText, Projectile } from "../../core/types";
+import type { Unit, UnitGroup, EnemyStats } from "../../core/types";
 import { trySpawnMinion } from "./broodMother";
 import { tryRaiseDead } from "./necromancer";
 import { trySpawnTentacle } from "./tentacle";
