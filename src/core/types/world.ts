@@ -66,6 +66,7 @@ export interface UnitGroup extends THREE.Group {
             leaderTargetZ: number;      // That unit's formation target Z
         };
         facingRight?: boolean;  // Sprite facing direction (true = right, default)
+        attackMoveTarget?: { x: number; z: number };  // Attack-move destination (resume after combat)
     };
 }
 

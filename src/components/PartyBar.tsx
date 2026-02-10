@@ -4,6 +4,22 @@ import { COLORS } from "../core/constants";
 import { UNIT_DATA, getEffectiveMaxHp } from "../game/playerUnits";
 import { getHpPercentage, getHpColor } from "../combat/combatMath";
 import { SkillHotbar, type HotbarAssignments } from "./SkillHotbar";
+import monkPortrait from "../assets/monk-portrait.png";
+import barbarianPortrait from "../assets/barbarian-portrait.png";
+import wizardPortrait from "../assets/wizard-portrait.png";
+import paladinPortrait from "../assets/paladin-portrait.png";
+import thiefPortrait from "../assets/thief-portrait.png";
+import clericPortrait from "../assets/cleric-portrait.png";
+
+const CLASS_PORTRAITS: Record<string, string> = {
+    Barbarian: barbarianPortrait,
+    Wizard: wizardPortrait,
+    Paladin: paladinPortrait,
+    Thief: thiefPortrait,
+    Cleric: clericPortrait,
+    Monk: monkPortrait,
+};
+const getPortrait = (className: string) => CLASS_PORTRAITS[className] ?? monkPortrait;
 
 const EFFECT_ICONS: Record<StatusEffectType, { icon: string; color: string }> = {
     poison: { icon: "☠", color: COLORS.poisonText },
@@ -249,9 +265,8 @@ export function PartyBar({
                         />
                     </div>
                 )}
-                <div className="portrait-icon" style={{ background: data.color }}>
+                <div className={`portrait-icon${unit.holdPosition ? " hold-active" : ""}`} style={{ background: `${data.color} url(${getPortrait(data.class)}) center / cover` }}>
                     <span className="portrait-fkey">F{renderIndex + 1}</span>
-                    {data.name[0]}
                     {hasUnspentPoints && <span className="levelup-badge">+</span>}
                     {unit.statusEffects && unit.statusEffects.length > 0 && (
                         <div className="portrait-effects">

@@ -51,6 +51,7 @@ export interface Unit {
     splitCount?: number;  // For amoebas - how many times this lineage has split (affects size)
     facing?: number;  // Direction unit is facing in radians (for front-shielded enemies)
     cantripUses?: Record<string, number>;  // Remaining cantrip charges keyed by skill name
+    holdPosition?: boolean;  // Hold stance - attacks in range but never chases
 }
 
 import type { Skill } from "./combat";

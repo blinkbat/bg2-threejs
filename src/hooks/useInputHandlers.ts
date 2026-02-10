@@ -69,6 +69,7 @@ export interface InputStateRefs {
     hotbarAssignmentsRef: React.MutableRefObject<HotbarAssignments>;
     pauseStartTimeRef: React.MutableRefObject<number | null>;
     formationOrderRef: React.MutableRefObject<number[]>;
+    commandModeRef: React.MutableRefObject<"attackMove" | null>;
 }
 
 export interface InputMutableRefs {
@@ -102,6 +103,7 @@ export interface InputSetters {
     setOpenedChests: React.Dispatch<React.SetStateAction<Set<string>>>;
     setOpenedSecretDoors: React.Dispatch<React.SetStateAction<Set<string>>>;
     setGold: React.Dispatch<React.SetStateAction<number>>;
+    setCommandMode: React.Dispatch<React.SetStateAction<"attackMove" | null>>;
 }
 
 export interface InputCallbacks {
@@ -319,6 +321,7 @@ export function useInputHandlers({
                                 gameRefs.current.moveMarkerStart = Date.now();
                             }
                             soundFns.playMove();
+                            const isAttackMove = stateRefs.commandModeRef.current === "attackMove";
                             const moveTargets = buildMoveTargets(stateRefs.selectedRef.current, stateRefs.unitsStateRef.current, unitGroups, gx, gz, stateRefs.formationOrderRef.current);
                             const useDirectMove = moveTargets.length > 1;
                             // Row-based speed ramp: each unit crawls until the row
@@ -327,10 +330,15 @@ export function useInputHandlers({
                             // Row N starts at index N*(N+1)/2
                             const getRow = (i: number) => Math.floor((-1 + Math.sqrt(1 + 8 * i)) / 2);
                             moveTargets.forEach((t, i) => {
-                                mutableRefs.actionQueueRef.current[t.id] = { type: "move", targetX: t.x, targetZ: t.z, direct: useDirectMove };
+                                mutableRefs.actionQueueRef.current[t.id] = { type: "move", targetX: t.x, targetZ: t.z, direct: useDirectMove, attackMove: isAttackMove || undefined };
                                 if (unitGroups[t.id]) {
                                     unitGroups[t.id].userData.attackTarget = null;
                                     unitGroups[t.id].userData.pendingMove = true;
+                                    if (isAttackMove) {
+                                        unitGroups[t.id].userData.attackMoveTarget = { x: t.x, z: t.z };
+                                    } else {
+                                        delete unitGroups[t.id].userData.attackMoveTarget;
+                                    }
                                     const row = getRow(i);
                                     if (row > 0) {
                                         // Watch first unit of the previous row
@@ -351,6 +359,15 @@ export function useInputHandlers({
                                     }
                                 }
                             });
+                            // Clear hold stance on move command
+                            const moveIds = moveTargets.map(t => t.id);
+                            setters.setUnits(prev => prev.map(u =>
+                                moveIds.includes(u.id) && u.holdPosition ? { ...u, holdPosition: false } : u
+                            ));
+                            // Reset command mode after issuing the command
+                            if (isAttackMove) {
+                                setters.setCommandMode(null);
+                            }
                             if (stateRefs.pausedRef.current) {
                                 callbacks.addLog(`Move queued for ${moveTargets.length} unit${moveTargets.length !== 1 ? "s" : ""}.`, "#888");
                             }
@@ -483,7 +500,9 @@ export function useInputHandlers({
                 );
             }
             if (e.code === "Escape") {
-                if (stateRefs.consumableTargetingModeRef.current) {
+                if (stateRefs.commandModeRef?.current) {
+                    setters.setCommandMode(null);
+                } else if (stateRefs.consumableTargetingModeRef.current) {
                     setters.setConsumableTargetingMode(null);
                 } else if (stateRefs.targetingModeRef.current) {
                     clearTargetingMode(setters.setTargetingMode, { current: rangeIndicator }, { current: aoeIndicator });
@@ -528,7 +547,64 @@ export function useInputHandlers({
                     }
                 }
             }
-            if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "KeyW", "KeyA", "KeyS", "KeyD"].includes(e.code)) {
+            // Command hotkeys (S=stop, H=hold, A=attack-move, M=move)
+            if (e.code === "KeyS" && !stateRefs.targetingModeRef.current) {
+                const selected = stateRefs.selectedRef.current;
+                if (selected.length > 0) {
+                    selected.forEach(uid => {
+                        gameRefs.current.paths[uid] = [];
+                        const ug = unitGroups[uid];
+                        if (ug) {
+                            ug.userData.attackTarget = null;
+                            ug.userData.pendingMove = false;
+                            delete ug.userData.formationRamp;
+                            delete ug.userData.attackMoveTarget;
+                        }
+                        delete mutableRefs.actionQueueRef.current[uid];
+                    });
+                    setters.setQueuedActions(prev => prev.filter(q => !selected.includes(q.unitId)));
+                    setters.setUnits(prev => prev.map(u =>
+                        selected.includes(u.id) ? { ...u, target: null, holdPosition: false } : u
+                    ));
+                }
+            }
+            if (e.code === "KeyH" && !stateRefs.targetingModeRef.current) {
+                const selected = stateRefs.selectedRef.current;
+                if (selected.length > 0) {
+                    // Toggle hold — when toggling ON, also stop
+                    const units = stateRefs.unitsStateRef.current;
+                    setters.setUnits(prev => prev.map(u => {
+                        if (!selected.includes(u.id)) return u;
+                        const turningOn = !u.holdPosition;
+                        if (turningOn) {
+                            // Stop movement when entering hold
+                            gameRefs.current.paths[u.id] = [];
+                            const ug = unitGroups[u.id];
+                            if (ug) {
+                                ug.userData.attackTarget = null;
+                                ug.userData.pendingMove = false;
+                                delete ug.userData.formationRamp;
+                                delete ug.userData.attackMoveTarget;
+                            }
+                            delete mutableRefs.actionQueueRef.current[u.id];
+                        }
+                        return { ...u, holdPosition: turningOn, target: turningOn ? null : u.target };
+                    }));
+                    setters.setQueuedActions(prev => prev.filter(q => {
+                        const unit = units.find(u => u.id === q.unitId);
+                        return !(unit && selected.includes(unit.id) && !unit.holdPosition);
+                    }));
+                }
+            }
+            if (e.code === "KeyA" && !stateRefs.targetingModeRef.current) {
+                if (stateRefs.selectedRef.current.length > 0) {
+                    setters.setCommandMode("attackMove");
+                }
+            }
+            if (e.code === "KeyM" && !stateRefs.targetingModeRef.current) {
+                setters.setCommandMode(null);
+            }
+            if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) {
                 mutableRefs.keysPressed.current.add(e.code);
             }
         };

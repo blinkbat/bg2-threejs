@@ -227,38 +227,48 @@ export function acquireTarget(ctx: TargetingContext, targetId: number): boolean 
     const { unit, g, unitsRef, pathsRef, moveStartRef, now } = ctx;
     const isPlayer = unit.team === "player";
 
-    g.userData.attackTarget = targetId;
     const targetG = unitsRef[targetId];
-
-    if (targetG) {
-        // Check if already in attack range (no path needed)
-        const dist = distanceBetween(g.position, targetG.position);
-        const attackRange = getAttackRange(unit);
-        if (dist < attackRange) {
-            // Already in attack range, no path needed
-            pathsRef[unit.id] = [];
-            return true;
-        }
-
-        // Flying enemies can pass over lava
-        const isFlying = !isPlayer && unit.enemyType && ENEMY_STATS[unit.enemyType]?.flying === true;
-        const path = findPath(g.position.x, g.position.z, targetG.position.x, targetG.position.z, 0, isFlying);
-        if (path && path.length > 0) {
-            pathsRef[unit.id] = path.slice(1);
-            moveStartRef[unit.id] = { time: now, x: g.position.x, z: g.position.z };
-            clearJitterTracking(unit.id);  // Reset jitter detection for new path
-            return true;
-        } else {
-            // No path found and not in range - mark as unreachable for enemies
-            pathsRef[unit.id] = [];
-            if (!isPlayer) {
-                handleGiveUp(unit.id, isPlayer, targetId, now);
-                g.userData.attackTarget = null;
-            }
-            return false;
-        }
-    } else {
+    if (!targetG) {
         pathsRef[unit.id] = [];
+        return false;
+    }
+
+    const dist = distanceBetween(g.position, targetG.position);
+    const attackRange = getAttackRange(unit);
+
+    // Hold position: only engage targets already in range
+    if (isPlayer && unit.holdPosition) {
+        if (dist < attackRange) {
+            g.userData.attackTarget = targetId;
+            pathsRef[unit.id] = [];
+            return true;
+        }
+        return false;
+    }
+
+    g.userData.attackTarget = targetId;
+
+    if (dist < attackRange) {
+        // Already in attack range, no path needed
+        pathsRef[unit.id] = [];
+        return true;
+    }
+
+    // Flying enemies can pass over lava
+    const isFlying = !isPlayer && unit.enemyType && ENEMY_STATS[unit.enemyType]?.flying === true;
+    const path = findPath(g.position.x, g.position.z, targetG.position.x, targetG.position.z, 0, isFlying);
+    if (path && path.length > 0) {
+        pathsRef[unit.id] = path.slice(1);
+        moveStartRef[unit.id] = { time: now, x: g.position.x, z: g.position.z };
+        clearJitterTracking(unit.id);  // Reset jitter detection for new path
+        return true;
+    } else {
+        // No path found and not in range - mark as unreachable for enemies
+        pathsRef[unit.id] = [];
+        if (!isPlayer) {
+            handleGiveUp(unit.id, isPlayer, targetId, now);
+            g.userData.attackTarget = null;
+        }
         return false;
     }
 }
@@ -369,7 +379,8 @@ export function runTargetingPhase(ctx: TargetingContext): void {
 
     // Determine if we should look for a new target
     const hasActivePath = pathsRef[unit.id]?.length > 0;
-    const isExecutingMoveCommand = (hasActivePath || g.userData.pendingMove) && g.userData.attackTarget === null;
+    const isAttackMoving = isPlayer && g.userData.attackMoveTarget !== undefined;
+    const isExecutingMoveCommand = (hasActivePath || g.userData.pendingMove) && g.userData.attackTarget === null && !isAttackMoving;
     const canAutoTarget = shouldAutoTarget && !targetStillValid && !isExecutingMoveCommand;
     const canScan = canScanForTargets(unit.id, now);
 

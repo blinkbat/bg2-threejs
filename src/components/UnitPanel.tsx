@@ -9,6 +9,29 @@ import { COLORS, getSkillColorClass, getSkillBorderColor } from "../core/constan
 import { getCharacterEquipment, getPartyInventory } from "../game/equipmentState";
 import { getItem } from "../game/items";
 import { isOffHandDisabled } from "../game/equipment";
+import monkPortrait from "../assets/monk-portrait.png";
+import barbarianPortrait from "../assets/barbarian-portrait.png";
+import wizardPortrait from "../assets/wizard-portrait.png";
+import paladinPortrait from "../assets/paladin-portrait.png";
+import thiefPortrait from "../assets/thief-portrait.png";
+import clericPortrait from "../assets/cleric-portrait.png";
+
+const CLASS_PORTRAITS: Record<string, string> = {
+    Barbarian: barbarianPortrait,
+    Wizard: wizardPortrait,
+    Paladin: paladinPortrait,
+    Thief: thiefPortrait,
+    Cleric: clericPortrait,
+    Monk: monkPortrait,
+};
+const getPortrait = (className: string) => CLASS_PORTRAITS[className] ?? monkPortrait;
+
+const PORTRAIT_POS: Record<string, string> = {
+    Cleric: "35% center",
+    Monk: "35% center",
+    Thief: "65% center",
+    Wizard: "65% center",
+};
 
 interface UnitPanelProps {
     unitId: number;
@@ -55,27 +78,18 @@ export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, ski
     const hasMana = effectiveMaxMana > 0;
     const manaPct = hasMana ? getHpPercentage(getMana(unit), effectiveMaxMana) : 0;
 
-    const darkenColor = (hex: string, factor: number = 0.4) => {
-        const r = parseInt(hex.slice(1, 3), 16);
-        const g = parseInt(hex.slice(3, 5), 16);
-        const b = parseInt(hex.slice(5, 7), 16);
-        return `rgb(${Math.floor(r * factor)}, ${Math.floor(g * factor)}, ${Math.floor(b * factor)})`;
-    };
-    const headerColor = darkenColor(data.color);
-
     return (
         <div className="unit-panel glass-panel">
-            <div className="unit-panel-header" style={{ background: headerColor, borderBottom: `2px solid ${data.color}` }}>
-                <div className="unit-avatar" style={{ color: data.color }}>{data.name[0]}</div>
-                <div className="unit-info">
+            <div className="unit-panel-header" style={{ backgroundColor: data.color, "--header-bg-image": `url(${getPortrait(data.class)})`, "--header-bg-pos": PORTRAIT_POS[data.class] ?? "center" } as React.CSSProperties}>
+                <div className="close-btn header-close" onClick={onClose}>×</div>
+                <div className="unit-info header-info">
                     <div className="unit-name">{data.name}</div>
                     {data.name !== data.class && <div className="unit-class">{data.class}</div>}
                 </div>
-                <div className="close-btn" onClick={onClose}>×</div>
             </div>
 
             <div className="unit-bars">
-                <div className="bar-label">HP: {Math.max(0, unit.hp)} / {effectiveMaxHp}</div>
+                <div className="bar-label">Health: {Math.max(0, unit.hp)} / {effectiveMaxHp}</div>
                 <div className="progress-bar">
                     <div className="progress-fill" style={{ width: `${Math.max(0, hpPct)}%`, backgroundColor: hpColor }} />
                 </div>

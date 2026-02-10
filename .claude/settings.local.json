@@ -12,7 +12,8 @@
       "Bash(findstr:*)",
       "Bash(npx eslint:*)",
       "Bash(del:*)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(python -c:*)"
     ]
   }
 }

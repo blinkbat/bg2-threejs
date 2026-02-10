@@ -61,7 +61,7 @@ export interface InputSetters {
 // Note: attacks are just skills now - no separate "attack" type
 export type QueuedAction =
     | { type: "skill"; skill: Skill; targetX: number; targetZ: number; targetId?: number }
-    | { type: "move"; targetX: number; targetZ: number; direct?: boolean; notBefore?: number }
+    | { type: "move"; targetX: number; targetZ: number; direct?: boolean; notBefore?: number; attackMove?: boolean }
     | { type: "consumable"; itemId: string; targetId?: number };
 
 // Map from unitId to their queued action

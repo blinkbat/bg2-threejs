@@ -12,6 +12,7 @@ import {
     type TargetingContext, type PathContext, type MovementContext
 } from "../ai/unitAI";
 import { getUnitStats, getAttackRange } from "../game/units";
+import { createPathToTarget, clearJitterTracking } from "../ai/movement";
 import { getBasicAttackSkill } from "../game/playerUnits";
 import type { ActionQueue } from "../input";
 import { hasStatusEffect, isUnitAlive, getCooldownMultiplier, setSkillCooldown, isCooldownReady, getEffectiveSpeedMultiplier } from "../combat/combatMath";
@@ -304,6 +305,16 @@ export function updateUnitAI(
                 }
                 return;
             } else {
+                // Hold position: drop target instead of chasing
+                if (isPlayer && unit.holdPosition) {
+                    g.userData.attackTarget = null;
+                    if (actionQueueRef && actionQueueRef[unit.id]) {
+                        delete actionQueueRef[unit.id];
+                        setQueuedActions?.(prev => prev.filter(q => q.unitId !== unit.id));
+                    }
+                    return;
+                }
+
                 // Not in attack range - check if we can leap to close distance
                 if (!isPlayer && 'leapSkill' in data && data.leapSkill && !isUnitLeaping(unit.id)) {
                     const leapSkill = data.leapSkill;
@@ -325,6 +336,16 @@ export function updateUnitAI(
             if (isPlayer && actionQueueRef && actionQueueRef[unit.id]) {
                 delete actionQueueRef[unit.id];
                 setQueuedActions?.(prev => prev.filter(q => q.unitId !== unit.id));
+            }
+            // Attack-move: resume path to original destination after target dies
+            if (isPlayer && g.userData.attackMoveTarget) {
+                const dest = g.userData.attackMoveTarget;
+                const result = createPathToTarget(g.position.x, g.position.z, dest.x, dest.z);
+                if (result.success) {
+                    pathsRef[unit.id] = result.path;
+                    moveStartRef[unit.id] = { time: now, x: g.position.x, z: g.position.z };
+                    clearJitterTracking(unit.id);
+                }
             }
         }
     }

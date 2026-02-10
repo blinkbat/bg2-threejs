@@ -114,10 +114,10 @@ function updateKeyboardPanning(
     updateCam: () => void
 ): void {
     let screenX = 0, screenY = 0;
-    if (keysPressed.has("ArrowUp") || keysPressed.has("KeyW")) screenY -= 1;
-    if (keysPressed.has("ArrowDown") || keysPressed.has("KeyS")) screenY += 1;
-    if (keysPressed.has("ArrowLeft") || keysPressed.has("KeyA")) screenX -= 1;
-    if (keysPressed.has("ArrowRight") || keysPressed.has("KeyD")) screenX += 1;
+    if (keysPressed.has("ArrowUp")) screenY -= 1;
+    if (keysPressed.has("ArrowDown")) screenY += 1;
+    if (keysPressed.has("ArrowLeft")) screenX -= 1;
+    if (keysPressed.has("ArrowRight")) screenX += 1;
 
     if (screenX !== 0 || screenY !== 0) {
         const len = Math.hypot(screenX, screenY);

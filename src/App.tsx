@@ -40,6 +40,7 @@ import { useThreeScene, useGameLoop, useInputHandlers, type InitializedSceneStat
 
 // UI Components
 import { PartyBar } from "./components/PartyBar";
+import { CommandBar } from "./components/CommandBar";
 import { UnitPanel } from "./components/UnitPanel";
 import { type HotbarAssignments, loadHotbarAssignments, saveHotbarAssignments } from "./components/SkillHotbar";
 import { CombatLog } from "./components/CombatLog";
@@ -49,6 +50,25 @@ import { loadFormationOrder, saveFormationOrder } from "./hooks/formationStorage
 import { HelpModal } from "./components/HelpModal";
 import { SaveLoadModal } from "./components/SaveLoadModal";
 import { type SaveSlotData, SAVE_VERSION, saveGame, loadGame } from "./game/saveLoad";
+import monkPortrait from "./assets/monk-portrait.png";
+import barbarianPortrait from "./assets/barbarian-portrait.png";
+import wizardPortrait from "./assets/wizard-portrait.png";
+import paladinPortrait from "./assets/paladin-portrait.png";
+import thiefPortrait from "./assets/thief-portrait.png";
+import clericPortrait from "./assets/cleric-portrait.png";
+
+const PORTRAIT_URLS = [monkPortrait, barbarianPortrait, wizardPortrait, paladinPortrait, thiefPortrait, clericPortrait];
+
+function preloadPortraits(): Promise<void> {
+    return Promise.all(
+        PORTRAIT_URLS.map(src => new Promise<void>((resolve) => {
+            const img = new Image();
+            img.onload = () => resolve();
+            img.onerror = () => resolve(); // Don't block on failure
+            img.src = src;
+        }))
+    ).then(() => {});
+}
 
 // =============================================================================
 // TYPES
@@ -202,6 +222,7 @@ function Game({
     const [fps, setFps] = useState(0);
     const [debug, setDebug] = useState(false);
     const [fastMove, setFastMove] = useState(false);
+    const [commandMode, setCommandMode] = useState<"attackMove" | null>(null);
     const [hotbarAssignments, setHotbarAssignments] = useState<HotbarAssignments>(loadHotbarAssignments);
     const [formationOrder, setFormationOrder] = useState<number[]>(loadFormationOrder);
 
@@ -221,6 +242,7 @@ function Game({
     const openedChestsRef = useRef(openedChests);
     const hotbarAssignmentsRef = useRef(hotbarAssignments);
     const formationOrderRef = useRef(formationOrder);
+    const commandModeRef = useRef(commandMode);
     const handleCastSkillRef = useRef<((unitId: number, skill: Skill) => void) | null>(null);
 
     // Sync refs with state
@@ -235,6 +257,7 @@ function Game({
     useEffect(() => { openedChestsRef.current = openedChests; }, [openedChests]);
     useEffect(() => { hotbarAssignmentsRef.current = hotbarAssignments; }, [hotbarAssignments]);
     useEffect(() => { formationOrderRef.current = formationOrder; }, [formationOrder]);
+    useEffect(() => { commandModeRef.current = commandMode; }, [commandMode]);
 
     // =============================================================================
     // MUTABLE REFS FOR INPUT
@@ -261,12 +284,18 @@ function Game({
         initialCameraOffset: initialCamOffset
     });
 
-    // Notify parent when scene is ready
+    // Preload portrait images before fade-in
+    const [portraitsReady, setPortraitsReady] = useState(false);
     useEffect(() => {
-        if (isInitialized && onReady) {
+        preloadPortraits().then(() => setPortraitsReady(true));
+    }, []);
+
+    // Notify parent when scene + portraits are ready
+    useEffect(() => {
+        if (isInitialized && portraitsReady && onReady) {
             onReady();
         }
-    }, [isInitialized, onReady]);
+    }, [isInitialized, portraitsReady, onReady]);
 
     // Sync hoveredDoor to gameRefs
     useEffect(() => {
@@ -455,7 +484,8 @@ function Game({
         stateRefs: {
             unitsStateRef, selectedRef, pausedRef, targetingModeRef, consumableTargetingModeRef,
             showPanelRef, helpOpenRef, openedChestsRef, hotbarAssignmentsRef, pauseStartTimeRef,
-            formationOrderRef
+            formationOrderRef,
+            commandModeRef
         },
         mutableRefs: {
             actionQueueRef, actionCooldownRef, keysPressed,
@@ -465,7 +495,8 @@ function Game({
             setSelectedIds, setSelBox, setUnits, setPaused, setTargetingMode, setConsumableTargetingMode,
             setSkillCooldowns, setQueuedActions, setShowPanel, setHoveredEnemy,
             setHoveredChest, setHoveredPlayer, setHoveredDoor, setHoveredSecretDoor,
-            setHoveredLootBag, setOpenedChests, setOpenedSecretDoors, setGold
+            setHoveredLootBag, setOpenedChests, setOpenedSecretDoors, setGold,
+            setCommandMode
         },
         callbacks: {
             addLog, getSkillContext, handleAreaTransition, onCloseHelp,
@@ -638,6 +669,45 @@ function Game({
 
     handleCastSkillRef.current = handleCastSkill;
 
+    const handleStop = useCallback(() => {
+        const selected = selectedRef.current;
+        if (selected.length === 0) return;
+        selected.forEach(uid => {
+            gameRefs.current.paths[uid] = [];
+            const ug = sceneState.unitGroups[uid];
+            if (ug) {
+                ug.userData.attackTarget = null;
+                ug.userData.pendingMove = false;
+                delete ug.userData.formationRamp;
+                delete ug.userData.attackMoveTarget;
+            }
+            delete actionQueueRef.current[uid];
+        });
+        setQueuedActions(prev => prev.filter(q => !selected.includes(q.unitId)));
+        setUnits(prev => prev.map(u => selected.includes(u.id) ? { ...u, target: null } : u));
+    }, [sceneState.unitGroups]);
+
+    const handleHold = useCallback(() => {
+        const selected = selectedRef.current;
+        if (selected.length === 0) return;
+        setUnits(prev => prev.map(u => {
+            if (!selected.includes(u.id)) return u;
+            const turningOn = !u.holdPosition;
+            if (turningOn) {
+                gameRefs.current.paths[u.id] = [];
+                const ug = sceneState.unitGroups[u.id];
+                if (ug) {
+                    ug.userData.attackTarget = null;
+                    ug.userData.pendingMove = false;
+                    delete ug.userData.formationRamp;
+                    delete ug.userData.attackMoveTarget;
+                }
+                delete actionQueueRef.current[u.id];
+            }
+            return { ...u, holdPosition: turningOn, target: turningOn ? null : u.target };
+        }));
+    }, [sceneState.unitGroups]);
+
     const handleTogglePause = useCallback(() => {
         togglePause(
             { pauseStartTimeRef, actionCooldownRef },
@@ -753,7 +823,7 @@ function Game({
     const areaData = getCurrentArea();
 
     return (
-        <div style={{ width: "100%", height: "100vh", position: "relative", cursor: (targetingMode || consumableTargetingMode) ? "crosshair" : "default" }}>
+        <div style={{ width: "100%", height: "100vh", position: "relative", cursor: (targetingMode || consumableTargetingMode || commandMode === "attackMove") ? "crosshair" : "default" }}>
             <div ref={containerRef} style={{ width: "100%", height: "100%", filter: paused ? "saturate(0.4) brightness(0.85)" : "none", transition: "filter 0.2s" }} />
             {selBox && <div style={{ position: "absolute", left: selBox.left, top: selBox.top, width: selBox.width, height: selBox.height, border: "1px solid #00ff00", backgroundColor: "rgba(0,255,0,0.1)", pointerEvents: "none" }} />}
 
@@ -831,6 +901,15 @@ function Game({
             <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onPause={() => setPaused(true)} onShowHelp={onShowHelp} onRestart={onRestart} onSaveClick={onSaveClick} onLoadClick={onLoadClick} debug={debug} onToggleDebug={() => setDebug(d => !d)} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} onToggleFastMove={() => setFastMove(f => !f)} fastMoveEnabled={fastMove} otherModalOpen={helpOpen || saveLoadOpen} hasSelection={selectedIds.length > 0} />
             <CombatLog log={combatLog} />
             <FormationIndicator units={units} formationOrder={formationOrder} />
+            <div className="bottom-bar-container">
+            <CommandBar
+                commandMode={commandMode}
+                onStop={handleStop}
+                onHold={handleHold}
+                onAttackMove={() => setCommandMode("attackMove")}
+                hasSelection={selectedIds.length > 0}
+                holdActive={units.some(u => selectedIds.includes(u.id) && u.holdPosition)}
+            />
             <PartyBar
                 units={units} selectedIds={selectedIds} onSelect={setSelectedIds} targetingMode={targetingMode}
                 consumableTargetingMode={consumableTargetingMode}
@@ -865,6 +944,7 @@ function Game({
                 formationOrder={formationOrder}
                 onReorderFormation={(newOrder) => { setFormationOrder(newOrder); saveFormationOrder(newOrder); }}
             />
+            </div>
             {showPanel && selectedIds.length === 1 && (
                 <UnitPanel
                     unitId={selectedIds[0]} units={units} onClose={() => setShowPanel(false)}
