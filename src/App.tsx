@@ -158,15 +158,15 @@ interface LightingTuningSettings {
 
 const DEFAULT_LIGHTING_TUNING: LightingTuningSettings = {
     shadowsEnabled: true,
-    exposureScale: 1.09,
-    ambientScale: 1.12,
-    hemisphereScale: 0,
-    directionalScale: 1.21,
+    exposureScale: 1.1,
+    ambientScale: 1.72,
+    hemisphereScale: 0.22,
+    directionalScale: 1,
     shadowRadius: 2,
     shadowBias: -0.00115,
-    shadowNormalBias: 0.015,
-    spriteEmissiveScale: 0.95,
-    spriteRoughness: 0.92,
+    shadowNormalBias: 0.007,
+    spriteEmissiveScale: 0.7,
+    spriteRoughness: 0.82,
     spriteMetalness: 0
 };
 
