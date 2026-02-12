@@ -142,6 +142,34 @@ export interface SaveableGameState {
     killedEnemies: Set<string>;
 }
 
+interface LightingTuningSettings {
+    shadowsEnabled: boolean;
+    exposureScale: number;
+    ambientScale: number;
+    hemisphereScale: number;
+    directionalScale: number;
+    shadowRadius: number;
+    shadowBias: number;
+    shadowNormalBias: number;
+    spriteEmissiveScale: number;
+    spriteRoughness: number;
+    spriteMetalness: number;
+}
+
+const DEFAULT_LIGHTING_TUNING: LightingTuningSettings = {
+    shadowsEnabled: true,
+    exposureScale: 1.09,
+    ambientScale: 1.12,
+    hemisphereScale: 0,
+    directionalScale: 1.21,
+    shadowRadius: 2,
+    shadowBias: -0.00115,
+    shadowNormalBias: 0.015,
+    spriteEmissiveScale: 0.95,
+    spriteRoughness: 0.92,
+    spriteMetalness: 0
+};
+
 // =============================================================================
 // GAME COMPONENT
 // =============================================================================
@@ -258,6 +286,7 @@ function Game({
     const [commandMode, setCommandMode] = useState<"attackMove" | null>(null);
     const [hotbarAssignments, setHotbarAssignments] = useState<HotbarAssignments>(loadHotbarAssignments);
     const [formationOrder, setFormationOrder] = useState<number[]>(loadFormationOrder);
+    const [lightingTuning, setLightingTuning] = useState<LightingTuningSettings>({ ...DEFAULT_LIGHTING_TUNING });
 
     // =============================================================================
     // STATE SYNC REFS
@@ -347,6 +376,76 @@ function Game({
     useEffect(() => {
         setDebugSpeedMultiplier(fastMove ? 10 : 1);
     }, [fastMove]);
+
+    // Live lighting tuning from debug panel
+    useEffect(() => {
+        const scene = sceneState.scene;
+        const renderer = sceneState.renderer;
+        if (!scene || !renderer) return;
+
+        const baseExposureRaw = scene.userData.baseExposure;
+        const baseExposure = typeof baseExposureRaw === "number"
+            ? baseExposureRaw
+            : renderer.toneMappingExposure;
+        renderer.toneMappingExposure = baseExposure * lightingTuning.exposureScale;
+        renderer.shadowMap.enabled = lightingTuning.shadowsEnabled;
+        renderer.shadowMap.needsUpdate = true;
+
+        const ambient = scene.getObjectByName("ambientLight");
+        if (ambient instanceof THREE.AmbientLight) {
+            const baseAmbient = typeof ambient.userData.baseIntensity === "number"
+                ? ambient.userData.baseIntensity
+                : ambient.intensity;
+            ambient.intensity = baseAmbient * lightingTuning.ambientScale;
+        }
+
+        const hemi = scene.getObjectByName("hemiLight");
+        if (hemi instanceof THREE.HemisphereLight) {
+            const baseHemi = typeof hemi.userData.baseIntensity === "number"
+                ? hemi.userData.baseIntensity
+                : hemi.intensity;
+            hemi.intensity = baseHemi * lightingTuning.hemisphereScale;
+        }
+
+        const dir = scene.getObjectByName("directionalLight");
+        if (dir instanceof THREE.DirectionalLight) {
+            const baseDirectional = typeof dir.userData.baseIntensity === "number"
+                ? dir.userData.baseIntensity
+                : dir.intensity;
+            dir.intensity = baseDirectional * lightingTuning.directionalScale;
+            dir.castShadow = lightingTuning.shadowsEnabled;
+            dir.shadow.radius = lightingTuning.shadowRadius;
+            dir.shadow.bias = lightingTuning.shadowBias;
+            dir.shadow.normalBias = lightingTuning.shadowNormalBias;
+            dir.shadow.needsUpdate = true;
+        }
+
+        scene.traverse((object: THREE.Object3D) => {
+            if (!(object instanceof THREE.Mesh) || object.userData?.isBillboard !== true) return;
+
+            const mat = object.material;
+            if (!(mat instanceof THREE.MeshStandardMaterial)) return;
+
+            const existingBase = mat.userData.spriteLightingBase as {
+                emissiveIntensity: number;
+                metalness: number;
+                roughness: number;
+            } | undefined;
+            const base = existingBase ?? {
+                emissiveIntensity: mat.emissiveIntensity,
+                metalness: mat.metalness,
+                roughness: mat.roughness
+            };
+            if (!existingBase) {
+                mat.userData.spriteLightingBase = base;
+            }
+
+            mat.emissiveIntensity = base.emissiveIntensity * lightingTuning.spriteEmissiveScale;
+            mat.metalness = lightingTuning.spriteMetalness;
+            mat.roughness = lightingTuning.spriteRoughness;
+            mat.needsUpdate = true;
+        });
+    }, [sceneState.scene, sceneState.renderer, lightingTuning]);
 
     // =============================================================================
     // CALLBACKS
@@ -876,6 +975,36 @@ function Game({
         }
     }, [devMode, addLog]);
 
+    const handleUpdateLightingTuning = useCallback((patch: Partial<LightingTuningSettings>) => {
+        setLightingTuning(prev => ({ ...prev, ...patch }));
+    }, []);
+
+    const handleResetLightingTuning = useCallback(() => {
+        setLightingTuning({ ...DEFAULT_LIGHTING_TUNING });
+    }, []);
+
+    const lightingTuningOutput = useMemo(() => {
+        const payload = {
+            areaId: getCurrentAreaId(),
+            ...lightingTuning
+        };
+        const compact = [
+            `area=${payload.areaId}`,
+            `shadows=${payload.shadowsEnabled ? 1 : 0}`,
+            `exp=${payload.exposureScale.toFixed(2)}`,
+            `amb=${payload.ambientScale.toFixed(2)}`,
+            `hemi=${payload.hemisphereScale.toFixed(2)}`,
+            `dir=${payload.directionalScale.toFixed(2)}`,
+            `srad=${payload.shadowRadius.toFixed(2)}`,
+            `sbias=${payload.shadowBias.toFixed(5)}`,
+            `snbias=${payload.shadowNormalBias.toFixed(3)}`,
+            `sprE=${payload.spriteEmissiveScale.toFixed(2)}`,
+            `sprR=${payload.spriteRoughness.toFixed(2)}`,
+            `sprM=${payload.spriteMetalness.toFixed(2)}`
+        ].join(" ");
+        return `${JSON.stringify(payload, null, 2)}\n\n${compact}`;
+    }, [lightingTuning, sceneState.scene]);
+
     // =============================================================================
     // RENDER
     // =============================================================================
@@ -959,7 +1088,7 @@ function Game({
             <div style={{ position: "absolute", top: 10, right: 10, color: "#888", fontSize: 11, fontFamily: "monospace", opacity: 0.6 }}>{fps} fps</div>
 
             {/* UI Components */}
-            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onPause={() => setPaused(true)} onShowHelp={onShowHelp} onRestart={onRestart} onSaveClick={onSaveClick} onLoadClick={onLoadClick} debug={debug} onToggleDebug={() => setDebug(d => !d)} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} onToggleDevMode={handleToggleDevMode} devModeEnabled={devMode} onToggleFastMove={() => setFastMove(f => !f)} fastMoveEnabled={fastMove} otherModalOpen={helpOpen || saveLoadOpen} hasSelection={selectedIds.length > 0} />
+            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onPause={() => setPaused(true)} onShowHelp={onShowHelp} onRestart={onRestart} onSaveClick={onSaveClick} onLoadClick={onLoadClick} debug={debug} onToggleDebug={() => setDebug(d => !d)} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} onToggleDevMode={handleToggleDevMode} devModeEnabled={devMode} onToggleFastMove={() => setFastMove(f => !f)} fastMoveEnabled={fastMove} lightingTuning={lightingTuning} onUpdateLightingTuning={handleUpdateLightingTuning} onResetLightingTuning={handleResetLightingTuning} lightingTuningOutput={lightingTuningOutput} otherModalOpen={helpOpen || saveLoadOpen} hasSelection={selectedIds.length > 0} />
             <CombatLog log={combatLog} />
             <FormationIndicator units={units} formationOrder={formationOrder} />
             <div className="bottom-bar-container">

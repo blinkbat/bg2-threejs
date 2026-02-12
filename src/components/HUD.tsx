@@ -4,6 +4,20 @@ import { MenuModal } from "./MenuModal";
 import { JukeboxModal } from "./JukeboxModal";
 import { AREAS, type AreaId } from "../game/areas";
 
+interface LightingTuningSettings {
+    shadowsEnabled: boolean;
+    exposureScale: number;
+    ambientScale: number;
+    hemisphereScale: number;
+    directionalScale: number;
+    shadowRadius: number;
+    shadowBias: number;
+    shadowNormalBias: number;
+    spriteEmissiveScale: number;
+    spriteRoughness: number;
+    spriteMetalness: number;
+}
+
 interface HUDProps {
     areaName: string;
     areaFlavor: string;
@@ -23,6 +37,10 @@ interface HUDProps {
     devModeEnabled?: boolean;
     onToggleFastMove?: () => void;
     fastMoveEnabled?: boolean;
+    lightingTuning?: LightingTuningSettings;
+    onUpdateLightingTuning?: (patch: Partial<LightingTuningSettings>) => void;
+    onResetLightingTuning?: () => void;
+    lightingTuningOutput?: string;
     otherModalOpen?: boolean;
     hasSelection?: boolean;
 }
@@ -46,12 +64,18 @@ export function HUD({
     devModeEnabled,
     onToggleFastMove,
     fastMoveEnabled,
+    lightingTuning,
+    onUpdateLightingTuning,
+    onResetLightingTuning,
+    lightingTuningOutput,
     otherModalOpen,
     hasSelection
 }: HUDProps) {
     const [menuOpen, setMenuOpen] = useState(false);
     const [debugPanelOpen, setDebugPanelOpen] = useState(false);
     const [jukeboxOpen, setJukeboxOpen] = useState(false);
+    const [lightingCopied, setLightingCopied] = useState(false);
+    const [lightingExpanded, setLightingExpanded] = useState(false);
 
     // Enable debug visuals when panel opens, disable when it closes
     useEffect(() => {
@@ -115,6 +139,16 @@ export function HUD({
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
     }, [debugPanelOpen, menuOpen, otherModalOpen, hasSelection, handleCloseMenu, handleOpenMenu]);
+
+    const copyLightingOutput = useCallback(() => {
+        if (!lightingTuningOutput) return;
+        navigator.clipboard.writeText(lightingTuningOutput).then(() => {
+            setLightingCopied(true);
+            window.setTimeout(() => setLightingCopied(false), 1200);
+        }).catch(() => {
+            setLightingCopied(false);
+        });
+    }, [lightingTuningOutput]);
 
     return (
         <>
@@ -203,6 +237,167 @@ export function HUD({
                                 </button>
                             </div>
                         </div>
+                        {lightingTuning && onUpdateLightingTuning && (
+                            <div className="hud-debug-group">
+                                <div className="hud-debug-group-header">
+                                    <div className="hud-debug-label">Lighting</div>
+                                    <button
+                                        className="btn btn-tiny hud-debug-expand-btn"
+                                        onClick={() => setLightingExpanded(prev => !prev)}
+                                    >
+                                        {lightingExpanded ? "Hide" : "Show"}
+                                    </button>
+                                </div>
+                                {lightingExpanded && (
+                                    <>
+                                        <div className="hud-debug-controls">
+                                            <label className="hud-debug-toggle">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={lightingTuning.shadowsEnabled}
+                                                    onChange={e => onUpdateLightingTuning({ shadowsEnabled: e.target.checked })}
+                                                />
+                                                Shadows
+                                            </label>
+
+                                            <label className="hud-debug-control">
+                                                <span>Exposure x{lightingTuning.exposureScale.toFixed(2)}</span>
+                                                <input
+                                                    type="range"
+                                                    min="0.5"
+                                                    max="1.8"
+                                                    step="0.01"
+                                                    value={lightingTuning.exposureScale}
+                                                    onChange={e => onUpdateLightingTuning({ exposureScale: parseFloat(e.target.value) })}
+                                                />
+                                            </label>
+
+                                            <label className="hud-debug-control">
+                                                <span>Ambient x{lightingTuning.ambientScale.toFixed(2)}</span>
+                                                <input
+                                                    type="range"
+                                                    min="0"
+                                                    max="2"
+                                                    step="0.01"
+                                                    value={lightingTuning.ambientScale}
+                                                    onChange={e => onUpdateLightingTuning({ ambientScale: parseFloat(e.target.value) })}
+                                                />
+                                            </label>
+
+                                            <label className="hud-debug-control">
+                                                <span>Hemisphere x{lightingTuning.hemisphereScale.toFixed(2)}</span>
+                                                <input
+                                                    type="range"
+                                                    min="0"
+                                                    max="2"
+                                                    step="0.01"
+                                                    value={lightingTuning.hemisphereScale}
+                                                    onChange={e => onUpdateLightingTuning({ hemisphereScale: parseFloat(e.target.value) })}
+                                                />
+                                            </label>
+
+                                            <label className="hud-debug-control">
+                                                <span>Directional x{lightingTuning.directionalScale.toFixed(2)}</span>
+                                                <input
+                                                    type="range"
+                                                    min="0"
+                                                    max="2"
+                                                    step="0.01"
+                                                    value={lightingTuning.directionalScale}
+                                                    onChange={e => onUpdateLightingTuning({ directionalScale: parseFloat(e.target.value) })}
+                                                />
+                                            </label>
+
+                                            <label className="hud-debug-control">
+                                                <span>Shadow Radius {lightingTuning.shadowRadius.toFixed(2)}</span>
+                                                <input
+                                                    type="range"
+                                                    min="0"
+                                                    max="6"
+                                                    step="0.1"
+                                                    value={lightingTuning.shadowRadius}
+                                                    onChange={e => onUpdateLightingTuning({ shadowRadius: parseFloat(e.target.value) })}
+                                                    disabled={!lightingTuning.shadowsEnabled}
+                                                />
+                                            </label>
+
+                                            <label className="hud-debug-control">
+                                                <span>Shadow Bias {lightingTuning.shadowBias.toFixed(5)}</span>
+                                                <input
+                                                    type="range"
+                                                    min="-0.002"
+                                                    max="0.001"
+                                                    step="0.00005"
+                                                    value={lightingTuning.shadowBias}
+                                                    onChange={e => onUpdateLightingTuning({ shadowBias: parseFloat(e.target.value) })}
+                                                    disabled={!lightingTuning.shadowsEnabled}
+                                                />
+                                            </label>
+
+                                            <label className="hud-debug-control">
+                                                <span>Shadow Normal Bias {lightingTuning.shadowNormalBias.toFixed(3)}</span>
+                                                <input
+                                                    type="range"
+                                                    min="0"
+                                                    max="0.05"
+                                                    step="0.001"
+                                                    value={lightingTuning.shadowNormalBias}
+                                                    onChange={e => onUpdateLightingTuning({ shadowNormalBias: parseFloat(e.target.value) })}
+                                                    disabled={!lightingTuning.shadowsEnabled}
+                                                />
+                                            </label>
+
+                                            <label className="hud-debug-control">
+                                                <span>Sprite Emissive x{lightingTuning.spriteEmissiveScale.toFixed(2)}</span>
+                                                <input
+                                                    type="range"
+                                                    min="0"
+                                                    max="3"
+                                                    step="0.05"
+                                                    value={lightingTuning.spriteEmissiveScale}
+                                                    onChange={e => onUpdateLightingTuning({ spriteEmissiveScale: parseFloat(e.target.value) })}
+                                                />
+                                            </label>
+
+                                            <label className="hud-debug-control">
+                                                <span>Sprite Roughness {lightingTuning.spriteRoughness.toFixed(2)}</span>
+                                                <input
+                                                    type="range"
+                                                    min="0"
+                                                    max="1"
+                                                    step="0.01"
+                                                    value={lightingTuning.spriteRoughness}
+                                                    onChange={e => onUpdateLightingTuning({ spriteRoughness: parseFloat(e.target.value) })}
+                                                />
+                                            </label>
+
+                                            <label className="hud-debug-control">
+                                                <span>Sprite Metalness {lightingTuning.spriteMetalness.toFixed(2)}</span>
+                                                <input
+                                                    type="range"
+                                                    min="0"
+                                                    max="1"
+                                                    step="0.01"
+                                                    value={lightingTuning.spriteMetalness}
+                                                    onChange={e => onUpdateLightingTuning({ spriteMetalness: parseFloat(e.target.value) })}
+                                                />
+                                            </label>
+                                        </div>
+                                        <div className="hud-debug-buttons">
+                                            {onResetLightingTuning && (
+                                                <button className="btn btn-tiny" onClick={onResetLightingTuning}>Reset Lighting</button>
+                                            )}
+                                            <button className="btn btn-tiny" onClick={copyLightingOutput}>
+                                                {lightingCopied ? "Copied" : "Copy Lighting"}
+                                            </button>
+                                        </div>
+                                        {lightingTuningOutput && (
+                                            <textarea className="hud-debug-output" readOnly value={lightingTuningOutput} />
+                                        )}
+                                    </>
+                                )}
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

@@ -47,7 +47,7 @@ export interface ThreeSceneState {
     columnGroups: THREE.Mesh[][];
     doorMeshes: DoorMesh[];
     secretDoorMeshes: SecretDoorMesh[];
-    waterMesh: THREE.Mesh | null;
+    waterMesh: THREE.Object3D | null;
     chestMeshes: ChestMeshData[];
     billboards: THREE.Mesh[];
 }

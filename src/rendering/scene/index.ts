@@ -158,6 +158,82 @@ function getFloorCornerFlags(floor: string[] | string[][], x: number, z: number)
     return [roundTopLeft, roundTopRight, roundBottomRight, roundBottomLeft];
 }
 
+interface LiquidTileAnimationData {
+    liquidType: "water" | "lava";
+    baseY: number;
+    wavePhase: number;
+    waveSpeed: number;
+    baseColor: THREE.Color;
+    hotColor?: THREE.Color;
+    baseEmissiveIntensity: number;
+}
+
+function registerLiquidTile(tile: THREE.Mesh, liquidType: "water" | "lava", x: number, z: number): void {
+    const mat = tile.material;
+    if (!(mat instanceof THREE.MeshStandardMaterial)) return;
+
+    const wavePhase = (x * 0.73 + z * 1.21) % (Math.PI * 2);
+    const waveSpeed = liquidType === "water"
+        ? 1.15 + ((x + z) % 3) * 0.2
+        : 1.8 + ((x + z) % 4) * 0.16;
+
+    const liquidData: LiquidTileAnimationData = {
+        liquidType,
+        baseY: tile.position.y,
+        wavePhase,
+        waveSpeed,
+        baseColor: mat.color.clone(),
+        baseEmissiveIntensity: mat.emissiveIntensity,
+    };
+    if (liquidType === "lava") {
+        liquidData.hotColor = new THREE.Color("#ff8a00");
+    }
+
+    tile.userData.liquid = liquidData;
+}
+
+function hasLitMaterial(material: THREE.Material | THREE.Material[]): boolean {
+    const materials = Array.isArray(material) ? material : [material];
+    return materials.some(mat =>
+        mat instanceof THREE.MeshStandardMaterial ||
+        mat instanceof THREE.MeshPhysicalMaterial ||
+        mat instanceof THREE.MeshLambertMaterial ||
+        mat instanceof THREE.MeshPhongMaterial ||
+        mat instanceof THREE.MeshToonMaterial
+    );
+}
+
+function applyShadowDefaults(scene: THREE.Scene): void {
+    scene.traverse((object: THREE.Object3D) => {
+        if (!(object instanceof THREE.Mesh)) return;
+        if (!hasLitMaterial(object.material)) return;
+
+        if (object.userData?.liquid) {
+            object.castShadow = false;
+            object.receiveShadow = false;
+            return;
+        }
+
+        if (object.name === "ground" || object.name === "lava") {
+            object.castShadow = false;
+            object.receiveShadow = false;
+            return;
+        }
+
+        if (typeof object.userData?.unitId === "number") {
+            object.castShadow = false;
+            object.receiveShadow = false;
+            return;
+        }
+
+        if (object.name === "obstacle" || object.name === "chest" || object.name === "decoration") {
+            object.castShadow = true;
+            object.receiveShadow = true;
+            return;
+        }
+    });
+}
+
 // =============================================================================
 // MAIN SCENE CREATION
 // =============================================================================
@@ -197,13 +273,60 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(container.clientWidth, container.clientHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    const baseExposure = area.id === "forest" ? 1.12 : 1.1;
+    renderer.toneMappingExposure = baseExposure;
+    scene.userData.baseExposure = baseExposure;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(renderer.domElement);
 
-    // Lighting - use area settings
-    scene.add(new THREE.AmbientLight(0xffffff, area.ambientLight));
-    const dir = new THREE.DirectionalLight(0xffffff, area.directionalLight);
-    dir.position.set(10, 20, 10);
+    // Skip atmospheric fog on FoW maps to avoid double-overlay artifacts.
+    if (!area.hasFogOfWar) {
+        const mapDiagonal = Math.hypot(area.gridWidth, area.gridHeight);
+        const fogNear = Math.max(12, mapDiagonal * 0.35);
+        const fogFar = Math.max(fogNear + 12, mapDiagonal * 1.1);
+        const fogColor = new THREE.Color(area.backgroundColor).lerp(
+            new THREE.Color("#0a1118"),
+            area.id === "forest" ? 0.15 : 0.3
+        );
+        scene.fog = new THREE.Fog(fogColor, fogNear, fogFar);
+    }
+
+    // Lighting - softer fill/key ratio to avoid harsh top-down contrast.
+    const ambientLight = new THREE.AmbientLight(0xffffff, area.ambientLight * 1.05);
+    ambientLight.name = "ambientLight";
+    ambientLight.userData.baseIntensity = ambientLight.intensity;
+    scene.add(ambientLight);
+    const hemi = new THREE.HemisphereLight("#a9ccff", "#283341", area.ambientLight * 0.22);
+    hemi.name = "hemiLight";
+    hemi.userData.baseIntensity = hemi.intensity;
+    scene.add(hemi);
+    const dir = new THREE.DirectionalLight("#f5eee2", area.directionalLight * 0.9);
+    dir.name = "directionalLight";
+    dir.position.set(area.gridWidth * 0.35, 24, area.gridHeight * 0.25);
+    const dirTarget = new THREE.Object3D();
+    dirTarget.position.set(area.gridWidth / 2, 0, area.gridHeight / 2);
+    scene.add(dirTarget);
+    dir.target = dirTarget;
+    dir.castShadow = true;
+    const shadowExtent = Math.max(area.gridWidth, area.gridHeight);
+    dir.shadow.mapSize.set(2048, 2048);
+    dir.shadow.camera.left = -shadowExtent;
+    dir.shadow.camera.right = shadowExtent;
+    dir.shadow.camera.top = shadowExtent;
+    dir.shadow.camera.bottom = -shadowExtent;
+    dir.shadow.camera.near = 2;
+    dir.shadow.camera.far = Math.max(120, shadowExtent * 3);
+    dir.shadow.bias = -0.0002;
+    dir.shadow.normalBias = 0.012;
+    dir.shadow.radius = 2;
+    dir.userData.baseIntensity = dir.intensity;
+    dir.userData.baseShadowBias = dir.shadow.bias;
+    dir.userData.baseShadowNormalBias = dir.shadow.normalBias;
+    dir.userData.baseShadowRadius = dir.shadow.radius;
     scene.add(dir);
 
     // Ground - base layer for non-room areas (corridors, etc)
@@ -219,7 +342,11 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
 
     // Floor tiles - render based on floor grid
     // Floor types: s=sand, d=dirt, g=grass, w=water, t=stone, .=default (gray)
-    let waterMesh: THREE.Mesh | null = null;
+    let waterMesh: THREE.Object3D | null = null;
+    let hasLiquidTiles = false;
+    const liquidTiles = new THREE.Group();
+    liquidTiles.name = "liquidTiles";
+    scene.add(liquidTiles);
 
     // Shared geometry for all 1x1 floor/terrain tiles (hundreds of tiles, one geometry)
     const tileGeo = new THREE.PlaneGeometry(1, 1);
@@ -286,7 +413,13 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 tile.rotation.x = -Math.PI / 2;
                 tile.position.set(x + 0.5, 0.001, z + 0.5);
                 tile.name = "ground";
-                scene.add(tile);
+                if (isWater) {
+                    registerLiquidTile(tile, "water", x, z);
+                    liquidTiles.add(tile);
+                    hasLiquidTiles = true;
+                } else {
+                    scene.add(tile);
+                }
             }
         }
     }
@@ -313,16 +446,25 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                     tile.rotation.x = -Math.PI / 2;
                     tile.position.set(x + 0.5, 0.002, z + 0.5);
                     tile.name = "lava";
-                    scene.add(tile);
+                    registerLiquidTile(tile, "lava", x, z);
+                    liquidTiles.add(tile);
+                    hasLiquidTiles = true;
                 } else if (char === "w") {
                     const tile = new THREE.Mesh(tileGeo, terrainWaterMat);
                     tile.rotation.x = -Math.PI / 2;
                     tile.position.set(x + 0.5, 0.002, z + 0.5);
                     tile.name = "ground";
-                    scene.add(tile);
+                    registerLiquidTile(tile, "water", x, z);
+                    liquidTiles.add(tile);
+                    hasLiquidTiles = true;
                 }
             }
         }
+    }
+    if (hasLiquidTiles) {
+        waterMesh = liquidTiles;
+    } else {
+        scene.remove(liquidTiles);
     }
 
     // Torches with flames and lights (only in areas with candles)
@@ -1045,15 +1187,31 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     const fogTextureObj = new THREE.CanvasTexture(fogCanvas);
     fogTextureObj.magFilter = THREE.LinearFilter;
     fogTextureObj.minFilter = THREE.LinearFilter;
+    fogTextureObj.colorSpace = THREE.NoColorSpace;
+    fogTextureObj.generateMipmaps = false;
     const fogTexture: FogTexture = { canvas: fogCanvas, ctx: fogCtx, texture: fogTextureObj };
+
+    const fogMaterial = new THREE.MeshBasicMaterial({
+        map: fogTextureObj,
+        color: "#000000",
+        transparent: true,
+        opacity: 1,
+        depthWrite: false,
+        toneMapped: false,
+        fog: false,
+        blending: THREE.NormalBlending,
+        premultipliedAlpha: false
+    });
+    fogMaterial.depthTest = false;
 
     const fogMesh = new THREE.Mesh(
         new THREE.PlaneGeometry(area.gridWidth, area.gridHeight),
-        new THREE.MeshBasicMaterial({ map: fogTextureObj, transparent: true, depthWrite: false })
+        fogMaterial
     );
     fogMesh.rotation.x = -Math.PI / 2;
     fogMesh.position.set(area.gridWidth / 2, 2.6, area.gridHeight / 2);
-    fogMesh.renderOrder = 999;
+    fogMesh.renderOrder = 1100;
+    fogMesh.frustumCulled = false;
     scene.add(fogMesh);
 
     // Move marker
@@ -1118,6 +1276,8 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
             shieldIndicators[unit.id] = result.shieldIndicator;
         }
     });
+
+    applyShadowDefaults(scene);
 
     return {
         scene,

@@ -2254,7 +2254,7 @@ html, body, #root {
     padding-top: 10px;
     border-top: 1px solid rgba(255, 255, 255, 0.1);
     pointer-events: auto;
-    max-width: 400px;
+    max-width: 620px;
 }
 
 .hud-debug-group {
@@ -2265,6 +2265,13 @@ html, body, #root {
     margin-bottom: 0;
 }
 
+.hud-debug-group-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
 .hud-debug-label {
     font-size: 10px;
     color: #666;
@@ -2273,10 +2280,67 @@ html, body, #root {
     margin-bottom: 4px;
 }
 
+.hud-debug-group-header .hud-debug-label {
+    margin-bottom: 0;
+}
+
+.hud-debug-expand-btn {
+    min-width: 54px;
+}
+
 .hud-debug-buttons {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
+}
+
+.hud-debug-controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(170px, 1fr));
+    gap: 6px 10px;
+    margin-bottom: 8px;
+}
+
+.hud-debug-control {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 10px;
+    color: #9aa4b2;
+}
+
+.hud-debug-control input[type="range"] {
+    width: 100%;
+    accent-color: #6ea8ff;
+}
+
+.hud-debug-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: #c9d4e2;
+}
+
+.hud-debug-output {
+    margin-top: 6px;
+    width: 100%;
+    min-height: 140px;
+    padding: 6px 8px;
+    font-size: 11px;
+    font-family: "Consolas", "Monaco", "Courier New", monospace;
+    line-height: 1.35;
+    color: #cdd6e0;
+    background: rgba(12, 18, 28, 0.85);
+    border: 1px solid rgba(120, 140, 170, 0.35);
+    border-radius: 4px;
+    resize: vertical;
+}
+
+@media (max-width: 900px) {
+    .hud-debug-controls {
+        grid-template-columns: 1fr;
+    }
 }
 
 .btn-small {

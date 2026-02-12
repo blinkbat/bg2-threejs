@@ -50,7 +50,7 @@ export interface SceneRefs {
     columnGroups: THREE.Mesh[][];  // Groups of column parts (body, base, capital) that fade together
     doorMeshes: DoorMesh[];
     secretDoorMeshes: SecretDoorMesh[];  // Hidden doors that reveal caves when clicked
-    waterMesh: THREE.Mesh | null;  // Water for coast
+    waterMesh: THREE.Object3D | null;  // Animated liquid tiles (water/lava)
     chestMeshes: ChestMeshData[];  // Chest lid pivots for open/close animation
     billboards: THREE.Mesh[];  // Billboard meshes that face the camera
 }

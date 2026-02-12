@@ -6,6 +6,42 @@ import * as THREE from "three";
 import type { Unit, UnitGroup } from "../../core/types";
 import type { ChestMeshData } from "./types";
 
+interface LiquidTileAnimationData {
+    liquidType: "water" | "lava";
+    baseY: number;
+    wavePhase: number;
+    waveSpeed: number;
+    baseColor: THREE.Color;
+    hotColor?: THREE.Color;
+    baseEmissiveIntensity: number;
+}
+
+function readLiquidData(value: unknown): LiquidTileAnimationData | null {
+    if (!value || typeof value !== "object") return null;
+
+    const liquidType = Reflect.get(value, "liquidType");
+    const baseY = Reflect.get(value, "baseY");
+    const wavePhase = Reflect.get(value, "wavePhase");
+    const waveSpeed = Reflect.get(value, "waveSpeed");
+    const baseColor = Reflect.get(value, "baseColor");
+    const hotColor = Reflect.get(value, "hotColor");
+    const baseEmissiveIntensity = Reflect.get(value, "baseEmissiveIntensity");
+
+    if (liquidType !== "water" && liquidType !== "lava") return null;
+    if (typeof baseY !== "number" || typeof wavePhase !== "number" || typeof waveSpeed !== "number") return null;
+    if (!(baseColor instanceof THREE.Color)) return null;
+
+    return {
+        liquidType,
+        baseY,
+        wavePhase,
+        waveSpeed,
+        baseColor,
+        hotColor: hotColor instanceof THREE.Color ? hotColor : undefined,
+        baseEmissiveIntensity: typeof baseEmissiveIntensity === "number" ? baseEmissiveIntensity : 0.8,
+    };
+}
+
 // =============================================================================
 // CHEST STATE
 // =============================================================================
@@ -36,10 +72,42 @@ export function updateCamera(camera: THREE.OrthographicCamera, offset: { x: numb
 // =============================================================================
 
 /**
- * Update water (no-op for now).
+ * Update animated liquid tiles (water + lava).
  */
-export function updateWater(_waterMesh: THREE.Mesh | null, _time: number): void {
-    // Simple blue water - no animation
+export function updateWater(waterMesh: THREE.Object3D | null, time: number): void {
+    if (!waterMesh) return;
+
+    const t = time * 0.001;
+    waterMesh.traverse((obj: THREE.Object3D) => {
+        if (!(obj instanceof THREE.Mesh)) return;
+
+        const liquidData = readLiquidData(obj.userData?.liquid);
+        if (!liquidData) return;
+
+        const mat = obj.material;
+        if (!(mat instanceof THREE.MeshStandardMaterial)) return;
+
+        const primaryWave = Math.sin(t * liquidData.waveSpeed + liquidData.wavePhase);
+        const secondaryWave = Math.sin(t * (liquidData.waveSpeed * 1.6) + liquidData.wavePhase * 0.73);
+
+        if (liquidData.liquidType === "water") {
+            const shimmer = 0.5 + (primaryWave * 0.4 + secondaryWave * 0.6) * 0.5;
+            mat.emissive.setRGB(0.02, 0.06, 0.09);
+            mat.emissiveIntensity = 0.03 + shimmer * 0.045;
+            mat.roughness = 0.52 + (1 - shimmer) * 0.08;
+            mat.metalness = 0.08;
+            return;
+        }
+
+        const pulse = 0.5 + (primaryWave * 0.7 + secondaryWave * 0.3) * 0.5;
+        if (liquidData.baseColor && liquidData.hotColor) {
+            mat.color.copy(liquidData.baseColor).lerp(liquidData.hotColor, pulse * 0.35);
+        }
+        mat.emissive.setRGB(1.0, 0.2, 0.05);
+        mat.emissiveIntensity = (liquidData.baseEmissiveIntensity ?? 0.8) + pulse * 0.35;
+        mat.roughness = 0.36 + (1 - pulse) * 0.12;
+        mat.metalness = 0.16;
+    });
 }
 
 // =============================================================================

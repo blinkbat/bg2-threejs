@@ -216,6 +216,12 @@ function buildUnitGroup(
         // Billboard plane that faces the camera and responds to lighting
         const spriteHeight = spriteConfig.spriteHeight ?? 1.8;
         const spriteWidth = spriteHeight * (spriteConfig.width / spriteConfig.height);
+        const emissiveBoost = Math.min(0.2, 0.09 + (spriteConfig.brightness ?? 0.06));
+        const spriteLightingBase = {
+            emissiveIntensity: emissiveBoost,
+            metalness: 0.02,
+            roughness: 0.92
+        };
         const planeMat = new THREE.MeshStandardMaterial({
             map: spriteConfig.texture,
             color: spriteConfig.color ?? 0xffffff,
@@ -223,12 +229,13 @@ function buildUnitGroup(
             alphaTest: 0.01,
             opacity: spriteConfig.opacity ?? 1,
             side: THREE.DoubleSide,
-            metalness: 0.3,
-            roughness: 0.6,
-            emissive: spriteConfig.brightness ? (spriteConfig.color ?? 0xffffff) : undefined,
-            emissiveIntensity: spriteConfig.brightness ?? 0,
-            emissiveMap: spriteConfig.brightness ? spriteConfig.texture : undefined,
+            metalness: spriteLightingBase.metalness,
+            roughness: spriteLightingBase.roughness,
+            emissive: spriteConfig.color ?? 0xffffff,
+            emissiveIntensity: spriteLightingBase.emissiveIntensity,
+            emissiveMap: spriteConfig.texture,
         });
+        planeMat.userData.spriteLightingBase = spriteLightingBase;
         applySpriteEdgeBlur(planeMat, spriteConfig.width, spriteConfig.height);
         const plane = new THREE.Mesh(new THREE.PlaneGeometry(spriteWidth, spriteHeight), planeMat);
         plane.position.y = spriteHeight / 2 + (spriteConfig.offsetY ?? 0);
@@ -266,6 +273,8 @@ function buildUnitGroup(
         group.add(box);
         unitMesh = box;
     }
+    unitMesh.castShadow = false;
+    unitMesh.receiveShadow = false;
 
     // Determine fly height early (needed for shadow positioning)
     const isFlying = !isPlayer && "flying" in data && data.flying;
