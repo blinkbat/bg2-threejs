@@ -15,6 +15,12 @@ import { findPath } from "./pathfinding";
 
 // Track when units gave up on a path to prevent immediate retry
 const gaveUpUntil: Record<number, number> = {};
+// Throttle path recalculation to avoid per-frame path churn in crowds
+const nextPathRecalcAt: Record<number, number> = {};
+
+const REPATH_COOLDOWN_TARGET_MOVED_MS = 90;
+const REPATH_COOLDOWN_UNIT_DEVIATED_MS = 180;
+const REPATH_COOLDOWN_NO_PATH_MS = 260;
 
 // Throttle target acquisition - don't scan for targets every frame
 const lastTargetScan: Record<number, number> = {};
@@ -206,6 +212,27 @@ export function recentlyGaveUp(unitId: number, now: number): boolean {
     return gaveUpUntil[unitId] !== undefined && now < gaveUpUntil[unitId];
 }
 
+/**
+ * Check if a unit is allowed to recalculate path right now.
+ */
+export function canRecalculatePath(unitId: number, now: number): boolean {
+    return (nextPathRecalcAt[unitId] ?? 0) <= now;
+}
+
+/**
+ * Record a path recalculation attempt and apply a short cooldown based on reason.
+ */
+export function recordPathRecalculation(
+    unitId: number,
+    reason: "no_path" | "target_moved" | "unit_deviated" | "none",
+    now: number
+): void {
+    let cooldown = REPATH_COOLDOWN_NO_PATH_MS;
+    if (reason === "target_moved") cooldown = REPATH_COOLDOWN_TARGET_MOVED_MS;
+    else if (reason === "unit_deviated") cooldown = REPATH_COOLDOWN_UNIT_DEVIATED_MS;
+    nextPathRecalcAt[unitId] = now + cooldown;
+}
+
 // =============================================================================
 // TARGET SCANNING
 // =============================================================================
@@ -342,6 +369,7 @@ export function createPathToTarget(
  */
 export function cleanupUnitState(unitId: number): void {
     delete gaveUpUntil[unitId];
+    delete nextPathRecalcAt[unitId];
     delete lastTargetScan[unitId];
     delete unreachableTargets[unitId];
     delete jitterTracking[unitId];
@@ -352,6 +380,7 @@ export function cleanupUnitState(unitId: number): void {
  */
 export function resetAllMovementState(): void {
     Object.keys(gaveUpUntil).forEach(k => delete gaveUpUntil[Number(k)]);
+    Object.keys(nextPathRecalcAt).forEach(k => delete nextPathRecalcAt[Number(k)]);
     Object.keys(lastTargetScan).forEach(k => delete lastTargetScan[Number(k)]);
     Object.keys(unreachableTargets).forEach(k => delete unreachableTargets[Number(k)]);
     Object.keys(jitterTracking).forEach(k => delete jitterTracking[Number(k)]);

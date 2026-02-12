@@ -10,12 +10,12 @@ import {
     MOVEMENT_MIN_DIST, MOVEMENT_MIN_MAGNITUDE,
     PLAYER_MOVE_TIMEOUT_MS
 } from "../core/constants";
-import { blocked } from "../game/dungeon";
-import { findPath } from "./pathfinding";
+import { findPath, isPassable } from "./pathfinding";
 import {
     canScanForTargets, recordTargetScan, getBlockedTargets,
     recentlyGaveUp, checkPathNeedsRecalc, createPathToTarget,
-    hasReachedWaypoint, checkIfStuck, handleGiveUp, clearJitterTracking
+    hasReachedWaypoint, checkIfStuck, handleGiveUp, clearJitterTracking,
+    canRecalculatePath, recordPathRecalculation
 } from "./movement";
 import { getUnitRadius } from "../rendering/range";
 import { clampToGrid, distanceBetween } from "../game/geometry";
@@ -424,6 +424,69 @@ export interface PathContext {
     isPlayer: boolean;
 }
 
+const PATH_SHORTCUT_MAX_LOOKAHEAD = 4;
+const PATH_SHORTCUT_SAMPLE_STEP = 0.35;
+const LOCAL_DETOUR_DISTANCE = 1.15;
+const LOCAL_DETOUR_ANGLE_OFFSETS = [Math.PI / 2, -Math.PI / 2, Math.PI / 4, -Math.PI / 4, (Math.PI * 3) / 4, -(Math.PI * 3) / 4];
+
+function hasPassableSegment(
+    startX: number,
+    startZ: number,
+    endX: number,
+    endZ: number,
+    flying: boolean
+): boolean {
+    const dx = endX - startX;
+    const dz = endZ - startZ;
+    const dist = Math.hypot(dx, dz);
+    const steps = Math.max(1, Math.ceil(dist / PATH_SHORTCUT_SAMPLE_STEP));
+    for (let i = 1; i <= steps; i++) {
+        const t = i / steps;
+        const sampleX = startX + dx * t;
+        const sampleZ = startZ + dz * t;
+        if (!isPassable(Math.floor(sampleX), Math.floor(sampleZ), flying)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+function tryBuildLocalDetourPath(
+    currentX: number,
+    currentZ: number,
+    towardX: number,
+    towardZ: number,
+    finalGoalX: number,
+    finalGoalZ: number,
+    flying: boolean
+): { x: number; z: number }[] | null {
+    const baseAngle = Math.atan2(towardZ - currentZ, towardX - currentX);
+
+    for (const offset of LOCAL_DETOUR_ANGLE_OFFSETS) {
+        const angle = baseAngle + offset;
+        const detourX = currentX + Math.cos(angle) * LOCAL_DETOUR_DISTANCE;
+        const detourZ = currentZ + Math.sin(angle) * LOCAL_DETOUR_DISTANCE;
+
+        if (!isPassable(Math.floor(detourX), Math.floor(detourZ), flying)) {
+            continue;
+        }
+
+        const toDetour = createPathToTarget(currentX, currentZ, detourX, detourZ, flying);
+        if (!toDetour.success || toDetour.path.length === 0) {
+            continue;
+        }
+
+        const toGoal = createPathToTarget(detourX, detourZ, finalGoalX, finalGoalZ, flying);
+        if (toGoal.success && toGoal.path.length > 0) {
+            return [...toDetour.path, ...toGoal.path];
+        }
+
+        return toDetour.path;
+    }
+
+    return null;
+}
+
 /**
  * Run the path following phase - advance along path, handle stuck detection.
  * Returns the current movement target position.
@@ -431,6 +494,7 @@ export interface PathContext {
 export function runPathFollowingPhase(ctx: PathContext): { targetX: number; targetZ: number } {
     const { unit, g, pathsRef, moveStartRef, now, isPlayer } = ctx;
     const path = pathsRef[unit.id];
+    const isPlayerMoveCommand = isPlayer && g.userData.attackTarget === null;
 
     let targetX = g.position.x;
     let targetZ = g.position.z;
@@ -438,25 +502,85 @@ export function runPathFollowingPhase(ctx: PathContext): { targetX: number; targ
     if (path && path.length > 0) {
         targetX = path[0].x;
         targetZ = path[0].z;
+        const isFlying = unit.team === "enemy" && !!(unit.enemyType && ENEMY_STATS[unit.enemyType]?.flying === true);
+
+        // Try to skip near-term waypoints when a direct segment is clear.
+        if (path.length > 1) {
+            const maxLookahead = Math.min(PATH_SHORTCUT_MAX_LOOKAHEAD, path.length - 1);
+            for (let i = maxLookahead; i >= 1; i--) {
+                const candidate = path[i];
+                if (hasPassableSegment(g.position.x, g.position.z, candidate.x, candidate.z, isFlying)) {
+                    path.splice(0, i);
+                    targetX = path[0].x;
+                    targetZ = path[0].z;
+                    break;
+                }
+            }
+        }
 
         // Check if we've reached the current waypoint
         if (hasReachedWaypoint(g.position.x, g.position.z, targetX, targetZ)) {
             path.shift();
             moveStartRef[unit.id] = { time: now, x: g.position.x, z: g.position.z };
+            if (path.length === 0 && isPlayerMoveCommand) {
+                delete moveStartRef[unit.id];
+                delete g.userData.moveTarget;
+                delete g.userData.formationRegroupAttempted;
+                delete g.userData.formationRamp;
+            }
         }
 
         // Stuck detection - give up if barely moving or jittering
         // Player move commands use a longer absolute timeout to avoid
         // giving up too quickly during crowded formation movement
-        const isPlayerMoveCommand = isPlayer && g.userData.attackTarget === null;
         const moveStart = moveStartRef[unit.id];
         const stuckResult = isPlayerMoveCommand
             ? { isStuck: false, isReallyStuck: !!(moveStart && (now - moveStart.time) > PLAYER_MOVE_TIMEOUT_MS), isJittering: false }
             : checkIfStuck(unit.id, g.position.x, g.position.z, moveStart, now);
 
         if (stuckResult.isReallyStuck || stuckResult.isStuck || stuckResult.isJittering) {
+            // Player formation commands get one forced repath before giving up.
+            const shouldRegroup = isPlayerMoveCommand && stuckResult.isReallyStuck && !g.userData.formationRegroupAttempted;
+            if (shouldRegroup) {
+                const regroupTarget = g.userData.moveTarget ?? path[path.length - 1] ?? { x: targetX, z: targetZ };
+                const regroupPath = createPathToTarget(g.position.x, g.position.z, regroupTarget.x, regroupTarget.z);
+                if (regroupPath.success && regroupPath.path.length > 0) {
+                    pathsRef[unit.id] = regroupPath.path;
+                    moveStartRef[unit.id] = { time: now, x: g.position.x, z: g.position.z };
+                    g.userData.formationRegroupAttempted = true;
+                    clearJitterTracking(unit.id);
+                    const nextWaypoint = pathsRef[unit.id][0];
+                    if (nextWaypoint) {
+                        return { targetX: nextWaypoint.x, targetZ: nextWaypoint.z };
+                    }
+                }
+            }
+
+            // All units: try one local sidestep route around corners/crowds before giving up.
+            const finalGoal = g.userData.moveTarget ?? path[path.length - 1] ?? { x: targetX, z: targetZ };
+            const detourPath = tryBuildLocalDetourPath(
+                g.position.x,
+                g.position.z,
+                targetX,
+                targetZ,
+                finalGoal.x,
+                finalGoal.z,
+                isFlying
+            );
+            if (detourPath && detourPath.length > 0) {
+                pathsRef[unit.id] = detourPath;
+                moveStartRef[unit.id] = { time: now, x: g.position.x, z: g.position.z };
+                clearJitterTracking(unit.id);
+                return { targetX: detourPath[0].x, targetZ: detourPath[0].z };
+            }
+
             pathsRef[unit.id] = [];
             delete moveStartRef[unit.id];
+            if (isPlayerMoveCommand) {
+                delete g.userData.moveTarget;
+                delete g.userData.formationRegroupAttempted;
+                delete g.userData.formationRamp;
+            }
 
             // Handle give up - updates internal state and returns info about cleared target
             const giveUpResult = handleGiveUp(unit.id, isPlayer, g.userData.attackTarget, now);
@@ -485,13 +609,14 @@ export interface MovementContext {
 
 /**
  * Calculate avoidance vector from nearby units.
- * Disabled for player units on move commands (no attack target) to preserve formation.
+ * Player formation moves keep steering at reduced strength for cohesion.
  */
 export function calculateAvoidance(ctx: MovementContext, desiredX: number, desiredZ: number): { avoidX: number; avoidZ: number } {
     const { unit, g, unitsRef } = ctx;
 
-    // Player move commands: only hard separation (no steering) to preserve formation
+    // Player formation movement keeps steering mild instead of fully disabled.
     const formationMove = unit.team === "player" && g.userData.attackTarget === null;
+    const steeringScale = formationMove ? 0.35 : 1.0;
 
     const myRadius = getUnitRadius(unit);
     let avoidX = 0, avoidZ = 0;
@@ -516,8 +641,8 @@ export function calculateAvoidance(ctx: MovementContext, desiredX: number, desir
                 avoidX -= (ox / oDist) * sepStrength * AVOIDANCE_OVERLAP_STRENGTH;
                 avoidZ -= (oz / oDist) * sepStrength * AVOIDANCE_OVERLAP_STRENGTH;
             }
-            // Steering when unit is ahead and close (skip for formation moves)
-            else if (!formationMove) {
+            // Steering when unit is ahead and close
+            else {
                 const dot = (ox * desiredX + oz * desiredZ) / oDist;
                 if (dot > AVOIDANCE_STEER_THRESHOLD) {
                     const steerStrength = (combinedRadius * AVOIDANCE_RANGE_MULTIPLIER - oDist) / (combinedRadius * AVOIDANCE_STEER_STRENGTH);
@@ -525,8 +650,8 @@ export function calculateAvoidance(ctx: MovementContext, desiredX: number, desir
                     const steerRight = (unit.id ^ Number(otherId)) % 2 === 0;
                     const perpX = steerRight ? -desiredZ : desiredZ;
                     const perpZ = steerRight ? desiredX : -desiredX;
-                    avoidX += perpX * steerStrength * AVOIDANCE_STEER_STRENGTH;
-                    avoidZ += perpZ * steerStrength * AVOIDANCE_STEER_STRENGTH;
+                    avoidX += perpX * steerStrength * AVOIDANCE_STEER_STRENGTH * steeringScale;
+                    avoidZ += perpZ * steerStrength * AVOIDANCE_STEER_STRENGTH * steeringScale;
                 }
             }
         }
@@ -538,13 +663,13 @@ export function calculateAvoidance(ctx: MovementContext, desiredX: number, desir
 /**
  * Try to move with wall sliding - if direct movement blocked, try sliding along walls.
  */
-export function applyWallSliding(g: UnitGroup, moveX: number, moveZ: number): void {
+export function applyWallSliding(g: UnitGroup, moveX: number, moveZ: number, flying: boolean = false): void {
     const newX = g.position.x + moveX;
     const newZ = g.position.z + moveZ;
     const cellX = Math.floor(newX);
     const cellZ = Math.floor(newZ);
 
-    if (!blocked[cellX]?.[cellZ]) {
+    if (isPassable(cellX, cellZ, flying)) {
         // Direct movement is valid
         g.position.x = clampToGrid(newX, 0.5, "x");
         g.position.z = clampToGrid(newZ, 0.5, "z");
@@ -553,12 +678,12 @@ export function applyWallSliding(g: UnitGroup, moveX: number, moveZ: number): vo
         const xOnlyX = g.position.x + moveX;
         const xOnlyCellX = Math.floor(xOnlyX);
         const xOnlyCellZ = Math.floor(g.position.z);
-        const canMoveX = !blocked[xOnlyCellX]?.[xOnlyCellZ];
+        const canMoveX = isPassable(xOnlyCellX, xOnlyCellZ, flying);
 
         const zOnlyZ = g.position.z + moveZ;
         const zOnlyCellX = Math.floor(g.position.x);
         const zOnlyCellZ = Math.floor(zOnlyZ);
-        const canMoveZ = !blocked[zOnlyCellX]?.[zOnlyCellZ];
+        const canMoveZ = isPassable(zOnlyCellX, zOnlyCellZ, flying);
 
         if (canMoveX && Math.abs(moveX) > Math.abs(moveZ)) {
             g.position.x = clampToGrid(xOnlyX, 0.5, "x");
@@ -575,7 +700,7 @@ export function applyWallSliding(g: UnitGroup, moveX: number, moveZ: number): vo
  * Run the movement phase - move towards target with avoidance and wall sliding.
  */
 export function runMovementPhase(ctx: MovementContext): void {
-    const { g, targetX, targetZ, speedMultiplier = 1.0 } = ctx;
+    const { unit, g, targetX, targetZ, speedMultiplier = 1.0 } = ctx;
 
     const dx = targetX - g.position.x;
     const dz = targetZ - g.position.z;
@@ -601,8 +726,9 @@ export function runMovementPhase(ctx: MovementContext): void {
         moveX = (moveX / moveMag) * speed;
         moveZ = (moveZ / moveMag) * speed;
 
+        const isFlying = unit.team === "enemy" && !!(unit.enemyType && ENEMY_STATS[unit.enemyType]?.flying === true);
         // Apply movement with wall sliding
-        applyWallSliding(g, moveX, moveZ);
+        applyWallSliding(g, moveX, moveZ, isFlying);
     }
 }
 
@@ -624,7 +750,7 @@ export function recalculatePathIfNeeded(
 ): void {
     if (recentlyGaveUp(unit.id, now)) return;
 
-    const { needsNewPath } = checkPathNeedsRecalc(
+    const { needsNewPath, reason } = checkPathNeedsRecalc(
         pathsRef[unit.id],
         targetX,
         targetZ,
@@ -632,14 +758,16 @@ export function recalculatePathIfNeeded(
         g.position.z
     );
 
-    if (needsNewPath) {
-        // Flying enemies can pass over lava
-        const isFlying = unit.team === "enemy" && unit.enemyType && ENEMY_STATS[unit.enemyType]?.flying === true;
-        const result = createPathToTarget(g.position.x, g.position.z, targetX, targetZ, isFlying);
-        pathsRef[unit.id] = result.path;
-        if (result.success) {
-            moveStartRef[unit.id] = { time: now, x: g.position.x, z: g.position.z };
-            clearJitterTracking(unit.id);  // Reset jitter detection for new path
-        }
+    if (!needsNewPath) return;
+    if (!canRecalculatePath(unit.id, now)) return;
+
+    // Flying enemies can pass over lava
+    const isFlying = unit.team === "enemy" && unit.enemyType && ENEMY_STATS[unit.enemyType]?.flying === true;
+    const result = createPathToTarget(g.position.x, g.position.z, targetX, targetZ, isFlying);
+    recordPathRecalculation(unit.id, reason, now);
+    pathsRef[unit.id] = result.path;
+    if (result.success) {
+        moveStartRef[unit.id] = { time: now, x: g.position.x, z: g.position.z };
+        clearJitterTracking(unit.id);  // Reset jitter detection for new path
     }
 }

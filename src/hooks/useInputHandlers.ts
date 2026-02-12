@@ -28,6 +28,7 @@ import {
 import { clearTargetingMode, type SkillExecutionContext } from "../combat/skills";
 import { getPartyInventory, setPartyInventory } from "../game/equipmentState";
 import { removeFromInventory, addToInventory } from "../game/equipment";
+import { buildEffectiveFormationOrder } from "../game/formationOrder";
 import type { HotbarAssignments } from "./hotbarStorage";
 
 // =============================================================================
@@ -123,6 +124,42 @@ export interface UseInputHandlersOptions {
     mutableRefs: InputMutableRefs;
     setters: InputSetters;
     callbacks: InputCallbacks;
+}
+
+const DIRECT_MOVE_SAMPLE_DENSITY = 4;
+
+/**
+ * Use direct movement only when the straight segment is clear of hard or
+ * terrain blockers. This keeps open-field movement snappy without forcing
+ * units to run directly into obstacles.
+ */
+function canUseDirectMove(g: UnitGroup, targetX: number, targetZ: number): boolean {
+    const startX = g.position.x;
+    const startZ = g.position.z;
+    const dx = targetX - startX;
+    const dz = targetZ - startZ;
+    const dist = Math.hypot(dx, dz);
+    if (dist < 0.75) {
+        return true;
+    }
+
+    const steps = Math.max(1, Math.ceil(dist * DIRECT_MOVE_SAMPLE_DENSITY));
+    for (let i = 1; i <= steps; i++) {
+        const t = i / steps;
+        const sampleX = startX + dx * t;
+        const sampleZ = startZ + dz * t;
+        const cellX = Math.floor(sampleX);
+        const cellZ = Math.floor(sampleZ);
+        const row = blocked[cellX];
+        if (!row || row[cellZ] === undefined) {
+            return false;
+        }
+        if (row[cellZ] || isTerrainBlocked(cellX, cellZ)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 // =============================================================================
@@ -338,21 +375,33 @@ export function useInputHandlers({
                             soundFns.playMove();
                             const isAttackMove = stateRefs.commandModeRef.current === "attackMove";
                             const moveTargets = buildMoveTargets(stateRefs.selectedRef.current, stateRefs.unitsStateRef.current, unitGroups, gx, gz, stateRefs.formationOrderRef.current);
-                            const useDirectMove = moveTargets.length > 1;
                             // Row-based speed ramp: each unit crawls until the row
                             // ahead is in place, then snaps to full speed.
                             // Wedge rows: [0] | [1,2] | [3,4,5] | ...
                             // Row N starts at index N*(N+1)/2
                             const getRow = (i: number) => Math.floor((-1 + Math.sqrt(1 + 8 * i)) / 2);
+                            const queueNow = Date.now();
                             moveTargets.forEach((t, i) => {
-                                mutableRefs.actionQueueRef.current[t.id] = { type: "move", targetX: t.x, targetZ: t.z, direct: useDirectMove, attackMove: isAttackMove || undefined };
-                                if (unitGroups[t.id]) {
-                                    unitGroups[t.id].userData.attackTarget = null;
-                                    unitGroups[t.id].userData.pendingMove = true;
+                                const unitG = unitGroups[t.id];
+                                const directMove = unitG ? canUseDirectMove(unitG, t.x, t.z) : false;
+                                const notBefore = t.delay > 0 ? queueNow + t.delay : undefined;
+                                mutableRefs.actionQueueRef.current[t.id] = {
+                                    type: "move",
+                                    targetX: t.x,
+                                    targetZ: t.z,
+                                    direct: directMove,
+                                    notBefore,
+                                    attackMove: isAttackMove || undefined
+                                };
+                                if (unitG) {
+                                    unitG.userData.attackTarget = null;
+                                    unitG.userData.pendingMove = true;
+                                    unitG.userData.moveTarget = { x: t.x, z: t.z };
+                                    delete unitG.userData.formationRegroupAttempted;
                                     if (isAttackMove) {
-                                        unitGroups[t.id].userData.attackMoveTarget = { x: t.x, z: t.z };
+                                        unitG.userData.attackMoveTarget = { x: t.x, z: t.z };
                                     } else {
-                                        delete unitGroups[t.id].userData.attackMoveTarget;
+                                        delete unitG.userData.attackMoveTarget;
                                     }
                                     const row = getRow(i);
                                     if (row > 0) {
@@ -361,16 +410,20 @@ export function useInputHandlers({
                                         const ahead = moveTargets[prevRowStart];
                                         const aheadG = unitGroups[ahead.id];
                                         if (aheadG) {
-                                            unitGroups[t.id].userData.formationRamp = {
+                                            const leaderStartDist = Math.max(0.001, Math.hypot(ahead.x - aheadG.position.x, ahead.z - aheadG.position.z));
+                                            const myStartDist = Math.max(0.001, Math.hypot(t.x - unitG.position.x, t.z - unitG.position.z));
+                                            unitG.userData.formationRamp = {
                                                 leaderId: ahead.id,
                                                 leaderTargetX: ahead.x,
                                                 leaderTargetZ: ahead.z,
+                                                leaderStartDist,
+                                                myStartDist,
                                             };
                                         } else {
-                                            delete unitGroups[t.id].userData.formationRamp;
+                                            delete unitG.userData.formationRamp;
                                         }
                                     } else {
-                                        delete unitGroups[t.id].userData.formationRamp;
+                                        delete unitG.userData.formationRamp;
                                     }
                                 }
                             });
@@ -549,12 +602,7 @@ export function useInputHandlers({
                 const slotIndex = parseInt(e.code.charAt(1)) - 1;
                 const playerUnits = stateRefs.unitsStateRef.current.filter(u => u.team === "player");
                 const playerIds = playerUnits.map(u => u.id);
-                const order = stateRefs.formationOrderRef.current;
-                // Build effective order: saved order filtered to living, then append unknowns
-                const effective = order.filter(id => playerIds.includes(id));
-                for (const id of playerIds) {
-                    if (!effective.includes(id)) effective.push(id);
-                }
+                const effective = buildEffectiveFormationOrder(playerIds, stateRefs.formationOrderRef.current);
                 const unitId = effective[slotIndex];
                 if (unitId !== undefined) {
                     const unit = playerUnits.find(u => u.id === unitId);
@@ -575,6 +623,8 @@ export function useInputHandlers({
                             ug.userData.pendingMove = false;
                             delete ug.userData.formationRamp;
                             delete ug.userData.attackMoveTarget;
+                            delete ug.userData.moveTarget;
+                            delete ug.userData.formationRegroupAttempted;
                         }
                         delete mutableRefs.actionQueueRef.current[uid];
                     });
@@ -601,6 +651,8 @@ export function useInputHandlers({
                                 ug.userData.pendingMove = false;
                                 delete ug.userData.formationRamp;
                                 delete ug.userData.attackMoveTarget;
+                                delete ug.userData.moveTarget;
+                                delete ug.userData.formationRegroupAttempted;
                             }
                             delete mutableRefs.actionQueueRef.current[u.id];
                         }

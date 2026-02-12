@@ -1,5 +1,6 @@
 import { UNIT_DATA } from "../game/playerUnits";
 import type { Unit } from "../core/types";
+import { sortUnitsByFormationOrder } from "../game/formationOrder";
 
 /**
  * Wedge formation layout — maps slot index to grid position.
@@ -23,17 +24,8 @@ interface FormationIndicatorProps {
     formationOrder: number[];
 }
 
-/** Sort players by formation order, falling back to ID order for unknowns. */
-function sortByFormation(players: Unit[], formationOrder: number[]): Unit[] {
-    return [...players].sort((a, b) => {
-        const ai = formationOrder.indexOf(a.id);
-        const bi = formationOrder.indexOf(b.id);
-        return (ai === -1 ? 100 + a.id : ai) - (bi === -1 ? 100 + b.id : bi);
-    });
-}
-
 export function FormationIndicator({ units, formationOrder }: FormationIndicatorProps) {
-    const players = sortByFormation(
+    const players = sortUnitsByFormationOrder(
         units.filter(u => u.team === "player"),
         formationOrder
     );

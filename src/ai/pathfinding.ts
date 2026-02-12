@@ -384,13 +384,14 @@ const PATH_CACHE_MAX_SIZE = 100;
 
 const pathCache: Map<number, CachedPath> = new Map();
 
-function getPathCacheKey(sx: number, sz: number, ex: number, ez: number): number {
-    // Pack 4 coordinates into a single number: (sx * K³ + sz * K² + ex * K + ez)
-    return ((sx * KEY_STRIDE + sz) * KEY_STRIDE + ex) * KEY_STRIDE + ez;
+function getPathCacheKey(sx: number, sz: number, ex: number, ez: number, flying: boolean): number {
+    // Pack 4 coordinates and movement mode into a single number.
+    const packed = ((sx * KEY_STRIDE + sz) * KEY_STRIDE + ex) * KEY_STRIDE + ez;
+    return packed * 2 + (flying ? 1 : 0);
 }
 
-function getCachedPath(sx: number, sz: number, ex: number, ez: number, now: number): { x: number; z: number }[] | null {
-    const key = getPathCacheKey(sx, sz, ex, ez);
+function getCachedPath(sx: number, sz: number, ex: number, ez: number, now: number, flying: boolean): { x: number; z: number }[] | null {
+    const key = getPathCacheKey(sx, sz, ex, ez, flying);
     const cached = pathCache.get(key);
     if (cached && now - cached.timestamp < PATH_CACHE_DURATION) {
         // Return a copy to prevent mutation issues
@@ -399,14 +400,14 @@ function getCachedPath(sx: number, sz: number, ex: number, ez: number, now: numb
     return null;
 }
 
-function setCachedPath(sx: number, sz: number, ex: number, ez: number, path: { x: number; z: number }[], now: number): void {
+function setCachedPath(sx: number, sz: number, ex: number, ez: number, path: { x: number; z: number }[], now: number, flying: boolean): void {
     // Prune old entries if cache is too large
     if (pathCache.size >= PATH_CACHE_MAX_SIZE) {
         const oldestKey = pathCache.keys().next().value;
         if (oldestKey) pathCache.delete(oldestKey);
     }
 
-    const key = getPathCacheKey(sx, sz, ex, ez);
+    const key = getPathCacheKey(sx, sz, ex, ez, flying);
     pathCache.set(key, { path: path.map(p => ({ x: p.x, z: p.z })), timestamp: now });
 }
 
@@ -545,7 +546,7 @@ export function findPath(startX: number, startZ: number, endX: number, endZ: num
 
     // Check cache first
     const now = Date.now();
-    const cached = getCachedPath(sx, sz, ex, ez, now);
+    const cached = getCachedPath(sx, sz, ex, ez, now, flying);
     if (cached) return cached;
 
     // Calculate heuristic using squared distance comparison but actual distance for h value
@@ -569,7 +570,7 @@ export function findPath(startX: number, startZ: number, endX: number, endZ: num
             path[path.length - 1] = { x: endX, z: endZ };
 
             // Cache the result
-            setCachedPath(sx, sz, ex, ez, path, now);
+            setCachedPath(sx, sz, ex, ez, path, now, flying);
             return path;
         }
 
@@ -598,3 +599,4 @@ export function findPath(startX: number, startZ: number, endX: number, endZ: num
     }
     return null;
 }
+

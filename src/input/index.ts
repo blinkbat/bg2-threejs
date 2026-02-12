@@ -13,6 +13,7 @@ import { executeSkill, clearTargetingMode, type SkillExecutionContext } from "..
 import { findClosestTargetByTeam } from "../combat/skills/helpers";
 import { hasStatusEffect } from "../combat/combatMath";
 import { getFormationPositions } from "../game/formation";
+import { sortUnitsByFormationOrder } from "../game/formationOrder";
 import { MOVE_SPEED } from "../core/constants";
 import { disposeGeometry } from "../rendering/disposal";
 import { distanceToPoint } from "../game/geometry";
@@ -133,6 +134,8 @@ export function assignPath(
 ): void {
     const g = unitsRef[unitId];
     if (!g) return;
+    delete g.userData.formationRegroupAttempted;
+    g.userData.moveTarget = { x: targetX, z: targetZ };
     if (direct) {
         // Direct movement — skip A*, just walk straight to target
         pathsRef[unitId] = [{ x: targetX, z: targetZ }];
@@ -173,7 +176,12 @@ export function executeAttack(
 ): void {
     const unitIdSet = new Set(unitIds);
     unitIds.forEach(uid => {
-        if (unitsRef[uid]) unitsRef[uid].userData.attackTarget = targetId;
+        const g = unitsRef[uid];
+        if (g) {
+            g.userData.attackTarget = targetId;
+            delete g.userData.moveTarget;
+            delete g.userData.formationRegroupAttempted;
+        }
         pathsRef[uid] = [];
     });
     updateUnitsWhere(setUnits, u => unitIdSet.has(u.id), { target: targetId });
@@ -352,16 +360,12 @@ export function buildMoveTargets(
     const facingAngle = Math.atan2(dz, dx);
     const positions = getFormationPositions(gx, gz, facingAngle, alive.length);
 
-    // Slot assignment: use custom formation order, fallback to ID order
-    const sorted = [...alive].sort((a, b) => {
-        const ai = formationOrder.indexOf(a.id);
-        const bi = formationOrder.indexOf(b.id);
-        return (ai === -1 ? 100 + a.id : ai) - (bi === -1 ? 100 + b.id : bi);
-    });
-
+    // Slot assignment: preserve formation order deterministically.
+    const sorted = sortUnitsByFormationOrder(alive, formationOrder);
     // Distance-based stagger: back-row units with shorter paths delay so the
     // formation arrives together. Front unit (slot 0) is the baseline — never waits.
     const UNITS_PER_SEC = MOVE_SPEED * 40;
+    const MAX_STAGGER_MS = 160;
     const entries: { id: number; x: number; z: number; dist: number }[] = [];
     for (let i = 0; i < sorted.length; i++) {
         const pos = positions[i] ?? { x: gx, z: gz };
@@ -375,7 +379,9 @@ export function buildMoveTargets(
         id: e.id,
         x: e.x,
         z: e.z,
-        delay: frontDist > 0 ? Math.max(0, Math.round((frontDist - e.dist) / UNITS_PER_SEC * 1000)) : 0,
+        delay: frontDist > 0
+            ? Math.min(MAX_STAGGER_MS, Math.max(0, Math.round((frontDist - e.dist) / UNITS_PER_SEC * 1000)))
+            : 0,
     }));
 }
 

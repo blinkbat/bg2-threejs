@@ -357,6 +357,8 @@ export function updateUnitAI(
                 if (result.success) {
                     pathsRef[unit.id] = result.path;
                     moveStartRef[unit.id] = { time: now, x: g.position.x, z: g.position.z };
+                    g.userData.moveTarget = { x: dest.x, z: dest.z };
+                    delete g.userData.formationRegroupAttempted;
                     clearJitterTracking(unit.id);
                 }
             }
@@ -381,7 +383,7 @@ export function updateUnitAI(
     // Phase 4: Movement - move toward target with avoidance and wall sliding
     // Pinned units cannot move (speed = 0), slowed units move at half speed
     let speedMult = getEffectiveSpeedMultiplier(unit, data);
-    // Formation: crawl until the row ahead is further along than us, then full speed
+    // Formation: smoothly throttle until the row ahead has opened enough space.
     const ramp = isPlayer ? g.userData.formationRamp : undefined;
     if (ramp) {
         const recentlyDamaged = g.userData.lastHitTime && (now - g.userData.lastHitTime) < 500;
@@ -395,12 +397,20 @@ export function updateUnitAI(
             } else {
                 const aheadRemain = Math.hypot(ramp.leaderTargetX - aheadG.position.x, ramp.leaderTargetZ - aheadG.position.z);
                 const myRemain = Math.hypot(targetX - g.position.x, targetZ - g.position.z);
-                if (aheadRemain < myRemain) {
+                const leaderStartDist = Math.max(ramp.leaderStartDist ?? aheadRemain, 0.001);
+                const myStartDist = Math.max(ramp.myStartDist ?? myRemain, 0.001);
+                const aheadProgress = 1 - Math.min(1, aheadRemain / leaderStartDist);
+                const myProgress = 1 - Math.min(1, myRemain / myStartDist);
+                const progressGap = aheadProgress - myProgress;
+                if (myRemain < 0.15 || aheadProgress > 0.98) {
                     // Row ahead is further along — full speed, done with ramp
                     delete g.userData.formationRamp;
                 } else {
                     // Row ahead is behind us or even — crawl
-                    speedMult *= FORMATION_SLOW_SPEED;
+                    const blend = Math.max(0, Math.min(1, (progressGap + 0.2) / 0.4));
+                    const minFormationSpeed = Math.max(FORMATION_SLOW_SPEED, 0.62);
+                    const formationSpeed = minFormationSpeed + (1 - minFormationSpeed) * blend;
+                    speedMult *= formationSpeed;
                 }
             }
         }

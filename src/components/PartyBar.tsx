@@ -5,6 +5,7 @@ import { UNIT_DATA, getEffectiveMaxHp } from "../game/playerUnits";
 import { getHpPercentage, getHpColor } from "../combat/combatMath";
 import { SkillHotbar } from "./SkillHotbar";
 import type { HotbarAssignments } from "../hooks/hotbarStorage";
+import { buildEffectiveFormationOrder } from "../game/formationOrder";
 import monkPortrait from "../assets/monk-portrait.png";
 import barbarianPortrait from "../assets/barbarian-portrait.png";
 import wizardPortrait from "../assets/wizard-portrait.png";
@@ -58,17 +59,6 @@ interface PartyBarProps {
     onReorderFormation?: (newOrder: number[]) => void;
 }
 
-/** Build a complete formation order array from current players + saved order. */
-function getEffectiveOrder(playerIds: number[], formationOrder: number[]): number[] {
-    // Start with saved order, filtered to living IDs
-    const ordered = formationOrder.filter(id => playerIds.includes(id));
-    // Append any IDs not in the saved order (new units, fallback)
-    for (const id of playerIds) {
-        if (!ordered.includes(id)) ordered.push(id);
-    }
-    return ordered;
-}
-
 export function PartyBar({
     units,
     selectedIds,
@@ -87,7 +77,7 @@ export function PartyBar({
     const playerUnits = useMemo(() => units.filter((u: Unit) => u.team === "player"), [units]);
     const effectiveOrder = useMemo(() => {
         const playerIds = playerUnits.map(u => u.id);
-        return getEffectiveOrder(playerIds, formationOrder);
+        return buildEffectiveFormationOrder(playerIds, formationOrder);
     }, [playerUnits, formationOrder]);
     const effectiveOrderRef = useRef(effectiveOrder);
     useEffect(() => {
