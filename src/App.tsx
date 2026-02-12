@@ -8,7 +8,7 @@ import * as THREE from "three";
 
 // Constants & Types
 import { setDebugSpeedMultiplier } from "./core/constants";
-import type { Unit, Skill, CombatLogEntry, SelectionBox, CharacterStats } from "./core/types";
+import type { Unit, UnitGroup, Skill, CombatLogEntry, SelectionBox, CharacterStats } from "./core/types";
 
 // Game Logic
 import { getCurrentArea, getCurrentAreaId, setCurrentArea, AREAS, DEFAULT_STARTING_AREA, DEFAULT_SPAWN_POINT, type AreaId, type AreaTransition } from "./game/areas";
@@ -22,6 +22,7 @@ import { isConsumable } from "./core/types";
 import { updateChestStates } from "./rendering/scene";
 import { soundFns } from "./audio";
 import { findSpawnPositions } from "./ai/pathfinding";
+import { updateUnit, updateUnitWith, updateUnitsWhere } from "./core/stateUtils";
 
 // Extracted modules
 import { executeSkill, type SkillExecutionContext } from "./combat/skills";
@@ -43,7 +44,9 @@ import { useThreeScene, useGameLoop, useInputHandlers, type InitializedSceneStat
 import { PartyBar } from "./components/PartyBar";
 import { CommandBar } from "./components/CommandBar";
 import { UnitPanel } from "./components/UnitPanel";
-import { type HotbarAssignments, loadHotbarAssignments, saveHotbarAssignments } from "./components/SkillHotbar";
+import type { HotbarAssignments } from "./hooks/hotbarStorage";
+import { loadHotbarAssignments, saveHotbarAssignments } from "./hooks/hotbarStorage";
+import { loadDevMode, saveDevMode } from "./hooks/localStorage";
 import { CombatLog } from "./components/CombatLog";
 import { HUD } from "./components/HUD";
 import { FormationIndicator } from "./components/FormationIndicator";
@@ -69,6 +72,27 @@ function preloadPortraits(): Promise<void> {
             img.src = src;
         }))
     ).then(() => {});
+}
+
+function syncHoveredDoorRef<T extends { hoveredDoor: string | null }>(
+    refs: React.MutableRefObject<T>,
+    hoveredDoorTarget: string | null
+): void {
+    refs.current.hoveredDoor = hoveredDoorTarget;
+}
+
+function reviveUnitVisual(
+    unitGroups: Record<number, UnitGroup>,
+    targetId: number,
+    reviveX: number,
+    reviveZ: number
+): void {
+    const reviveGroup = unitGroups[targetId];
+    if (!reviveGroup) return;
+    reviveGroup.visible = true;
+    reviveGroup.position.set(reviveX, reviveGroup.userData.flyHeight, reviveZ);
+    reviveGroup.userData.targetX = reviveX;
+    reviveGroup.userData.targetZ = reviveZ;
 }
 
 // =============================================================================
@@ -131,6 +155,7 @@ function Game({
 
     // Initial camera offset
     const initialCamOffset = useMemo(() => spawnPoint ?? DEFAULT_SPAWN_POINT, [spawnPoint]);
+    const [devMode, setDevMode] = useState<boolean>(loadDevMode);
 
     // Create initial units
     const createUnitsForArea = useCallback((): Unit[] => {
@@ -152,6 +177,9 @@ function Game({
             const persisted = persistedPlayers?.find(p => p.id === id);
             const pos = spawnPositions[i] ?? { x: spawn.x, z: spawn.z };
             const initialExp = persisted?.exp ?? (INITIAL_XP_VALUES[id] ?? 0);
+            const learnedSkills = devMode
+                ? data.skills.map(s => s.name)
+                : (persisted?.learnedSkills ?? []);
             return {
                 id,
                 x: pos.x,
@@ -163,7 +191,7 @@ function Game({
                 stats: persisted?.stats,
                 statPoints: persisted?.statPoints,
                 skillPoints: persisted?.skillPoints ?? 1,
-                learnedSkills: persisted?.learnedSkills ?? [],
+                learnedSkills,
                 team: "player" as const,
                 target: null,
                 aiEnabled: true,
@@ -197,7 +225,7 @@ function Game({
         const allUnits = [...players, ...enemies];
         initializeUnitIdCounter(allUnits);
         return allUnits;
-    }, [persistedPlayers, spawnPoint, spawnDirection, initialKilledEnemies]);
+    }, [persistedPlayers, spawnPoint, spawnDirection, initialKilledEnemies, devMode]);
 
     // =============================================================================
     // REACT STATE
@@ -240,7 +268,7 @@ function Game({
     const pausedRef = useRef(paused);
     const targetingModeRef = useRef(targetingMode);
     const consumableTargetingModeRef = useRef(consumableTargetingMode);
-    const pauseStartTimeRef = useRef<number | null>(Date.now());
+    const pauseStartTimeRef = useRef<number | null>(null);
     const showPanelRef = useRef(showPanel);
     const helpOpenRef = useRef(helpOpen);
     const skillCooldownsRef = useRef(skillCooldowns);
@@ -277,6 +305,7 @@ function Game({
     const boxStart = useRef({ x: 0, y: 0 });
     const boxEnd = useRef({ x: 0, y: 0 });
     const lastMouse = useRef({ x: 0, y: 0 });
+    const debugGridRef = useRef<THREE.Group | null>(null);
 
     // =============================================================================
     // USE THREE SCENE HOOK
@@ -304,9 +333,7 @@ function Game({
 
     // Sync hoveredDoor to gameRefs
     useEffect(() => {
-        if (gameRefs.current) {
-            gameRefs.current.hoveredDoor = hoveredDoor?.targetArea ?? null;
-        }
+        syncHoveredDoorRef(gameRefs, hoveredDoor?.targetArea ?? null);
     }, [hoveredDoor, gameRefs]);
 
     // Update chest states when opened chests change
@@ -362,7 +389,7 @@ function Game({
             if (userUnit.hp >= maxHp) return false;
             const newHp = Math.min(maxHp, userUnit.hp + item.value);
             const healed = newHp - userUnit.hp;
-            setUnits(prev => prev.map(u => u.id === unitId ? { ...u, hp: newHp } : u));
+            updateUnit(setUnits, unitId, { hp: newHp });
             addLog(`${UNIT_DATA[unitId].name} uses ${item.name}, restoring ${healed} HP.`, "#22c55e");
         } else if (item.effect === "mana") {
             const maxMana = UNIT_DATA[unitId].maxMana ?? 0;
@@ -370,7 +397,7 @@ function Game({
             if (currentMana >= maxMana) return false;
             const newMana = Math.min(maxMana, currentMana + item.value);
             const restored = newMana - currentMana;
-            setUnits(prev => prev.map(u => u.id === unitId ? { ...u, mana: newMana } : u));
+            updateUnit(setUnits, unitId, { mana: newMana });
             addLog(`${UNIT_DATA[unitId].name} uses ${item.name}, restoring ${restored} Mana.`, "#3b82f6");
         } else if (item.effect === "exp") {
             const newExp = (userUnit.exp ?? 0) + item.value;
@@ -399,7 +426,7 @@ function Game({
                     }
                 }
             } else {
-                setUnits(prev => prev.map(u => u.id === unitId ? { ...u, exp: newExp } : u));
+                updateUnit(setUnits, unitId, { exp: newExp });
                 addLog(`${UNIT_DATA[unitId].name} reads ${item.name}, gaining ${item.value} XP.`, "#9b59b6");
             }
         } else if (item.effect === "revive") {
@@ -422,13 +449,7 @@ function Game({
             }));
 
             // Make the unit visible and reposition
-            const reviveG = sceneState.unitGroups[targetId];
-            if (reviveG) {
-                reviveG.visible = true;
-                reviveG.position.set(reviveX, reviveG.userData.flyHeight, reviveZ);
-                reviveG.userData.targetX = reviveX;
-                reviveG.userData.targetZ = reviveZ;
-            }
+            reviveUnitVisual(sceneState.unitGroups, targetId, reviveX, reviveZ);
 
             addLog(`${UNIT_DATA[unitId].name} uses ${item.name}, reviving ${UNIT_DATA[targetId].name}!`, "#ffd700");
             soundFns.playHeal();
@@ -616,9 +637,9 @@ function Game({
     useEffect(() => {
         const scene = sceneState.scene;
         if (!scene) return;
-        if (gameRefs.current.debugGrid) {
-            scene.remove(gameRefs.current.debugGrid);
-            gameRefs.current.debugGrid = null;
+        if (debugGridRef.current) {
+            scene.remove(debugGridRef.current);
+            debugGridRef.current = null;
         }
         if (debug) {
             const group = new THREE.Group();
@@ -642,9 +663,9 @@ function Game({
                 }
             }
             scene.add(group);
-            gameRefs.current.debugGrid = group;
+            debugGridRef.current = group;
         }
-    }, [debug, sceneState.scene, gameRefs]);
+    }, [debug, sceneState.scene]);
 
     // =============================================================================
     // SKILL HANDLERS
@@ -681,6 +702,7 @@ function Game({
     const handleStop = useCallback(() => {
         const selected = selectedRef.current;
         if (selected.length === 0) return;
+        const selectedSet = new Set(selected);
         selected.forEach(uid => {
             gameRefs.current.paths[uid] = [];
             const ug = sceneState.unitGroups[uid];
@@ -692,15 +714,16 @@ function Game({
             }
             delete actionQueueRef.current[uid];
         });
-        setQueuedActions(prev => prev.filter(q => !selected.includes(q.unitId)));
-        setUnits(prev => prev.map(u => selected.includes(u.id) ? { ...u, target: null } : u));
+        setQueuedActions(prev => prev.filter(q => !selectedSet.has(q.unitId)));
+        updateUnitsWhere(setUnits, u => selectedSet.has(u.id), { target: null });
     }, [sceneState.unitGroups]);
 
     const handleHold = useCallback(() => {
         const selected = selectedRef.current;
         if (selected.length === 0) return;
+        const selectedSet = new Set(selected);
         setUnits(prev => prev.map(u => {
-            if (!selected.includes(u.id)) return u;
+            if (!selectedSet.has(u.id)) return u;
             const turningOn = !u.holdPosition;
             if (turningOn) {
                 gameRefs.current.paths[u.id] = [];
@@ -828,6 +851,31 @@ function Game({
         }
     }, [sceneState, addLog]);
 
+    const handleToggleDevMode = useCallback(() => {
+        const next = !devMode;
+        setDevMode(next);
+        saveDevMode(next);
+
+        if (next) {
+            setUnits(prev => prev.map(u => {
+                if (u.team !== "player") return u;
+                const data = UNIT_DATA[u.id];
+                if (!data) return u;
+
+                const unlockedSkillNames = data.skills.map(s => s.name);
+                const currentSkills = u.learnedSkills ?? [];
+                const alreadyUnlocked = unlockedSkillNames.length === currentSkills.length
+                    && unlockedSkillNames.every(name => currentSkills.includes(name));
+
+                if (alreadyUnlocked) return u;
+                return { ...u, learnedSkills: unlockedSkillNames };
+            }));
+            addLog("Debug: Dev Mode enabled (all skills unlocked).", "#9b59b6");
+        } else {
+            addLog("Debug: Dev Mode disabled.", "#888");
+        }
+    }, [devMode, addLog]);
+
     // =============================================================================
     // RENDER
     // =============================================================================
@@ -911,7 +959,7 @@ function Game({
             <div style={{ position: "absolute", top: 10, right: 10, color: "#888", fontSize: 11, fontFamily: "monospace", opacity: 0.6 }}>{fps} fps</div>
 
             {/* UI Components */}
-            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onPause={() => setPaused(true)} onShowHelp={onShowHelp} onRestart={onRestart} onSaveClick={onSaveClick} onLoadClick={onLoadClick} debug={debug} onToggleDebug={() => setDebug(d => !d)} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} onToggleFastMove={() => setFastMove(f => !f)} fastMoveEnabled={fastMove} otherModalOpen={helpOpen || saveLoadOpen} hasSelection={selectedIds.length > 0} />
+            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onPause={() => setPaused(true)} onShowHelp={onShowHelp} onRestart={onRestart} onSaveClick={onSaveClick} onLoadClick={onLoadClick} debug={debug} onToggleDebug={() => setDebug(d => !d)} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} onToggleDevMode={handleToggleDevMode} devModeEnabled={devMode} onToggleFastMove={() => setFastMove(f => !f)} fastMoveEnabled={fastMove} otherModalOpen={helpOpen || saveLoadOpen} hasSelection={selectedIds.length > 0} />
             <CombatLog log={combatLog} />
             <FormationIndicator units={units} formationOrder={formationOrder} />
             <div className="bottom-bar-container">
@@ -961,7 +1009,7 @@ function Game({
             {showPanel && selectedIds.length === 1 && (
                 <UnitPanel
                     unitId={selectedIds[0]} units={units} onClose={() => setShowPanel(false)}
-                    onToggleAI={(id) => setUnits(prev => prev.map(u => u.id === id ? { ...u, aiEnabled: !u.aiEnabled } : u))}
+                    onToggleAI={(id) => updateUnitWith(setUnits, id, u => ({ aiEnabled: !u.aiEnabled }))}
                     onCastSkill={handleCastSkill} skillCooldowns={skillCooldowns} paused={paused}
                     queuedSkills={queuedActions.filter(q => q.unitId === selectedIds[0]).map(q => q.skillName)}
                     onUseConsumable={handleUseConsumable} consumableCooldownEnd={actionCooldownRef.current[selectedIds[0]] || 0}
@@ -983,10 +1031,10 @@ function Game({
                         return u;
                     }))}
                     onLearnSkill={(id, skillName) => setUnits(prev => prev.map(u => {
-                        if (u.id === id && (u.skillPoints ?? 0) > 0 && !(u.learnedSkills ?? []).includes(skillName)) {
+                        if (u.id === id && !(u.learnedSkills ?? []).includes(skillName) && (devMode || (u.skillPoints ?? 0) > 0)) {
                             return {
                                 ...u,
-                                skillPoints: (u.skillPoints ?? 0) - 1,
+                                skillPoints: devMode ? (u.skillPoints ?? 0) : (u.skillPoints ?? 0) - 1,
                                 learnedSkills: [...(u.learnedSkills ?? []), skillName]
                             };
                         }
@@ -1018,6 +1066,7 @@ export default function App() {
     const [initialOpenedSecretDoors, setInitialOpenedSecretDoors] = useState<Set<string> | null>(null);
     const [initialGold, setInitialGold] = useState<number | null>(null);
     const [initialKilledEnemies, setInitialKilledEnemies] = useState<Set<string> | null>(null);
+    const [savePreviewTimestamp, setSavePreviewTimestamp] = useState(0);
     const gameStateRef = useRef<(() => SaveableGameState) | null>(null);
 
     // Transition overlay state (starts opaque so initial load fades in from black)
@@ -1062,12 +1111,19 @@ export default function App() {
         setTransitionOpacity(0);
     }, []);
 
+    useEffect(() => {
+        const updateTimestamp = () => setSavePreviewTimestamp(Date.now());
+        updateTimestamp();
+        const interval = setInterval(updateTimestamp, 1000);
+        return () => clearInterval(interval);
+    }, []);
+
     const handleSave = (slot: number) => {
         if (!gameStateRef.current) return;
         const state = gameStateRef.current();
         const areaData = AREAS[state.currentAreaId];
         const saveData: SaveSlotData = {
-            version: SAVE_VERSION, timestamp: Date.now(), slotName: areaData.name,
+            version: SAVE_VERSION, timestamp: savePreviewTimestamp, slotName: areaData.name,
             players: state.players, currentAreaId: state.currentAreaId,
             openedChests: Array.from(state.openedChests), openedSecretDoors: Array.from(state.openedSecretDoors),
             killedEnemies: Array.from(state.killedEnemies), gold: state.gold,
@@ -1101,7 +1157,7 @@ export default function App() {
         const state = gameStateRef.current();
         const areaData = AREAS[state.currentAreaId];
         return {
-            version: SAVE_VERSION, timestamp: Date.now(), slotName: areaData.name,
+            version: SAVE_VERSION, timestamp: savePreviewTimestamp, slotName: areaData.name,
             players: state.players, currentAreaId: state.currentAreaId,
             openedChests: Array.from(state.openedChests), openedSecretDoors: Array.from(state.openedSecretDoors),
             killedEnemies: Array.from(state.killedEnemies), gold: state.gold,

@@ -331,7 +331,7 @@ export function equipItem(
 
     // Unequip current item in slot (returns to inventory)
     let newInventory = inventory;
-    let newEquipment = { ...equipment };
+    const newEquipment = { ...equipment };
 
     const currentItemId = equipment[slot];
     if (currentItemId) {

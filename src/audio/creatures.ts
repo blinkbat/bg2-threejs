@@ -3,6 +3,7 @@
 // =============================================================================
 
 import { isMuted, getAudioCtx } from "./core";
+import { createNoiseBuffer } from "./noise";
 
 const NOOP = () => { };
 
@@ -110,16 +111,13 @@ export const playGush = () => {
     const duration = 0.35;
 
     // Crackly noise with rising pitch - the "rrrriiIIP" effect
-    const bufferSize = ctx.sampleRate * duration;
-    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const output = noiseBuffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
+    const noiseBuffer = createNoiseBuffer(ctx, duration, (i, size) => {
         // Crackly texture - random pops and clicks
-        const t = i / bufferSize;
+        const t = i / size;
         const crackle = Math.random() > 0.7 ? (Math.random() * 2 - 1) : 0;
         const base = (Math.random() * 2 - 1) * 0.3;
-        output[i] = (base + crackle) * (1 - t * 0.3);  // Slight decay
-    }
+        return (base + crackle) * (1 - t * 0.3);
+    });
     const noise = ctx.createBufferSource();
     noise.buffer = noiseBuffer;
 
@@ -224,16 +222,13 @@ export const playSplash = () => {
     const ctx = getAudioCtx();
 
     // Noise burst - water splashing
-    const splashSize = ctx.sampleRate * 0.35;
-    const splashBuffer = ctx.createBuffer(1, splashSize, ctx.sampleRate);
-    const splashOutput = splashBuffer.getChannelData(0);
-    for (let i = 0; i < splashSize; i++) {
-        const t = i / splashSize;
+    const splashBuffer = createNoiseBuffer(ctx, 0.35, (i, size) => {
+        const t = i / size;
         // Fast attack, medium decay with some bubbling texture
         const envelope = t < 0.05 ? t / 0.05 : Math.exp(-t * 4);
         const bubbles = 1 + Math.sin(i * 0.02) * 0.2 * Math.exp(-t * 6);
-        splashOutput[i] = (Math.random() * 2 - 1) * envelope * bubbles;
-    }
+        return (Math.random() * 2 - 1) * envelope * bubbles;
+    });
     const splash = ctx.createBufferSource();
     splash.buffer = splashBuffer;
     const splashFilter = ctx.createBiquadFilter();
@@ -299,14 +294,11 @@ export const playMetallicSqueal = () => {
     squeal.start();
     squeal.stop(ctx.currentTime + 0.35);
 
-    const scrapeSize = Math.floor(ctx.sampleRate * 0.24);
-    const scrapeBuffer = ctx.createBuffer(1, scrapeSize, ctx.sampleRate);
-    const scrapeOutput = scrapeBuffer.getChannelData(0);
-    for (let i = 0; i < scrapeSize; i++) {
-        const t = i / scrapeSize;
+    const scrapeBuffer = createNoiseBuffer(ctx, 0.24, (i, size) => {
+        const t = i / size;
         const grit = Math.random() > 0.7 ? (Math.random() * 2 - 1) : 0;
-        scrapeOutput[i] = (Math.random() * 2 - 1) * (0.25 + grit) * Math.exp(-t * 5);
-    }
+        return (Math.random() * 2 - 1) * (0.25 + grit) * Math.exp(-t * 5);
+    });
 
     const scrape = ctx.createBufferSource();
     scrape.buffer = scrapeBuffer;
@@ -328,11 +320,10 @@ export const startFireBreathScratch = (): (() => void) => {
 
     const ctx = getAudioCtx();
 
-    const noiseLength = Math.floor(ctx.sampleRate * 1.5);
-    const noiseBuffer = ctx.createBuffer(1, noiseLength, ctx.sampleRate);
+    const noiseBuffer = createNoiseBuffer(ctx, 1.5, () => 0);
     const output = noiseBuffer.getChannelData(0);
     let smooth = 0;
-    for (let i = 0; i < noiseLength; i++) {
+    for (let i = 0; i < output.length; i++) {
         const white = Math.random() * 2 - 1;
         smooth = smooth * 0.7 + white * 0.3;
         output[i] = smooth * (0.7 + Math.random() * 0.3);

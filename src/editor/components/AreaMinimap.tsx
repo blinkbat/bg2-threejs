@@ -25,13 +25,6 @@ export function AreaMinimap({ areaId, spawnX, spawnZ, onSpawnChange, width = 200
     const [isDragging, setIsDragging] = useState(false);
     const [dragStart, setDragStart] = useState({ x: 0, z: 0 });
 
-    // Reset view when area changes
-    useEffect(() => {
-        setZoom(1);
-        setOffsetX(0);
-        setOffsetZ(0);
-    }, [areaId]);
-
     // Calculate scale to fit area in preview
     const gridSize = area?.gridSize || 30;
     const baseCellSize = Math.min(width, height) / gridSize;

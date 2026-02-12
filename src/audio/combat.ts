@@ -3,6 +3,7 @@
 // =============================================================================
 
 import { isMuted, getAudioCtx } from "./core";
+import { createNoiseBuffer } from "./noise";
 
 // Fireball - whooshing explosion with long decay
 export const playFireball = () => {
@@ -30,12 +31,9 @@ export const playFireball = () => {
     whoosh.stop(ctx.currentTime + 0.6);
 
     // Crackle layer - noise burst
-    const bufferSize = ctx.sampleRate * 0.4;
-    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const output = noiseBuffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-        output[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.3));
-    }
+    const noiseBuffer = createNoiseBuffer(ctx, 0.4, (i, size) => (
+        (Math.random() * 2 - 1) * Math.exp(-i / (size * 0.3))
+    ));
     const noise = ctx.createBufferSource();
     noise.buffer = noiseBuffer;
     const noiseGain = ctx.createGain();
@@ -83,12 +81,9 @@ export const playExplosion = () => {
     sub.stop(ctx.currentTime + 0.6);
 
     // Crackle/sizzle layer - longer decay
-    const bufferSize = ctx.sampleRate * 0.7;
-    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const output = noiseBuffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-        output[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.25));
-    }
+    const noiseBuffer = createNoiseBuffer(ctx, 0.7, (i, size) => (
+        (Math.random() * 2 - 1) * Math.exp(-i / (size * 0.25))
+    ));
     const noise = ctx.createBufferSource();
     noise.buffer = noiseBuffer;
     const noiseGain = ctx.createGain();
@@ -127,9 +122,9 @@ export const playDeath = () => {
     crunch.stop(ctx.currentTime + 1.0);
 
     // Bitcrushed noise - long crackle/crush texture decay
-    const bufferSize = ctx.sampleRate * 1.2;
-    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const noiseBuffer = createNoiseBuffer(ctx, 1.2, () => 0);
     const output = noiseBuffer.getChannelData(0);
+    const bufferSize = output.length;
     // Create bitcrushed effect with sample-and-hold
     const bitcrushRate = 12; // samples to hold
     let holdValue = 0;

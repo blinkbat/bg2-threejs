@@ -99,6 +99,7 @@ export function EntityEditPopup({ entity, screenX, screenY, onSave, onClose, onN
                         <div style={{ marginBottom: 10 }}>
                             <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Click to set spawn point:</span>
                             <AreaMinimap
+                                key={draft.transitionTarget}
                                 areaId={draft.transitionTarget}
                                 spawnX={draft.transitionSpawnX || 0}
                                 spawnZ={draft.transitionSpawnZ || 0}

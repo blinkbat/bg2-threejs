@@ -3,6 +3,7 @@
 // =============================================================================
 
 import { isMuted, getAudioCtx } from "./core";
+import { createNoiseBuffer } from "./noise";
 
 // Gulp - liquid drinking sound
 export const playGulp = () => {
@@ -199,17 +200,16 @@ export const playCrunch = () => {
     const ctx = getAudioCtx();
 
     // Crunchy noise burst
-    const bufferSize = ctx.sampleRate * 0.15;
-    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const noiseBuffer = createNoiseBuffer(ctx, 0.15, () => 0);
     const output = noiseBuffer.getChannelData(0);
     // Bitcrushed crackle texture
     const crushRate = 8;
     let holdValue = 0;
-    for (let i = 0; i < bufferSize; i++) {
+    for (let i = 0; i < output.length; i++) {
         if (i % crushRate === 0) {
             holdValue = Math.random() * 2 - 1;
         }
-        output[i] = holdValue * Math.exp(-i / (bufferSize * 0.4));
+        output[i] = holdValue * Math.exp(-i / (output.length * 0.4));
     }
     const noise = ctx.createBufferSource();
     noise.buffer = noiseBuffer;
@@ -266,12 +266,9 @@ export const playFootsteps = () => {
         thud.stop(startTime + 0.2);
 
         // Gritty scuff — longer, louder noise burst
-        const bufferSize = Math.floor(ctx.sampleRate * 0.12);
-        const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-        const output = noiseBuffer.getChannelData(0);
-        for (let j = 0; j < bufferSize; j++) {
-            output[j] = (Math.random() * 2 - 1) * Math.exp(-j / (bufferSize * 0.4));
-        }
+        const noiseBuffer = createNoiseBuffer(ctx, 0.12, (j, size) => (
+            (Math.random() * 2 - 1) * Math.exp(-j / (size * 0.4))
+        ));
         const noise = ctx.createBufferSource();
         noise.buffer = noiseBuffer;
         const noiseFilter = ctx.createBiquadFilter();

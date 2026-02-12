@@ -19,6 +19,8 @@ interface HUDProps {
     onToggleDebug: () => void;
     onWarpToArea?: (areaId: AreaId) => void;
     onAddXp?: (amount: number) => void;
+    onToggleDevMode?: () => void;
+    devModeEnabled?: boolean;
     onToggleFastMove?: () => void;
     fastMoveEnabled?: boolean;
     otherModalOpen?: boolean;
@@ -40,6 +42,8 @@ export function HUD({
     onToggleDebug,
     onWarpToArea,
     onAddXp,
+    onToggleDevMode,
+    devModeEnabled,
     onToggleFastMove,
     fastMoveEnabled,
     otherModalOpen,
@@ -173,6 +177,14 @@ export function HUD({
                                         <button className="btn btn-tiny" onClick={() => onAddXp(50)}>+50 XP</button>
                                         <button className="btn btn-tiny" onClick={() => onAddXp(500)}>+500 XP</button>
                                     </>
+                                )}
+                                {onToggleDevMode && (
+                                    <button
+                                        className={`btn btn-tiny ${devModeEnabled ? "btn-active" : ""}`}
+                                        onClick={onToggleDevMode}
+                                    >
+                                        Dev Mode
+                                    </button>
                                 )}
                                 {onToggleFastMove && (
                                     <button

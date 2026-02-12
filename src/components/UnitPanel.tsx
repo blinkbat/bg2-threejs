@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Tippy from "@tippyjs/react";
 import type { Unit, Skill, StatusEffect, DamageType, Item, CharacterStats } from "../core/types";
 import { isConsumable, isWeapon, isShield, isArmor, isAccessory } from "../core/types";
@@ -9,6 +9,7 @@ import { COLORS, getSkillColorClass, getSkillBorderColor } from "../core/constan
 import { getCharacterEquipment, getPartyInventory } from "../game/equipmentState";
 import { getItem } from "../game/items";
 import { isOffHandDisabled } from "../game/equipment";
+import { useDisplayTime } from "../hooks/useDisplayTime";
 import monkPortrait from "../assets/monk-portrait.png";
 import barbarianPortrait from "../assets/barbarian-portrait.png";
 import wizardPortrait from "../assets/wizard-portrait.png";
@@ -51,22 +52,7 @@ interface UnitPanelProps {
 }
 
 export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, skillCooldowns = {}, paused = false, queuedSkills = [], onUseConsumable, consumableCooldownEnd = 0, onIncrementStat, onLearnSkill, gold = 0 }: UnitPanelProps) {
-    const [, setTick] = useState(0);
-    // Use a ref to capture pause time immediately without waiting for state update
-    const [pauseTimeState, setPauseTimeState] = useState<number | null>(() => paused ? Date.now() : null);
-
-    useEffect(() => {
-        if (paused) {
-            setPauseTimeState(Date.now());
-            return;
-        }
-        setPauseTimeState(null);
-        const interval = setInterval(() => setTick(t => t + 1), 100);
-        return () => clearInterval(interval);
-    }, [paused]);
-
-    // When paused, freeze display time. Use current time if pauseTimeState hasn't updated yet.
-    const displayTime = paused ? (pauseTimeState ?? Date.now()) : Date.now();
+    const displayTime = useDisplayTime(paused, 16);
     const [tab, setTab] = useState("status");
     const data = UNIT_DATA[unitId];
     const unit = units.find((u: Unit) => u.id === unitId);
@@ -554,10 +540,12 @@ function SkillCard({
     const cooldownKey = `${unitId}-${skill.name}`;
     const cooldownData = skillCooldowns[cooldownKey];
     const skillCooldownEnd = cooldownData?.end || 0;
-    const cooldownDuration = cooldownData?.duration || skill.cooldown;
+    const cooldownDuration = Math.max(1, cooldownData?.duration || skill.cooldown);
     const skillOnCooldown = skillCooldownEnd > displayTime;
     const cooldownRemaining = skillOnCooldown ? Math.ceil((skillCooldownEnd - displayTime) / 1000) : 0;
-    const cooldownPct = skillOnCooldown ? ((skillCooldownEnd - displayTime) / cooldownDuration) * 100 : 0;
+    const cooldownScale = skillOnCooldown
+        ? Math.max(0, Math.min(1, (skillCooldownEnd - displayTime) / cooldownDuration))
+        : 0;
     const hasManaForSkill = (unit.mana ?? 0) >= skill.manaCost;
     const isBasicAttack = skill.name === "Attack";
     const isRanged = skill.range > 2;
@@ -597,7 +585,7 @@ function SkillCard({
                     <div
                         className="skill-cooldown-overlay"
                         style={{
-                            width: `${cooldownPct}%`,
+                            transform: `scaleX(${cooldownScale})`,
                             background: isQueued ? "rgba(245, 158, 11, 0.4)" : "rgba(0,0,0,0.5)"
                         }}
                     />
@@ -650,7 +638,7 @@ function SkillsTab({
     const skillPoints = unit.skillPoints ?? 0;
 
     const cantrips = learnedSkills.filter(s => s.isCantrip);
-    const learnedRegular = learnedSkills.filter(s => !s.isCantrip && s.name !== "Attack");
+    const learnedRegular = learnedSkills.filter(s => !s.isCantrip);
     const unlearnedSkills = availableSkills.filter(s => !learnedSet.has(s.name));
 
     return (

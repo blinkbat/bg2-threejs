@@ -3,6 +3,7 @@
 // =============================================================================
 
 import { isMuted, getAudioCtx, getAudioContext } from "./core";
+import { createNoiseBuffer, createWhiteNoiseBuffer } from "./noise";
 
 // Heal - chirpy ascending arpeggio
 export const playHeal = () => {
@@ -108,12 +109,7 @@ export const playMagicWave = () => {
     const duration = 0.9;
 
     // White noise source using buffer - the core of the crackle
-    const bufferSize = ctx.sampleRate * duration;
-    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const output = noiseBuffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-        output[i] = Math.random() * 2 - 1;
-    }
+    const noiseBuffer = createWhiteNoiseBuffer(ctx, duration);
 
     // Noise layer 1 - main crackle with highpass filter
     const noise1 = ctx.createBufferSource();
@@ -172,12 +168,7 @@ export const playEnergyShield = () => {
     const ctx = getAudioCtx();
 
     // Whoosh sweep - filtered noise rising in pitch
-    const bufferSize = ctx.sampleRate * 0.5;
-    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const output = noiseBuffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-        output[i] = Math.random() * 2 - 1;
-    }
+    const noiseBuffer = createWhiteNoiseBuffer(ctx, 0.5);
 
     const noise = ctx.createBufferSource();
     noise.buffer = noiseBuffer;
@@ -241,15 +232,11 @@ export const playThunder = () => {
     const ctx = getAudioCtx();
 
     // Sharp initial CRACK - white noise burst with very fast attack
-    const crackSize = ctx.sampleRate * 0.08;
-    const crackBuffer = ctx.createBuffer(1, crackSize, ctx.sampleRate);
-    const crackOutput = crackBuffer.getChannelData(0);
-    for (let i = 0; i < crackSize; i++) {
-        const t = i / crackSize;
-        // Very sharp attack, fast decay
+    const crackBuffer = createNoiseBuffer(ctx, 0.08, (i, size) => {
+        const t = i / size;
         const envelope = t < 0.05 ? t / 0.05 : Math.exp(-t * 15);
-        crackOutput[i] = (Math.random() * 2 - 1) * envelope;
-    }
+        return (Math.random() * 2 - 1) * envelope;
+    });
     const crack = ctx.createBufferSource();
     crack.buffer = crackBuffer;
     const crackFilter = ctx.createBiquadFilter();
@@ -264,15 +251,11 @@ export const playThunder = () => {
     crack.start();
 
     // Mid-frequency crackle layer - the "CRRACK" texture
-    const crackleSize = ctx.sampleRate * 0.15;
-    const crackleBuffer = ctx.createBuffer(1, crackleSize, ctx.sampleRate);
-    const crackleOutput = crackleBuffer.getChannelData(0);
-    for (let i = 0; i < crackleSize; i++) {
-        const t = i / crackleSize;
-        // Irregular crackle pattern
+    const crackleBuffer = createNoiseBuffer(ctx, 0.15, (i, size) => {
+        const t = i / size;
         const spike = Math.random() > 0.85 ? 1 : 0.3;
-        crackleOutput[i] = (Math.random() * 2 - 1) * spike * Math.exp(-t * 8);
-    }
+        return (Math.random() * 2 - 1) * spike * Math.exp(-t * 8);
+    });
     const crackle = ctx.createBufferSource();
     crackle.buffer = crackleBuffer;
     const crackleFilter = ctx.createBiquadFilter();
@@ -321,16 +304,12 @@ export const playVines = () => {
     const ctx = getAudioCtx();
 
     // Rustling noise - filtered for organic feel
-    const rustleSize = ctx.sampleRate * 0.4;
-    const rustleBuffer = ctx.createBuffer(1, rustleSize, ctx.sampleRate);
-    const rustleOutput = rustleBuffer.getChannelData(0);
-    for (let i = 0; i < rustleSize; i++) {
-        const t = i / rustleSize;
-        // Irregular rustle pattern
+    const rustleBuffer = createNoiseBuffer(ctx, 0.4, (i, size) => {
+        const t = i / size;
         const rustle = Math.random() * 2 - 1;
         const envelope = Math.sin(t * Math.PI) * (1 + Math.sin(t * 20) * 0.3);
-        rustleOutput[i] = rustle * envelope * 0.4;
-    }
+        return rustle * envelope * 0.4;
+    });
     const rustleNoise = ctx.createBufferSource();
     rustleNoise.buffer = rustleBuffer;
     const rustleFilter = ctx.createBiquadFilter();

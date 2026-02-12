@@ -28,7 +28,7 @@ import {
 import { clearTargetingMode, type SkillExecutionContext } from "../combat/skills";
 import { getPartyInventory, setPartyInventory } from "../game/equipmentState";
 import { removeFromInventory, addToInventory } from "../game/equipment";
-import type { HotbarAssignments } from "../components/SkillHotbar";
+import type { HotbarAssignments } from "./hotbarStorage";
 
 // =============================================================================
 // TYPES

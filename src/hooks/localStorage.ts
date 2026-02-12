@@ -43,3 +43,24 @@ export function saveFormationOrder(order: number[]): void {
         localStorage.setItem(FORMATION_STORAGE_KEY, JSON.stringify(order));
     } catch { /* ignore */ }
 }
+
+// -----------------------------------------------------------------------------
+// Dev Mode
+// -----------------------------------------------------------------------------
+
+const DEV_MODE_STORAGE_KEY = "devModeEnabled";
+
+export function loadDevMode(): boolean {
+    try {
+        const stored = localStorage.getItem(DEV_MODE_STORAGE_KEY);
+        if (stored === null) return false;
+        return JSON.parse(stored) === true;
+    } catch { /* ignore */ }
+    return false;
+}
+
+export function saveDevMode(enabled: boolean): void {
+    try {
+        localStorage.setItem(DEV_MODE_STORAGE_KEY, JSON.stringify(enabled));
+    } catch { /* ignore */ }
+}

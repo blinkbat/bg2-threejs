@@ -724,8 +724,12 @@ html, body, #root {
 .tab {
     flex: 1;
     padding: 10px 0;
-    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
     font-size: 12px;
+    line-height: 1;
     text-transform: uppercase;
     cursor: pointer;
     background: transparent;
@@ -746,8 +750,7 @@ html, body, #root {
     height: 6px;
     border-radius: 50%;
     background: #ffd700;
-    margin-left: 4px;
-    vertical-align: middle;
+    flex-shrink: 0;
 }
 
 /* -----------------------------------------------------------------------------
@@ -861,11 +864,12 @@ html, body, #root {
 
 .skill-cooldown-overlay {
     position: absolute;
-    top: 0;
-    left: 0;
-    height: 100%;
+    inset: 0;
     background: rgba(0,0,0,0.5);
     pointer-events: none;
+    transform-origin: left center;
+    will-change: transform;
+    transition: transform 60ms linear;
 }
 
 .skill-header {
@@ -2355,11 +2359,15 @@ html, body, #root {
 
 .hotbar-cooldown-overlay {
     position: absolute;
+    top: 0;
     bottom: 0;
     left: 0;
     right: 0;
     background: rgba(0, 0, 0, 0.6);
     pointer-events: none;
+    transform-origin: center bottom;
+    will-change: transform;
+    transition: transform 60ms linear;
 }
 
 .hotbar-cooldown-text {

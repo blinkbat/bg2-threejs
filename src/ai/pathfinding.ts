@@ -28,7 +28,7 @@ const UNIT_AVOIDANCE_RADIUS = 1;
 const UNIT_AVOIDANCE_RADIUS_SQ = UNIT_AVOIDANCE_RADIUS * UNIT_AVOIDANCE_RADIUS;
 
 // Module-level state for dynamic obstacles (updated each frame before pathfinding)
-let dynamicCostMap: Map<number, number> = new Map();
+const dynamicCostMap: Map<number, number> = new Map();
 
 // Track last unit positions to avoid recomputing when nothing moved
 let lastUnitPositions: Map<number, number> = new Map();

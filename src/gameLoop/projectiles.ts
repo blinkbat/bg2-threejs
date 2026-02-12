@@ -42,6 +42,19 @@ interface VolleyStats {
 }
 const magicWaveVolleys: Map<number, VolleyStats> = new Map();
 
+/**
+ * Match piercing hit radius to the projectile's widest horizontal visual axis.
+ */
+function getPiercingHitRadius(proj: PiercingProjectile): number {
+    const baseRadius = (proj.mesh.geometry as THREE.SphereGeometry).parameters?.radius;
+    if (typeof baseRadius !== "number") {
+        return GLACIAL_WHORL_HIT_RADIUS;
+    }
+
+    const horizontalScale = Math.max(Math.abs(proj.mesh.scale.x), Math.abs(proj.mesh.scale.z));
+    return baseRadius * horizontalScale;
+}
+
 // =============================================================================
 // PROJECTILE DISPOSAL
 // =============================================================================
@@ -439,6 +452,7 @@ export function updateProjectiles(
         if (proj.type === "piercing") {
             const pProj = proj as PiercingProjectile;
             const attackerUnit = getUnitById(pProj.attackerId);
+            const piercingHitRadius = getPiercingHitRadius(pProj);
 
             // Move in straight line
             proj.mesh.position.x += pProj.directionX * pProj.speed;
@@ -484,7 +498,7 @@ export function updateProjectiles(
                     targetG.position.x, targetG.position.z
                 );
 
-                if (distToTarget < GLACIAL_WHORL_HIT_RADIUS) {
+                if (distToTarget <= piercingHitRadius) {
                     pProj.hitUnits.add(target.id);
 
                     const targetData = getUnitStats(target);

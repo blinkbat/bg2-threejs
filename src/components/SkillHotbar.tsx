@@ -1,14 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { createPortal } from "react-dom";
 import Tippy from "@tippyjs/react";
 import type { Unit, Skill } from "../core/types";
 import { getAllSkills, getAvailableSkills } from "../game/playerUnits";
 import { getSkillColorClass, getSkillBorderColor } from "../core/constants";
 import type { HotbarAssignments } from "../hooks/hotbarStorage";
-
-// Re-export for backwards compatibility
-export type { HotbarAssignments } from "../hooks/hotbarStorage";
-export { loadHotbarAssignments, saveHotbarAssignments } from "../hooks/hotbarStorage";
+import { useDisplayTime } from "../hooks/useDisplayTime";
 
 interface SkillHotbarProps {
     unit: Unit;
@@ -177,7 +174,7 @@ function HotbarSlot({
                 {onCooldown && (
                     <div
                         className="hotbar-cooldown-overlay"
-                        style={{ height: `${cooldownPct}%` }}
+                        style={{ transform: `scaleY(${Math.max(0, Math.min(1, cooldownPct / 100))})` }}
                     />
                 )}
                 <span className="hotbar-slot-key">{slotIndex + 1}</span>
@@ -208,16 +205,7 @@ export function SkillHotbar({
     paused = false
 }: SkillHotbarProps) {
     const [selectorOpen, setSelectorOpen] = useState<number | null>(null);
-    const [, setTick] = useState(0);
-
-    // Re-render for cooldown updates
-    useEffect(() => {
-        if (paused) return;
-        const interval = setInterval(() => setTick(t => t + 1), 100);
-        return () => clearInterval(interval);
-    }, [paused]);
-
-    const displayTime = Date.now();
+    const displayTime = useDisplayTime(paused, 16);
     const allSkills = getAllSkills(unit.id, unit);
     const availableSkills = getAvailableSkills(unit.id);
 
@@ -237,7 +225,7 @@ export function SkillHotbar({
                 const cooldownKey = skill ? `${unit.id}-${skill.name}` : "";
                 const cooldownData = skillCooldowns[cooldownKey];
                 const skillCooldownEnd = cooldownData?.end || 0;
-                const cooldownDuration = cooldownData?.duration || skill?.cooldown || 1000;
+                const cooldownDuration = Math.max(1, cooldownData?.duration || skill?.cooldown || 1000);
                 const onCooldown = skillCooldownEnd > displayTime;
                 const cooldownRemaining = onCooldown ? Math.ceil((skillCooldownEnd - displayTime) / 1000) : 0;
                 const cooldownPct = onCooldown ? ((skillCooldownEnd - displayTime) / cooldownDuration) * 100 : 0;

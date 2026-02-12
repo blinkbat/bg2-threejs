@@ -51,8 +51,9 @@ export function trySleep(ctx: SleepContext): boolean {
 
     // Apply sleep to all hit targets in one state update
     if (hitIds.length > 0) {
+        const hitIdSet = new Set(hitIds);
         setUnits(prev => prev.map(u => {
-            if (!hitIds.includes(u.id)) return u;
+            if (!hitIdSet.has(u.id)) return u;
             return applySleep(u, unit.id, now);
         }));
     }

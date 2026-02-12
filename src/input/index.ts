@@ -16,6 +16,7 @@ import { getFormationPositions } from "../game/formation";
 import { MOVE_SPEED } from "../core/constants";
 import { disposeGeometry } from "../rendering/disposal";
 import { distanceToPoint } from "../game/geometry";
+import { updateUnitsWhere } from "../core/stateUtils";
 
 // =============================================================================
 // TYPES
@@ -152,6 +153,7 @@ export function executeMove(
     targets: { id: number; x: number; z: number }[],
     direct: boolean = false
 ): void {
+    const targetIdSet = new Set(targets.map(t => t.id));
     targets.forEach(t => {
         assignPath(unitsRef, pathsRef, moveStartRef, t.id, t.x, t.z, direct);
         if (unitsRef[t.id]) {
@@ -159,7 +161,7 @@ export function executeMove(
             unitsRef[t.id].userData.pendingMove = false;
         }
     });
-    setUnits(prev => prev.map(u => targets.some(t => t.id === u.id) ? { ...u, target: null } : u));
+    updateUnitsWhere(setUnits, u => targetIdSet.has(u.id), { target: null });
 }
 
 export function executeAttack(
@@ -169,11 +171,12 @@ export function executeAttack(
     unitIds: number[],
     targetId: number
 ): void {
+    const unitIdSet = new Set(unitIds);
     unitIds.forEach(uid => {
         if (unitsRef[uid]) unitsRef[uid].userData.attackTarget = targetId;
         pathsRef[uid] = [];
     });
-    setUnits(prev => prev.map(u => unitIds.includes(u.id) ? { ...u, target: targetId } : u));
+    updateUnitsWhere(setUnits, u => unitIdSet.has(u.id), { target: targetId });
     soundFns.playAttack();
 }
 
@@ -303,7 +306,8 @@ export function processActionQueue(
 
     // Update UI for executed/removed skills
     if (executedUnits.length > 0) {
-        setQueuedActions(prev => prev.filter(q => !executedUnits.includes(q.unitId)));
+        const executedSet = new Set(executedUnits);
+        setQueuedActions(prev => prev.filter(q => !executedSet.has(q.unitId)));
     }
 }
 

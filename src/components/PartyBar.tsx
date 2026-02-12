@@ -1,9 +1,10 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import type { Unit, Skill, StatusEffectType } from "../core/types";
 import { COLORS } from "../core/constants";
 import { UNIT_DATA, getEffectiveMaxHp } from "../game/playerUnits";
 import { getHpPercentage, getHpColor } from "../combat/combatMath";
-import { SkillHotbar, type HotbarAssignments } from "./SkillHotbar";
+import { SkillHotbar } from "./SkillHotbar";
+import type { HotbarAssignments } from "../hooks/hotbarStorage";
 import monkPortrait from "../assets/monk-portrait.png";
 import barbarianPortrait from "../assets/barbarian-portrait.png";
 import wizardPortrait from "../assets/wizard-portrait.png";
@@ -83,9 +84,15 @@ export function PartyBar({
     formationOrder = [],
     onReorderFormation
 }: PartyBarProps) {
-    const playerUnits = units.filter((u: Unit) => u.team === "player");
-    const playerIds = playerUnits.map(u => u.id);
-    const effectiveOrder = getEffectiveOrder(playerIds, formationOrder);
+    const playerUnits = useMemo(() => units.filter((u: Unit) => u.team === "player"), [units]);
+    const effectiveOrder = useMemo(() => {
+        const playerIds = playerUnits.map(u => u.id);
+        return getEffectiveOrder(playerIds, formationOrder);
+    }, [playerUnits, formationOrder]);
+    const effectiveOrderRef = useRef(effectiveOrder);
+    useEffect(() => {
+        effectiveOrderRef.current = effectiveOrder;
+    }, [effectiveOrder]);
 
     // Context menu state
     const [contextMenu, setContextMenu] = useState<{ unitId: number; x: number; y: number } | null>(null);
@@ -112,14 +119,15 @@ export function PartyBar({
     }, [contextMenu]);
 
     const swapFormation = useCallback((unitId: number, direction: -1 | 1) => {
-        const idx = effectiveOrder.indexOf(unitId);
+        const order = effectiveOrderRef.current;
+        const idx = order.indexOf(unitId);
         const targetIdx = idx + direction;
-        if (idx === -1 || targetIdx < 0 || targetIdx >= effectiveOrder.length) return;
-        const newOrder = [...effectiveOrder];
+        if (idx === -1 || targetIdx < 0 || targetIdx >= order.length) return;
+        const newOrder = [...order];
         [newOrder[idx], newOrder[targetIdx]] = [newOrder[targetIdx], newOrder[idx]];
         onReorderFormation?.(newOrder);
         setContextMenu(null);
-    }, [effectiveOrder, onReorderFormation]);
+    }, [onReorderFormation]);
 
     /** Compute the insert gap from a clientX anywhere in the bar */
     const computeInsertIdxFromX = useCallback((fromId: number, clientX: number) => {
@@ -133,11 +141,11 @@ export function PartyBar({
             if (clientX < mid) { gap = i; break; }
         }
         // No-op check: dropping here wouldn't move the unit
-        const fromIdx = effectiveOrder.indexOf(fromId);
+        const fromIdx = effectiveOrderRef.current.indexOf(fromId);
         if (fromIdx === -1) return null;
         if (gap === fromIdx || gap === fromIdx + 1) return null;
         return gap;
-    }, [effectiveOrder]);
+    }, []);
 
     /** Execute the drop at the current insertIdx */
     const executeDrop = useCallback(() => {
@@ -147,14 +155,15 @@ export function PartyBar({
         setDraggingId(null);
         setInsertIdx(null);
         if (fromId === null || gap === null) return;
-        const fromIdx = effectiveOrder.indexOf(fromId);
+        const order = effectiveOrderRef.current;
+        const fromIdx = order.indexOf(fromId);
         if (fromIdx === -1) return;
-        const newOrder = effectiveOrder.filter(id => id !== fromId);
+        const newOrder = order.filter(id => id !== fromId);
         // Adjust gap for the removal
         const adjustedGap = gap > fromIdx ? gap - 1 : gap;
         newOrder.splice(adjustedGap, 0, fromId);
         onReorderFormation?.(newOrder);
-    }, [effectiveOrder, insertIdx, onReorderFormation]);
+    }, [insertIdx, onReorderFormation]);
 
     // Sort playerUnits by effective formation order for rendering
     const sortedUnits = [...playerUnits].sort((a, b) => effectiveOrder.indexOf(a.id) - effectiveOrder.indexOf(b.id));

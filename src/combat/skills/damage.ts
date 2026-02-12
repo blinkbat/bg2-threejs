@@ -620,12 +620,13 @@ export function executeGlacialWhorlSkill(
     const dirX = dx / len;
     const dirZ = dz / len;
 
-    // Create projectile mesh (ice shard)
+    // Create projectile mesh: larger and horizontally oblong on local X.
     const mesh = new THREE.Mesh(
-        new THREE.SphereGeometry(0.25, 10, 10),
+        new THREE.SphereGeometry(0.3, 12, 10),
         new THREE.MeshBasicMaterial({ color: skill.projectileColor ?? "#5dade2" })
     );
-    mesh.position.set(casterG.position.x + dirX * 0.3, 0.5, casterG.position.z + dirZ * 0.3);
+    mesh.scale.set(2.0, 0.9, 1.0);
+    mesh.position.set(casterG.position.x + dirX * 0.45, 0.5, casterG.position.z + dirZ * 0.45);
     scene.add(mesh);
 
     const piercingProj: PiercingProjectile = {

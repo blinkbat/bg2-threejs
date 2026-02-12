@@ -109,7 +109,7 @@ export function useThreeScene({
     openedChests,
     initialCameraOffset
 }: UseThreeSceneOptions): UseThreeSceneResult {
-    // Scene state ref (populated during initialization)
+    // Scene state (stable object, populated during initialization)
     const sceneStateRef = useRef<ThreeSceneState>({
         scene: null,
         camera: null,
@@ -262,9 +262,5 @@ export function useThreeScene({
         };
     }, []); // Only run once on mount
 
-    return {
-        sceneState: sceneStateRef.current,
-        gameRefs: gameRefsRef,
-        isInitialized
-    };
+    return { sceneState: sceneStateRef.current, gameRefs: gameRefsRef, isInitialized };
 }
