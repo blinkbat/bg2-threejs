@@ -639,12 +639,15 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         let palmTopZ = tree.z;
 
         if (treeType === "palm") {
-            // Palm: taller trunk with slight per-tree variation.
-            const palmHeightScale = 1.05 + Math.random() * 0.55;
-            trunkHeight = 2.5 * scale * palmHeightScale;
+            // Palm: taller trunk with wider per-tree variation.
+            const palmHeightScale = 0.82 + Math.random() * 1.05;
+            const normalizedPalmHeight = THREE.MathUtils.clamp((palmHeightScale - 0.82) / 1.05, 0, 1);
+            const canopyBaseScale = 0.9 + normalizedPalmHeight * 0.45;
+            trunkHeight = 2.45 * scale * palmHeightScale;
             trunkRadius = 0.08 * scale;
             trunkBottomRadius = trunkRadius * 1.5;
-            foliageRadius = 0.58 * scale;
+            // Taller palms get broader base foliage.
+            foliageRadius = 0.58 * scale * canopyBaseScale;
             foliageHeight = 2 * foliageRadius;  // Sphere diameter for fog-of-war
 
             // Lean each palm in a unique direction and compute top anchor point.
@@ -794,6 +797,149 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     // Decorations - columns, broken walls, etc.
     const columnMeshes: THREE.Mesh[] = [];
     const columnGroups: THREE.Mesh[][] = [];  // Groups of column parts that fade together
+
+    const addSeaweedCluster = (
+        centerX: number,
+        centerZ: number,
+        size: number,
+        variant: "large" | "small"
+    ): void => {
+        const isLarge = variant === "large";
+        const frondCount = isLarge ? 4 + Math.floor(Math.random() * 3) : 2 + Math.floor(Math.random() * 2);
+        const palette = isLarge
+            ? ["#6f9639", "#83ab47", "#98bf57", "#b0d16b"]
+            : ["#7fa544", "#91b854", "#a8cb66"];
+        const spreadMin = (isLarge ? 0.24 : 0.14) * size;
+        const spreadMax = (isLarge ? 0.52 : 0.3) * size;
+        const anchorCount = 2;
+        const anchorRadius = (isLarge ? 0.22 : 0.14) * size;
+        const anchors = Array(anchorCount).fill(null).map(() => {
+            const a = Math.random() * Math.PI * 2;
+            const r = Math.random() * anchorRadius;
+            return { x: Math.cos(a) * r, z: Math.sin(a) * r };
+        });
+
+        for (let j = 0; j < frondCount; j++) {
+            const angle = (j / frondCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.45;
+            const lobeRadius = (isLarge ? 0.085 : 0.058) * size * (0.85 + Math.random() * 0.4);
+            const baseOffset = spreadMin + Math.random() * (spreadMax - spreadMin);
+            const lean = THREE.MathUtils.degToRad((isLarge ? 46 : 40) + Math.random() * 16);
+            const anchor = anchors[j % anchors.length];
+            const lobeScaleX = 1.25 + Math.random() * 0.55;
+            const lobeScaleY = 1.75 + Math.random() * 0.65;
+            const lobeScaleZ = 0.95 + Math.random() * 0.45;
+            const lobeLift = lobeRadius * lobeScaleY * 0.42;
+            const frondColor = palette[Math.floor(Math.random() * palette.length)];
+            const useStalk = Math.random() < (isLarge ? 0.38 : 0.32);
+
+            if (useStalk) {
+                const stalkRadius = lobeRadius * (0.46 + Math.random() * 0.18);
+                const stalkHeight = lobeRadius * (2.9 + Math.random() * 1.3);
+                const stalk = new THREE.Mesh(
+                    new THREE.CylinderGeometry(stalkRadius * 0.82, stalkRadius, stalkHeight, 9),
+                    new THREE.MeshStandardMaterial({
+                        color: frondColor,
+                        metalness: 0.0,
+                        roughness: 0.77,
+                        transparent: true,
+                        opacity: 0.98,
+                        emissive: "#28340f",
+                        emissiveIntensity: 0.06
+                    })
+                );
+                stalk.position.set(
+                    centerX + anchor.x + Math.cos(angle) * baseOffset,
+                    stalkHeight * 0.5,
+                    centerZ + anchor.z + Math.sin(angle) * baseOffset
+                );
+                stalk.rotation.y = angle + (Math.random() - 0.5) * 0.3;
+                stalk.rotation.x = -lean;
+                stalk.rotation.z = (Math.random() - 0.5) * 0.35;
+                if (j === 0) stalk.name = "decoration";
+                scene.add(stalk);
+
+                const tipBulb = new THREE.Mesh(
+                    new THREE.SphereGeometry(stalkRadius * 0.85, 8, 6),
+                    new THREE.MeshStandardMaterial({
+                        color: frondColor,
+                        metalness: 0.0,
+                        roughness: 0.76,
+                        emissive: "#28340f",
+                        emissiveIntensity: 0.05
+                    })
+                );
+                tipBulb.position.set(0, stalkHeight * 0.5, 0);
+                stalk.add(tipBulb);
+            } else {
+                const blade = new THREE.Mesh(
+                    new THREE.SphereGeometry(lobeRadius, 10, 8),
+                    new THREE.MeshStandardMaterial({
+                        color: frondColor,
+                        metalness: 0.0,
+                        roughness: 0.76,
+                        transparent: true,
+                        opacity: 0.98,
+                        emissive: "#28340f",
+                        emissiveIntensity: 0.06
+                    })
+                );
+                blade.position.set(
+                    centerX + anchor.x + Math.cos(angle) * baseOffset,
+                    lobeLift,
+                    centerZ + anchor.z + Math.sin(angle) * baseOffset
+                );
+                blade.rotation.y = angle + (Math.random() - 0.5) * 0.35;
+                blade.rotation.x = -lean;
+                blade.rotation.z = (Math.random() - 0.5) * 0.45;
+                blade.scale.set(lobeScaleX, lobeScaleY, lobeScaleZ);
+                if (j === 0) blade.name = "decoration";
+                scene.add(blade);
+
+                // Optional top nub keeps silhouette playful/chunky.
+                if (Math.random() < 0.45) {
+                    const nub = new THREE.Mesh(
+                        new THREE.SphereGeometry(lobeRadius * 0.45, 8, 6),
+                        new THREE.MeshStandardMaterial({
+                            color: frondColor,
+                            metalness: 0.0,
+                            roughness: 0.78,
+                            emissive: "#28340f",
+                            emissiveIntensity: 0.04
+                        })
+                    );
+                    nub.position.set(
+                        blade.position.x + Math.cos(angle) * lobeRadius * 0.2,
+                        blade.position.y + lobeRadius * lobeScaleY * 0.6,
+                        blade.position.z + Math.sin(angle) * lobeRadius * 0.2
+                    );
+                    scene.add(nub);
+                }
+            }
+        }
+
+        const rootCount = isLarge ? 2 : 1;
+        for (let r = 0; r < rootCount; r++) {
+            const rootRadius = (isLarge ? 0.05 : 0.035) * size * (0.8 + Math.random() * 0.5);
+            const rootAngle = Math.random() * Math.PI * 2;
+            const rootDist = Math.random() * (isLarge ? 0.08 : 0.05) * size;
+            const root = new THREE.Mesh(
+                new THREE.SphereGeometry(rootRadius, 9, 8),
+                new THREE.MeshStandardMaterial({
+                    color: isLarge ? "#8daf60" : "#95b769",
+                    metalness: 0.0,
+                    roughness: 0.88
+                })
+            );
+            root.position.set(
+                centerX + Math.cos(rootAngle) * rootDist,
+                rootRadius * 0.65,
+                centerZ + Math.sin(rootAngle) * rootDist
+            );
+            if (r === 0) root.name = "decoration";
+            scene.add(root);
+        }
+    };
+
     if (area.decorations) {
         area.decorations.forEach(dec => {
             const size = dec.size ?? 1;
@@ -804,7 +950,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 const columnHeight = 2.5 * size;
                 const column = new THREE.Mesh(
                     new THREE.CylinderGeometry(columnRadius, columnRadius * 1.1, columnHeight, 12),
-                    new THREE.MeshStandardMaterial({ color: "#8b8b7a", metalness: 0.1, roughness: 0.9, transparent: true })
+                    new THREE.MeshStandardMaterial({ color: "#a6a08f", metalness: 0.1, roughness: 0.9, transparent: true })
                 );
                 column.position.set(dec.x, columnHeight / 2, dec.z);
                 column.name = "decoration";
@@ -815,7 +961,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 // Column base
                 const base = new THREE.Mesh(
                     new THREE.CylinderGeometry(columnRadius * 1.4, columnRadius * 1.5, 0.2, 12),
-                    new THREE.MeshStandardMaterial({ color: "#7a7a6a", metalness: 0.1, roughness: 0.9, transparent: true })
+                    new THREE.MeshStandardMaterial({ color: "#979080", metalness: 0.1, roughness: 0.9, transparent: true })
                 );
                 base.position.set(dec.x, 0.1, dec.z);
                 scene.add(base);
@@ -825,7 +971,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 // Column capital (top)
                 const capital = new THREE.Mesh(
                     new THREE.CylinderGeometry(columnRadius * 1.3, columnRadius, 0.25, 12),
-                    new THREE.MeshStandardMaterial({ color: "#9a9a8a", metalness: 0.1, roughness: 0.9, transparent: true })
+                    new THREE.MeshStandardMaterial({ color: "#b6ae9d", metalness: 0.1, roughness: 0.9, transparent: true })
                 );
                 capital.position.set(dec.x, columnHeight, dec.z);
                 scene.add(capital);
@@ -840,7 +986,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 const columnHeight = (0.8 + Math.random() * 0.8) * size;  // Random broken height
                 const column = new THREE.Mesh(
                     new THREE.CylinderGeometry(columnRadius * 0.9, columnRadius * 1.1, columnHeight, 12),
-                    new THREE.MeshStandardMaterial({ color: "#7a7a6a", metalness: 0.1, roughness: 0.95 })
+                    new THREE.MeshStandardMaterial({ color: "#958f80", metalness: 0.1, roughness: 0.95 })
                 );
                 column.position.set(dec.x, columnHeight / 2, dec.z);
                 column.name = "decoration";
@@ -850,7 +996,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 // Column base (crumbled)
                 const base = new THREE.Mesh(
                     new THREE.CylinderGeometry(columnRadius * 1.3, columnRadius * 1.5, 0.15, 8),
-                    new THREE.MeshStandardMaterial({ color: "#6a6a5a", metalness: 0.1, roughness: 0.95 })
+                    new THREE.MeshStandardMaterial({ color: "#878072", metalness: 0.1, roughness: 0.95 })
                 );
                 base.position.set(dec.x, 0.075, dec.z);
                 scene.add(base);
@@ -860,7 +1006,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 for (let j = 0; j < 3; j++) {
                     const debris = new THREE.Mesh(
                         new THREE.BoxGeometry(0.2 + Math.random() * 0.2, 0.15, 0.2 + Math.random() * 0.2),
-                        new THREE.MeshStandardMaterial({ color: "#6a6a5a", metalness: 0.1, roughness: 0.95 })
+                        new THREE.MeshStandardMaterial({ color: "#878072", metalness: 0.1, roughness: 0.95 })
                     );
                     const angle = Math.random() * Math.PI * 2;
                     const dist = 0.4 + Math.random() * 0.4;
@@ -876,7 +1022,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
 
                 const wall = new THREE.Mesh(
                     new THREE.BoxGeometry(wallLength, wallHeight, wallThick),
-                    new THREE.MeshStandardMaterial({ color: "#5a5a4a", metalness: 0.1, roughness: 0.95 })
+                    new THREE.MeshStandardMaterial({ color: "#8f8a79", metalness: 0.1, roughness: 0.95 })
                 );
                 wall.position.set(dec.x, wallHeight / 2, dec.z);
                 wall.rotation.y = dec.rotation ?? 0;
@@ -888,7 +1034,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 for (let j = 0; j < 4; j++) {
                     const rubble = new THREE.Mesh(
                         new THREE.BoxGeometry(0.15 + Math.random() * 0.25, 0.1 + Math.random() * 0.15, 0.15 + Math.random() * 0.25),
-                        new THREE.MeshStandardMaterial({ color: "#4a4a3a", metalness: 0.1, roughness: 0.95 })
+                        new THREE.MeshStandardMaterial({ color: "#7a7567", metalness: 0.1, roughness: 0.95 })
                     );
                     const offsetX = (Math.random() - 0.5) * wallLength;
                     const offsetZ = (Math.random() - 0.5) * 0.8;
@@ -901,7 +1047,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 const rockSize = 0.75 * size;  // Slightly bigger
                 const rock = new THREE.Mesh(
                     new THREE.DodecahedronGeometry(rockSize, 0),
-                    new THREE.MeshStandardMaterial({ color: "#5a5040", metalness: 0.1, roughness: 0.95 })
+                    new THREE.MeshStandardMaterial({ color: "#9b907d", metalness: 0.1, roughness: 0.95 })
                 );
                 rock.position.set(dec.x, rockSize * 0.6, dec.z);
                 rock.rotation.set(Math.random() * 0.3, Math.random() * Math.PI, Math.random() * 0.3);
@@ -913,7 +1059,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 const rockSize = 0.35 * size;  // Slightly bigger
                 const rock = new THREE.Mesh(
                     new THREE.DodecahedronGeometry(rockSize, 0),
-                    new THREE.MeshStandardMaterial({ color: "#6a6050", metalness: 0.1, roughness: 0.95 })
+                    new THREE.MeshStandardMaterial({ color: "#afa38f", metalness: 0.1, roughness: 0.95 })
                 );
                 rock.position.set(dec.x, rockSize * 0.5, dec.z);
                 rock.rotation.set(Math.random() * 0.5, Math.random() * Math.PI, Math.random() * 0.5);
@@ -953,23 +1099,37 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 cap.name = "decoration";
                 scene.add(cap);
 
-                // White spots on cap (random count)
-                const spotCount = 3 + Math.floor(Math.random() * 5);
-                for (let j = 0; j < spotCount; j++) {
-                    const spotSize = (0.04 + Math.random() * 0.04) * size * sizeJitter;
-                    const spot = new THREE.Mesh(
-                        new THREE.CircleGeometry(spotSize, 8),
-                        new THREE.MeshBasicMaterial({ color: "#fff" })
-                    );
-                    const theta = Math.random() * Math.PI * 2;
-                    const phi = Math.random() * Math.PI * capFlatness * 0.85;
-                    spot.position.set(
-                        dec.x + Math.sin(phi) * Math.cos(theta) * capRadius * 0.95,
-                        stemHeight + Math.cos(phi) * capRadius * 0.95,
-                        dec.z + Math.sin(phi) * Math.sin(theta) * capRadius * 0.95
-                    );
-                    spot.lookAt(dec.x, stemHeight, dec.z);
-                    scene.add(spot);
+                // Add spots to only some large mushrooms.
+                if (Math.random() < 0.68) {
+                    const spotCount = 4 + Math.floor(Math.random() * 6);
+                    const spotColors = ["#fff8da", "#f5efcd", "#efe5bc"];
+                    for (let j = 0; j < spotCount; j++) {
+                        const spotSize = (0.04 + Math.random() * 0.05) * size * sizeJitter;
+                        const spot = new THREE.Mesh(
+                            new THREE.CircleGeometry(spotSize, 9),
+                            new THREE.MeshStandardMaterial({
+                                color: spotColors[Math.floor(Math.random() * spotColors.length)],
+                                metalness: 0.0,
+                                roughness: 0.8,
+                                side: THREE.DoubleSide
+                            })
+                        );
+                        const theta = Math.random() * Math.PI * 2;
+                        const phi = Math.random() * Math.PI * capFlatness * 0.82;
+                        const radial = capRadius * 0.99;
+                        spot.position.set(
+                            dec.x + Math.sin(phi) * Math.cos(theta) * radial,
+                            stemHeight + Math.cos(phi) * radial,
+                            dec.z + Math.sin(phi) * Math.sin(theta) * radial
+                        );
+                        // Orient spots outward from the cap center so they are visible.
+                        spot.lookAt(
+                            spot.position.x * 2 - dec.x,
+                            spot.position.y * 2 - stemHeight,
+                            spot.position.z * 2 - dec.z
+                        );
+                        scene.add(spot);
+                    }
                 }
             } else if (dec.type === "small_mushroom") {
                 // Small mushroom cluster with randomized count and layout
@@ -1007,59 +1167,11 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                     scene.add(cap);
                 }
             } else if (dec.type === "seaweed") {
-                // Large seaweed - multiple fronds radiating from center
-                const seaweedColor = "#2a6030";
-                const frondCount = 6;
-                for (let j = 0; j < frondCount; j++) {
-                    const angle = (j / frondCount) * Math.PI * 2 + Math.random() * 0.3;
-                    const frondLength = (0.5 + Math.random() * 0.2) * size;
-                    const frondWidth = 0.15 * size;
-
-                    // Each frond is a thin box tilted outward
-                    const frond = new THREE.Mesh(
-                        new THREE.BoxGeometry(frondWidth, 0.02, frondLength),
-                        new THREE.MeshStandardMaterial({ color: seaweedColor, metalness: 0.0, roughness: 0.9, side: THREE.DoubleSide })
-                    );
-                    frond.position.set(
-                        dec.x + Math.cos(angle) * frondLength * 0.4,
-                        0.15 * size,
-                        dec.z + Math.sin(angle) * frondLength * 0.4
-                    );
-                    frond.rotation.y = angle;
-                    frond.rotation.x = -0.6;  // Tilt outward
-                    scene.add(frond);
-                }
-                // Center stem
-                const stem = new THREE.Mesh(
-                    new THREE.CylinderGeometry(0.03 * size, 0.05 * size, 0.2 * size, 6),
-                    new THREE.MeshStandardMaterial({ color: "#3a4030", metalness: 0.0, roughness: 0.9 })
-                );
-                stem.position.set(dec.x, 0.1 * size, dec.z);
-                stem.name = "decoration";
-                scene.add(stem);
+                // Large seaweed - curved ribbon fronds with varied bend and width.
+                addSeaweedCluster(dec.x, dec.z, size, "large");
             } else if (dec.type === "small_seaweed") {
-                // Small seaweed - fewer, smaller fronds
-                const seaweedColor = "#3a7040";
-                const frondCount = 4;
-                for (let j = 0; j < frondCount; j++) {
-                    const angle = (j / frondCount) * Math.PI * 2 + Math.random() * 0.4;
-                    const frondLength = (0.25 + Math.random() * 0.1) * size;
-                    const frondWidth = 0.08 * size;
-
-                    const frond = new THREE.Mesh(
-                        new THREE.BoxGeometry(frondWidth, 0.015, frondLength),
-                        new THREE.MeshStandardMaterial({ color: seaweedColor, metalness: 0.0, roughness: 0.9, side: THREE.DoubleSide })
-                    );
-                    frond.position.set(
-                        dec.x + Math.cos(angle) * frondLength * 0.35,
-                        0.08 * size,
-                        dec.z + Math.sin(angle) * frondLength * 0.35
-                    );
-                    frond.rotation.y = angle;
-                    frond.rotation.x = -0.5;
-                    if (j === 0) frond.name = "decoration";
-                    scene.add(frond);
-                }
+                // Small seaweed - compact variant of the same curved blade treatment.
+                addSeaweedCluster(dec.x, dec.z, size, "small");
             } else if (dec.type === "fern") {
                 // Large bush - cluster of spheres with variation
                 const colors = ["#2a6a3a", "#3a8a4e", "#4a9a5e", "#5aaa6e", "#6aba7e"];
@@ -1171,7 +1283,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     // Walls - with transparent support for unit occlusion
     const wallMeshes: THREE.Mesh[] = [];
     computed.mergedObstacles.forEach((o, i) => {
-        const shade = 0x2d3748 + (i % 3) * 0x050505;
+        const shade = 0x5a677d + (i % 3) * 0x040404;
         const mesh = new THREE.Mesh(
             new THREE.BoxGeometry(o.w, 2.5, o.h),
             new THREE.MeshStandardMaterial({ color: shade, metalness: 0.2, roughness: 0.8, transparent: true, opacity: 1 })
@@ -1237,7 +1349,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
             // Create the blocking wall mesh (same style as other walls)
             const wallMesh = new THREE.Mesh(
                 new THREE.BoxGeometry(blockingWall.w, 2.5, blockingWall.h),
-                new THREE.MeshStandardMaterial({ color: 0x2d3748, metalness: 0.2, roughness: 0.8 })
+                new THREE.MeshStandardMaterial({ color: 0x5a677d, metalness: 0.2, roughness: 0.8 })
             );
             wallMesh.position.set(
                 blockingWall.x + blockingWall.w / 2,

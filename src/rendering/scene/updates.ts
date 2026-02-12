@@ -385,8 +385,7 @@ export function updateTreeFogVisibility(
     treeMeshes: THREE.Mesh[],
     visibility: number[][]
 ): void {
-    const FOG_Y = 2.6;
-    const MAX_HEIGHT_UNEXPLORED = FOG_Y - 0.1;  // Cap just below fog
+    const UNEXPLORED_TRUNK_STUMP_HEIGHT = 0.42;
 
     for (const mesh of treeMeshes) {
         const tx = Math.floor(mesh.userData.treeX ?? mesh.position.x);
@@ -402,8 +401,8 @@ export function updateTreeFogVisibility(
         if (mesh.userData.isTrunk) {
             const fullHeight = mesh.userData.fullHeight as number;
             if (!treeDiscovered) {
-                // Unexplored - cap trunk below fog
-                const cappedHeight = Math.min(fullHeight, MAX_HEIGHT_UNEXPLORED);
+                // Unexplored - keep only a short stump to avoid floating half-trees at fog edge.
+                const cappedHeight = Math.min(fullHeight, UNEXPLORED_TRUNK_STUMP_HEIGHT);
                 mesh.scale.y = cappedHeight / fullHeight;
                 mesh.position.y = cappedHeight / 2;
                 mesh.userData.wasExplored = false;
@@ -415,29 +414,11 @@ export function updateTreeFogVisibility(
             }
         } else if (mesh.userData.isFoliage) {
             const fullY = mesh.userData.fullY as number;
-            const fullHeight = mesh.userData.fullHeight as number;
-            const trunkHeight = mesh.userData.trunkHeight as number;
 
             if (!treeDiscovered) {
-                // Unexplored - hide foliage if it would stick above fog
-                const foliageBottom = fullY - fullHeight / 2;
-                if (foliageBottom >= MAX_HEIGHT_UNEXPLORED) {
-                    // Foliage entirely above fog - hide it
-                    mesh.visible = false;
-                    mat.opacity = 0;
-                } else {
-                    // Partially clip foliage
-                    mesh.visible = true;
-                    const availableSpace = MAX_HEIGHT_UNEXPLORED - trunkHeight;
-                    if (availableSpace <= 0) {
-                        mesh.visible = false;
-                        mat.opacity = 0;
-                    } else {
-                        const scaleFactor = Math.min(1, availableSpace / fullHeight);
-                        mesh.scale.y = scaleFactor;
-                        mesh.position.y = trunkHeight + (fullHeight * scaleFactor) / 2;
-                    }
-                }
+                // Unexplored - hide all canopy parts; reveal once base cell is discovered.
+                mesh.visible = false;
+                mat.opacity = 0;
                 mesh.userData.wasExplored = false;
             } else {
                 // Discovered - full height with fade-in

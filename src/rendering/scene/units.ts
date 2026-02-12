@@ -144,9 +144,9 @@ function getEnemySpriteConfigs(): Record<string, SpriteConfig> {
     return {
         bat: { texture: vampireBatTexture, width: 128, height: 128, spriteHeight: 1.4, color: 0xd2b48c, brightness: 0.2 },
         acid_slug: { texture: acidSlugTexture, width: 160, height: 128, spriteHeight: 1.4, brightness: 0.15, offsetY: -0.3, shadowSize: 0.6 },
-        giant_amoeba_lg: { texture: amoebaLgTexture, width: 128, height: 128, spriteHeight: 2.4, opacity: 0.55 },
-        giant_amoeba_md: { texture: amoebaMdTexture, width: 128, height: 128, spriteHeight: 1.7, opacity: 0.55 },
-        giant_amoeba_sm: { texture: amoebaSmTexture, width: 128, height: 128, spriteHeight: 1.2, opacity: 0.55 },
+        giant_amoeba_lg: { texture: amoebaLgTexture, width: 128, height: 128, spriteHeight: 2.4, opacity: 0.25 },
+        giant_amoeba_md: { texture: amoebaMdTexture, width: 128, height: 128, spriteHeight: 1.7, opacity: 0.25 },
+        giant_amoeba_sm: { texture: amoebaSmTexture, width: 128, height: 128, spriteHeight: 1.2, opacity: 0.25 },
         kraken_tentacle: { texture: krakenTentacleTexture, width: 80, height: 128, spriteHeight: 2.0, color: 0xd8c0e8 },
         baby_kraken: { texture: krakenBodyTexture, width: 128, height: 128, spriteHeight: 2.5, color: 0xd8c0e8 },
     };
@@ -265,7 +265,7 @@ function buildUnitGroup(
             metalness: isAmoeba ? 0.1 : 0.5,
             roughness: isAmoeba ? 0.2 : 0.4,
             transparent: isAmoeba,
-            opacity: isAmoeba ? 0.45 : 1.0
+            opacity: isAmoeba ? 0.25 : 1.0
         });
         const box = new THREE.Mesh(new THREE.BoxGeometry(boxW, boxH, boxW), boxMat);
         box.position.y = boxH / 2;
