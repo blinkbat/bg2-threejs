@@ -20,7 +20,9 @@ export {
     executeSmiteSkill,
     executeRangedSkill,
     executeFlurrySkill,
-    executeMagicWaveSkill
+    executeMagicWaveSkill,
+    executeHolyStrikeSkill,
+    executeGlacialWhorlSkill
 } from "./damage";
 
 // Re-export support skills
@@ -32,7 +34,8 @@ export {
     executeEnergyShieldSkill,
     executeCleanseSkill,
     executeRestorationSkill,
-    executeReviveSkill
+    executeReviveSkill,
+    executeSunStanceSkill
 } from "./support";
 
 // Re-export utility skills
@@ -48,8 +51,8 @@ export { executeDodgeSkill } from "./movement";
 
 // Import for internal use
 import type { SkillExecutionContext } from "./types";
-import { executeAoeSkill, executeMeleeSkill, executeSmiteSkill, executeRangedSkill, executeFlurrySkill, executeMagicWaveSkill } from "./damage";
-import { executeHealSkill, executeManaTransferSkill, executeBuffSkill, executeAoeBuffSkill, executeEnergyShieldSkill, executeCleanseSkill, executeRestorationSkill, executeReviveSkill } from "./support";
+import { executeAoeSkill, executeMeleeSkill, executeSmiteSkill, executeRangedSkill, executeFlurrySkill, executeMagicWaveSkill, executeHolyStrikeSkill, executeGlacialWhorlSkill } from "./damage";
+import { executeHealSkill, executeManaTransferSkill, executeBuffSkill, executeAoeBuffSkill, executeEnergyShieldSkill, executeCleanseSkill, executeRestorationSkill, executeReviveSkill, executeSunStanceSkill } from "./support";
 import { executeTauntSkill, executeDebuffSkill, executeTrapSkill, executeSanctuarySkill } from "./utility";
 import { executeDodgeSkill } from "./movement";
 
@@ -83,6 +86,14 @@ export function executeSkill(
         if (skill.name === "Magic Wave") {
             return executeMagicWaveSkill(ctx, casterId, skill, targetX, targetZ);
         }
+        // Holy Strike - line-shaped cone AOE
+        if (skill.name === "Holy Strike") {
+            return executeHolyStrikeSkill(ctx, casterId, skill, targetX, targetZ);
+        }
+        // Glacial Whorl - piercing projectile
+        if (skill.name === "Glacial Whorl") {
+            return executeGlacialWhorlSkill(ctx, casterId, skill, targetX, targetZ);
+        }
         // Standard AOE like Fireball
         executeAoeSkill(ctx, casterId, skill, targetX, targetZ);
         return true;
@@ -103,6 +114,9 @@ export function executeSkill(
     } else if (skill.type === "taunt" && skill.targetType === "self") {
         return executeTauntSkill(ctx, casterId, skill);
     } else if (skill.type === "buff" && skill.targetType === "self") {
+        if (skill.name === "Sun Stance") {
+            return executeSunStanceSkill(ctx, casterId, skill);
+        }
         return executeBuffSkill(ctx, casterId, skill);
     } else if (skill.type === "energy_shield" && skill.targetType === "self") {
         return executeEnergyShieldSkill(ctx, casterId, skill);
@@ -147,5 +161,10 @@ export function clearTargetingMode(
 ): void {
     setTargetingMode(null);
     if (rangeIndicatorRef.current) rangeIndicatorRef.current.visible = false;
-    if (aoeIndicatorRef.current) aoeIndicatorRef.current.visible = false;
+    if (aoeIndicatorRef.current) {
+        aoeIndicatorRef.current.visible = false;
+        aoeIndicatorRef.current.rotation.z = 0;
+        // Don't clear isLine here — setupTargetingMode reads it to detect
+        // shape transitions (line→circle) and force geometry recreation.
+    }
 }

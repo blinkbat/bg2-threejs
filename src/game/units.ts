@@ -9,18 +9,39 @@ import { ENEMY_STATS } from "./enemyStats";
 /** Default melee attack range (used when unit has no range specified) */
 export const DEFAULT_MELEE_RANGE = 1.8;
 
+// =============================================================================
+// PER-FRAME STATS CACHE
+// =============================================================================
+// Player unit stats are expensive to compute (equipment + stat bonuses).
+// Cache results per frame to avoid redundant recalculations.
+
+const statsCache: Map<number, UnitData | EnemyStats> = new Map();
+
+/** Clear the per-frame stats cache. Call once at the start of each game loop frame. */
+export function clearUnitStatsCache(): void {
+    statsCache.clear();
+}
+
 /**
  * Get stats for any unit (player or enemy).
  * For player units, returns effective stats with equipment and stat bonuses applied.
+ * Results are cached per frame — call clearUnitStatsCache() at frame start.
  */
 export function getUnitStats(unit: Unit): UnitData | EnemyStats {
+    const cached = statsCache.get(unit.id);
+    if (cached) return cached;
+
+    let result: UnitData | EnemyStats;
     if (unit.team === "player") {
-        // Return effective stats including equipment and character stat bonuses
-        return getEffectiveUnitData(unit.id, unit);
+        result = getEffectiveUnitData(unit.id, unit);
+    } else if (!unit.enemyType) {
+        result = ENEMY_STATS.kobold;
+    } else {
+        result = ENEMY_STATS[unit.enemyType];
     }
-    // Safely handle missing enemyType - fallback to kobold stats
-    if (!unit.enemyType) return ENEMY_STATS.kobold;
-    return ENEMY_STATS[unit.enemyType];
+
+    statsCache.set(unit.id, result);
+    return result;
 }
 
 /** Get the attack range for any unit (player or enemy) */

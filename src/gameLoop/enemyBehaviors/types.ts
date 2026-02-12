@@ -3,7 +3,7 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitGroup, EnemyStats, EnemySpawnSkill, EnemyChargeAttack, EnemyLeapSkill, EnemyVinesSkill, EnemyTentacleSkill, EnemyRaiseSkill, EnemyCurseSkill, EnemyGlareSkill, DamageText } from "../../core/types";
+import type { Unit, UnitGroup, EnemyStats, EnemySpawnSkill, EnemyChargeAttack, EnemyLeapSkill, EnemyVinesSkill, EnemyTentacleSkill, EnemyRaiseSkill, EnemyCurseSkill, EnemyGlareSkill, EnemySleepSkill, EnemyDreamEaterSkill, DamageText } from "../../core/types";
 
 // =============================================================================
 // BASE CONTEXT — shared fields across all enemy behaviors
@@ -84,4 +84,25 @@ export interface GlareContext extends BehaviorBaseContext {
     unitsState: Unit[];
     unitsRef: Record<number, UnitGroup>;
     scene: THREE.Scene;
+}
+
+export interface SleepContext extends BehaviorBaseContext {
+    sleepSkill: EnemySleepSkill;
+    unitsState: Unit[];
+    unitsRef: Record<number, UnitGroup>;
+    scene: THREE.Scene;
+    setUnits: React.Dispatch<React.SetStateAction<Unit[]>>;
+    defeatedThisFrame: Set<number>;
+}
+
+export interface DreamEaterContext extends BehaviorBaseContext {
+    dreamEaterSkill: EnemyDreamEaterSkill;
+    unitsState: Unit[];
+    unitsRef: Record<number, UnitGroup>;
+    scene: THREE.Scene;
+    setUnits: React.Dispatch<React.SetStateAction<Unit[]>>;
+    damageTexts: DamageText[];
+    hitFlashRef: Record<number, number>;
+    unitsStateRef: React.RefObject<Unit[]>;
+    defeatedThisFrame: Set<number>;
 }

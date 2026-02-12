@@ -7,7 +7,8 @@ import type { Unit, UnitGroup, DamageText } from "../../core/types";
 import { getUnitStats } from "../../game/units";
 import { soundFns } from "../../audio";
 import { setSkillCooldown } from "../../combat/combatMath";
-import { COLORS } from "../../core/constants";
+import { COLORS, LEAP_DURATION, LEAP_ARC_HEIGHT, LEAP_DAMAGE_RADIUS, LEAP_MIN_LANDING_DIST, LEAP_LANDING_OFFSET } from "../../core/constants";
+import { accumulateDelta } from "../../core/gameClock";
 import { applyDamageToUnit, type DamageContext } from "../../combat/damageEffects";
 import type { LeapContext } from "./types";
 
@@ -29,8 +30,6 @@ interface ActiveLeap {
 }
 
 const activeLeaps: ActiveLeap[] = [];
-const LEAP_DURATION = 350;  // ms for the leap animation
-const LEAP_HEIGHT = 2.5;    // Peak height of the arc
 
 // =============================================================================
 // LEAP INITIATION
@@ -63,7 +62,7 @@ export function tryLeapToTarget(ctx: LeapContext): boolean {
     // Calculate landing position (slightly in front of target)
     const dirX = dx / dist;
     const dirZ = dz / dist;
-    const landingDist = Math.max(1.2, dist - 1.0);  // Land close to target but not on them
+    const landingDist = Math.max(LEAP_MIN_LANDING_DIST, dist - LEAP_LANDING_OFFSET);  // Land close to target but not on them
     const endX = g.position.x + dirX * landingDist;
     const endZ = g.position.z + dirZ * landingDist;
 
@@ -123,11 +122,8 @@ export function updateLeaps(
     for (let i = activeLeaps.length - 1; i >= 0; i--) {
         const leap = activeLeaps[i];
 
-        // Cap delta to prevent pause/unpause from causing instant leap completion
-        const rawDelta = now - leap.lastUpdateTime;
-        const delta = Math.min(rawDelta, 100); // Max 100ms per frame
-        leap.elapsedTime += delta;
-        leap.lastUpdateTime = now;
+        // Accumulate elapsed time (pause-safe)
+        accumulateDelta(leap, now);
 
         const progress = Math.min(1, leap.elapsedTime / leap.duration);
 
@@ -142,7 +138,7 @@ export function updateLeaps(
         const x = leap.startX + (leap.endX - leap.startX) * t;
         const z = leap.startZ + (leap.endZ - leap.startZ) * t;
         // Parabolic arc: peaks at t=0.5
-        const arcY = LEAP_HEIGHT * 4 * t * (1 - t);
+        const arcY = LEAP_ARC_HEIGHT * 4 * t * (1 - t);
 
         g.position.set(x, arcY, z);
 
@@ -180,7 +176,7 @@ export function updateLeaps(
                 );
 
                 // Deal damage if close enough on landing
-                if (landDist < 2.5) {
+                if (landDist < LEAP_DAMAGE_RADIUS) {
                     const damage = leap.damage[0] + Math.floor(Math.random() * (leap.damage[1] - leap.damage[0] + 1));
                     const targetData = getUnitStats(targetUnit);
 
@@ -188,7 +184,7 @@ export function updateLeaps(
                         scene, damageTexts, hitFlashRef: hitFlashRef.current, unitsRef, unitsStateRef,
                         setUnits, addLog, now, defeatedThisFrame
                     };
-                    applyDamageToUnit(dmgCtx, leap.targetId, targetG, targetUnit.hp, damage, targetData.name, {
+                    applyDamageToUnit(dmgCtx, leap.targetId, targetG, damage, targetData.name, {
                         color: COLORS.damageEnemy,
                         hitMessage: { text: `Feral Hound's leap deals ${damage} damage!`, color: "#ff6600" },
                         targetUnit

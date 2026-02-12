@@ -15,7 +15,8 @@ import { logDefeated, applyPoison, applySlowed, hasStatusEffect, isUnitAlive } f
 import { tryKillBark } from "./barks";
 import { getNextUnitId } from "../core/unitIds";
 import { ENEMY_STATS } from "../game/enemyStats";
-import { getXpForLevel } from "../game/playerUnits";
+import { getXpForLevel, getEffectiveMaxHp, getEffectiveMaxMana } from "../game/playerUnits";
+import { LEVEL_UP_HP, LEVEL_UP_MANA, LEVEL_UP_STAT_POINTS, LEVEL_UP_SKILL_POINTS } from "../game/statBonuses";
 import { trySubmergeKraken, isKrakenSubmerged } from "../gameLoop/enemyBehaviors";
 
 // =============================================================================
@@ -27,6 +28,19 @@ export type ProjectileType = "aoe" | "ranged" | "enemy";
 /**
  * Create a projectile mesh with standardized configuration
  */
+// Shared sphere geometries per projectile type (never disposed)
+const projectileGeos: Partial<Record<ProjectileType, THREE.SphereGeometry>> = {};
+
+function getProjectileGeo(type: ProjectileType): THREE.SphereGeometry {
+    let geo = projectileGeos[type];
+    if (!geo) {
+        const config = PROJECTILE_CONFIG[type];
+        geo = new THREE.SphereGeometry(config.radius, config.segments, config.segments);
+        projectileGeos[type] = geo;
+    }
+    return geo;
+}
+
 export function createProjectile(
     scene: THREE.Scene,
     type: ProjectileType,
@@ -38,7 +52,7 @@ export function createProjectile(
     const projectileColor = color || ('defaultColor' in config ? config.defaultColor : "#ffffff");
 
     const projectile = new THREE.Mesh(
-        new THREE.SphereGeometry(config.radius, config.segments, config.segments),
+        getProjectileGeo(type),
         new THREE.MeshBasicMaterial({ color: projectileColor })
     );
     projectile.position.set(x, config.height, z);
@@ -57,6 +71,19 @@ export function getProjectileSpeed(type: ProjectileType): number {
 // =============================================================================
 // EXPANDING MESH ANIMATION (rings, arcs)
 // =============================================================================
+
+// Shared ring geometries keyed by "inner,outer"
+const ringGeoCache: Map<string, THREE.RingGeometry> = new Map();
+
+function getRingGeo(inner: number, outer: number): THREE.RingGeometry {
+    const key = `${inner},${outer}`;
+    let geo = ringGeoCache.get(key);
+    if (!geo) {
+        geo = new THREE.RingGeometry(inner, outer, 32);
+        ringGeoCache.set(key, geo);
+    }
+    return geo;
+}
 
 export interface ExpandingMeshConfig {
     duration?: number;
@@ -80,6 +107,7 @@ export function createAnimatedRing(
         duration?: number;
         initialOpacity?: number;
         maxScale: number;
+        y?: number;
     }
 ): void {
     const {
@@ -87,15 +115,16 @@ export function createAnimatedRing(
         outerRadius = 0.7,
         duration = RING_EXPAND_DURATION,
         initialOpacity = 0.8,
-        maxScale
+        maxScale,
+        y = 0.1
     } = config;
 
     const ring = new THREE.Mesh(
-        new THREE.RingGeometry(innerRadius, outerRadius, 32),
+        getRingGeo(innerRadius, outerRadius),
         new THREE.MeshBasicMaterial({ color, transparent: true, opacity: initialOpacity, side: THREE.DoubleSide })
     );
     ring.rotation.x = -Math.PI / 2;
-    ring.position.set(x, 0.1, z);
+    ring.position.set(x, y, z);
     scene.add(ring);
 
     animateExpandingMesh(scene, ring, {
@@ -333,36 +362,41 @@ export interface DamageOptions {
 }
 
 /**
- * Apply damage to a unit with all side effects (state update, flash, damage number, defeat check)
- * Returns the new HP value
+ * Apply damage to a unit with all side effects (state update, flash, damage number, defeat check).
+ * Reads current HP from unitsStateRef internally — callers just specify the raw damage amount.
  */
 export function applyDamageToUnit(
     ctx: DamageContext,
     targetId: number,
     targetGroup: UnitGroup,
-    currentHp: number,
     damage: number,
     targetName: string,
     options: DamageOptions = {}
-): number {
+): void {
     const { scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now, defeatedThisFrame } = ctx;
     const { poison, slow, color = COLORS.damageEnemy, skipDefeatTracking = false, attackerName, hitMessage, targetUnit, attackerPosition, damageType, isCrit = false } = options;
 
+    // Skip already-defeated targets this frame
+    if (defeatedThisFrame?.has(targetId)) return;
+
     // Submerged krakens are invulnerable
-    if (isKrakenSubmerged(targetId)) {
-        return currentHp;
-    }
+    if (isKrakenSubmerged(targetId)) return;
+
+    // Read current state from ref
+    const refUnit = targetUnit ?? unitsStateRef.current?.find(u => u.id === targetId);
 
     // Invul status — full damage immunity (e.g. Dodge cantrip)
-    const invulUnit = targetUnit ?? unitsStateRef.current?.find(u => u.id === targetId);
-    if (invulUnit && hasStatusEffect(invulUnit, "invul")) {
+    if (refUnit && hasStatusEffect(refUnit, "invul")) {
         spawnDamageNumber(scene, targetGroup.position.x, targetGroup.position.z, 0, "#ffffff", damageTexts);
-        return currentHp;
+        return;
     }
 
+    // Read current HP — bail if already dead
+    const currentHp = refUnit?.hp ?? 0;
+    if (currentHp <= 0) return;
+
     // Check for energy shield absorption
-    const currentUnit = targetUnit ?? unitsStateRef.current?.find(u => u.id === targetId);
-    const energyShield = currentUnit?.statusEffects?.find(e => e.type === "energyShield");
+    const energyShield = refUnit?.statusEffects?.find(e => e.type === "energyShield");
 
     let effectiveDamage = damage;
     let shieldAbsorbed = 0;
@@ -457,13 +491,13 @@ export function applyDamageToUnit(
         }
         handleUnitDefeat(targetId, targetGroup, unitsRef, addLog, targetName, true);  // Silent defeat
 
-        return 0;  // Original is now dead
+        return;  // Original is now dead
     }
 
     // Normal damage handling (non-amoeba or can't split)
     setUnits(prev => prev.map(u => {
         if (u.id !== targetId) return u;
-        let updated = { ...u, hp: newHp };
+        let updated = { ...u, hp: Math.max(0, u.hp - effectiveDamage) };
 
         // Update energy shield status effect
         if (shieldAbsorbed > 0 && updated.statusEffects) {
@@ -493,6 +527,13 @@ export function applyDamageToUnit(
         // Apply slow debuff
         if (slow) {
             updated = applySlowed(updated, slow.sourceId, now);
+        }
+        // Wake from sleep on any damage
+        if (hasStatusEffect(updated, "sleep")) {
+            updated = {
+                ...updated,
+                statusEffects: (updated.statusEffects ?? []).filter(e => e.type !== "sleep")
+            };
         }
         return updated;
     }));
@@ -559,13 +600,16 @@ export function applyDamageToUnit(
                         const currentLevel = u.level ?? 1;
                         const xpForNext = getXpForLevel(currentLevel + 1);
                         if (newExp >= xpForNext) {
+                            const maxHp = getEffectiveMaxHp(u.id, u);
+                            const maxMana = getEffectiveMaxMana(u.id, u);
                             return {
                                 ...u,
                                 exp: newExp,
                                 level: currentLevel + 1,
-                                statPoints: (u.statPoints ?? 0) + 5,
-                                hp: u.hp + 2,
-                                mana: (u.mana ?? 0) + 1,
+                                statPoints: (u.statPoints ?? 0) + LEVEL_UP_STAT_POINTS,
+                                skillPoints: (u.skillPoints ?? 0) + LEVEL_UP_SKILL_POINTS,
+                                hp: Math.min(u.hp + LEVEL_UP_HP, maxHp),
+                                mana: Math.min((u.mana ?? 0) + LEVEL_UP_MANA, maxMana),
                                 stats: u.stats ?? {
                                     strength: 0,
                                     dexterity: 0,
@@ -584,7 +628,7 @@ export function applyDamageToUnit(
 
                 // Level-up effects
                 if (leveledUpIds.length > 0) {
-                    addLog(`Level up! +3 stat points available.`, "#ffd700");
+                    addLog(`Level up! +${LEVEL_UP_STAT_POINTS} stat points available.`, "#ffd700");
                     soundFns.playLevelUp();
                     for (const unitId of leveledUpIds) {
                         const unitGroup = unitsRef[unitId];
@@ -611,7 +655,7 @@ export function applyDamageToUnit(
                         // Recursively apply damage to the kraken (skip defeat tracking since this is bonus damage)
                         applyDamageToUnit(
                             { scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now, defeatedThisFrame },
-                            parentKraken.id, krakenG, parentKraken.hp, tentacleDamage, krakenStats.name,
+                            parentKraken.id, krakenG, tentacleDamage, krakenStats.name,
                             {
                                 color: COLORS.damageEnemy,
                                 hitMessage: { text: `The severed tentacle damages ${krakenStats.name} for ${tentacleDamage}!`, color: "#ff6600" },
@@ -629,7 +673,47 @@ export function applyDamageToUnit(
         trySubmergeKraken({ ...targetUnit, hp: newHp }, unitsRef, addLog, now);
     }
 
-    return newHp;
+}
+
+// =============================================================================
+// DAMAGE NUMBER POOLING — reuse canvas/texture/mesh instead of creating new ones
+// =============================================================================
+
+const normalPlaneGeo = new THREE.PlaneGeometry(0.8, 0.4);
+const critPlaneGeo = new THREE.PlaneGeometry(1.2, 0.6);
+const normalDmgPool: THREE.Mesh[] = [];
+const critDmgPool: THREE.Mesh[] = [];
+const DMG_POOL_MAX = 20;
+
+function acquireDmgMesh(isCrit: boolean): THREE.Mesh {
+    const pool = isCrit ? critDmgPool : normalDmgPool;
+    if (pool.length > 0) {
+        const mesh = pool.pop()!;
+        (mesh.material as THREE.MeshBasicMaterial).opacity = 1;
+        return mesh;
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = isCrit ? 96 : 64;
+    canvas.height = isCrit ? 48 : 32;
+    const texture = new THREE.CanvasTexture(canvas);
+    return new THREE.Mesh(
+        isCrit ? critPlaneGeo : normalPlaneGeo,
+        new THREE.MeshBasicMaterial({ map: texture, transparent: true })
+    );
+}
+
+/** Return a damage number mesh to the pool for reuse. */
+export function recycleDamageNumber(scene: THREE.Scene, mesh: THREE.Mesh): void {
+    scene.remove(mesh);
+    const isCrit = mesh.geometry === critPlaneGeo;
+    const pool = isCrit ? critDmgPool : normalDmgPool;
+    if (pool.length < DMG_POOL_MAX) {
+        pool.push(mesh);
+    } else {
+        const mat = mesh.material as THREE.MeshBasicMaterial;
+        if (mat.map) mat.map.dispose();
+        mat.dispose();
+    }
 }
 
 /**
@@ -647,24 +731,20 @@ export function spawnDamageNumber(
     isHeal: boolean = false,
     isCrit: boolean = false
 ): void {
-    const canvas = document.createElement("canvas");
-    canvas.width = isCrit ? 96 : 64;
-    canvas.height = isCrit ? 48 : 32;
+    const mesh = acquireDmgMesh(isCrit);
+    const texture = (mesh.material as THREE.MeshBasicMaterial).map as THREE.CanvasTexture;
+    const canvas = texture.image as HTMLCanvasElement;
     const ctx = canvas.getContext("2d")!;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.font = isCrit ? "bold 28px monospace" : "bold 24px monospace";
     ctx.fillStyle = isCrit ? COLORS.damageCrit : color;
     ctx.textAlign = "center";
     const prefix = isHeal ? "+" : "-";
     const text = isCrit ? `${prefix}${damage}!` : `${prefix}${damage}`;
     ctx.fillText(text, canvas.width / 2, isCrit ? 36 : 24);
+    texture.needsUpdate = true;
 
-    const texture = new THREE.CanvasTexture(canvas);
-    const planeWidth = isCrit ? 1.2 : 0.8;
-    const planeHeight = isCrit ? 0.6 : 0.4;
-    const mesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(planeWidth, planeHeight),
-        new THREE.MeshBasicMaterial({ map: texture, transparent: true })
-    );
     mesh.position.set(x, 1.5, z);
     scene.add(mesh);
     damageTexts.push({ mesh, life: 1000 });

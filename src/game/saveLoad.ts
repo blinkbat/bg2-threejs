@@ -27,6 +27,8 @@ export interface SavedPlayer {
     exp?: number;
     stats?: CharacterStats;
     statPoints?: number;
+    skillPoints?: number;
+    learnedSkills?: string[];
     statusEffects?: StatusEffect[];
     cantripUses?: Record<string, number>;
 }

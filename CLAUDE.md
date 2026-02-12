@@ -10,6 +10,8 @@
 - Explicit complete types — no `any`, `as`, `!`, no guessed defaults (ask)
 - No placeholders/TODOs, no invented utilities, no runtime checks the type system covers
 - Ask before substantial refactors — offer `git commit` first
+- ALWAYS ask clarifying questions as though the user had finished by asking, "any questions?"
+- Consider the "cleanest" approach from a future-you perspective, not a get-it-done-now perspective. We have plenty of time, code carefully -- it matters!
 
 ---
 
@@ -137,8 +139,7 @@ React + Three.js ARPG. State in React (`Unit[]` via `setUnits`), 3D positions on
 ## Key Patterns
 
 - **`getGameTime()`** — visual animations that freeze when paused. Import from `core/gameClock`. Game-logic timestamps (cooldowns, status effects) still use `Date.now()`. Updated per frame in `useGameLoop`, paused/resumed in `togglePause()`.
-- **`defeatedThisFrame: Set<number>`** — prevents overkill from multiple damage sources per frame
-- **`createHpTracker(units)`** — local HP tracking for multi-hit skills (avoids stale React state)
+- **`defeatedThisFrame: Set<number>`** — prevents overkill from multiple damage sources per frame. `applyDamageToUnit` checks this internally.
 - **`setUnits(prev => prev.map(...))`** — always functional updates
 - **`unitsStateRef.current`** — read-only ref for fresh HP reads mid-frame
 - **`SkillExecutionContext`** / **`DamageContext`** — context bags for skill execution / damage pipeline

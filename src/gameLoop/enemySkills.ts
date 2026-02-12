@@ -6,7 +6,7 @@ import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, EnemyStats, EnemySkill, EnemyHealSkill } from "../core/types";
 import { COLORS, SWIPE_ANIMATE_DURATION } from "../core/constants";
 import { getUnitStats } from "../game/units";
-import { calculateDamageWithCrit, rollHit, getEffectiveArmor, logAoeHit, logAoeMiss, createHpTracker } from "../combat/combatMath";
+import { calculateDamageWithCrit, rollHit, getEffectiveArmor, logAoeHit, logAoeMiss } from "../combat/combatMath";
 import { distance } from "../game/geometry";
 import { applyDamageToUnit, animateExpandingMesh, getAliveUnitsInRange, spawnDamageNumber, buildDamageContext } from "../combat/damageEffects";
 import { soundFns } from "../audio";
@@ -68,23 +68,17 @@ export function executeEnemySwipe(
     soundFns.playHit();
 
     // Deal damage to all targets
-    // Use hpTracker to handle multiple hits in same frame correctly
-    const hpTracker = createHpTracker(hitTargets.map(t => t.unit));
-
     let hitCount = 0;
     let totalDamage = 0;
     const dmgCtx = buildDamageContext(scene, damageTexts, hitFlashRef, unitsRef, unitsState, setUnits, addLog, now, defeatedThisFrame);
     hitTargets.forEach(({ unit: target, group: tg }) => {
-        // Skip if already defeated this frame
-        const currentHp = hpTracker[target.id] ?? target.hp;
-        if (currentHp <= 0 || defeatedThisFrame.has(target.id)) return;
+        if (target.hp <= 0 || defeatedThisFrame.has(target.id)) return;
 
         const targetData = getUnitStats(target);
 
         if (rollHit(enemyData.accuracy)) {
             const { damage: dmg } = calculateDamageWithCrit(skill.damage[0], skill.damage[1], getEffectiveArmor(target, targetData.armor), skill.damageType, unit);
-            applyDamageToUnit(dmgCtx, target.id, tg, currentHp, dmg, targetData.name, { color: COLORS.damageEnemy, targetUnit: target });
-            hpTracker[target.id] = Math.max(0, currentHp - dmg);
+            applyDamageToUnit(dmgCtx, target.id, tg, dmg, targetData.name, { color: COLORS.damageEnemy, targetUnit: target });
             hitCount++;
             totalDamage += dmg;
         }

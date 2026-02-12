@@ -3,7 +3,7 @@
 // =============================================================================
 
 // Types
-export type { BehaviorBaseContext, SpawnContext, ChargeContext, LeapContext, VinesContext, TentacleContext, RaiseContext, CurseContext, GlareContext } from "./types";
+export type { BehaviorBaseContext, SpawnContext, ChargeContext, LeapContext, VinesContext, TentacleContext, RaiseContext, CurseContext, GlareContext, SleepContext, DreamEaterContext } from "./types";
 export type { PreAttackContext } from "./preAttack";
 
 // Pre-attack dispatch (fire-and-forget behaviors)
@@ -42,6 +42,12 @@ export type { AcidSlugContext } from "./acidSlug";
 
 // Basilisk Glare
 export { tryBasiliskGlare, processGlares, clearGlares } from "./basiliskGlare";
+
+// Occultist Dreamwalker Sleep
+export { trySleep } from "./sleep";
+
+// Occultist Dreamwalker Dream Eater
+export { tryDreamEater } from "./dreamEater";
 
 // Baby Kraken Submerge
 export {

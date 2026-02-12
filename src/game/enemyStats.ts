@@ -359,6 +359,78 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
             damageType: "chaos"
         }
     },
+    occultist_firebreather: {
+        name: "Occultist Firebreather",
+        hp: 100,
+        maxHp: 100,
+        damage: [0, 0],
+        accuracy: 70,
+        armor: 4,
+        color: "#8b2500",
+        aggroRange: 8,
+        attackCooldown: 1000,
+        size: 1.5,
+        moveSpeed: 0.35,
+        expReward: 55,
+        breathSkill: {
+            name: "Fire Breath",
+            cooldown: 4000,
+            range: 4,
+            coneAngle: Math.PI / 5,
+            coneDistance: 4,
+            tickInterval: 500,
+            damage: [3, 6],
+            damageType: "fire",
+            duration: 3000
+        }
+    },
+    occultist_dreamwalker: {
+        name: "Occultist Dreamwalker",
+        hp: 55,
+        maxHp: 55,
+        damage: [3, 6],
+        accuracy: 70,
+        armor: 0,
+        color: "#4a0080",
+        aggroRange: 10,
+        attackCooldown: 2500,
+        range: 8,
+        projectileColor: "#9b59b6",
+        size: 1.2,
+        moveSpeed: 0.55,
+        expReward: 45,
+        kiteTrigger: 4,
+        kiteDistance: 3,
+        kiteCooldown: 4000,
+        sleepSkill: {
+            name: "Dream Veil",
+            cooldown: 12000,
+            range: 8,
+            radius: 2.5,
+            accuracy: 65
+        },
+        dreamEaterSkill: {
+            name: "Dream Eater",
+            cooldown: 6000,
+            range: 8,
+            damage: [20, 30],
+            damageType: "chaos"
+        }
+    },
+    occultist_pygmy: {
+        name: "Occultist Pygmy",
+        hp: 15,
+        maxHp: 15,
+        damage: [2, 4],
+        accuracy: 55,
+        armor: 0,
+        color: "#5c3a1e",
+        aggroRange: 8,
+        attackCooldown: 1200,
+        size: 0.6,
+        moveSpeed: 1.2,
+        expReward: 8
+    },
     ogre: {
         name: "Ogre",
         hp: 80,

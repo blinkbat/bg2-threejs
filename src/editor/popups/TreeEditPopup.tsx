@@ -4,8 +4,11 @@
 
 import { useState } from "react";
 import type { TreeDef } from "../types";
+import type { TreeType } from "../../game/areas/types";
 import { useClampedPosition } from "../hooks/useClampedPosition";
-import { popupStyle, inputStyle, buttonStyle } from "../constants";
+import { popupStyle, inputStyle, selectStyle, buttonStyle } from "../constants";
+
+const TREE_TYPES: TreeType[] = ["pine", "palm", "oak"];
 
 interface TreeEditPopupProps {
     tree: TreeDef;
@@ -17,11 +20,24 @@ interface TreeEditPopupProps {
 
 export function TreeEditPopup({ tree, screenX, screenY, onSave, onClose }: TreeEditPopupProps) {
     const [size, setSize] = useState(tree.size);
+    const [treeType, setTreeType] = useState<TreeType>(tree.type ?? "pine");
     const { popupRef, position } = useClampedPosition(screenX, screenY);
 
     return (
         <div ref={popupRef} style={{ ...popupStyle, left: position.x, top: position.y }} onClick={e => e.stopPropagation()}>
             <h4 style={{ margin: "0 0 12px", fontSize: 15 }}>Edit Tree</h4>
+            <label style={{ display: "block", marginBottom: 10 }}>
+                <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Type</span>
+                <select
+                    style={selectStyle}
+                    value={treeType}
+                    onChange={e => setTreeType(e.target.value as TreeType)}
+                >
+                    {TREE_TYPES.map(t => (
+                        <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
+                    ))}
+                </select>
+            </label>
             <label style={{ display: "block", marginBottom: 10 }}>
                 <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Size</span>
                 <input
@@ -33,7 +49,7 @@ export function TreeEditPopup({ tree, screenX, screenY, onSave, onClose }: TreeE
                 />
             </label>
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                <button style={{ ...buttonStyle, background: "#4a9", color: "#fff" }} onClick={() => onSave({ ...tree, size })}>Save</button>
+                <button style={{ ...buttonStyle, background: "#4a9", color: "#fff" }} onClick={() => onSave({ ...tree, size, type: treeType })}>Save</button>
                 <button style={{ ...buttonStyle, background: "#555", color: "#fff" }} onClick={onClose}>Cancel</button>
             </div>
         </div>

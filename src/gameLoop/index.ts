@@ -12,6 +12,7 @@ import {
     type TargetingContext, type PathContext, type MovementContext
 } from "../ai/unitAI";
 import { getUnitStats, getAttackRange } from "../game/units";
+import { getUnitById } from "../game/unitQuery";
 import { createPathToTarget, clearJitterTracking } from "../ai/movement";
 import { getBasicAttackSkill } from "../game/playerUnits";
 import type { ActionQueue } from "../input";
@@ -27,10 +28,12 @@ export { spawnSwingIndicator, updateSwingAnimations } from "./swingAnimations";
 export { processAcidTiles, createAcidTile, clearAcidTiles } from "./acidTiles";
 export { processSanctuaryTiles, createSanctuaryTile, clearSanctuaryTiles } from "./sanctuaryTiles";
 export { processChargeAttacks, clearChargeAttacks, isUnitCharging } from "./constructCharge";
+export { processFireBreaths, clearFireBreaths, isUnitBreathing } from "./fireBreath";
 export { processCurses, clearCurses } from "./necromancerCurse";
 import { executeEnemySwipe, executeEnemyHeal } from "./enemySkills";
 import { executeEnemyBasicAttack } from "./enemyAttack";
 import { isUnitCharging } from "./constructCharge";
+import { isUnitBreathing, startFireBreath } from "./fireBreath";
 import { tryStartChargeAttack, tryLeapToTarget, isUnitLeaping, tryVinesSkill, tryAcidSlugPatrol, processAcidTrailAndAura, runPreAttackBehaviors } from "./enemyBehaviors";
 export { clearLeaps, updateLeaps, isUnitLeaping, updateTentacles, clearTentacles, trySubmergeKraken, isKrakenSubmerged, isKrakenFullySubmerged, updateSubmergedKrakens, processGlares, clearGlares } from "./enemyBehaviors";
 export { spawnLootBag, removeLootBag, clearAllLootBags, resetLootBagIds } from "./lootBags";
@@ -96,13 +99,13 @@ export function updateUnitAI(
     const isPlayer = unit.team === "player";
     const data = getUnitStats(unit);
 
-    // Skip all actions if stunned - unit cannot move or attack
-    if (hasStatusEffect(unit, "stunned")) {
+    // Skip all actions if stunned or asleep - unit cannot move or attack
+    if (hasStatusEffect(unit, "stunned") || hasStatusEffect(unit, "sleep")) {
         return;
     }
 
-    // Skip all actions if unit is charging a charge attack
-    if (!isPlayer && isUnitCharging(unit.id)) {
+    // Skip all actions if unit is charging or breathing fire
+    if (!isPlayer && (isUnitCharging(unit.id) || isUnitBreathing(unit.id))) {
         return;
     }
 
@@ -179,7 +182,8 @@ export function updateUnitAI(
     if (!isPlayer) {
         runPreAttackBehaviors({
             unit, g, enemyStats: data as EnemyStats, unitsState, unitsRef,
-            scene, setUnits, skillCooldowns, setSkillCooldowns, addLog, now
+            scene, setUnits, skillCooldowns, setSkillCooldowns, addLog, now,
+            damageTexts, hitFlashRef, unitsStateRef: { current: unitsState } as React.RefObject<Unit[]>, defeatedThisFrame
         });
     }
 
@@ -187,7 +191,7 @@ export function updateUnitAI(
 
     if (g.userData.attackTarget) {
         const targetG = unitsRef[g.userData.attackTarget];
-        const targetU = unitsState.find(u => u.id === g.userData.attackTarget);
+        const targetU = getUnitById(g.userData.attackTarget);
 
         if (targetG && targetU && isUnitAlive(targetU, defeatedThisFrame)) {
             targetX = targetG.position.x;
@@ -229,6 +233,15 @@ export function updateUnitAI(
                 }
 
                 if (now >= cooldownEnd && !skipAttackForAcidAura) {
+                    // Check if enemy has a breath skill and it's ready (cone-only attacker)
+                    if (!isPlayer && 'breathSkill' in data && data.breathSkill) {
+                        const breathSkill = data.breathSkill;
+                        if (isCooldownReady(skillCooldowns, unit.id, breathSkill.name, now)) {
+                            startFireBreath(scene, unit, g, breathSkill, targetU.id, targetG, now, setSkillCooldowns, addLog);
+                            return;
+                        }
+                    }
+
                     // Check if enemy has a charge attack and it's ready
                     if (!isPlayer && 'chargeAttack' in data && data.chargeAttack) {
                         if (tryStartChargeAttack({
@@ -371,18 +384,24 @@ export function updateUnitAI(
     // Formation: crawl until the row ahead is further along than us, then full speed
     const ramp = isPlayer ? g.userData.formationRamp : undefined;
     if (ramp) {
-        const aheadG = unitsRef[ramp.leaderId];
-        if (!aheadG) {
+        const recentlyDamaged = g.userData.lastHitTime && (now - g.userData.lastHitTime) < 500;
+        if (recentlyDamaged) {
+            // Took damage recently — break formation, move at full speed
             delete g.userData.formationRamp;
         } else {
-            const aheadRemain = Math.hypot(ramp.leaderTargetX - aheadG.position.x, ramp.leaderTargetZ - aheadG.position.z);
-            const myRemain = Math.hypot(targetX - g.position.x, targetZ - g.position.z);
-            if (aheadRemain < myRemain) {
-                // Row ahead is further along — full speed, done with ramp
+            const aheadG = unitsRef[ramp.leaderId];
+            if (!aheadG) {
                 delete g.userData.formationRamp;
             } else {
-                // Row ahead is behind us or even — crawl
-                speedMult *= FORMATION_SLOW_SPEED;
+                const aheadRemain = Math.hypot(ramp.leaderTargetX - aheadG.position.x, ramp.leaderTargetZ - aheadG.position.z);
+                const myRemain = Math.hypot(targetX - g.position.x, targetZ - g.position.z);
+                if (aheadRemain < myRemain) {
+                    // Row ahead is further along — full speed, done with ramp
+                    delete g.userData.formationRamp;
+                } else {
+                    // Row ahead is behind us or even — crawl
+                    speedMult *= FORMATION_SLOW_SPEED;
+                }
             }
         }
     }
@@ -442,11 +461,14 @@ export function updateHpBarPositions(
 const TURN_SPEED_STATIONARY = 0.35;  // Fast turn when standing still
 const TURN_SPEED_MOVING = 0.10;      // Slower turn when moving
 const DAMAGE_SOURCE_PRIORITY_TIME = 2000;  // ms - prioritize damage source for 2 seconds
+// Only sync facing to React state when visual differs from committed state by this much
+const FACING_REACT_THRESHOLD = 0.05;  // ~3 degrees
 
 /**
  * Update shield facing for front-shielded enemies.
  * They rotate toward damage sources (when hit recently) or their target.
  * Turn speed is faster when stationary, slower when moving.
+ * Visual mesh updates every frame; React state only syncs when change exceeds threshold.
  */
 export function updateShieldFacing(
     unitsState: Unit[],
@@ -454,7 +476,7 @@ export function updateShieldFacing(
     shieldIndicators: Record<number, THREE.Mesh>,
     setUnits: React.Dispatch<React.SetStateAction<Unit[]>>
 ): void {
-    const facingUpdates: { id: number; facing: number }[] = [];
+    const facingUpdates = new Map<number, number>();
     const now = Date.now();
 
     for (const unit of unitsState) {
@@ -467,8 +489,8 @@ export function updateShieldFacing(
         const shieldMesh = shieldIndicators[unit.id];
         if (!g || !shieldMesh) continue;
 
-        // Get current facing (default to 0 if not set)
-        let currentFacing = unit.facing ?? 0;
+        // Use visual facing for smooth per-frame tracking (independent of React state)
+        let currentFacing: number = g.userData.visualFacing ?? (unit.facing ?? 0);
 
         // Determine target position - prioritize recent damage source
         let targetX: number | undefined;
@@ -476,11 +498,9 @@ export function updateShieldFacing(
         const damageSource = g.userData.lastDamageSource;
 
         if (damageSource && (now - damageSource.time) < DAMAGE_SOURCE_PRIORITY_TIME) {
-            // Face toward where damage came from
             targetX = damageSource.x;
             targetZ = damageSource.z;
         } else if (g.userData.attackTarget !== null) {
-            // Face attack target
             const targetG = unitsRef[g.userData.attackTarget];
             if (targetG) {
                 targetX = targetG.position.x;
@@ -490,12 +510,10 @@ export function updateShieldFacing(
                 targetZ = g.userData.targetZ;
             }
         } else if (g.userData.targetX !== undefined && g.userData.targetZ !== undefined) {
-            // Face movement target
             targetX = g.userData.targetX;
             targetZ = g.userData.targetZ;
         }
 
-        // Skip if no valid target position (prevents NaN calculations)
         if (targetX === undefined || targetZ === undefined) {
             continue;
         }
@@ -505,50 +523,48 @@ export function updateShieldFacing(
         const dist = Math.hypot(dx, dz);
 
         if (dist > 0.1) {
-            // Calculate target angle (atan2 gives angle from positive X axis)
             const targetAngle = Math.atan2(dx, dz);
-
-            // Calculate shortest rotation direction
             let angleDiff = targetAngle - currentFacing;
 
-            // Normalize to -PI to PI
             while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
             while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
 
-            // Determine if unit is moving (check if position differs from movement target)
             const moveDistX = Math.abs(g.userData.targetX - g.position.x);
             const moveDistZ = Math.abs(g.userData.targetZ - g.position.z);
             const isMoving = moveDistX > 0.2 || moveDistZ > 0.2;
 
-            // Apply turn speed - faster when stationary, slower when moving
             const baseTurnSpeed = isMoving ? TURN_SPEED_MOVING : TURN_SPEED_STATIONARY;
             const turnSpeed = baseTurnSpeed * (data.turnSpeed ?? 1);
 
-            // Rotate toward target
             if (Math.abs(angleDiff) < turnSpeed) {
                 currentFacing = targetAngle;
             } else {
                 currentFacing += turnSpeed * Math.sign(angleDiff);
             }
 
-            // Normalize result
             while (currentFacing > Math.PI) currentFacing -= Math.PI * 2;
             while (currentFacing < -Math.PI) currentFacing += Math.PI * 2;
-
-            facingUpdates.push({ id: unit.id, facing: currentFacing });
         }
 
-        // Update shield mesh rotation to match blocking direction
-        // The CircleGeometry thetaStart=-PI/2 creates a half-disc pointing +X in local coords
-        // After rotation.x=-PI/2, it needs rotation.z offset to align with atan2 facing angles
+        // Always update the visual (smooth every frame)
+        g.userData.visualFacing = currentFacing;
         shieldMesh.rotation.z = currentFacing - Math.PI / 2;
+
+        // Only queue React update when visual drifts far enough from committed state
+        const reactFacing = unit.facing ?? 0;
+        let reactDiff = currentFacing - reactFacing;
+        while (reactDiff > Math.PI) reactDiff -= Math.PI * 2;
+        while (reactDiff < -Math.PI) reactDiff += Math.PI * 2;
+        if (Math.abs(reactDiff) > FACING_REACT_THRESHOLD) {
+            facingUpdates.set(unit.id, currentFacing);
+        }
     }
 
-    // Batch update unit facing values
-    if (facingUpdates.length > 0) {
+    // Batch update unit facing values (Map.get is O(1) vs .find O(n))
+    if (facingUpdates.size > 0) {
         setUnits(prev => prev.map(u => {
-            const update = facingUpdates.find(f => f.id === u.id);
-            return update ? { ...u, facing: update.facing } : u;
+            const facing = facingUpdates.get(u.id);
+            return facing !== undefined ? { ...u, facing } : u;
         }));
     }
 }

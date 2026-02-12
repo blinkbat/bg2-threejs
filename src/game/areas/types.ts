@@ -44,10 +44,13 @@ export interface ChestLocation {
     requiredKeyId?: string;  // keyId from KeyItem to unlock
 }
 
+export type TreeType = "pine" | "palm" | "oak";
+
 export interface TreeLocation {
     x: number;
     z: number;
     size: number;  // Scale multiplier (0.5 = small, 1 = medium, 1.5 = large)
+    type?: TreeType;  // Defaults to "pine"
 }
 
 export interface Decoration {

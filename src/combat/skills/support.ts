@@ -407,10 +407,11 @@ export function executeRestorationSkill(
     const hasDoom = hasStatusEffect(targetAlly, "doom");
     const hasPoison = hasStatusEffect(targetAlly, "poison");
     const hasSlow = hasStatusEffect(targetAlly, "slowed");
+    const hasSleep = hasStatusEffect(targetAlly, "sleep");
     const targetMaxHp = getEffectiveMaxHp(targetAlly.id, targetAlly);
     const needsHealing = targetAlly.hp < targetMaxHp;
 
-    if (!hasDoom && !hasPoison && !hasSlow && !needsHealing) {
+    if (!hasDoom && !hasPoison && !hasSlow && !hasSleep && !needsHealing) {
         addLog(`${UNIT_DATA[casterId].name}: ${targetData.name} doesn't need restoration!`, COLORS.logNeutral);
         return false;
     }
@@ -438,7 +439,7 @@ export function executeRestorationSkill(
         if (u.id !== targetId) return u;
         // Remove doom, poison, slow
         const cleansedEffects = (u.statusEffects ?? []).filter(
-            e => e.type !== "doom" && e.type !== "poison" && e.type !== "slowed"
+            e => e.type !== "doom" && e.type !== "poison" && e.type !== "slowed" && e.type !== "sleep"
         );
         return { ...u, statusEffects: applyStatusEffect(cleansedEffects, regenEffect) };
     }));
@@ -448,6 +449,7 @@ export function executeRestorationSkill(
     if (hasDoom) removedEffects.push("Doom");
     if (hasPoison) removedEffects.push("Poison");
     if (hasSlow) removedEffects.push("Slow");
+    if (hasSleep) removedEffects.push("Sleep");
 
     soundFns.playHeal();
     if (removedEffects.length > 0) {
@@ -558,4 +560,45 @@ export function executeReviveSkill(
     }
 
     return true;
+}
+
+// =============================================================================
+// SUN STANCE SKILL (self-buff + small heal)
+// =============================================================================
+
+/**
+ * Execute Sun Stance — self-buff that adds fire damage to attacks + small instant heal.
+ */
+export function executeSunStanceSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill
+): boolean {
+    const { unitMeshRef, hitFlashRef, setUnits } = ctx;
+
+    // Apply buff via template
+    const success = applyBuffFromTemplate(ctx, casterId, skill, {
+        effectType: "sun_stance",
+        ringColor: "#ff6b35",
+        ringOpts: { innerRadius: 0.3, outerRadius: 0.5, maxScale: 1.5, duration: 300 },
+        sound: soundFns.playHeal,
+        logMessage: (name, skillName) => logBuff(name, skillName),
+        logColor: "#ff6b35",
+    });
+
+    if (success && skill.healRange) {
+        // Small immediate heal
+        const healAmount = rollDamage(skill.healRange[0], skill.healRange[1]);
+        const targetMaxHp = getEffectiveMaxHp(casterId);
+        updateUnitWith(setUnits, casterId, u => ({ hp: Math.min(targetMaxHp, u.hp + healAmount) }));
+
+        // Orange flash
+        const mesh = unitMeshRef.current[casterId];
+        if (mesh) {
+            (mesh.material as THREE.MeshStandardMaterial).color.set("#ff6b35");
+            hitFlashRef.current[casterId] = Date.now();
+        }
+    }
+
+    return success;
 }

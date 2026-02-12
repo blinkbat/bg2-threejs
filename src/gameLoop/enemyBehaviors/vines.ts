@@ -67,7 +67,7 @@ export function tryVinesSkill(ctx: VinesContext): boolean {
     const damage = vinesSkill.damage[0] + Math.floor(Math.random() * (vinesSkill.damage[1] - vinesSkill.damage[0] + 1));
     const targetData = getUnitStats(targetUnit);
     const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now, defeatedThisFrame };
-    applyDamageToUnit(dmgCtx, targetUnit.id, targetG, targetUnit.hp, damage, targetData.name, {
+    applyDamageToUnit(dmgCtx, targetUnit.id, targetG, damage, targetData.name, {
         color: COLORS.damageEnemy,
         hitMessage: { text: `${enemyStats.name} entangles ${targetUnit.team === "player" ? "a party member" : "its target"} in vines for ${damage} damage!`, color: "#2d4a1c" },
         targetUnit

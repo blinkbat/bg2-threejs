@@ -3,17 +3,17 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, Skill, UnitGroup, MagicMissileProjectile } from "../../core/types";
-import { COLORS } from "../../core/constants";
+import type { Unit, Skill, UnitGroup, MagicMissileProjectile, PiercingProjectile } from "../../core/types";
+import { COLORS, SUN_STANCE_BONUS_DAMAGE, MAGIC_WAVE_TARGETING_BUFFER, MAGIC_WAVE_FAN_SPREAD, MAGIC_MISSILE_START_OFFSET, MAGIC_MISSILE_SPEED, MAGIC_MISSILE_ZIGZAG_PHASE_STEP, GLACIAL_WHORL_SPEED, GLACIAL_WHORL_MAX_DISTANCE } from "../../core/constants";
 import { UNIT_DATA, getEffectiveUnitData } from "../../game/playerUnits";
 import { getUnitStats } from "../../game/units";
-import { rollChance, calculateDamageWithCrit, rollHit, getEffectiveArmor, logHit, logMiss, logPoisoned, logCast, calculateStatBonus, checkEnemyDefenses, createHpTracker } from "../combatMath";
+import { rollChance, rollDamage, calculateDamageWithCrit, rollHit, getEffectiveArmor, logHit, logMiss, logPoisoned, logCast, logAoeHit, logAoeMiss, calculateStatBonus, checkEnemyDefenses, hasStatusEffect } from "../combatMath";
 import { ENEMY_STATS } from "../../game/enemyStats";
 import { getUnitRadius, isInRange } from "../../rendering/range";
-import { distanceToPoint } from "../../game/geometry";
+import { distanceToPoint, isPointInRectangle } from "../../game/geometry";
 import { getAliveUnits } from "../../game/unitQuery";
 import { soundFns } from "../../audio";
-import { createProjectile, getProjectileSpeed, applyDamageToUnit, createAnimatedRing, createLightningPillar, type DamageContext } from "../damageEffects";
+import { createProjectile, getProjectileSpeed, applyDamageToUnit, createAnimatedRing, createLightningPillar, animateExpandingMesh, type DamageContext } from "../damageEffects";
 import { spawnSwingIndicator } from "../../gameLoop/swingAnimations";
 import type { SkillExecutionContext } from "./types";
 import { findAndValidateEnemyTarget, consumeSkill } from "./helpers";
@@ -188,20 +188,11 @@ export function executeTargetedDamageSkill(
         );
         const willPoison = delivery.mode === "melee" && skill.poisonChance ? rollChance(skill.poisonChance) : false;
 
-        // Read fresh HP to avoid stale data race condition
-        const freshTarget = unitsStateRef.current.find(u => u.id === targetId);
-        const currentHp = freshTarget?.hp ?? targetEnemy.hp;
-
-        // Skip if target was already defeated this frame
-        if (currentHp <= 0 || defeatedThisFrame.has(targetId)) {
-            return true;
-        }
-
         const dmgCtx: DamageContext = {
             scene, damageTexts: damageTexts.current, hitFlashRef: hitFlashRef.current,
             unitsRef: unitsRef.current, unitsStateRef, setUnits, addLog, now, defeatedThisFrame
         };
-        applyDamageToUnit(dmgCtx, targetId, targetG, currentHp, dmg, targetData.name, {
+        applyDamageToUnit(dmgCtx, targetId, targetG, dmg, targetData.name, {
             color: COLORS.damagePlayer,
             poison: willPoison ? { sourceId: casterId } : undefined,
             attackerName: casterData.name,
@@ -210,6 +201,14 @@ export function executeTargetedDamageSkill(
             attackerPosition: { x: casterG.position.x, z: casterG.position.z },
             isCrit
         });
+
+        // Sun Stance: bonus fire damage on hit
+        if (casterUnit && hasStatusEffect(casterUnit, "sun_stance")) {
+            const fireDmg = rollDamage(SUN_STANCE_BONUS_DAMAGE[0], SUN_STANCE_BONUS_DAMAGE[1]);
+            applyDamageToUnit(dmgCtx, targetId, targetG, fireDmg, targetData.name, {
+                color: COLORS.dmgFire,
+            });
+        }
 
         if (delivery.mode === "melee") {
             soundFns.playHit();
@@ -288,10 +287,7 @@ export function executeFlurrySkill(
     }
 
     // Distribute hits across enemies (round-robin)
-    // Track HP locally since state updates are batched
-    const hpTracker = createHpTracker(enemiesInRange.map(e => e.unit));
-
-    // Use shared defeatedThisFrame from context to prevent hitting dead enemies
+    // defeatedThisFrame prevents hitting dead enemies (updated internally by applyDamageToUnit)
     const dmgCtx: DamageContext = {
         scene, damageTexts: damageTexts.current, hitFlashRef: hitFlashRef.current,
         unitsRef: unitsRef.current, unitsStateRef, setUnits, addLog, now, defeatedThisFrame
@@ -308,9 +304,8 @@ export function executeFlurrySkill(
         const targetIdx = i % enemiesInRange.length;
         const { unit: target, group: targetG } = enemiesInRange[targetIdx];
 
-        // Skip if already defeated this frame or HP already at 0 in tracker
+        // Skip if already defeated this frame
         if (defeatedThisFrame.has(target.id)) continue;
-        if (hpTracker[target.id] <= 0) continue;
 
         const targetData = getUnitStats(target);
 
@@ -326,18 +321,13 @@ export function executeFlurrySkill(
         if (rollHit(casterData.accuracy)) {
             const { damage: dmg, isCrit } = calculateDamageWithCrit(skill.damageRange![0] + statBonus, skill.damageRange![1] + statBonus, getEffectiveArmor(target, targetData.armor), skill.damageType, casterUnit);
 
-            // Use tracked HP, not stale snapshot
-            const currentHp = hpTracker[target.id];
-            applyDamageToUnit(dmgCtx, target.id, targetG, currentHp, dmg, targetData.name, {
+            applyDamageToUnit(dmgCtx, target.id, targetG, dmg, targetData.name, {
                 color: COLORS.damagePlayer,
                 attackerName: casterData.name,
                 targetUnit: target,
                 attackerPosition: { x: casterG.position.x, z: casterG.position.z },
                 isCrit
             });
-
-            // Update local HP tracker
-            hpTracker[target.id] = Math.max(0, currentHp - dmg);
 
             totalHits++;
             totalDamage += dmg;
@@ -398,7 +388,7 @@ export function executeMagicWaveSkill(
 
         // Distance from target click position
         const distToTarget = distanceToPoint(enemyG.position, targetX, targetZ);
-        if (distToTarget <= aoeRadius + 1) {  // Slight buffer for targeting
+        if (distToTarget <= aoeRadius + MAGIC_WAVE_TARGETING_BUFFER) {  // Slight buffer for targeting
             enemiesNearTarget.push({ unit: enemy, group: enemyG, dist: distToTarget });
         }
     });
@@ -408,7 +398,7 @@ export function executeMagicWaveSkill(
 
     // Calculate base direction towards target click for fan-out
     const baseAngle = Math.atan2(targetZ - casterG.position.z, targetX - casterG.position.x);
-    const fanSpread = Math.PI * 0.5;  // 90 degree total spread
+    const fanSpread = MAGIC_WAVE_FAN_SPREAD;  // 90 degree total spread
 
     // Generate unique volley ID for tracking hits across all missiles in this cast
     const volleyId = Date.now() + Math.random();
@@ -426,7 +416,7 @@ export function executeMagicWaveSkill(
             new THREE.MeshBasicMaterial({ color: skill.projectileColor ?? "#9966ff" })
         );
         // Start position offset slightly in the fan direction
-        const startOffset = 0.3;
+        const startOffset = MAGIC_MISSILE_START_OFFSET;
         missile.position.set(
             casterG.position.x + Math.cos(startAngle) * startOffset,
             0.6,
@@ -451,12 +441,12 @@ export function executeMagicWaveSkill(
             mesh: missile,
             attackerId: casterId,
             targetId: targetId,
-            speed: 0.07,
+            speed: MAGIC_MISSILE_SPEED,
             damage: skill.damageRange!,
             damageType: skill.damageType ?? "chaos",
             zigzagOffset: 0,
             zigzagDirection: i % 2 === 0 ? 1 : -1,
-            zigzagPhase: i * 0.25 + Math.random() * 0.2,
+            zigzagPhase: i * MAGIC_MISSILE_ZIGZAG_PHASE_STEP + Math.random() * 0.2,
             // Fan-out: store normalized angle offset (-0.5 to 0.5) for lateral drift
             fanAngle: normalizedPos - 0.5,
             startX: missile.position.x,
@@ -477,6 +467,188 @@ export function executeMagicWaveSkill(
 
     addLog(logCast(casterData.name, skill.name), "#9966ff");
     soundFns.playMagicWave();
+
+    return true;
+}
+
+// =============================================================================
+// HOLY STRIKE SKILL (line-shaped AOE)
+// =============================================================================
+
+/**
+ * Execute Holy Strike — rectangle AOE aimed at click target.
+ * Instant damage to all enemies in the line, golden rectangle visual.
+ */
+export function executeHolyStrikeSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill,
+    targetX: number,
+    targetZ: number
+): boolean {
+    const { scene, unitsStateRef, unitsRef, setUnits, addLog, hitFlashRef, damageTexts, defeatedThisFrame } = ctx;
+
+    const casterG = unitsRef.current[casterId];
+    if (!casterG) return false;
+
+    consumeSkill(ctx, casterId, skill);
+
+    const casterData = UNIT_DATA[casterId];
+    const now = Date.now();
+    const facingAngle = Math.atan2(targetZ - casterG.position.z, targetX - casterG.position.x);
+    const length = skill.range;
+    const lineWidth = skill.lineWidth ?? 1.5;
+    const halfWidth = lineWidth / 2;
+
+    // Find all enemies in the rectangle
+    const enemies = getAliveUnits(unitsStateRef.current, "enemy");
+    const enemiesInLine: { unit: Unit; group: UnitGroup }[] = [];
+
+    for (const enemy of enemies) {
+        if (defeatedThisFrame.has(enemy.id)) continue;
+        const enemyG = unitsRef.current[enemy.id];
+        if (!enemyG) continue;
+
+        if (isPointInRectangle(
+            enemyG.position.x, enemyG.position.z,
+            casterG.position.x, casterG.position.z,
+            facingAngle, length, halfWidth
+        )) {
+            enemiesInLine.push({ unit: enemy, group: enemyG });
+        }
+    }
+
+    // Visual — golden rectangle extending from caster
+    const rectGeo = new THREE.PlaneGeometry(length, lineWidth);
+    rectGeo.translate(length / 2, 0, 0);
+    const rectMesh = new THREE.Mesh(
+        rectGeo,
+        new THREE.MeshBasicMaterial({ color: "#ffd700", transparent: true, opacity: 0.7, side: THREE.DoubleSide })
+    );
+    rectMesh.rotation.x = -Math.PI / 2;
+    rectMesh.rotation.z = -facingAngle;
+    rectMesh.position.set(casterG.position.x, 0.2, casterG.position.z);
+    scene.add(rectMesh);
+
+    animateExpandingMesh(scene, rectMesh, {
+        duration: 300,
+        initialOpacity: 0.7,
+        maxScale: 1.2,
+        baseRadius: 1
+    });
+
+    soundFns.playHit();
+
+    // Deal damage
+    const dmgCtx: DamageContext = {
+        scene, damageTexts: damageTexts.current, hitFlashRef: hitFlashRef.current,
+        unitsRef: unitsRef.current, unitsStateRef, setUnits, addLog, now, defeatedThisFrame
+    };
+
+    let hitCount = 0;
+    let totalDamage = 0;
+    let totalCrits = 0;
+
+    const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
+    const statBonus = calculateStatBonus(casterUnit, skill.damageType);
+
+    for (const { unit: target, group: tg } of enemiesInLine) {
+        if (defeatedThisFrame.has(target.id)) continue;
+        const targetData = getUnitStats(target);
+
+        if (rollHit(casterData.accuracy)) {
+            const { damage: dmg, isCrit } = calculateDamageWithCrit(
+                skill.damageRange![0] + statBonus, skill.damageRange![1] + statBonus,
+                getEffectiveArmor(target, targetData.armor), skill.damageType, casterUnit
+            );
+
+            applyDamageToUnit(dmgCtx, target.id, tg, dmg, targetData.name, {
+                color: COLORS.damagePlayer,
+                attackerName: casterData.name,
+                targetUnit: target,
+                attackerPosition: { x: casterG.position.x, z: casterG.position.z },
+                isCrit
+            });
+
+            hitCount++;
+            totalDamage += dmg;
+            if (isCrit) totalCrits++;
+        }
+    }
+
+    if (hitCount > 0) {
+        const critText = totalCrits > 0 ? ` (${totalCrits} critical!)` : "";
+        addLog(logAoeHit(casterData.name, skill.name, hitCount, totalDamage) + critText, COLORS.damagePlayer);
+    } else if (enemiesInLine.length > 0) {
+        addLog(logAoeMiss(casterData.name, skill.name), COLORS.logNeutral);
+    } else {
+        addLog(logCast(casterData.name, skill.name), "#ffd700");
+    }
+
+    return true;
+}
+
+// =============================================================================
+// GLACIAL WHORL SKILL (piercing projectile)
+// =============================================================================
+
+/**
+ * Execute Glacial Whorl — a slow piercing projectile that passes through all enemies,
+ * dealing cold damage and potentially applying chilled.
+ */
+export function executeGlacialWhorlSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill,
+    targetX: number,
+    targetZ: number
+): boolean {
+    const { scene, unitsRef, projectilesRef, addLog } = ctx;
+
+    const casterG = unitsRef.current[casterId];
+    if (!casterG) return false;
+
+    consumeSkill(ctx, casterId, skill);
+
+    const casterData = UNIT_DATA[casterId];
+
+    // Compute direction from caster to click
+    const dx = targetX - casterG.position.x;
+    const dz = targetZ - casterG.position.z;
+    const len = Math.hypot(dx, dz);
+    if (len < 0.01) return true;  // Click on self — skill consumed but no projectile
+    const dirX = dx / len;
+    const dirZ = dz / len;
+
+    // Create projectile mesh (ice shard)
+    const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(0.25, 10, 10),
+        new THREE.MeshBasicMaterial({ color: skill.projectileColor ?? "#5dade2" })
+    );
+    mesh.position.set(casterG.position.x + dirX * 0.3, 0.5, casterG.position.z + dirZ * 0.3);
+    scene.add(mesh);
+
+    const piercingProj: PiercingProjectile = {
+        type: "piercing",
+        mesh,
+        attackerId: casterId,
+        speed: GLACIAL_WHORL_SPEED,
+        damage: skill.damageRange!,
+        damageType: skill.damageType ?? "cold",
+        startX: mesh.position.x,
+        startZ: mesh.position.z,
+        directionX: dirX,
+        directionZ: dirZ,
+        maxDistance: GLACIAL_WHORL_MAX_DISTANCE,
+        hitUnits: new Set<number>(),
+        chillChance: skill.chillChance ?? 60,
+        attackerTeam: "player"
+    };
+
+    projectilesRef.current.push(piercingProj);
+
+    addLog(logCast(casterData.name, skill.name), COLORS.dmgCold);
+    soundFns.playAttack();
 
     return true;
 }

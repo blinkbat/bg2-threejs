@@ -148,3 +148,29 @@ export function isUnitOnTile(
     const unitGridZ = Math.floor(unitZ);
     return unitGridX === tileX && unitGridZ === tileZ;
 }
+
+/**
+ * Create a ground warning tile (PlaneGeometry 0.9x0.9) used by telegraphed AoE attacks.
+ * Consolidates the identical createChargeTile / createCurseTile helpers.
+ */
+export function createGroundWarningTile(
+    scene: THREE.Scene,
+    x: number,
+    z: number,
+    color: string,
+    name: string
+): THREE.Mesh {
+    const geometry = new THREE.PlaneGeometry(0.9, 0.9);
+    const material = new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.1,
+        side: THREE.DoubleSide
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(x + 0.5, 0.05, z + 0.5);
+    mesh.name = name;
+    scene.add(mesh);
+    return mesh;
+}

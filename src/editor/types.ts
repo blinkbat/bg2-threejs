@@ -2,7 +2,7 @@
 // EDITOR TYPES
 // =============================================================================
 
-import type { AreaId } from "../game/areas/types";
+import type { AreaId, TreeType } from "../game/areas/types";
 import type { EnemyType } from "../core/types";
 
 export type Tool = "paint" | "erase" | "select";
@@ -50,6 +50,7 @@ export interface TreeDef {
     x: number;
     z: number;
     size: number;
+    type?: TreeType;
 }
 
 export interface DecorationDef {

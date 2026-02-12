@@ -4,7 +4,7 @@
 
 import * as THREE from "three";
 import type { Skill, StatusEffect, TrapProjectile } from "../../core/types";
-import { COLORS, BUFF_TICK_INTERVAL, TRAP_FLIGHT_DURATION, TRAP_ARC_HEIGHT, TRAP_MESH_SIZE, SANCTUARY_HEAL_PER_TICK } from "../../core/constants";
+import { COLORS, BUFF_TICK_INTERVAL, TRAP_FLIGHT_DURATION, TRAP_ARC_HEIGHT, TRAP_MESH_SIZE, SANCTUARY_HEAL_PER_TICK, DEFAULT_TAUNT_CHANCE, DEFAULT_STUN_CHANCE } from "../../core/constants";
 import { UNIT_DATA } from "../../game/playerUnits";
 import { getUnitStats } from "../../game/units";
 import { rollChance, rollHit, hasStatusEffect, logTaunt, logTauntMiss, logStunned, logTrapThrown, applyStatusEffect, checkEnemyDefenses } from "../combatMath";
@@ -37,7 +37,7 @@ export function executeTauntSkill(
     consumeSkill(ctx, casterId, skill);
 
     const casterData = UNIT_DATA[casterId];
-    const tauntChance = skill.tauntChance ?? 80;  // Taunt chance percentage
+    const tauntChance = skill.tauntChance ?? DEFAULT_TAUNT_CHANCE;
 
     // Find all enemies within range
     const enemies = getAliveUnits(unitsStateRef.current, "enemy");
@@ -134,7 +134,7 @@ export function executeDebuffSkill(
     // Roll to hit
     if (rollHit(casterData.accuracy)) {
         // Roll for stun chance
-        const stunChance = skill.stunChance ?? 75;
+        const stunChance = skill.stunChance ?? DEFAULT_STUN_CHANCE;
         if (rollChance(stunChance)) {
             const stunDuration = skill.duration!;  // Duration in ms
 

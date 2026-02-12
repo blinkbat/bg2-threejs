@@ -178,7 +178,7 @@ export function executeEnemyMeleeAttack(ctx: EnemyAttackContext): void {
             : logHit(attackerStats.name, attackName, targetData.name, dmg);
 
         const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now, defeatedThisFrame };
-        applyDamageToUnit(dmgCtx, target.id, targetG, target.hp, dmg, targetData.name, {
+        applyDamageToUnit(dmgCtx, target.id, targetG, dmg, targetData.name, {
             color: COLORS.damageEnemy,
             poison: willPoison ? { sourceId: attacker.id, damagePerTick: poisonDmg } : undefined,
             slow: willSlow ? { sourceId: attacker.id } : undefined,

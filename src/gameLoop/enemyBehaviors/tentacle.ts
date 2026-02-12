@@ -9,7 +9,7 @@ import { distance } from "../../game/geometry";
 import { getNextUnitId } from "../../core/unitIds";
 import { soundFns } from "../../audio";
 import { setSkillCooldown } from "../../combat/combatMath";
-import { COLORS } from "../../core/constants";
+import { COLORS, TENTACLE_EMERGE_DURATION, TENTACLE_START_Y, MAX_LIFETIME_TENTACLES, TENTACLE_SPAWN_BUFFER } from "../../core/constants";
 import { getGameTime } from "../../core/gameClock";
 import { applyDamageToUnit, type DamageContext } from "../../combat/damageEffects";
 import type { TentacleContext } from "./types";
@@ -29,12 +29,9 @@ interface ActiveTentacle {
 }
 
 const activeTentacles: ActiveTentacle[] = [];
-const TENTACLE_EMERGE_DURATION = 600;  // ms for emerge animation
-const TENTACLE_START_Y = -1.5;  // Start below ground
 
-// Track lifetime tentacles spawned per kraken (max 8)
+// Track lifetime tentacles spawned per kraken
 const krakenLifetimeTentacles: Map<number, number> = new Map();
-const MAX_LIFETIME_TENTACLES = 8;
 
 // =============================================================================
 // TENTACLE SPAWNING
@@ -92,7 +89,7 @@ export function trySpawnTentacle(ctx: TentacleContext): boolean {
     const dirZ = dz / dist;
 
     // Spawn tentacle at a distance toward the target (but not right on them)
-    const spawnDist = Math.min(tentacleSkill.spawnRange, dist - 1.5);
+    const spawnDist = Math.min(tentacleSkill.spawnRange, dist - TENTACLE_SPAWN_BUFFER);
     const spawnX = g.position.x + dirX * spawnDist;
     const spawnZ = g.position.z + dirZ * spawnDist;
 
@@ -245,7 +242,7 @@ export function handleTentacleDeath(
         setUnits, addLog, now, defeatedThisFrame
     };
 
-    applyDamageToUnit(dmgCtx, parentKraken.id, krakenG, parentKraken.hp, damage, krakenStats.name, {
+    applyDamageToUnit(dmgCtx, parentKraken.id, krakenG, damage, krakenStats.name, {
         color: COLORS.damageEnemy,
         hitMessage: { text: `The severed tentacle damages ${krakenStats.name} for ${damage}!`, color: "#ff6600" },
         targetUnit: parentKraken

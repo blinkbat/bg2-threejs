@@ -214,8 +214,23 @@ export function useInputHandlers({
                 raycaster.setFromCamera(mouse, camera);
                 for (const hit of raycaster.intersectObjects(scene.children, true)) {
                     if (hit.object.name === "ground") {
-                        aoeIndicator.position.x = hit.point.x;
-                        aoeIndicator.position.z = hit.point.z;
+                        if (aoeIndicator.userData.isLine) {
+                            // Line AOE: position at caster, rotate toward cursor
+                            const casterG = unitGroups[stateRefs.targetingModeRef.current.casterId];
+                            if (casterG) {
+                                aoeIndicator.position.x = casterG.position.x;
+                                aoeIndicator.position.z = casterG.position.z;
+                                const angle = Math.atan2(
+                                    hit.point.z - casterG.position.z,
+                                    hit.point.x - casterG.position.x
+                                );
+                                aoeIndicator.rotation.z = -angle;
+                            }
+                        } else {
+                            // Circular AOE: follow cursor
+                            aoeIndicator.position.x = hit.point.x;
+                            aoeIndicator.position.z = hit.point.z;
+                        }
                         break;
                     }
                 }
@@ -522,7 +537,8 @@ export function useInputHandlers({
                     const slots = stateRefs.hotbarAssignmentsRef.current[unitId] || [null, null, null, null, null];
                     const skillName = slots[slotIndex];
                     if (skillName) {
-                        const skills = getAllSkills(unitId);
+                        const unit = stateRefs.unitsStateRef.current.find(u => u.id === unitId);
+                        const skills = getAllSkills(unitId, unit);
                         const skill = skills.find(s => s.name === skillName);
                         if (skill) callbacks.handleCastSkillRef.current?.(unitId, skill);
                     }

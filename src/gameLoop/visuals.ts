@@ -4,12 +4,13 @@
 
 import * as THREE from "three";
 import type { Unit, DamageText, UnitGroup, FogTexture } from "../core/types";
-import { FOG_SCALE, FLASH_DURATION, COLORS, POISON_TINT_STRENGTH } from "../core/constants";
+import { FOG_SCALE, FLASH_DURATION, COLORS, POISON_TINT_STRENGTH, SUN_STANCE_TINT_STRENGTH, CHILLED_TINT_STRENGTH } from "../core/constants";
 import { hasStatusEffect } from "../combat/combatMath";
 import { updateVisibility } from "../ai/pathfinding";
 import { getCurrentArea } from "../game/areas";
-import { disposeTexturedMesh } from "../rendering/disposal";
 import { isKrakenFullySubmerged } from "./enemyBehaviors";
+import { getUnitById } from "../game/unitQuery";
+import { recycleDamageNumber } from "../combat/damageEffects";
 
 // =============================================================================
 // DAMAGE TEXT UPDATE
@@ -28,7 +29,7 @@ export function updateDamageTexts(
             dt.life -= 16;
             (dt.mesh.material as THREE.MeshBasicMaterial).opacity = dt.life / 1000;
             if (dt.life <= 0) {
-                disposeTexturedMesh(scene, dt.mesh);
+                recycleDamageNumber(scene, dt.mesh);
                 return false;
             }
         }
@@ -45,12 +46,13 @@ const _flashWhite = new THREE.Color(1, 1, 1);
 const _tempColor = new THREE.Color();
 const _targetColor = new THREE.Color();
 const _poisonColor = new THREE.Color(COLORS.poison);
+const _sunStanceColor = new THREE.Color(COLORS.sunStance);
+const _chilledColor = new THREE.Color(COLORS.chilled);
 
 export function updateHitFlash(
     hitFlashRef: Record<number, number>,
     unitMeshRef: Record<number, THREE.Mesh>,
     unitOriginalColorRef: Record<number, THREE.Color>,
-    unitsState: Unit[],
     now: number
 ): void {
     Object.entries(hitFlashRef).forEach(([id, hitTime]) => {
@@ -59,10 +61,16 @@ export function updateHitFlash(
         if (!mesh || !originalColor) return;
         const elapsed = now - hitTime;
 
-        // Get the target color (original or poison-tinted) - reuse _targetColor
-        const unit = unitsState.find(u => u.id === Number(id));
+        // Get the target color (original or status-tinted) - reuse _targetColor
+        const unit = getUnitById(Number(id));
         const isPoisoned = unit ? hasStatusEffect(unit, "poison") : false;
-        if (isPoisoned) {
+        const hasSunStance = unit ? hasStatusEffect(unit, "sun_stance") : false;
+        const isChilled = unit ? hasStatusEffect(unit, "chilled") : false;
+        if (hasSunStance) {
+            _targetColor.copy(originalColor).lerp(_sunStanceColor, SUN_STANCE_TINT_STRENGTH);
+        } else if (isChilled) {
+            _targetColor.copy(originalColor).lerp(_chilledColor, CHILLED_TINT_STRENGTH);
+        } else if (isPoisoned) {
             _targetColor.copy(originalColor).lerp(_poisonColor, POISON_TINT_STRENGTH);
         } else {
             _targetColor.copy(originalColor);
@@ -95,8 +103,18 @@ export function updatePoisonVisuals(
         if (hitFlashRef[unit.id] !== undefined) continue;
 
         const isPoisoned = hasStatusEffect(unit, "poison");
+        const hasSunStance = hasStatusEffect(unit, "sun_stance");
+        const isChilled = hasStatusEffect(unit, "chilled");
 
-        if (isPoisoned) {
+        if (hasSunStance) {
+            // Apply orange sun stance tint (takes priority over poison/chill)
+            _tempColor.copy(originalColor).lerp(_sunStanceColor, SUN_STANCE_TINT_STRENGTH);
+            (mesh.material as THREE.MeshStandardMaterial).color.copy(_tempColor);
+        } else if (isChilled) {
+            // Apply ice blue chilled tint
+            _tempColor.copy(originalColor).lerp(_chilledColor, CHILLED_TINT_STRENGTH);
+            (mesh.material as THREE.MeshStandardMaterial).color.copy(_tempColor);
+        } else if (isPoisoned) {
             // Apply green poison tint - reuse _tempColor
             _tempColor.copy(originalColor).lerp(_poisonColor, POISON_TINT_STRENGTH);
             (mesh.material as THREE.MeshStandardMaterial).color.copy(_tempColor);

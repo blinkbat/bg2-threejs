@@ -12,7 +12,8 @@ import type { Unit, Skill, CombatLogEntry, SelectionBox, CharacterStats } from "
 
 // Game Logic
 import { getCurrentArea, getCurrentAreaId, setCurrentArea, AREAS, DEFAULT_STARTING_AREA, DEFAULT_SPAWN_POINT, type AreaId, type AreaTransition } from "./game/areas";
-import { UNIT_DATA, getEffectiveMaxHp } from "./game/playerUnits";
+import { UNIT_DATA, getEffectiveMaxHp, getEffectiveMaxMana } from "./game/playerUnits";
+import { LEVEL_UP_HP, LEVEL_UP_MANA, LEVEL_UP_STAT_POINTS, LEVEL_UP_SKILL_POINTS, HP_PER_VITALITY, MP_PER_INTELLIGENCE } from "./game/statBonuses";
 import { ENEMY_STATS } from "./game/enemyStats";
 import { initializeEquipmentState, getPartyInventory, setPartyInventory, getAllEquipment, setAllEquipment } from "./game/equipmentState";
 import { removeFromInventory } from "./game/equipment";
@@ -82,6 +83,8 @@ interface PersistedPlayer {
     exp?: number;
     stats?: CharacterStats;
     statPoints?: number;
+    skillPoints?: number;
+    learnedSkills?: string[];
     statusEffects?: Unit["statusEffects"];
     cantripUses?: Record<string, number>;
 }
@@ -159,6 +162,8 @@ function Game({
                 exp: initialExp,
                 stats: persisted?.stats,
                 statPoints: persisted?.statPoints,
+                skillPoints: persisted?.skillPoints ?? 1,
+                learnedSkills: persisted?.learnedSkills ?? [],
                 team: "player" as const,
                 target: null,
                 aiEnabled: true,
@@ -375,9 +380,13 @@ function Game({
             if (newExp >= xpForNext) {
                 setUnits(prev => prev.map(u => {
                     if (u.id !== unitId) return u;
+                    const maxHp = getEffectiveMaxHp(u.id, u);
+                    const maxMana = getEffectiveMaxMana(u.id, u);
                     return {
-                        ...u, exp: newExp, level: currentLevel + 1, statPoints: (u.statPoints ?? 0) + 3,
-                        hp: u.hp + 2, mana: (u.mana ?? 0) + 1,
+                        ...u, exp: newExp, level: currentLevel + 1,
+                        statPoints: (u.statPoints ?? 0) + LEVEL_UP_STAT_POINTS,
+                        skillPoints: (u.skillPoints ?? 0) + LEVEL_UP_SKILL_POINTS,
+                        hp: Math.min(u.hp + LEVEL_UP_HP, maxHp), mana: Math.min((u.mana ?? 0) + LEVEL_UP_MANA, maxMana),
                         stats: u.stats ?? { strength: 0, dexterity: 0, vitality: 0, intelligence: 0, faith: 0 }
                     };
                 }));
@@ -452,8 +461,8 @@ function Game({
         const playerUnits = unitsStateRef.current.filter(u => u.team === "player");
         const persistedState: PersistedPlayer[] = playerUnits.map(u => ({
             id: u.id, hp: u.hp, mana: u.mana, level: u.level, exp: u.exp,
-            stats: u.stats, statPoints: u.statPoints, statusEffects: u.statusEffects,
-            cantripUses: u.cantripUses
+            stats: u.stats, statPoints: u.statPoints, skillPoints: u.skillPoints,
+            learnedSkills: u.learnedSkills, statusEffects: u.statusEffects, cantripUses: u.cantripUses
         }));
         onAreaTransition(persistedState, transition.targetArea, transition.targetSpawn, transition.direction);
     }, [onAreaTransition]);
@@ -770,8 +779,8 @@ function Game({
         const playerUnits = unitsStateRef.current.filter(u => u.team === "player");
         const persistedState: PersistedPlayer[] = playerUnits.map(u => ({
             id: u.id, hp: u.hp, mana: u.mana, level: u.level, exp: u.exp,
-            stats: u.stats, statPoints: u.statPoints, statusEffects: u.statusEffects,
-            cantripUses: u.cantripUses
+            stats: u.stats, statPoints: u.statPoints, skillPoints: u.skillPoints,
+            learnedSkills: u.learnedSkills, statusEffects: u.statusEffects, cantripUses: u.cantripUses
         }));
         onAreaTransition(persistedState, areaId, AREAS[areaId].defaultSpawn);
     }, [onAreaTransition]);
@@ -793,9 +802,13 @@ function Game({
                 const newExp = (u.exp ?? 0) + amount;
                 const currentLevel = u.level ?? 1;
                 if (newExp >= getXpForLevel(currentLevel + 1)) {
+                    const maxHp = getEffectiveMaxHp(u.id, u);
+                    const maxMana = getEffectiveMaxMana(u.id, u);
                     return {
-                        ...u, exp: newExp, level: currentLevel + 1, statPoints: (u.statPoints ?? 0) + 3,
-                        hp: u.hp + 2, mana: (u.mana ?? 0) + 1,
+                        ...u, exp: newExp, level: currentLevel + 1,
+                        statPoints: (u.statPoints ?? 0) + LEVEL_UP_STAT_POINTS,
+                        skillPoints: (u.skillPoints ?? 0) + LEVEL_UP_SKILL_POINTS,
+                        hp: Math.min(u.hp + LEVEL_UP_HP, maxHp), mana: Math.min((u.mana ?? 0) + LEVEL_UP_MANA, maxMana),
                         stats: u.stats ?? { strength: 0, dexterity: 0, vitality: 0, intelligence: 0, faith: 0 }
                     };
                 }
@@ -806,7 +819,7 @@ function Game({
 
         addLog(`Debug: Party gained ${amount} XP!`, "#9b59b6");
         if (leveledUpIds.length > 0) {
-            addLog("Level up! +3 stat points available.", "#ffd700");
+            addLog(`Level up! +${LEVEL_UP_STAT_POINTS} stat points available.`, "#ffd700");
             soundFns.playLevelUp();
             for (const unitId of leveledUpIds) {
                 const unitGroup = sceneState.unitGroups[unitId];
@@ -955,8 +968,27 @@ function Game({
                     onIncrementStat={(id, stat) => setUnits(prev => prev.map(u => {
                         if (u.id === id && (u.statPoints ?? 0) > 0) {
                             const currentStats = u.stats ?? { strength: 0, dexterity: 0, vitality: 0, intelligence: 0, faith: 0 };
-                            const hpBonus = stat === "vitality" ? 2 : 0;
-                            return { ...u, hp: u.hp + hpBonus, statPoints: (u.statPoints ?? 0) - 1, stats: { ...currentStats, [stat]: currentStats[stat] + 1 } };
+                            const newStats = { ...currentStats, [stat]: currentStats[stat] + 1 };
+                            const updated = { ...u, statPoints: (u.statPoints ?? 0) - 1, stats: newStats };
+                            if (stat === "vitality") {
+                                const maxHp = getEffectiveMaxHp(u.id, updated);
+                                updated.hp = Math.min(u.hp + HP_PER_VITALITY, maxHp);
+                            }
+                            if (stat === "intelligence") {
+                                const maxMana = getEffectiveMaxMana(u.id, updated);
+                                updated.mana = Math.min((u.mana ?? 0) + MP_PER_INTELLIGENCE, maxMana);
+                            }
+                            return updated;
+                        }
+                        return u;
+                    }))}
+                    onLearnSkill={(id, skillName) => setUnits(prev => prev.map(u => {
+                        if (u.id === id && (u.skillPoints ?? 0) > 0 && !(u.learnedSkills ?? []).includes(skillName)) {
+                            return {
+                                ...u,
+                                skillPoints: (u.skillPoints ?? 0) - 1,
+                                learnedSkills: [...(u.learnedSkills ?? []), skillName]
+                            };
                         }
                         return u;
                     }))}

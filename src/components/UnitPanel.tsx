@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import Tippy from "@tippyjs/react";
 import type { Unit, Skill, StatusEffect, DamageType, Item, CharacterStats } from "../core/types";
 import { isConsumable, isWeapon, isShield, isArmor, isAccessory } from "../core/types";
-import { UNIT_DATA, getAllSkills, getEffectiveUnitData, getEffectiveMaxHp, getEffectiveMaxMana, getXpForLevel } from "../game/playerUnits";
+import { UNIT_DATA, getAllSkills, getAvailableSkills, getEffectiveUnitData, getEffectiveMaxHp, getEffectiveMaxMana, getXpForLevel } from "../game/playerUnits";
 import { getHpPercentage, getHpColor, getMana, hasStatusEffect, getEffectiveArmor } from "../combat/combatMath";
 import { getDexterityCritChance } from "../game/statBonuses";
 import { COLORS, getSkillColorClass, getSkillBorderColor } from "../core/constants";
@@ -27,10 +27,11 @@ const CLASS_PORTRAITS: Record<string, string> = {
 const getPortrait = (className: string) => CLASS_PORTRAITS[className] ?? monkPortrait;
 
 const PORTRAIT_POS: Record<string, string> = {
-    Cleric: "35% center",
-    Monk: "35% center",
-    Thief: "65% center",
-    Wizard: "65% center",
+    Cleric: "35% bottom",
+    Monk: "35% bottom",
+    Paladin: "center 80%",
+    Thief: "65% bottom",
+    Wizard: "65% bottom",
 };
 
 interface UnitPanelProps {
@@ -45,10 +46,11 @@ interface UnitPanelProps {
     onUseConsumable?: (itemId: string, targetUnitId: number) => void;
     consumableCooldownEnd?: number;
     onIncrementStat?: (unitId: number, stat: keyof CharacterStats) => void;
+    onLearnSkill?: (unitId: number, skillName: string) => void;
     gold?: number;
 }
 
-export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, skillCooldowns = {}, paused = false, queuedSkills = [], onUseConsumable, consumableCooldownEnd = 0, onIncrementStat, gold = 0 }: UnitPanelProps) {
+export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, skillCooldowns = {}, paused = false, queuedSkills = [], onUseConsumable, consumableCooldownEnd = 0, onIncrementStat, onLearnSkill, gold = 0 }: UnitPanelProps) {
     const [, setTick] = useState(0);
     // Use a ref to capture pause time immediately without waiting for state update
     const [pauseTimeState, setPauseTimeState] = useState<number | null>(() => paused ? Date.now() : null);
@@ -80,7 +82,7 @@ export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, ski
 
     return (
         <div className="unit-panel glass-panel">
-            <div className="unit-panel-header" style={{ backgroundColor: data.color, "--header-bg-image": `url(${getPortrait(data.class)})`, "--header-bg-pos": PORTRAIT_POS[data.class] ?? "center" } as React.CSSProperties}>
+            <div className="unit-panel-header" style={{ backgroundColor: data.color, "--header-bg-image": `url(${getPortrait(data.class)})`, "--header-bg-pos": PORTRAIT_POS[data.class] ?? "center bottom" } as React.CSSProperties}>
                 <div className="close-btn header-close" onClick={onClose}>×</div>
                 <div className="unit-info header-info">
                     <div className="unit-name">{data.name}</div>
@@ -104,15 +106,19 @@ export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, ski
             </div>
 
             <div className="tab-container">
-                {["status", "skills", "equipment", "inventory"].map(t => (
-                    <div
-                        key={t}
-                        className={`tab ${tab === t ? "active" : ""}`}
-                        onClick={() => setTab(t)}
-                    >
-                        {t}
-                    </div>
-                ))}
+                {["status", "skills", "equipment", "inventory"].map(t => {
+                    const showDot = (t === "status" && (unit.statPoints ?? 0) > 0)
+                        || (t === "skills" && (unit.skillPoints ?? 0) > 0);
+                    return (
+                        <div
+                            key={t}
+                            className={`tab ${tab === t ? "active" : ""}`}
+                            onClick={() => setTab(t)}
+                        >
+                            {t}{showDot && <span className="tab-dot" />}
+                        </div>
+                    );
+                })}
             </div>
 
             <div className="unit-content">
@@ -126,6 +132,7 @@ export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, ski
                         paused={paused}
                         queuedSkills={queuedSkills}
                         onCastSkill={onCastSkill}
+                        onLearnSkill={onLearnSkill}
                     />
                 )}
                 {tab === "equipment" && <EquipmentTab unitId={unitId} />}
@@ -201,6 +208,7 @@ const EFFECT_INFO: Record<string, { icon: string; color: string; description: st
     doom: { icon: "💀", color: COLORS.doomText, description: "Death in 10s — cure with Restoration" },
     regen: { icon: "💚", color: COLORS.hpHigh, description: "Healing over time" },
     invul: { icon: "✦", color: "#8e44ad", description: "Immune to all damage" },
+    sun_stance: { icon: "☀", color: COLORS.sunStanceText, description: "Attacks deal bonus fire damage" },
 };
 
 /** Renders active status effects as inline icons with tooltips */
@@ -528,7 +536,7 @@ function SkillTooltip({ skill, isShielded, cantripUses }: { skill: Skill; isShie
 }
 
 function SkillCard({
-    unitId, unit, skill, skillCooldowns, displayTime, paused, isShielded, isQueued, onCastSkill
+    unitId, unit, skill, skillCooldowns, displayTime, paused, isShielded, isQueued, onCastSkill, unlearned, canLearn, onLearn
 }: {
     unitId: number;
     unit: Unit;
@@ -539,6 +547,9 @@ function SkillCard({
     isShielded: boolean;
     isQueued: boolean;
     onCastSkill?: (unitId: number, skill: Skill) => void;
+    unlearned?: boolean;
+    canLearn?: boolean;
+    onLearn?: () => void;
 }) {
     const cooldownKey = `${unitId}-${skill.name}`;
     const cooldownData = skillCooldowns[cooldownKey];
@@ -552,12 +563,18 @@ function SkillCard({
     const isRanged = skill.range > 2;
     const cantripUses = skill.isCantrip ? (unit.cantripUses?.[skill.name] ?? 0) : undefined;
     const noUsesLeft = skill.isCantrip && cantripUses !== undefined && cantripUses <= 0;
-    const canClick = hasManaForSkill && !noUsesLeft && unit.hp > 0;
+    const canCast = !unlearned && hasManaForSkill && !noUsesLeft && unit.hp > 0;
 
     const skillColorClass = getSkillColorClass(skill.type);
     const skillBorderColor = getSkillBorderColor(skill.type);
 
-    const cardClass = `skill-card ${!canClick && !isQueued ? "disabled" : ""} ${isQueued ? "queued" : ""}`;
+    const cardClass = [
+        "skill-card",
+        !canCast && !isQueued && !unlearned ? "disabled" : "",
+        isQueued ? "queued" : "",
+        unlearned ? "unlearned" : "",
+        unlearned && canLearn ? "can-learn" : ""
+    ].filter(Boolean).join(" ");
 
     return (
         <Tippy
@@ -568,12 +585,15 @@ function SkillCard({
         >
             <div
                 className={cardClass}
-                onClick={() => canClick && onCastSkill?.(unitId, skill)}
+                onClick={() => {
+                    if (unlearned && canLearn && onLearn) onLearn();
+                    else if (canCast) onCastSkill?.(unitId, skill);
+                }}
                 style={{
-                    borderColor: isQueued ? undefined : (canClick ? skillBorderColor : "#333")
+                    borderColor: unlearned ? undefined : (isQueued ? undefined : (canCast ? skillBorderColor : "#333"))
                 }}
             >
-                {skillOnCooldown && (
+                {!unlearned && skillOnCooldown && (
                     <div
                         className="skill-cooldown-overlay"
                         style={{
@@ -590,13 +610,18 @@ function SkillCard({
                         {isQueued && <span className="skill-tag skill-tag-queued">QUEUED</span>}
                     </span>
                     <div className="skill-header-right">
-                        {cantripUses !== undefined && (
+                        {!unlearned && cantripUses !== undefined && (
                             <span className="skill-uses-badge">{cantripUses} uses</span>
                         )}
                         {skill.manaCost > 0 && <span className="mana-cost">{skill.manaCost} MP</span>}
+                        {unlearned && (
+                            <span className={`skill-learn-tag ${canLearn ? "available" : ""}`}>
+                                {canLearn ? "Learn" : "Locked"}
+                            </span>
+                        )}
                     </div>
                 </div>
-                {skillOnCooldown && (
+                {!unlearned && skillOnCooldown && (
                     <div className="skill-cooldown-text" style={isQueued ? { color: "#f59e0b" } : undefined}>
                         {cooldownRemaining}s{paused && " (paused)"}{isShielded && " (×2)"}
                     </div>
@@ -607,7 +632,7 @@ function SkillCard({
 }
 
 function SkillsTab({
-    unitId, unit, skillCooldowns, displayTime, paused, queuedSkills, onCastSkill
+    unitId, unit, skillCooldowns, displayTime, paused, queuedSkills, onCastSkill, onLearnSkill
 }: {
     unitId: number;
     unit: Unit;
@@ -616,11 +641,17 @@ function SkillsTab({
     paused: boolean;
     queuedSkills: string[];
     onCastSkill?: (unitId: number, skill: Skill) => void;
+    onLearnSkill?: (unitId: number, skillName: string) => void;
 }) {
     const isShielded = hasStatusEffect(unit, "shielded");
-    const allSkills = getAllSkills(unitId);
-    const cantrips = allSkills.filter(s => s.isCantrip);
-    const regularSkills = allSkills.filter(s => !s.isCantrip);
+    const learnedSkills = getAllSkills(unitId, unit);
+    const learnedSet = new Set((unit.learnedSkills ?? []).map(n => n));
+    const availableSkills = getAvailableSkills(unitId);
+    const skillPoints = unit.skillPoints ?? 0;
+
+    const cantrips = learnedSkills.filter(s => s.isCantrip);
+    const learnedRegular = learnedSkills.filter(s => !s.isCantrip && s.name !== "Attack");
+    const unlearnedSkills = availableSkills.filter(s => !learnedSet.has(s.name));
 
     return (
         <div className="flex flex-col gap-8">
@@ -643,24 +674,53 @@ function SkillsTab({
                             onCastSkill={onCastSkill}
                         />
                     ))}
-                    <div className="skills-section-label">Skills</div>
                 </>
             )}
 
-            {regularSkills.map((skill: Skill, i: number) => (
-                <SkillCard
-                    key={`skill-${i}`}
-                    unitId={unitId}
-                    unit={unit}
-                    skill={skill}
-                    skillCooldowns={skillCooldowns}
-                    displayTime={displayTime}
-                    paused={paused}
-                    isShielded={isShielded}
-                    isQueued={queuedSkills.includes(skill.name)}
-                    onCastSkill={onCastSkill}
-                />
-            ))}
+            {learnedRegular.length > 0 && (
+                <>
+                    <div className="skills-section-label">Skills</div>
+                    {learnedRegular.map((skill: Skill, i: number) => (
+                        <SkillCard
+                            key={`skill-${i}`}
+                            unitId={unitId}
+                            unit={unit}
+                            skill={skill}
+                            skillCooldowns={skillCooldowns}
+                            displayTime={displayTime}
+                            paused={paused}
+                            isShielded={isShielded}
+                            isQueued={queuedSkills.includes(skill.name)}
+                            onCastSkill={onCastSkill}
+                        />
+                    ))}
+                </>
+            )}
+
+            {unlearnedSkills.length > 0 && (
+                <>
+                    <div className="skills-section-label">
+                        <span>Unlearned</span>
+                        {skillPoints > 0 && <span className="skill-points-badge">{skillPoints} pts</span>}
+                    </div>
+                    {unlearnedSkills.map((skill: Skill, i: number) => (
+                        <SkillCard
+                            key={`unlearned-${i}`}
+                            unitId={unitId}
+                            unit={unit}
+                            skill={skill}
+                            skillCooldowns={skillCooldowns}
+                            displayTime={displayTime}
+                            paused={paused}
+                            isShielded={false}
+                            isQueued={false}
+                            unlearned
+                            canLearn={skillPoints > 0}
+                            onLearn={() => onLearnSkill?.(unitId, skill.name)}
+                        />
+                    ))}
+                </>
+            )}
         </div>
     );
 }

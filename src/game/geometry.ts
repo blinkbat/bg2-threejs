@@ -68,3 +68,62 @@ export function worldToCell(x: number, z: number): { x: number; z: number } {
 export function cellToWorld(cellX: number, cellZ: number): { x: number; z: number } {
     return { x: cellX + 0.5, z: cellZ + 0.5 };
 }
+
+/**
+ * Normalize an angle to the range [-PI, PI].
+ */
+export function normalizeAngle(angle: number): number {
+    while (angle > Math.PI) angle -= Math.PI * 2;
+    while (angle < -Math.PI) angle += Math.PI * 2;
+    return angle;
+}
+
+/**
+ * Check if a point (px, pz) is within a cone emanating from (originX, originZ).
+ * @param facingAngle - direction the cone is pointing (radians, atan2 convention)
+ * @param halfAngle - half-width of the cone in radians
+ * @param maxDistance - maximum reach of the cone
+ * @param minDistance - minimum distance (to exclude the origin itself), default 0.1
+ */
+export function isPointInCone(
+    px: number, pz: number,
+    originX: number, originZ: number,
+    facingAngle: number, halfAngle: number, maxDistance: number,
+    minDistance: number = 0.1
+): boolean {
+    const dx = px - originX;
+    const dz = pz - originZ;
+    const dist = Math.hypot(dx, dz);
+
+    if (dist > maxDistance || dist < minDistance) return false;
+
+    const angleToPoint = Math.atan2(dz, dx);
+    const angleDiff = normalizeAngle(angleToPoint - facingAngle);
+
+    return Math.abs(angleDiff) <= halfAngle;
+}
+
+/**
+ * Check if a point (px, pz) is within a rectangle extending from (originX, originZ).
+ * The rectangle starts at the origin and extends in the direction of facingAngle.
+ * @param facingAngle - direction the rectangle extends (radians, atan2 convention)
+ * @param length - how far the rectangle extends from the origin
+ * @param halfWidth - half the width of the rectangle (perpendicular to facing)
+ */
+export function isPointInRectangle(
+    px: number, pz: number,
+    originX: number, originZ: number,
+    facingAngle: number, length: number, halfWidth: number
+): boolean {
+    // Translate point relative to origin
+    const dx = px - originX;
+    const dz = pz - originZ;
+
+    // Project onto rectangle's local axes (forward = facing, right = perpendicular)
+    const cosA = Math.cos(facingAngle);
+    const sinA = Math.sin(facingAngle);
+    const forward = dx * cosA + dz * sinA;
+    const lateral = -dx * sinA + dz * cosA;
+
+    return forward >= 0 && forward <= length && Math.abs(lateral) <= halfWidth;
+}

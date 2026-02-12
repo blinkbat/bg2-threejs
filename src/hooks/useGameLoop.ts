@@ -11,7 +11,8 @@ import { getCurrentArea } from "../game/areas";
 import type { Unit, UnitGroup } from "../core/types";
 import { updateCamera, updateWallTransparency, updateTreeFogVisibility, updateLightLOD, addUnitToScene, updateWater, updateBillboards } from "../rendering/scene";
 import { updateDynamicObstacles } from "../ai/pathfinding";
-import { updateUnitCache } from "../ai/unitAI";
+import { updateUnitCache } from "../game/unitQuery";
+import { clearUnitStatsCache } from "../game/units";
 import {
     updateDamageTexts,
     updateHitFlash,
@@ -27,6 +28,7 @@ import {
     processAcidTiles,
     processSanctuaryTiles,
     processChargeAttacks,
+    processFireBreaths,
     processCurses,
     processGlares,
     updateLeaps,
@@ -220,12 +222,19 @@ export function useGameLoop({
         } = sceneState;
 
         let animId: number;
+        let hpBarFrame = 0;
+        let cachedRect = renderer.domElement.getBoundingClientRect();
 
         const animate = () => {
             animId = requestAnimationFrame(animate);
             const now = Date.now();
             updateGameClock();
             const refs = gameRefs.current;
+
+            // Snapshot units and populate O(1) lookup caches for all systems this frame
+            const currentUnits = stateRefs.unitsStateRef.current;
+            updateUnitCache(currentUnits);
+            clearUnitStatsCache();
 
             // FPS counter
             fpsFrameCount.current++;
@@ -253,7 +262,7 @@ export function useGameLoop({
                 refs.projectiles = updateProjectiles(
                     refs.projectiles,
                     unitGroups,
-                    stateRefs.unitsStateRef.current,
+                    currentUnits,
                     scene,
                     refs.damageTexts,
                     refs.hitFlash,
@@ -265,7 +274,7 @@ export function useGameLoop({
 
                 // Process status effects
                 processStatusEffects(
-                    stateRefs.unitsStateRef.current,
+                    currentUnits,
                     unitGroups,
                     scene,
                     refs.damageTexts,
@@ -279,7 +288,7 @@ export function useGameLoop({
                 // Process acid tiles
                 processAcidTiles(
                     refs.acidTiles,
-                    stateRefs.unitsStateRef.current,
+                    currentUnits,
                     unitGroups,
                     scene,
                     refs.damageTexts,
@@ -293,7 +302,7 @@ export function useGameLoop({
                 // Process sanctuary tiles
                 processSanctuaryTiles(
                     refs.sanctuaryTiles,
-                    stateRefs.unitsStateRef.current,
+                    currentUnits,
                     unitGroups,
                     scene,
                     refs.damageTexts,
@@ -305,7 +314,7 @@ export function useGameLoop({
                 // Process charge attacks
                 processChargeAttacks(
                     scene,
-                    stateRefs.unitsStateRef.current,
+                    currentUnits,
                     unitGroups,
                     refs.damageTexts,
                     refs.hitFlash,
@@ -318,7 +327,20 @@ export function useGameLoop({
                 // Process necromancer curses
                 processCurses(
                     scene,
-                    stateRefs.unitsStateRef.current,
+                    currentUnits,
+                    unitGroups,
+                    refs.damageTexts,
+                    refs.hitFlash,
+                    callbacks.setUnits,
+                    callbacks.addLog,
+                    now,
+                    defeatedThisFrame
+                );
+
+                // Process fire breaths
+                processFireBreaths(
+                    scene,
+                    currentUnits,
                     unitGroups,
                     refs.damageTexts,
                     refs.hitFlash,
@@ -331,7 +353,7 @@ export function useGameLoop({
                 // Process basilisk glares
                 processGlares(
                     scene,
-                    stateRefs.unitsStateRef.current,
+                    currentUnits,
                     unitGroups,
                     refs.damageTexts,
                     refs.hitFlash,
@@ -355,23 +377,21 @@ export function useGameLoop({
                 );
 
                 // Update tentacles
-                updateTentacles(now, stateRefs.unitsStateRef.current, unitGroups, callbacks.setUnits, callbacks.addLog);
+                updateTentacles(now, currentUnits, unitGroups, callbacks.setUnits, callbacks.addLog);
 
                 // Update submerged krakens
-                updateSubmergedKrakens(now, stateRefs.unitsStateRef.current, unitGroups, callbacks.addLog);
+                updateSubmergedKrakens(now, currentUnits, unitGroups, callbacks.addLog);
 
                 // Update energy shield visuals
-                updateEnergyShieldVisuals(stateRefs.unitsStateRef.current, unitGroups, now);
+                updateEnergyShieldVisuals(currentUnits, unitGroups, now);
 
                 // Update shield facing
-                updateShieldFacing(stateRefs.unitsStateRef.current, unitGroups, shieldIndicators, callbacks.setUnits);
+                updateShieldFacing(currentUnits, unitGroups, shieldIndicators, callbacks.setUnits);
             }
 
             // Visual updates (run even when paused)
-            updateHitFlash(refs.hitFlash, unitMeshes, unitOriginalColors, stateRefs.unitsStateRef.current, now);
-            updatePoisonVisuals(stateRefs.unitsStateRef.current, unitMeshes, unitOriginalColors, refs.hitFlash);
-
-            const currentUnits = stateRefs.unitsStateRef.current;
+            updateHitFlash(refs.hitFlash, unitMeshes, unitOriginalColors, now);
+            updatePoisonVisuals(currentUnits, unitMeshes, unitOriginalColors, refs.hitFlash);
 
             // Fog of war
             const playerUnits = currentUnits.filter(u => u.team === "player" && u.hp > 0);
@@ -407,7 +427,6 @@ export function useGameLoop({
 
                 // Update pathfinding obstacles
                 updateDynamicObstacles(currentUnits, unitGroups);
-                updateUnitCache(currentUnits);
 
                 // Update each unit's AI
                 currentUnits.forEach(unit => {
@@ -435,9 +454,12 @@ export function useGameLoop({
             // Range indicator follows caster
             updateRangeIndicator(stateRefs.targetingModeRef.current, rangeIndicator, unitGroups);
 
-            // HP bar positions
-            const rect = renderer.domElement.getBoundingClientRect();
-            callbacks.setHpBarPositions(updateHpBarPositions(currentUnits, unitGroups, camera, rect, refs.zoomLevel));
+            // HP bar positions (rect measurement cached — only re-measured every 60 frames)
+            hpBarFrame++;
+            if (hpBarFrame % 60 === 0) {
+                cachedRect = renderer.domElement.getBoundingClientRect();
+            }
+            callbacks.setHpBarPositions(updateHpBarPositions(currentUnits, unitGroups, camera, cachedRect, refs.zoomLevel));
 
             // Wall/tree/candle transparency
             updateWallTransparency(camera, wallMeshes, unitGroups, currentUnits, treeMeshes, columnMeshes, columnGroups, candleMeshes, flames);
@@ -449,7 +471,7 @@ export function useGameLoop({
             updateWater(waterMesh, now);
 
             // Sprite facing direction (before billboard rotation so scale is current)
-            updateSpriteFacing(stateRefs.unitsStateRef.current, unitGroups);
+            updateSpriteFacing(currentUnits, unitGroups);
 
             // Billboard rotation
             updateBillboards(billboards, camera);

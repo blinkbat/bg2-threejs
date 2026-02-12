@@ -34,6 +34,9 @@ const EFFECT_ICONS: Record<StatusEffectType, { icon: string; color: string }> = 
     doom: { icon: "💀", color: COLORS.doomText },
     regen: { icon: "💚", color: COLORS.hpHigh },
     invul: { icon: "✦", color: "#8e44ad" },
+    chilled: { icon: "❄", color: COLORS.chilledText },
+    sleep: { icon: "💤", color: COLORS.sleepText },
+    sun_stance: { icon: "☀", color: COLORS.sunStanceText },
 };
 
 interface PartyBarProps {
@@ -184,13 +187,18 @@ export function PartyBar({
         const hpColor = getHpColor(hpPct);
 
         const isTargetingAlly = targetingMode?.skill.targetType === "ally";
+        const isReviveSkill = targetingMode?.skill.type === "revive";
         const isTargetingDeadAlly = consumableTargetingMode !== null && consumableTargetingMode !== undefined;
-        const isValidTarget = (targetingMode && isTargetingAlly && unit.hp > 0) ||
+        const isValidTarget = (targetingMode && isTargetingAlly && (isReviveSkill ? unit.hp <= 0 : unit.hp > 0)) ||
             (isTargetingDeadAlly && unit.hp <= 0 && unit.team === "player");
 
         const handleClick = (e: React.MouseEvent) => {
             e.stopPropagation();
             if (isTargetingDeadAlly && unit.hp <= 0 && onTargetUnit) {
+                onTargetUnit(unit.id);
+                return;
+            }
+            if (targetingMode && isTargetingAlly && isReviveSkill && unit.hp <= 0 && onTargetUnit) {
                 onTargetUnit(unit.id);
                 return;
             }
@@ -220,7 +228,7 @@ export function PartyBar({
             isDragSource ? "dragging" : ""
         ].filter(Boolean).join(" ");
 
-        const hasUnspentPoints = (unit.statPoints ?? 0) > 0;
+        const hasUnspentPoints = (unit.statPoints ?? 0) > 0 || (unit.skillPoints ?? 0) > 0;
         const showHotbar = isSelected && selectedIds.length === 1 && onAssignSkill;
 
         elements.push(

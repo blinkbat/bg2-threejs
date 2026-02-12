@@ -6,11 +6,12 @@ import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, EnemyStats, DamageType, StatusEffect } from "../../core/types";
 import { BUFF_TICK_INTERVAL, COLORS } from "../../core/constants";
 import { getUnitStats } from "../../game/units";
-import { getGameTime } from "../../core/gameClock";
+import { getGameTime, accumulateDelta } from "../../core/gameClock";
 import { calculateDamageWithCrit, rollHit, getEffectiveArmor, logAoeHit, isUnitAlive, applyStatusEffect, setSkillCooldown } from "../../combat/combatMath";
 import { applyDamageToUnit, buildDamageContext } from "../../combat/damageEffects";
 import { soundFns } from "../../audio";
 import { disposeBasicMesh } from "../../rendering/disposal";
+import { normalizeAngle, isPointInCone } from "../../game/geometry";
 import type { GlareContext } from "./types";
 
 // =============================================================================
@@ -123,9 +124,7 @@ export function tryBasiliskGlare(ctx: GlareContext): boolean {
     const candidateAngles: number[] = targets.map(t => t.angle);
     for (let i = 0; i < targets.length; i++) {
         for (let j = i + 1; j < targets.length; j++) {
-            let diff = targets[j].angle - targets[i].angle;
-            while (diff > Math.PI) diff -= Math.PI * 2;
-            while (diff < -Math.PI) diff += Math.PI * 2;
+            const diff = normalizeAngle(targets[j].angle - targets[i].angle);
             candidateAngles.push(targets[i].angle + diff / 2);
         }
     }
@@ -135,10 +134,7 @@ export function tryBasiliskGlare(ctx: GlareContext): boolean {
     for (const angle of candidateAngles) {
         let count = 0;
         for (const other of targets) {
-            let diff = other.angle - angle;
-            while (diff > Math.PI) diff -= Math.PI * 2;
-            while (diff < -Math.PI) diff += Math.PI * 2;
-            if (Math.abs(diff) <= glareSkill.coneAngle) count++;
+            if (Math.abs(normalizeAngle(other.angle - angle)) <= glareSkill.coneAngle) count++;
         }
         if (count > bestCount) {
             bestCount = count;
@@ -176,7 +172,7 @@ export function tryBasiliskGlare(ctx: GlareContext): boolean {
     setSkillCooldown(setSkillCooldowns, glareKey, glareSkill.cooldown, now, unit);
 
     addLog(`${enemyStats.name} begins ${glareSkill.name}!`, "#88aa22");
-    soundFns.playHit();
+    soundFns.playMetallicSqueal();
 
     return true;
 }
@@ -212,10 +208,7 @@ export function processGlares(
         }
 
         // Accumulate elapsed time (pause-safe)
-        const rawDelta = now - glare.lastUpdateTime;
-        const delta = Math.min(rawDelta, 100); // Max 100ms per frame
-        glare.elapsedTime += delta;
-        glare.lastUpdateTime = now;
+        accumulateDelta(glare, now);
 
         const progress = Math.min(glare.elapsedTime / glare.delay, 1);
 
@@ -286,13 +279,14 @@ function executeGlare(
     let totalDamage = 0;
 
     unitsState.forEach(target => {
-        if (target.team !== "player" || !isUnitAlive(target, defeatedThisFrame)) return;
+        if (target.team !== "player") return;
+        if (target.hp <= 0 || defeatedThisFrame.has(target.id)) return;
 
         const tg = unitsRef[target.id];
         if (!tg) return;
 
         // Cone hit test
-        if (!isInCone(tg.position.x, tg.position.z, glare)) return;
+        if (!isPointInCone(tg.position.x, tg.position.z, glare.coneOriginX, glare.coneOriginZ, glare.facingAngle, glare.coneAngle, glare.coneDistance)) return;
 
         const targetData = getUnitStats(target);
 
@@ -303,7 +297,7 @@ function executeGlare(
                 glare.damageType, caster
             );
 
-            applyDamageToUnit(dmgCtx, target.id, tg, target.hp, dmg, targetData.name, {
+            applyDamageToUnit(dmgCtx, target.id, tg, dmg, targetData.name, {
                 color: COLORS.damageEnemy,
                 targetUnit: target
             });
@@ -338,32 +332,6 @@ function executeGlare(
     } else {
         addLog(`${casterStats.name}'s ${glare.skillName} hits nothing!`, COLORS.logNeutral);
     }
-}
-
-// =============================================================================
-// CONE HIT TEST
-// =============================================================================
-
-/**
- * Check if a point (x, z) is within the glare cone.
- */
-function isInCone(x: number, z: number, glare: GlareState): boolean {
-    const dx = x - glare.coneOriginX;
-    const dz = z - glare.coneOriginZ;
-    const dist = Math.hypot(dx, dz);
-
-    // Check distance
-    if (dist > glare.coneDistance || dist < 0.1) return false;
-
-    // Check angle — angle from origin to point vs facing angle
-    const angleToPoint = Math.atan2(dz, dx);
-    let angleDiff = angleToPoint - glare.facingAngle;
-
-    // Normalize to [-PI, PI]
-    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-    while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-
-    return Math.abs(angleDiff) <= glare.coneAngle;
 }
 
 // =============================================================================

@@ -23,31 +23,8 @@ import { getAttackRange } from "../game/units";
 import { ENEMY_STATS } from "../game/enemyStats";
 import { isUnitAlive } from "../combat/combatMath";
 import { isKrakenSubmerged } from "../gameLoop/enemyBehaviors";
+import { getUnitById } from "../game/unitQuery";
 import type { Unit, UnitGroup } from "../core/types";
-
-// =============================================================================
-// UNIT LOOKUP CACHE - O(1) unit lookups by ID
-// =============================================================================
-
-// Module-level cache for fast unit lookups - updated once per frame
-let unitsByIdCache: Map<number, Unit> = new Map();
-
-/**
- * Update the unit lookup cache. Call this once per frame before AI updates.
- */
-export function updateUnitCache(unitsState: Unit[]): void {
-    unitsByIdCache.clear();
-    for (const unit of unitsState) {
-        unitsByIdCache.set(unit.id, unit);
-    }
-}
-
-/**
- * Get a unit by ID from the cache - O(1) lookup.
- */
-function getUnitById(id: number): Unit | undefined {
-    return unitsByIdCache.get(id);
-}
 
 /**
  * Check if a broodling's mother can see any player.
@@ -63,7 +40,7 @@ function getMothersSightTarget(
     // Only applies to broodlings with a living mother
     if (unit.enemyType !== "broodling" || !unit.spawnedBy) return null;
 
-    const mother = unitsState.find(u => u.id === unit.spawnedBy);
+    const mother = getUnitById(unit.spawnedBy!);
     if (!mother || mother.hp <= 0) return null;
 
     const motherG = unitsRef[mother.id];
@@ -146,13 +123,12 @@ export interface TargetingContext {
  */
 export function validateCurrentTarget(
     currentTarget: number | null | undefined,
-    unitsState: Unit[],
     defeatedThisFrame: Set<number>
 ): { valid: boolean; targetUnit: Unit | undefined } {
     if (currentTarget === null || currentTarget === undefined) {
         return { valid: false, targetUnit: undefined };
     }
-    const targetUnit = unitsState.find(u => u.id === currentTarget);
+    const targetUnit = getUnitById(currentTarget);
     // Invalid if dead, defeated this frame, or submerged (kraken)
     const valid = targetUnit !== undefined &&
         isUnitAlive(targetUnit, defeatedThisFrame) &&
@@ -334,7 +310,6 @@ export function runTargetingPhase(ctx: TargetingContext): void {
     // Check if current target is still valid
     const { valid: targetStillValid } = validateCurrentTarget(
         g.userData.attackTarget,
-        ctx.unitsState,
         ctx.defeatedThisFrame
     );
 
@@ -414,12 +389,12 @@ export interface MovementTargetContext {
  * Priority: attack target position > path waypoint > current position (idle)
  */
 export function getMovementTarget(ctx: MovementTargetContext): { x: number; z: number; hasTarget: boolean } {
-    const { unit, g, unitsRef, unitsState, pathsRef } = ctx;
+    const { unit, g, unitsRef, pathsRef } = ctx;
 
     // Priority 1: If we have an attack target, move toward it
     if (g.userData.attackTarget !== null && g.userData.attackTarget !== undefined) {
         const targetG = unitsRef[g.userData.attackTarget];
-        const targetU = unitsState.find(u => u.id === g.userData.attackTarget);
+        const targetU = getUnitById(g.userData.attackTarget);
 
         if (targetG && targetU && targetU.hp > 0) {
             return { x: targetG.position.x, z: targetG.position.z, hasTarget: true };

@@ -36,6 +36,8 @@ export interface Skill {
     stunChance?: number;              // 0-100 percent chance to apply stun on hit
     selfDamage?: [number, number];    // Damage range to apply to caster (for Qi Focus)
     trapDamage?: [number, number];    // Damage dealt when trap triggers
+    lineWidth?: number;               // Width of line-shaped AOE (rectangle instead of circle)
+    chillChance?: number;             // 0-100 percent chance to apply chilled on hit
 
     // Cantrip properties
     isCantrip?: boolean;              // Uses charges instead of cooldowns, bypasses action cooldown
@@ -132,4 +134,18 @@ export interface FireballProjectile extends BaseProjectile {
     hitUnits: Set<number>;   // Track units already hit to avoid multi-hit
 }
 
-export type Projectile = BasicProjectile | AoeProjectile | MagicMissileProjectile | TrapProjectile | FireballProjectile;
+export interface PiercingProjectile extends BaseProjectile {
+    type: "piercing";
+    damage: [number, number];
+    damageType: DamageType;
+    startX: number;
+    startZ: number;
+    directionX: number;
+    directionZ: number;
+    maxDistance: number;
+    hitUnits: Set<number>;
+    chillChance: number;       // 0-100 percent chance to apply chilled on hit
+    attackerTeam: "player" | "enemy";
+}
+
+export type Projectile = BasicProjectile | AoeProjectile | MagicMissileProjectile | TrapProjectile | FireballProjectile | PiercingProjectile;

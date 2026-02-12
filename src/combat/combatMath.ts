@@ -3,8 +3,9 @@
 // =============================================================================
 
 import type { Unit, UnitData, EnemyStats, StatusEffect, StatusEffectType, DamageType } from "../core/types";
-import { POISON_DURATION, POISON_TICK_INTERVAL, POISON_DAMAGE_PER_TICK, SLOW_DURATION, BUFF_TICK_INTERVAL, COLORS, SLOW_COOLDOWN_MULT, SLOW_MOVE_MULT, DEFIANCE_COOLDOWN_MULT } from "../core/constants";
+import { POISON_DURATION, POISON_TICK_INTERVAL, POISON_DAMAGE_PER_TICK, SLOW_DURATION, BUFF_TICK_INTERVAL, COLORS, SLOW_COOLDOWN_MULT, SLOW_MOVE_MULT, DEFIANCE_COOLDOWN_MULT, SLEEP_MIN_DURATION, SLEEP_MAX_DURATION, CHILLED_DURATION, CHILLED_COOLDOWN_MULT, CHILLED_MOVE_MULT } from "../core/constants";
 import { getStrengthDamageBonus, getIntelligenceMagicDamageBonus, getFaithHolyDamageBonus, getDexterityCritChance, CRIT_MULTIPLIER } from "../game/statBonuses";
+import { normalizeAngle } from "../game/geometry";
 
 // =============================================================================
 // DISTANCE & POSITION UTILITIES
@@ -43,15 +44,8 @@ export function isBlockedByFrontShield(
     // Angle from target to attacker
     const attackAngle = Math.atan2(dx, dz);
 
-    // Calculate angle difference
-    let angleDiff = attackAngle - targetFacing;
-
-    // Normalize to -PI to PI
-    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-    while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-
     // If angle difference is within 90 degrees (PI/2), attack is from the front
-    return Math.abs(angleDiff) < Math.PI / 2;
+    return Math.abs(normalizeAngle(attackAngle - targetFacing)) < Math.PI / 2;
 }
 
 // =============================================================================
@@ -251,6 +245,78 @@ export function applySlowed(unit: Unit, sourceId: number, now: number): Unit {
 }
 
 /**
+ * Apply the chilled debuff to a unit (2x cooldowns, 0.5x move speed for 5s).
+ */
+export function applyChilled(unit: Unit, sourceId: number, now: number): Unit {
+    const existingEffects = unit.statusEffects || [];
+    const existingChilled = existingEffects.find(e => e.type === "chilled");
+
+    if (existingChilled) {
+        // Refresh existing chill
+        return {
+            ...unit,
+            statusEffects: existingEffects.map(e =>
+                e.type === "chilled"
+                    ? { ...e, duration: CHILLED_DURATION, timeSinceTick: 0, lastUpdateTime: now }
+                    : e
+            )
+        };
+    }
+
+    // Apply new chilled effect
+    const chilledEffect: StatusEffect = {
+        type: "chilled",
+        duration: CHILLED_DURATION,
+        tickInterval: BUFF_TICK_INTERVAL,
+        timeSinceTick: 0,
+        lastUpdateTime: now,
+        damagePerTick: 0,  // Chill doesn't deal damage
+        sourceId
+    };
+
+    return {
+        ...unit,
+        statusEffects: [...existingEffects, chilledEffect]
+    };
+}
+
+/**
+ * Apply sleep status to a unit. Duration is randomized between SLEEP_MIN_DURATION and SLEEP_MAX_DURATION.
+ * If already sleeping, refreshes the duration with a new random roll.
+ */
+export function applySleep(unit: Unit, sourceId: number, now: number): Unit {
+    const existingEffects = unit.statusEffects || [];
+    const duration = SLEEP_MIN_DURATION + Math.random() * (SLEEP_MAX_DURATION - SLEEP_MIN_DURATION);
+    const existingSleep = existingEffects.find(e => e.type === "sleep");
+
+    if (existingSleep) {
+        return {
+            ...unit,
+            statusEffects: existingEffects.map(e =>
+                e.type === "sleep"
+                    ? { ...e, duration, timeSinceTick: 0, lastUpdateTime: now }
+                    : e
+            )
+        };
+    }
+
+    const sleepEffect: StatusEffect = {
+        type: "sleep",
+        duration,
+        tickInterval: BUFF_TICK_INTERVAL,
+        timeSinceTick: 0,
+        lastUpdateTime: now,
+        damagePerTick: 0,
+        sourceId
+    };
+
+    return {
+        ...unit,
+        statusEffects: [...existingEffects, sleepEffect]
+    };
+}
+
+/**
  * Check if an attacker should apply slow based on their slow chance.
  */
 export function shouldApplySlow(attackerData: UnitData | EnemyStats): boolean {
@@ -278,6 +344,7 @@ export function getEffectiveArmor(unit: Unit, baseArmor: number): number {
 export function getCooldownMultiplier(unit: Unit): number {
     let mult = 1;
     if (hasStatusEffect(unit, "slowed")) mult *= SLOW_COOLDOWN_MULT;
+    if (hasStatusEffect(unit, "chilled")) mult *= CHILLED_COOLDOWN_MULT;
     if (hasStatusEffect(unit, "defiance")) mult *= DEFIANCE_COOLDOWN_MULT;
     return mult;
 }
@@ -338,7 +405,8 @@ export function getEffectiveSpeedMultiplier(unit: Unit, data: EnemyStats | UnitD
     if (hasStatusEffect(unit, "pinned")) return 0;
     const base = "moveSpeed" in data ? (data as EnemyStats).moveSpeed ?? 1 : 1;
     const slow = hasStatusEffect(unit, "slowed") ? SLOW_MOVE_MULT : 1;
-    return base * slow;
+    const chill = hasStatusEffect(unit, "chilled") ? CHILLED_MOVE_MULT : 1;
+    return base * slow * chill;
 }
 
 /**
@@ -545,18 +613,6 @@ export function checkEnemyDefenses(
         return "blockChance";
     }
     return "none";
-}
-
-/**
- * Create an HP tracker for handling multiple hits in the same frame.
- * Prevents stale React state from causing overkill when multiple sources deal damage simultaneously.
- */
-export function createHpTracker(units: Unit[]): Record<number, number> {
-    const tracker: Record<number, number> = {};
-    for (const u of units) {
-        tracker[u.id] = u.hp;
-    }
-    return tracker;
 }
 
 // =============================================================================

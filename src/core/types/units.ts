@@ -3,10 +3,10 @@
 // =============================================================================
 
 // Enemy type identifiers
-export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba" | "acid_slug" | "basilisk" | "bat" | "undead_knight" | "ancient_construct" | "feral_hound" | "corrupt_druid" | "skeleton_warrior" | "baby_kraken" | "kraken_tentacle" | "magma_imp" | "necromancer" | "skeleton_minion" | "chittering_crabling" | "spine_spitter";
+export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba" | "acid_slug" | "basilisk" | "bat" | "undead_knight" | "ancient_construct" | "feral_hound" | "corrupt_druid" | "skeleton_warrior" | "baby_kraken" | "kraken_tentacle" | "magma_imp" | "necromancer" | "skeleton_minion" | "chittering_crabling" | "spine_spitter" | "occultist_dreamwalker" | "occultist_firebreather" | "occultist_pygmy";
 
 // Status effect types
-export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed" | "qi_drain" | "energyShield" | "defiance" | "doom" | "invul";
+export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed" | "chilled" | "qi_drain" | "energyShield" | "defiance" | "doom" | "invul" | "sleep" | "sun_stance";
 
 export interface StatusEffect {
     type: StatusEffectType;
@@ -42,6 +42,8 @@ export interface Unit {
     exp?: number;         // Current experience points (player units only)
     stats?: CharacterStats;  // Allocated stat points (player units only)
     statPoints?: number;  // Unspent stat points (player units only)
+    skillPoints?: number;  // Unspent skill points (player units only)
+    learnedSkills?: string[];  // Names of learned skills (player units only)
     team: "player" | "enemy";
     enemyType?: EnemyType;  // Only set for enemies
     target: number | null;
@@ -166,6 +168,34 @@ export interface EnemyGlareSkill {
     stunDuration: number;    // ms stun applied on hit
 }
 
+export interface EnemySleepSkill {
+    name: string;
+    cooldown: number;        // ms between casts
+    range: number;           // Targeting range (how far caster can target)
+    radius: number;          // AoE radius around target position
+    accuracy: number;        // Hit chance per target (0-100)
+}
+
+export interface EnemyDreamEaterSkill {
+    name: string;
+    cooldown: number;        // ms between casts
+    range: number;           // Targeting range
+    damage: [number, number];
+    damageType: DamageType;
+}
+
+export interface EnemyBreathSkill {
+    name: string;
+    cooldown: number;        // ms between casts (starts after channel ends)
+    range: number;           // Max range to start breathing
+    coneAngle: number;       // Half-angle in radians
+    coneDistance: number;     // How far the cone extends
+    tickInterval: number;    // ms between damage ticks
+    damage: [number, number];
+    damageType: DamageType;
+    duration: number;        // ms channel duration
+}
+
 export interface EnemyStats {
     name: string;
     hp: number;
@@ -239,6 +269,12 @@ export interface EnemyStats {
     biteChance?: number;           // 0-100, percent chance to bite per attack
     biteDamage?: [number, number]; // Override damage range for bite
     biteCrit?: number;             // Override crit chance for bite
+    // Optional sleep skill - AoE sleep with hit chance per target
+    sleepSkill?: EnemySleepSkill;
+    // Optional dream eater skill - high damage nuke on sleeping targets
+    dreamEaterSkill?: EnemyDreamEaterSkill;
+    // Optional breath skill - sustained channeled cone attack (locks in place)
+    breathSkill?: EnemyBreathSkill;
 }
 
 // =============================================================================

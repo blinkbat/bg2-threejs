@@ -47,16 +47,26 @@ export function getDexterityCritChance(unit: Unit): number {
 /** Base crit damage multiplier (1.5x) */
 export const CRIT_MULTIPLIER = 1.5;
 
-/** +1 HP per vitality point */
+// Per-point stat allocation bonuses
+export const HP_PER_VITALITY = 1;
+export const MP_PER_INTELLIGENCE = 1;
+
+// Level-up grants
+export const LEVEL_UP_HP = 2;
+export const LEVEL_UP_MANA = 1;
+export const LEVEL_UP_STAT_POINTS = 5;
+export const LEVEL_UP_SKILL_POINTS = 1;
+
+/** +HP_PER_VITALITY HP per vitality point */
 export function getVitalityHpBonus(unit: Unit): number {
     const stats = getStats(unit);
-    return stats.vitality;
+    return stats.vitality * HP_PER_VITALITY;
 }
 
-/** +1 MP per intelligence point */
+/** +MP_PER_INTELLIGENCE MP per intelligence point */
 export function getIntelligenceMpBonus(unit: Unit): number {
     const stats = getStats(unit);
-    return stats.intelligence;
+    return stats.intelligence * MP_PER_INTELLIGENCE;
 }
 
 /** +1 elemental/chaos damage per 2 intelligence points */

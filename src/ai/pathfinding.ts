@@ -6,6 +6,17 @@ import { isWithinGrid } from "../game/geometry";
 import type { PathNode, Unit, UnitGroup } from "../core/types";
 
 // =============================================================================
+// NUMERIC KEY HELPER — eliminates string allocation in hot paths
+// =============================================================================
+// Stride must exceed the maximum grid dimension. 1024 is safe for all maps.
+const KEY_STRIDE = 1024;
+
+/** Pack (x, z) into a single number for use as a Map/Set key. */
+function cellKey(x: number, z: number): number {
+    return x * KEY_STRIDE + z;
+}
+
+// =============================================================================
 // DYNAMIC OBSTACLE MAP - Units treated as soft obstacles with extra cost
 // =============================================================================
 
@@ -17,10 +28,10 @@ const UNIT_AVOIDANCE_RADIUS = 1;
 const UNIT_AVOIDANCE_RADIUS_SQ = UNIT_AVOIDANCE_RADIUS * UNIT_AVOIDANCE_RADIUS;
 
 // Module-level state for dynamic obstacles (updated each frame before pathfinding)
-let dynamicCostMap: Map<string, number> = new Map();
+let dynamicCostMap: Map<number, number> = new Map();
 
 // Track last unit positions to avoid recomputing when nothing moved
-let lastUnitPositions: Map<number, string> = new Map();
+let lastUnitPositions: Map<number, number> = new Map();
 let dynamicObstaclesDirty = true;
 
 /**
@@ -35,14 +46,14 @@ export function updateDynamicObstacles(
 ): void {
     // Check if any unit has moved
     let needsUpdate = false;
-    const newPositions: Map<number, string> = new Map();
+    const newPositions: Map<number, number> = new Map();
 
     for (const unit of units) {
         if (unit.hp <= 0) continue;
         const g = unitsRef[unit.id];
         if (!g) continue;
 
-        const posKey = `${Math.floor(g.position.x)},${Math.floor(g.position.z)}`;
+        const posKey = cellKey(Math.floor(g.position.x), Math.floor(g.position.z));
         newPositions.set(unit.id, posKey);
 
         const oldPos = lastUnitPositions.get(unit.id);
@@ -88,7 +99,7 @@ export function updateDynamicObstacles(
                     // Higher cost for cells closer to unit center
                     const dist = Math.sqrt(distSq);
                     const cost = UNIT_PROXIMITY_COST * (1 - dist / (UNIT_AVOIDANCE_RADIUS + 1));
-                    const key = `${x},${z}`;
+                    const key = cellKey(x, z);
                     const existing = dynamicCostMap.get(key) || 0;
                     dynamicCostMap.set(key, Math.max(existing, cost));
                 }
@@ -109,7 +120,7 @@ export function invalidateDynamicObstacles(): void {
  * Get the extra traversal cost for a cell due to nearby units.
  */
 function getDynamicCost(x: number, z: number): number {
-    return dynamicCostMap.get(`${x},${z}`) || 0;
+    return dynamicCostMap.get(cellKey(x, z)) || 0;
 }
 
 // =============================================================================
@@ -184,20 +195,20 @@ export function findSpawnPositions(
     // Fallback: simple 3-wide grid (used for initial game load with no transition)
     const spacing = 1.5;
     const positions: { x: number; z: number }[] = [];
-    const usedCells = new Set<string>();
+    const usedCells = new Set<number>();
 
     for (let i = 0; i < count; i++) {
         const idealX = spawnX + (i % 3) * spacing - spacing;
         const idealZ = spawnZ + Math.floor(i / 3) * spacing;
 
         let found = false;
-        const cellX = Math.floor(idealX);
-        const cellZ = Math.floor(idealZ);
-        const cellKey = `${cellX},${cellZ}`;
+        const cx = Math.floor(idealX);
+        const cz = Math.floor(idealZ);
+        const ck = cellKey(cx, cz);
 
-        if (isPassable(cellX, cellZ) && !usedCells.has(cellKey)) {
+        if (isPassable(cx, cz) && !usedCells.has(ck)) {
             positions.push({ x: idealX, z: idealZ });
-            usedCells.add(cellKey);
+            usedCells.add(ck);
             found = true;
         }
 
@@ -208,9 +219,9 @@ export function findSpawnPositions(
                     if (found) break;
                     for (let dz = -radius; dz <= radius; dz++) {
                         if (Math.abs(dx) !== radius && Math.abs(dz) !== radius) continue;
-                        const checkX = cellX + dx;
-                        const checkZ = cellZ + dz;
-                        const key = `${checkX},${checkZ}`;
+                        const checkX = cx + dx;
+                        const checkZ = cz + dz;
+                        const key = cellKey(checkX, checkZ);
                         if (isPassable(checkX, checkZ) && !usedCells.has(key)) {
                             positions.push({ x: checkX + 0.5, z: checkZ + 0.5 });
                             usedCells.add(key);
@@ -357,23 +368,6 @@ function getNeighbors(x: number, z: number, diagonalCost: number, flying: boolea
     return neighbors;
 }
 
-/**
- * Binary search to find insertion index for a node in a sorted open list.
- * Returns the index where the node should be inserted to maintain sort order.
- */
-function binarySearchInsertIndex(open: PathNode[], f: number): number {
-    let low = 0, high = open.length;
-    while (low < high) {
-        const mid = (low + high) >>> 1;
-        if ((open[mid].g + open[mid].h) < f) {
-            low = mid + 1;
-        } else {
-            high = mid;
-        }
-    }
-    return low;
-}
-
 // =============================================================================
 // PATH CACHING - Avoid redundant A* calculations
 // =============================================================================
@@ -388,10 +382,11 @@ const PATH_CACHE_DURATION = 500;
 // Max cache entries to prevent memory bloat
 const PATH_CACHE_MAX_SIZE = 100;
 
-const pathCache: Map<string, CachedPath> = new Map();
+const pathCache: Map<number, CachedPath> = new Map();
 
-function getPathCacheKey(sx: number, sz: number, ex: number, ez: number): string {
-    return `${sx},${sz}->${ex},${ez}`;
+function getPathCacheKey(sx: number, sz: number, ex: number, ez: number): number {
+    // Pack 4 coordinates into a single number: (sx * K³ + sz * K² + ex * K + ez)
+    return ((sx * KEY_STRIDE + sz) * KEY_STRIDE + ex) * KEY_STRIDE + ez;
 }
 
 function getCachedPath(sx: number, sz: number, ex: number, ez: number, now: number): { x: number; z: number }[] | null {
@@ -423,98 +418,101 @@ export function clearPathCache(): void {
 }
 
 // =============================================================================
-// OPTIMIZED OPEN LIST - O(1) index lookup for updates
+// OPTIMIZED OPEN LIST - Binary min-heap with O(1) lookup
 // =============================================================================
 
 /**
- * Managed open list that maintains both sorted array and index map.
- * Provides O(1) lookup for updates instead of O(n) indexOf.
+ * Binary min-heap ordered by f-score with O(1) has/get via indexMap.
+ * insert/shift/update are all O(log n) instead of O(n).
  */
 class OpenList {
     private nodes: PathNode[] = [];
-    private indexMap: Map<string, number> = new Map();
-
-    private key(x: number, z: number): string {
-        return `${x},${z}`;
-    }
+    private indexMap: Map<number, number> = new Map();
 
     get length(): number {
         return this.nodes.length;
     }
 
-    /**
-     * Insert a node maintaining sorted order by f-score.
-     */
-    insert(node: PathNode): void {
-        const f = node.g + node.h;
-        const insertIdx = binarySearchInsertIndex(this.nodes, f);
-
-        // Update indices for all nodes that will shift
-        for (let i = insertIdx; i < this.nodes.length; i++) {
-            const n = this.nodes[i];
-            this.indexMap.set(this.key(n.x, n.z), i + 1);
-        }
-
-        this.nodes.splice(insertIdx, 0, node);
-        this.indexMap.set(this.key(node.x, node.z), insertIdx);
+    private swap(i: number, j: number): void {
+        const a = this.nodes[i], b = this.nodes[j];
+        this.nodes[i] = b;
+        this.nodes[j] = a;
+        this.indexMap.set(cellKey(b.x, b.z), i);
+        this.indexMap.set(cellKey(a.x, a.z), j);
     }
 
-    /**
-     * Remove and return the node with lowest f-score.
-     */
+    private bubbleUp(idx: number): void {
+        while (idx > 0) {
+            const parent = (idx - 1) >> 1;
+            if (this.nodes[idx].g + this.nodes[idx].h < this.nodes[parent].g + this.nodes[parent].h) {
+                this.swap(idx, parent);
+                idx = parent;
+            } else {
+                break;
+            }
+        }
+    }
+
+    private bubbleDown(idx: number): void {
+        const n = this.nodes.length;
+        while (true) {
+            let smallest = idx;
+            const left = 2 * idx + 1;
+            const right = 2 * idx + 2;
+            if (left < n && this.nodes[left].g + this.nodes[left].h < this.nodes[smallest].g + this.nodes[smallest].h) {
+                smallest = left;
+            }
+            if (right < n && this.nodes[right].g + this.nodes[right].h < this.nodes[smallest].g + this.nodes[smallest].h) {
+                smallest = right;
+            }
+            if (smallest !== idx) {
+                this.swap(idx, smallest);
+                idx = smallest;
+            } else {
+                break;
+            }
+        }
+    }
+
+    insert(node: PathNode): void {
+        const idx = this.nodes.length;
+        this.nodes.push(node);
+        this.indexMap.set(cellKey(node.x, node.z), idx);
+        this.bubbleUp(idx);
+    }
+
     shift(): PathNode | undefined {
         if (this.nodes.length === 0) return undefined;
+        const min = this.nodes[0];
+        this.indexMap.delete(cellKey(min.x, min.z));
 
-        const node = this.nodes.shift()!;
-        this.indexMap.delete(this.key(node.x, node.z));
-
-        // Update indices for remaining nodes
-        for (let i = 0; i < this.nodes.length; i++) {
-            const n = this.nodes[i];
-            this.indexMap.set(this.key(n.x, n.z), i);
+        const last = this.nodes.pop()!;
+        if (this.nodes.length > 0) {
+            this.nodes[0] = last;
+            this.indexMap.set(cellKey(last.x, last.z), 0);
+            this.bubbleDown(0);
         }
-
-        return node;
+        return min;
     }
 
-    /**
-     * Get node by coordinates (O(1)).
-     */
     get(x: number, z: number): PathNode | undefined {
-        const idx = this.indexMap.get(this.key(x, z));
+        const idx = this.indexMap.get(cellKey(x, z));
         return idx !== undefined ? this.nodes[idx] : undefined;
     }
 
-    /**
-     * Check if coordinates exist in list (O(1)).
-     */
     has(x: number, z: number): boolean {
-        return this.indexMap.has(this.key(x, z));
+        return this.indexMap.has(cellKey(x, z));
     }
 
-    /**
-     * Update a node's g-score and re-sort (O(n) for splice, but O(1) lookup).
-     */
     update(node: PathNode, newG: number, newParent: PathNode): void {
-        const k = this.key(node.x, node.z);
-        const oldIdx = this.indexMap.get(k);
-        if (oldIdx === undefined) return;
+        const k = cellKey(node.x, node.z);
+        const idx = this.indexMap.get(k);
+        if (idx === undefined) return;
 
-        // Remove from current position
-        this.nodes.splice(oldIdx, 1);
-
-        // Update indices for nodes that shifted
-        for (let i = oldIdx; i < this.nodes.length; i++) {
-            const n = this.nodes[i];
-            this.indexMap.set(this.key(n.x, n.z), i);
-        }
-
-        // Update node values
         node.g = newG;
         node.parent = newParent;
-
-        // Re-insert in sorted position
-        this.insert(node);
+        // g decreased → f decreased → bubble up
+        this.bubbleUp(idx);
     }
 }
 
@@ -556,12 +554,10 @@ export function findPath(startX: number, startZ: number, endX: number, endZ: num
 
     const open = new OpenList();
     open.insert(startNode);
-    const closed = new Set<string>();
-    const key = (x: number, z: number) => `${x},${z}`;
+    const closed = new Set<number>();
 
     while (open.length > 0) {
         const current = open.shift()!;
-        const currentKey = key(current.x, current.z);
 
         if (current.x === ex && current.z === ez) {
             const path: { x: number; z: number }[] = [];
@@ -577,14 +573,13 @@ export function findPath(startX: number, startZ: number, endX: number, endZ: num
             return path;
         }
 
-        closed.add(currentKey);
+        closed.add(cellKey(current.x, current.z));
 
         // Get valid neighbors (handles bounds, blocking, and corner-cutting)
         const neighbors = getNeighbors(current.x, current.z, ASTAR_DIAGONAL_COST, flying);
 
         for (const n of neighbors) {
-            const nKey = key(n.x, n.z);
-            if (closed.has(nKey)) continue;
+            if (closed.has(cellKey(n.x, n.z))) continue;
 
             const g = current.g + n.cost;
             const existing = open.get(n.x, n.z);

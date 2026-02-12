@@ -22,7 +22,7 @@ export const SKILLS: Record<string, Skill> = {
     energyShield: {
         name: "Energy Shield",
         description: "Surround yourself with a protective barrier that absorbs up to 30 damage. Chaos damage penetrates twice as effectively.",
-        flavor: "The exile's final lesson: even the void can be worn as armor.",
+        flavor: "The shimmering veil of a wizard's shield is well-known among the enemies of Tel's Vale.",
         manaCost: 18,
         cooldown: 2500,
         type: "energy_shield",
@@ -222,6 +222,47 @@ export const SKILLS: Record<string, Skill> = {
         manaRange: [10, 14],  // Mana to give
         selfDamage: [20, 30],  // HP cost to caster over time
         damageType: "physical"
+    },
+    holyStrike: {
+        name: "Holy Strike",
+        description: "Summon a blade of radiant light that cuts through enemies in a line.",
+        flavor: "The warrior found the darkness itself akin to the flesh of the undead -- both were cleaved easily.",
+        manaCost: 12,
+        cooldown: 5000,
+        type: "damage",
+        targetType: "aoe",
+        range: 6,
+        aoeRadius: 6,
+        damageRange: [10, 16],
+        damageType: "holy",
+        lineWidth: 0.8,
+    },
+    sunStance: {
+        name: "Sun Stance",
+        description: "Channel inner fire, restoring health and wreathing your attacks in flame for 20 seconds.",
+        flavor: "\"The sun burns within. Let it out.\" - Master Shen",
+        manaCost: 8,
+        cooldown: 4000,
+        type: "buff",
+        targetType: "self",
+        range: 0,
+        duration: 20000,
+        healRange: [4, 6],
+        damageType: "fire"
+    },
+    glacialWhorl: {
+        name: "Glacial Whorl",
+        description: "Launch a slow-moving shard of ice that pierces through all enemies, chilling those it touches.",
+        flavor: "The cold does not kill quickly — it simply never stops.",
+        manaCost: 12,
+        cooldown: 6000,
+        type: "damage",
+        targetType: "aoe",
+        range: 12,
+        damageRange: [2, 5],
+        damageType: "cold",
+        chillChance: 60,
+        projectileColor: "#5dade2"
     },
     dodge: {
         name: "Dodge",

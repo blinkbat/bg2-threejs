@@ -221,6 +221,25 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     // Floor types: s=sand, d=dirt, g=grass, w=water, t=stone, .=default (gray)
     let waterMesh: THREE.Mesh | null = null;
 
+    // Shared geometry for all 1x1 floor/terrain tiles (hundreds of tiles, one geometry)
+    const tileGeo = new THREE.PlaneGeometry(1, 1);
+
+    // Material pool: reuse materials for tiles with the same color (avoids ~1600 unique instances)
+    const floorMatPool: Record<string, THREE.MeshStandardMaterial> = {};
+    const waterMatPool: Record<string, THREE.MeshStandardMaterial> = {};
+    function getFloorMat(color: string): THREE.MeshStandardMaterial {
+        if (!floorMatPool[color]) {
+            floorMatPool[color] = new THREE.MeshStandardMaterial({ color, metalness: 0.2, roughness: 0.9 });
+        }
+        return floorMatPool[color];
+    }
+    function getWaterMat(color: string): THREE.MeshStandardMaterial {
+        if (!waterMatPool[color]) {
+            waterMatPool[color] = new THREE.MeshStandardMaterial({ color, metalness: 0.3, roughness: 0.4 });
+        }
+        return waterMatPool[color];
+    }
+
     const floorColors: Record<string, string> = {
         "s": "#c2b280",  // Sand - tan
         "S": "#d4c490",  // Light sand
@@ -249,27 +268,18 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
 
                 if (isWater) {
                     // Water tiles - no rounding
-                    const floorMat = new THREE.MeshStandardMaterial({
-                        color,
-                        metalness: 0.3,
-                        roughness: 0.4,
-                    });
-                    tile = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), floorMat);
+                    tile = new THREE.Mesh(tileGeo, getWaterMat(color));
                 } else {
                     // Land gets outer corner rounding at edges
                     const corners = getFloorCornerFlags(area.floor, x, z);
                     const hasRounding = corners.some(c => c > 0);
 
                     if (hasRounding) {
+                        // Rounded tiles need unique materials (per-tile shader uniforms)
                         const roundedMat = createRoundedFloorMaterial(color, corners, 0.3);
-                        tile = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), roundedMat);
+                        tile = new THREE.Mesh(tileGeo, roundedMat);
                     } else {
-                        const floorMat = new THREE.MeshStandardMaterial({
-                            color,
-                            metalness: 0.2,
-                            roughness: 0.9,
-                        });
-                        tile = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), floorMat);
+                        tile = new THREE.Mesh(tileGeo, getFloorMat(color));
                     }
                 }
 
@@ -299,19 +309,13 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
             for (let x = 0; x < (area.terrain[z]?.length ?? 0); x++) {
                 const char = area.terrain[z][x];
                 if (char === "~") {
-                    const tile = new THREE.Mesh(
-                        new THREE.PlaneGeometry(1, 1),
-                        lavaMat
-                    );
+                    const tile = new THREE.Mesh(tileGeo, lavaMat);
                     tile.rotation.x = -Math.PI / 2;
                     tile.position.set(x + 0.5, 0.002, z + 0.5);
                     tile.name = "lava";
                     scene.add(tile);
                 } else if (char === "w") {
-                    const tile = new THREE.Mesh(
-                        new THREE.PlaneGeometry(1, 1),
-                        terrainWaterMat
-                    );
+                    const tile = new THREE.Mesh(tileGeo, terrainWaterMat);
                     tile.rotation.x = -Math.PI / 2;
                     tile.position.set(x + 0.5, 0.002, z + 0.5);
                     tile.name = "ground";
@@ -360,12 +364,17 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     });
 
     // Treasure chests from area data
+    // Shared geometries for all chests
+    const chestBodyGeo = new THREE.BoxGeometry(0.9, 0.5, 0.6);
+    const chestLidGeo = new THREE.BoxGeometry(0.95, 0.25, 0.65);
+    const chestBuckleGeo = new THREE.BoxGeometry(0.2, 0.2, 0.08);
+
     const chestMeshes: ChestMeshData[] = [];
     area.chests.forEach((chest, index) => {
         const chestGroup = new THREE.Group();
         // Chest body (main box) - dark wood
         const chestBody = new THREE.Mesh(
-            new THREE.BoxGeometry(0.9, 0.5, 0.6),
+            chestBodyGeo,
             new THREE.MeshStandardMaterial({ color: "#5c3a21", metalness: 0.2, roughness: 0.8 })
         );
         chestBody.position.y = 0.25;
@@ -378,7 +387,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
 
         // Chest lid - offset from pivot so it rotates from back edge
         const chestLid = new THREE.Mesh(
-            new THREE.BoxGeometry(0.95, 0.25, 0.65),
+            chestLidGeo,
             new THREE.MeshStandardMaterial({ color: "#6b4423", metalness: 0.2, roughness: 0.7 })
         );
         chestLid.position.set(0, 0.125, 0.325);  // Offset from pivot point
@@ -386,7 +395,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
 
         // Gold buckle/clasp on front - highly metallic brass/gold
         const buckle = new THREE.Mesh(
-            new THREE.BoxGeometry(0.2, 0.2, 0.08),
+            chestBuckleGeo,
             new THREE.MeshStandardMaterial({ color: "#d4af37", emissive: "#8b7500", emissiveIntensity: 0.6, metalness: 1.0, roughness: 0.05 })
         );
         buckle.position.set(0, 0.4, 0.32);
@@ -420,44 +429,85 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     // Tree size multiplier - forest trees are larger
     const treeSizeMultiplier = area.id === "forest" ? 1.5 : 1.0;
 
+    // Palm-specific colors
+    const palmFoliageColors = ["#2E8B57", "#3CB371", "#228B22", "#4CAF50"];
+
     area.trees.forEach((tree, i) => {
         const scale = tree.size * treeSizeMultiplier;
+        const treeType = tree.type ?? "pine";
 
         // Taller trees are skinnier - use inverse relationship with randomness
         // skinnyFactor ranges from ~0.6 (for large trees) to ~1.0 (for small trees)
         const randomVariance = 0.85 + Math.random() * 0.3;  // 0.85-1.15 random multiplier
         const skinnyFactor = Math.min(1.0, (1.0 / Math.sqrt(scale)) * randomVariance);
 
-        // Trunk - thick brown cylinder (skinnier for tall trees)
-        const trunkHeight = 1.2 * scale;
-        const trunkRadius = 0.15 * scale * skinnyFactor;
+        let trunkHeight: number;
+        let trunkRadius: number;
+        let trunkBottomRadius: number;
+        let foliageRadius: number;
+        let foliageHeight: number;
+
+        if (treeType === "palm") {
+            // Palm: tall thin trunk, small round foliage cluster at top
+            trunkHeight = 1.8 * scale;
+            trunkRadius = 0.08 * scale;
+            trunkBottomRadius = trunkRadius * 1.5;
+            foliageRadius = 0.5 * scale;
+            foliageHeight = 2 * foliageRadius;  // Sphere diameter for fog-of-war
+        } else if (treeType === "oak") {
+            // Oak: shorter thick trunk, wide round bushy foliage
+            trunkHeight = 0.8 * scale;
+            trunkRadius = 0.2 * scale * skinnyFactor;
+            trunkBottomRadius = trunkRadius * 1.4;
+            foliageRadius = 1.0 * scale * skinnyFactor;
+            foliageHeight = 2 * foliageRadius;  // Sphere diameter for fog-of-war
+        } else {
+            // Pine (default): tall pyramidal cone
+            trunkHeight = 1.2 * scale;
+            trunkRadius = 0.15 * scale * skinnyFactor;
+            trunkBottomRadius = trunkRadius * 1.3;
+            foliageRadius = 0.8 * scale * skinnyFactor;
+            foliageHeight = 2.5 * scale;
+        }
+
         const trunkColor = trunkColors[i % trunkColors.length];
         const trunk = new THREE.Mesh(
-            new THREE.CylinderGeometry(trunkRadius, trunkRadius * 1.3, trunkHeight, 8),
+            new THREE.CylinderGeometry(trunkRadius, trunkBottomRadius, trunkHeight, 8),
             new THREE.MeshStandardMaterial({ color: trunkColor, metalness: 0.0, roughness: 1.0, transparent: true, opacity: 1 })
         );
         trunk.position.set(tree.x, trunkHeight / 2, tree.z);
         trunk.name = "tree";
-        // Store full dimensions for fog height capping
         trunk.userData.fullHeight = trunkHeight;
         trunk.userData.treeX = tree.x;
         trunk.userData.treeZ = tree.z;
         trunk.userData.isTrunk = true;
         scene.add(trunk);
 
-        // Foliage - tall pyramidal cone with varied green colors (skinnier for tall trees)
-        const foliageRadius = 0.8 * scale * skinnyFactor;
-        const foliageHeight = 2.5 * scale;
-        const foliageColor = foliageColors[i % foliageColors.length];
+        // Foliage geometry depends on tree type
+        const foliageColor = treeType === "palm"
+            ? palmFoliageColors[i % palmFoliageColors.length]
+            : foliageColors[i % foliageColors.length];
+
+        let foliageGeometry: THREE.BufferGeometry;
+        if (treeType === "palm") {
+            foliageGeometry = new THREE.SphereGeometry(foliageRadius, 8, 6);
+        } else if (treeType === "oak") {
+            foliageGeometry = new THREE.SphereGeometry(foliageRadius, 8, 6);
+        } else {
+            foliageGeometry = new THREE.ConeGeometry(foliageRadius, foliageHeight, 8);
+        }
+
         const foliage = new THREE.Mesh(
-            new THREE.ConeGeometry(foliageRadius, foliageHeight, 8),
+            foliageGeometry,
             new THREE.MeshStandardMaterial({ color: foliageColor, metalness: 0.0, roughness: 0.8, transparent: true, opacity: 1 })
         );
-        // Store full Y position for restoration
-        const fullFoliageY = trunkHeight + foliageHeight / 2;
+        const fullFoliageY = treeType === "palm"
+            ? trunkHeight + foliageRadius          // Sphere sits on top of trunk
+            : treeType === "oak"
+                ? trunkHeight + foliageRadius * 0.7 // Sphere engulfs top of trunk
+                : trunkHeight + foliageHeight / 2;  // Cone base at trunk top
         foliage.position.set(tree.x, fullFoliageY, tree.z);
         foliage.name = "tree";
-        // Store full dimensions for fog height capping
         foliage.userData.fullY = fullFoliageY;
         foliage.userData.fullHeight = foliageHeight;
         foliage.userData.fullRadius = foliageRadius;
@@ -465,8 +515,8 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         foliage.userData.treeZ = tree.z;
         foliage.userData.isFoliage = true;
 
-        // Tree shadow - simple dark circle on ground
-        const shadowRadius = foliageRadius * 0.9;
+        // Tree shadow
+        const shadowRadius = (treeType === "pine" ? foliageRadius : foliageRadius * 1.1) * 0.9;
         const treeShadow = new THREE.Mesh(
             new THREE.CircleGeometry(shadowRadius, 16),
             new THREE.MeshBasicMaterial({ color: "#000000", transparent: true, opacity: 0.25, side: THREE.DoubleSide })
@@ -478,7 +528,6 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         foliage.userData.fogY = FOG_Y;
         scene.add(foliage);
 
-        // Track both trunk and foliage for transparency updates
         treeMeshes.push(trunk);
         treeMeshes.push(foliage);
     });
@@ -1019,7 +1068,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     // Range indicator
     const rangeIndicator = new THREE.Mesh(
         new THREE.RingGeometry(0.1, 10, 64),
-        new THREE.MeshBasicMaterial({ color: "#3b82f6", side: THREE.DoubleSide, transparent: true, opacity: 0.2 })
+        new THREE.MeshBasicMaterial({ color: "#3b82f6", side: THREE.DoubleSide, transparent: true, opacity: 0.25 })
     );
     rangeIndicator.rotation.x = -Math.PI / 2;
     rangeIndicator.position.y = 0.02;
@@ -1030,7 +1079,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     // AOE indicator
     const aoeIndicator = new THREE.Mesh(
         new THREE.RingGeometry(0.1, 2.5, 32),
-        new THREE.MeshBasicMaterial({ color: "#ff4400", side: THREE.DoubleSide, transparent: true, opacity: 0.3 })
+        new THREE.MeshBasicMaterial({ color: "#ff4400", side: THREE.DoubleSide, transparent: true, opacity: 0.4 })
     );
     aoeIndicator.rotation.x = -Math.PI / 2;
     aoeIndicator.position.y = 0.03;

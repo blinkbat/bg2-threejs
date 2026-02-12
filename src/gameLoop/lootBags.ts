@@ -5,6 +5,7 @@
 import * as THREE from "three";
 import type { LootBag } from "../core/types";
 import { getGameTime } from "../core/gameClock";
+import { LOOT_BAG_DROP_HEIGHT, LOOT_BAG_BOUNCE_DURATION, LOOT_BAG_DROP_PHASE, LOOT_BAG_BOUNCE_HEIGHT } from "../core/constants";
 
 // =============================================================================
 // LOOT BAG ID TRACKING
@@ -92,10 +93,10 @@ export function spawnLootBag(
     scene.add(mesh);
 
     // Add a small bounce animation on spawn
-    const startY = 1.5;
+    const startY = LOOT_BAG_DROP_HEIGHT;
     const endY = 0;
     const startTime = getGameTime();
-    const duration = 500;
+    const duration = LOOT_BAG_BOUNCE_DURATION;
 
     const animate = () => {
         const elapsed = getGameTime() - startTime;
@@ -103,14 +104,14 @@ export function spawnLootBag(
 
         // Bounce easing - cubic out with bounce
         let y: number;
-        if (progress < 0.7) {
+        if (progress < LOOT_BAG_DROP_PHASE) {
             // Initial drop with ease-in
-            const t = progress / 0.7;
+            const t = progress / LOOT_BAG_DROP_PHASE;
             y = startY + (endY - startY) * (t * t);
         } else {
             // Small bounce
-            const bounceT = (progress - 0.7) / 0.3;
-            const bounceHeight = 0.15;
+            const bounceT = (progress - LOOT_BAG_DROP_PHASE) / (1 - LOOT_BAG_DROP_PHASE);
+            const bounceHeight = LOOT_BAG_BOUNCE_HEIGHT;
             y = endY + Math.sin(bounceT * Math.PI) * bounceHeight * (1 - bounceT);
         }
         mesh.position.y = y;

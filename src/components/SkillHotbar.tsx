@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import Tippy from "@tippyjs/react";
 import type { Unit, Skill } from "../core/types";
-import { getAllSkills } from "../game/playerUnits";
+import { getAllSkills, getAvailableSkills } from "../game/playerUnits";
 import { getSkillColorClass, getSkillBorderColor } from "../core/constants";
 import type { HotbarAssignments } from "../hooks/hotbarStorage";
 
@@ -32,7 +32,7 @@ interface SkillSelectorProps {
 }
 
 function SkillSelector({ unit, slotIndex, currentSkill, onSelect, onClose }: SkillSelectorProps) {
-    const skills = getAllSkills(unit.id);
+    const skills = getAllSkills(unit.id, unit);
 
     return createPortal(
         <div className="skill-selector-backdrop" onClick={onClose}>
@@ -96,6 +96,7 @@ interface HotbarSlotProps {
     cooldownRemaining: number;
     hasManaForSkill: boolean;
     usesLeft?: number;
+    locked?: boolean;
 }
 
 function HotbarSlot({
@@ -107,13 +108,14 @@ function HotbarSlot({
     cooldownPct,
     cooldownRemaining,
     hasManaForSkill,
-    usesLeft
+    usesLeft,
+    locked
 }: HotbarSlotProps) {
     const isEmpty = !skill;
     const isCantrip = skill?.isCantrip ?? false;
     const noUsesLeft = isCantrip && usesLeft !== undefined && usesLeft <= 0;
-    const canClick = skill && hasManaForSkill && !noUsesLeft && unit.hp > 0;
-    const onCooldown = cooldownPct > 0;
+    const canClick = skill && !locked && hasManaForSkill && !noUsesLeft && unit.hp > 0;
+    const onCooldown = !locked && cooldownPct > 0;
 
     const handleContextMenu = (e: React.MouseEvent) => {
         e.preventDefault();
@@ -142,7 +144,13 @@ function HotbarSlot({
 
     return (
         <Tippy
-            content={skill ? (
+            content={locked && skill ? (
+                <div className="hotbar-tooltip">
+                    <div className="hotbar-tooltip-name">{skill.name}</div>
+                    <div className="hotbar-tooltip-hint" style={{ color: "#f59e0b" }}>Not yet learned</div>
+                    <div className="hotbar-tooltip-hint">Right-click to change</div>
+                </div>
+            ) : skill ? (
                 <div className="hotbar-tooltip">
                     <div className="hotbar-tooltip-name">{skill.name}</div>
                     {skill.manaCost > 0 && <div className="hotbar-tooltip-cost">{skill.manaCost} MP</div>}
@@ -210,7 +218,8 @@ export function SkillHotbar({
     }, [paused]);
 
     const displayTime = Date.now();
-    const allSkills = getAllSkills(unit.id);
+    const allSkills = getAllSkills(unit.id, unit);
+    const availableSkills = getAvailableSkills(unit.id);
 
     // Get slot assignments for this unit (default to 5 empty slots)
     const slots = hotbarAssignments[unit.id] || [null, null, null, null, null];
@@ -218,7 +227,11 @@ export function SkillHotbar({
     return (
         <div className="skill-hotbar" onClick={e => e.stopPropagation()}>
             {slots.map((skillName, index) => {
-                const skill = skillName ? allSkills.find(s => s.name === skillName) || null : null;
+                const learnedSkill = skillName ? allSkills.find(s => s.name === skillName) || null : null;
+                // If not learned, check if it exists as an available (unlearned) skill
+                const lockedSkill = !learnedSkill && skillName ? availableSkills.find(s => s.name === skillName) || null : null;
+                const skill = learnedSkill || lockedSkill;
+                const isLocked = !!lockedSkill;
 
                 // Cooldown calculation
                 const cooldownKey = skill ? `${unit.id}-${skill.name}` : "";
@@ -228,7 +241,7 @@ export function SkillHotbar({
                 const onCooldown = skillCooldownEnd > displayTime;
                 const cooldownRemaining = onCooldown ? Math.ceil((skillCooldownEnd - displayTime) / 1000) : 0;
                 const cooldownPct = onCooldown ? ((skillCooldownEnd - displayTime) / cooldownDuration) * 100 : 0;
-                const hasManaForSkill = skill ? (unit.mana ?? 0) >= skill.manaCost : false;
+                const hasManaForSkill = skill && !isLocked ? (unit.mana ?? 0) >= skill.manaCost : false;
                 const usesLeft = skill?.isCantrip ? (unit.cantripUses?.[skill.name] ?? 0) : undefined;
 
                 return (
@@ -243,6 +256,7 @@ export function SkillHotbar({
                         cooldownRemaining={cooldownRemaining}
                         hasManaForSkill={hasManaForSkill}
                         usesLeft={usesLeft}
+                        locked={isLocked}
                     />
                 );
             })}

@@ -4,6 +4,7 @@
 
 import { getAllAreaIds } from "../game/areas";
 import type { EnemyType } from "../core/types";
+import type { TreeType } from "../game/areas/types";
 import { ENEMY_STATS } from "../game/enemyStats";
 import type { Layer, DecorationDef } from "./types";
 import type { CSSProperties } from "react";
@@ -30,6 +31,7 @@ export interface BrushDef {
 export interface PropBrushDef extends BrushDef {
     decorationType?: DecorationDef["type"];
     isTree?: boolean;
+    treeType?: TreeType;
 }
 
 export const GEOMETRY_BRUSHES: BrushDef[] = [
@@ -60,7 +62,9 @@ export const FLOOR_BRUSHES: BrushDef[] = [
 
 export const PROP_BRUSHES: PropBrushDef[] = [
     { char: ".", label: "Empty", color: "" },
-    { char: "T", label: "Tree", color: "#2a5", isTree: true },
+    { char: "T", label: "Pine", color: "#2a5", isTree: true, treeType: "pine" },
+    { char: "P", label: "Palm", color: "#4a6", isTree: true, treeType: "palm" },
+    { char: "O", label: "Oak", color: "#3a4", isTree: true, treeType: "oak" },
     { char: "C", label: "Column", color: "#888", decorationType: "column" },
     { char: "c", label: "Broken Col", color: "#888", decorationType: "broken_column" },
     { char: "W", label: "Broken Wall", color: "#665", decorationType: "broken_wall" },
@@ -120,6 +124,10 @@ export const PROP_TYPE_TO_CHAR: Map<string, string> = new Map();
 export const PROP_CHAR_TO_TYPE: Map<string, DecorationDef["type"]> = new Map();
 /** Prop layer: chars that represent trees (not decorations) */
 export const PROP_TREE_CHARS: Set<string> = new Set();
+/** Prop layer: grid char → tree type (for extracting tree type from grid) */
+export const PROP_CHAR_TO_TREE_TYPE: Map<string, TreeType> = new Map();
+/** Prop layer: tree type → grid char (for writing tree type to grid) */
+export const PROP_TREE_TYPE_TO_CHAR: Map<TreeType, string> = new Map();
 
 for (const brush of PROP_BRUSHES) {
     if (brush.decorationType) {
@@ -128,6 +136,10 @@ for (const brush of PROP_BRUSHES) {
     }
     if (brush.isTree) {
         PROP_TREE_CHARS.add(brush.char);
+        if (brush.treeType) {
+            PROP_CHAR_TO_TREE_TYPE.set(brush.char, brush.treeType);
+            PROP_TREE_TYPE_TO_CHAR.set(brush.treeType, brush.char);
+        }
     }
 }
 

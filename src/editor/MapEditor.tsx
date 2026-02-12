@@ -7,7 +7,7 @@ import { areaDataToText } from "./areaTextFormat";
 
 // Editor modules
 import type { Tool, Layer, MapMetadata, EntityDef, TreeDef, DecorationDef, EditorSnapshot } from "./types";
-import { getAvailableAreaIds, BASE_CELL_SIZE, MAX_HISTORY, LAYER_COLORS, LAYER_BRUSHES, PROP_TYPE_TO_CHAR, PROP_CHAR_TO_TYPE, PROP_TREE_CHARS } from "./constants";
+import { getAvailableAreaIds, BASE_CELL_SIZE, MAX_HISTORY, LAYER_COLORS, LAYER_BRUSHES, PROP_TYPE_TO_CHAR, PROP_CHAR_TO_TYPE, PROP_TREE_CHARS, PROP_CHAR_TO_TREE_TYPE, PROP_TREE_TYPE_TO_CHAR } from "./constants";
 import { registerAreaFromText } from "../game/areas";
 import { EntityEditPopup, TreeEditPopup, DecorationEditPopup } from "./popups";
 import { ConnectionsPanel } from "./panels";
@@ -643,7 +643,7 @@ export function MapEditor() {
         setEntitiesLayer(newEntities);
 
         // Store detailed data that can't be shown in grid
-        setTrees(area.trees.map(t => ({ x: t.x, z: t.z, size: t.size })));
+        setTrees(area.trees.map(t => ({ x: t.x, z: t.z, size: t.size, type: t.type })));
         setDecorations((area.decorations ?? []).map(d => ({ x: d.x, z: d.z, type: d.type, rotation: d.rotation, size: d.size })));
 
         // Build entity definitions
@@ -752,9 +752,9 @@ export function MapEditor() {
         // Extract trees and decorations from props layer, merging with detailed state for metadata
         const gridProps = extractPropsFromLayer(propsLayer);
         const mergedTrees: TreeLocation[] = gridProps.trees.map(gt => {
-            // Find matching tree in state for metadata (size)
+            // Find matching tree in state for metadata (size), grid-derived type wins
             const stateTree = trees.find(t => Math.floor(t.x) === gt.x && Math.floor(t.z) === gt.z);
-            return stateTree ? { ...stateTree } : { x: gt.x, z: gt.z, size: 1.0 };
+            return stateTree ? { ...stateTree, type: gt.type } : { x: gt.x, z: gt.z, size: 1.0, type: gt.type };
         });
         const mergedDecorations: Decoration[] = gridProps.decorations.map(gd => {
             // Find matching decoration in state for metadata (rotation, size)
@@ -1297,7 +1297,9 @@ function computePropsFromArea(area: AreaData, width: number, height: number): st
     for (const tree of area.trees) {
         const x = Math.floor(tree.x);
         const z = Math.floor(tree.z);
-        if (x >= 0 && x < width && z >= 0 && z < height) grid[z][x] = "T";
+        if (x >= 0 && x < width && z >= 0 && z < height) {
+            grid[z][x] = PROP_TREE_TYPE_TO_CHAR.get(tree.type ?? "pine") ?? "T";
+        }
     }
 
     if (area.decorations) {
@@ -1378,7 +1380,7 @@ function extractPropsFromLayer(props: string[][]): { trees: TreeLocation[]; deco
         for (let x = 0; x < props[z].length; x++) {
             const char = props[z][x];
             if (PROP_TREE_CHARS.has(char)) {
-                trees.push({ x, z, size: 1.0 });
+                trees.push({ x, z, size: 1.0, type: PROP_CHAR_TO_TREE_TYPE.get(char) });
             } else {
                 const decType = PROP_CHAR_TO_TYPE.get(char);
                 if (decType) {

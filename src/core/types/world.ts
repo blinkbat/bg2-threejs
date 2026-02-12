@@ -67,6 +67,7 @@ export interface UnitGroup extends THREE.Group {
         };
         facingRight?: boolean;  // Sprite facing direction (true = right, default)
         attackMoveTarget?: { x: number; z: number };  // Attack-move destination (resume after combat)
+        visualFacing?: number;  // Smooth per-frame shield facing (decoupled from React state)
     };
 }
 

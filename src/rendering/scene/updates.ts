@@ -102,6 +102,17 @@ const _intersection = new THREE.Vector3();
 const _ray = new THREE.Ray();
 const _meshBox = new THREE.Box3();
 
+/** Get or compute a cached bounding box for a static mesh. */
+function getCachedBox(mesh: THREE.Mesh): THREE.Box3 {
+    let cached = mesh.userData.cachedBox as THREE.Box3 | undefined;
+    if (!cached) {
+        cached = new THREE.Box3().setFromObject(mesh);
+        mesh.userData.cachedBox = cached;
+    }
+    _meshBox.copy(cached);
+    return _meshBox;
+}
+
 // Throttle expensive ray-box tests - only recalculate every N frames
 const WALL_CHECK_INTERVAL = 3;
 let wallCheckFrame = 0;
@@ -147,7 +158,7 @@ export function updateWallTransparency(
             // Check walls
             for (const mesh of wallMeshes) {
                 if (cachedOccludingMeshes.has(mesh)) continue;  // Already marked
-                _meshBox.setFromObject(mesh);
+                getCachedBox(mesh);
                 if (_ray.intersectBox(_meshBox, _intersection)) {
                     if (_cameraPos.distanceTo(_intersection) < distToUnit) {
                         cachedOccludingMeshes.add(mesh);
@@ -159,7 +170,7 @@ export function updateWallTransparency(
             if (treeMeshes) {
                 for (const mesh of treeMeshes) {
                     if (cachedOccludingMeshes.has(mesh)) continue;
-                    _meshBox.setFromObject(mesh);
+                    getCachedBox(mesh);
                     if (_ray.intersectBox(_meshBox, _intersection)) {
                         if (_cameraPos.distanceTo(_intersection) < distToUnit) {
                             cachedOccludingMeshes.add(mesh);
@@ -176,7 +187,7 @@ export function updateWallTransparency(
                     // Check if any part of the column is occluding
                     let groupOccludes = false;
                     for (const mesh of group) {
-                        _meshBox.setFromObject(mesh);
+                        getCachedBox(mesh);
                         if (_ray.intersectBox(_meshBox, _intersection)) {
                             if (_cameraPos.distanceTo(_intersection) < distToUnit) {
                                 groupOccludes = true;
@@ -195,7 +206,7 @@ export function updateWallTransparency(
                 // Fallback: check individual meshes if no groups provided
                 for (const mesh of columnMeshes) {
                     if (cachedOccludingMeshes.has(mesh)) continue;
-                    _meshBox.setFromObject(mesh);
+                    getCachedBox(mesh);
                     if (_ray.intersectBox(_meshBox, _intersection)) {
                         if (_cameraPos.distanceTo(_intersection) < distToUnit) {
                             cachedOccludingMeshes.add(mesh);

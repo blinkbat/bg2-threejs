@@ -395,8 +395,8 @@ export function validateSkillTarget(
     if (skill.targetType === "enemy" && targetUnit.team !== "enemy") {
         return `${casterName}: Must target an enemy!`;
     }
-    // Check if target is alive
-    if (targetUnit.hp <= 0) {
+    // Check if target is alive (revive skills target dead allies)
+    if (targetUnit.hp <= 0 && skill.type !== "revive") {
         return `${casterName}: Target is dead!`;
     }
     return null;
@@ -602,18 +602,39 @@ export function setupTargetingMode(
     }
 
     if (aoeIndicatorRef.current) {
-        const targetRadius = skill.aoeRadius || 0.5;
-        const innerRadius = skill.aoeRadius ? 0.1 : 0.3;
-        const currentOuter = aoeIndicatorRef.current.userData.outerRadius;
-        const currentInner = aoeIndicatorRef.current.userData.innerRadius;
-        // Only recreate geometry if radius changed
-        if (currentOuter !== targetRadius || currentInner !== innerRadius) {
+        if (skill.lineWidth) {
+            // Line-shaped AOE: rectangle from caster toward cursor
             disposeGeometry(aoeIndicatorRef.current);
-            aoeIndicatorRef.current.geometry = new THREE.RingGeometry(innerRadius, targetRadius, 32);
-            aoeIndicatorRef.current.userData.outerRadius = targetRadius;
-            aoeIndicatorRef.current.userData.innerRadius = innerRadius;
+            const rectGeo = new THREE.PlaneGeometry(skill.range, skill.lineWidth);
+            rectGeo.translate(skill.range / 2, 0, 0);
+            aoeIndicatorRef.current.geometry = rectGeo;
+            aoeIndicatorRef.current.userData.isLine = true;
+            aoeIndicatorRef.current.userData.casterId = casterId;
+            // Clear circular radius cache so switching back to circle forces recreation
+            delete aoeIndicatorRef.current.userData.outerRadius;
+            delete aoeIndicatorRef.current.userData.innerRadius;
+            // Position at caster (mousemove will update rotation)
+            aoeIndicatorRef.current.position.x = casterG.position.x;
+            aoeIndicatorRef.current.position.z = casterG.position.z;
+        } else {
+            // Circular AOE indicator
+            const targetRadius = skill.aoeRadius || 0.5;
+            const innerRadius = skill.aoeRadius ? 0.1 : 0.3;
+            const wasLine = aoeIndicatorRef.current.userData.isLine;
+            const currentOuter = aoeIndicatorRef.current.userData.outerRadius;
+            const currentInner = aoeIndicatorRef.current.userData.innerRadius;
+            // Force geometry recreation if switching from line mode, or if radius changed
+            if (wasLine || currentOuter !== targetRadius || currentInner !== innerRadius) {
+                disposeGeometry(aoeIndicatorRef.current);
+                aoeIndicatorRef.current.geometry = new THREE.RingGeometry(innerRadius, targetRadius, 32);
+                aoeIndicatorRef.current.userData.outerRadius = targetRadius;
+                aoeIndicatorRef.current.userData.innerRadius = innerRadius;
+                aoeIndicatorRef.current.rotation.z = 0;
+            }
+            aoeIndicatorRef.current.userData.isLine = false;
         }
         (aoeIndicatorRef.current.material as THREE.MeshBasicMaterial).color.set(skill.type === "heal" ? "#22c55e" : "#ff4400");
+        (aoeIndicatorRef.current.material as THREE.MeshBasicMaterial).opacity = 0.4;
         aoeIndicatorRef.current.visible = true;
     }
 }

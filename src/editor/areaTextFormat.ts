@@ -3,7 +3,7 @@
 // =============================================================================
 
 import { GRID_SIZE } from "../core/constants";
-import type { AreaData, AreaId, EnemySpawn, AreaTransition, ChestLocation, TreeLocation, Decoration, SecretDoor } from "../game/areas/types";
+import type { AreaData, AreaId, EnemySpawn, AreaTransition, ChestLocation, TreeLocation, TreeType, Decoration, SecretDoor } from "../game/areas/types";
 import type { CandlePosition, EnemyType } from "../core/types";
 
 // =============================================================================
@@ -152,7 +152,8 @@ export function areaDataToText(area: AreaData): string {
     if (area.trees.length > 0) {
         lines.push("=== TREES ===");
         area.trees.forEach(tree => {
-            lines.push(`${tree.x},${tree.z}:${tree.size}`);
+            const typeSuffix = tree.type && tree.type !== "pine" ? `,${tree.type}` : "";
+            lines.push(`${tree.x},${tree.z}:${tree.size}${typeSuffix}`);
         });
         lines.push("");
     }
@@ -391,9 +392,12 @@ function parseTransitionLine(line: string, transitions: AreaTransition[]) {
 }
 
 function parseTreeLine(line: string, trees: TreeLocation[]) {
-    const [coords, size] = line.split(":");
+    const [coords, rest] = line.split(":");
     const [x, z] = coords.split(",").map(Number);
-    trees.push({ x, z, size: parseFloat(size) });
+    const parts = rest.split(",");
+    const size = parseFloat(parts[0]);
+    const type = parts[1] as TreeType | undefined;
+    trees.push({ x, z, size, ...(type ? { type } : {}) });
 }
 
 function parseDecorationLine(line: string, decorations: Decoration[]) {

@@ -5,6 +5,31 @@
 import type { Unit, UnitGroup, EnemyStats } from "../core/types";
 import { distance, distanceToPoint } from "./geometry";
 
+// =============================================================================
+// UNIT LOOKUP CACHE - O(1) unit lookups by ID
+// Updated once per frame in useGameLoop before any game logic runs.
+// =============================================================================
+
+let unitsByIdCache: Map<number, Unit> = new Map();
+
+/**
+ * Update the unit lookup cache. Call this once per frame before AI/combat updates.
+ */
+export function updateUnitCache(unitsState: Unit[]): void {
+    unitsByIdCache.clear();
+    for (const unit of unitsState) {
+        unitsByIdCache.set(unit.id, unit);
+    }
+}
+
+/**
+ * Get a unit by ID from the per-frame cache - O(1) lookup.
+ * Returns undefined if the unit doesn't exist or cache hasn't been populated.
+ */
+export function getUnitById(id: number): Unit | undefined {
+    return unitsByIdCache.get(id);
+}
+
 /**
  * Find the nearest unit matching a filter condition.
  * Returns the unit and its UnitGroup, or null if none found.

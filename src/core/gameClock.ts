@@ -60,3 +60,25 @@ export function resumeGameClock(): void {
     isPaused = false;
     lastWallTime = Date.now();
 }
+
+/**
+ * Compute a pause-safe capped delta from a "last update" timestamp.
+ * Consolidates the repeated pattern:
+ *   const rawDelta = now - obj.lastUpdateTime;
+ *   const delta = Math.min(rawDelta, 100);
+ *   obj.elapsedTime += delta;
+ *   obj.lastUpdateTime = now;
+ *
+ * @returns the capped delta (already applied to the object)
+ */
+export function accumulateDelta(
+    obj: { elapsedTime: number; lastUpdateTime: number },
+    now: number,
+    maxDelta: number = 100
+): number {
+    const rawDelta = now - obj.lastUpdateTime;
+    const delta = Math.min(rawDelta, maxDelta);
+    obj.elapsedTime += delta;
+    obj.lastUpdateTime = now;
+    return delta;
+}

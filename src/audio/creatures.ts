@@ -4,6 +4,8 @@
 
 import { isMuted, getAudioCtx } from "./core";
 
+const NOOP = () => { };
+
 // Broodling screech - high-pitched, creepy insectoid sound
 export const playScreech = () => {
     if (isMuted()) return;
@@ -272,4 +274,133 @@ export const playSplash = () => {
     bubbleGain.connect(ctx.destination);
     bubble.start();
     bubble.stop(ctx.currentTime + 0.3);
+};
+
+// Metallic squeal - harsh resonant scrape for basilisk glare
+export const playMetallicSqueal = () => {
+    if (isMuted()) return;
+    const ctx = getAudioCtx();
+
+    const squeal = ctx.createOscillator();
+    const squealGain = ctx.createGain();
+    const squealFilter = ctx.createBiquadFilter();
+    squeal.type = "sawtooth";
+    squeal.frequency.setValueAtTime(1400, ctx.currentTime);
+    squeal.frequency.exponentialRampToValueAtTime(2600, ctx.currentTime + 0.08);
+    squeal.frequency.exponentialRampToValueAtTime(900, ctx.currentTime + 0.32);
+    squealFilter.type = "bandpass";
+    squealFilter.frequency.setValueAtTime(2200, ctx.currentTime);
+    squealFilter.Q.setValueAtTime(8, ctx.currentTime);
+    squealGain.gain.setValueAtTime(0.22, ctx.currentTime);
+    squealGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+    squeal.connect(squealFilter);
+    squealFilter.connect(squealGain);
+    squealGain.connect(ctx.destination);
+    squeal.start();
+    squeal.stop(ctx.currentTime + 0.35);
+
+    const scrapeSize = Math.floor(ctx.sampleRate * 0.24);
+    const scrapeBuffer = ctx.createBuffer(1, scrapeSize, ctx.sampleRate);
+    const scrapeOutput = scrapeBuffer.getChannelData(0);
+    for (let i = 0; i < scrapeSize; i++) {
+        const t = i / scrapeSize;
+        const grit = Math.random() > 0.7 ? (Math.random() * 2 - 1) : 0;
+        scrapeOutput[i] = (Math.random() * 2 - 1) * (0.25 + grit) * Math.exp(-t * 5);
+    }
+
+    const scrape = ctx.createBufferSource();
+    scrape.buffer = scrapeBuffer;
+    const scrapeFilter = ctx.createBiquadFilter();
+    scrapeFilter.type = "highpass";
+    scrapeFilter.frequency.setValueAtTime(2400, ctx.currentTime);
+    const scrapeGain = ctx.createGain();
+    scrapeGain.gain.setValueAtTime(0.12, ctx.currentTime);
+    scrapeGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.24);
+    scrape.connect(scrapeFilter);
+    scrapeFilter.connect(scrapeGain);
+    scrapeGain.connect(ctx.destination);
+    scrape.start();
+};
+
+// Sustained scratchy flame layer for channeling fire breath
+export const startFireBreathScratch = (): (() => void) => {
+    if (isMuted()) return NOOP;
+
+    const ctx = getAudioCtx();
+
+    const noiseLength = Math.floor(ctx.sampleRate * 1.5);
+    const noiseBuffer = ctx.createBuffer(1, noiseLength, ctx.sampleRate);
+    const output = noiseBuffer.getChannelData(0);
+    let smooth = 0;
+    for (let i = 0; i < noiseLength; i++) {
+        const white = Math.random() * 2 - 1;
+        smooth = smooth * 0.7 + white * 0.3;
+        output[i] = smooth * (0.7 + Math.random() * 0.3);
+    }
+
+    const noise = ctx.createBufferSource();
+    noise.buffer = noiseBuffer;
+    noise.loop = true;
+
+    const highpass = ctx.createBiquadFilter();
+    highpass.type = "highpass";
+    highpass.frequency.setValueAtTime(500, ctx.currentTime);
+
+    const bandpass = ctx.createBiquadFilter();
+    bandpass.type = "bandpass";
+    bandpass.frequency.setValueAtTime(1500, ctx.currentTime);
+    bandpass.Q.setValueAtTime(1.3, ctx.currentTime);
+
+    const growl = ctx.createOscillator();
+    growl.type = "sawtooth";
+    growl.frequency.setValueAtTime(75, ctx.currentTime);
+    growl.frequency.exponentialRampToValueAtTime(120, ctx.currentTime + 0.5);
+    growl.frequency.exponentialRampToValueAtTime(90, ctx.currentTime + 1.2);
+
+    const growlGain = ctx.createGain();
+    growlGain.gain.setValueAtTime(0.05, ctx.currentTime);
+
+    const lfo = ctx.createOscillator();
+    const lfoGain = ctx.createGain();
+    lfo.type = "triangle";
+    lfo.frequency.setValueAtTime(16, ctx.currentTime);
+    lfoGain.gain.setValueAtTime(400, ctx.currentTime);
+    lfo.connect(lfoGain);
+    lfoGain.connect(bandpass.frequency);
+
+    const masterGain = ctx.createGain();
+    masterGain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    masterGain.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.08);
+
+    noise.connect(highpass);
+    highpass.connect(bandpass);
+    bandpass.connect(masterGain);
+
+    growl.connect(growlGain);
+    growlGain.connect(masterGain);
+
+    masterGain.connect(ctx.destination);
+
+    noise.start();
+    growl.start();
+    lfo.start();
+
+    let stopped = false;
+    return () => {
+        if (stopped) return;
+        stopped = true;
+
+        const stopAt = ctx.currentTime + 0.08;
+        masterGain.gain.cancelScheduledValues(ctx.currentTime);
+        masterGain.gain.setValueAtTime(Math.max(masterGain.gain.value, 0.0001), ctx.currentTime);
+        masterGain.gain.exponentialRampToValueAtTime(0.0001, stopAt);
+
+        try {
+            noise.stop(stopAt + 0.02);
+            growl.stop(stopAt + 0.02);
+            lfo.stop(stopAt + 0.02);
+        } catch {
+            // ignore if already stopped
+        }
+    };
 };

@@ -7,11 +7,12 @@ import type { Unit, UnitGroup, DamageText, EnemyCurseSkill, EnemyStats, DamageTy
 import { COLORS, DOOM_DURATION, BUFF_TICK_INTERVAL } from "../core/constants";
 import { getUnitStats } from "../game/units";
 import { distance } from "../game/geometry";
-import { getGameTime } from "../core/gameClock";
-import { calculateDamageWithCrit, rollHit, getEffectiveArmor, logAoeHit, isUnitAlive } from "../combat/combatMath";
-import { applyDamageToUnit, buildDamageContext } from "../combat/damageEffects";
+import { accumulateDelta } from "../core/gameClock";
+import { calculateDamageWithCrit, rollHit, getEffectiveArmor, logAoeHit } from "../combat/combatMath";
+import { applyDamageToUnit, buildDamageContext, createAnimatedRing } from "../combat/damageEffects";
 import { soundFns } from "../audio";
 import { disposeBasicMesh } from "../rendering/disposal";
+import { createGroundWarningTile } from "./tileUtils";
 
 // =============================================================================
 // TYPES
@@ -61,31 +62,12 @@ function createCurseMeshes(
             const dist = Math.sqrt(dx * dx + dz * dz);
             if (dist > radius) continue;
 
-            const mesh = createCurseTile(scene, centerX + dx, centerZ + dz);
+            const mesh = createGroundWarningTile(scene, centerX + dx, centerZ + dz, "#4a0066", "curse-tile");
             meshes.push(mesh);
         }
     }
 
     return meshes;
-}
-
-/**
- * Create a single curse warning tile.
- */
-function createCurseTile(scene: THREE.Scene, x: number, z: number): THREE.Mesh {
-    const geometry = new THREE.PlaneGeometry(0.9, 0.9);
-    const material = new THREE.MeshBasicMaterial({
-        color: "#4a0066",
-        transparent: true,
-        opacity: 0.1,
-        side: THREE.DoubleSide
-    });
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.rotation.x = -Math.PI / 2;
-    mesh.position.set(x + 0.5, 0.05, z + 0.5);
-    mesh.name = "curse-tile";
-    scene.add(mesh);
-    return mesh;
 }
 
 // =============================================================================
@@ -151,10 +133,7 @@ export function processCurses(
 
     activeCurses.forEach((curse, curseId) => {
         // Accumulate elapsed time (pause-safe)
-        const rawDelta = now - curse.lastUpdateTime;
-        const delta = Math.min(rawDelta, 100); // Max 100ms per frame
-        curse.elapsedTime += delta;
-        curse.lastUpdateTime = now;
+        accumulateDelta(curse, now);
 
         const progress = Math.min(curse.elapsedTime / curse.delay, 1);
 
@@ -228,7 +207,8 @@ function executeCurse(
     let totalDamage = 0;
 
     unitsState.forEach(target => {
-        if (target.team !== "player" || !isUnitAlive(target, defeatedThisFrame)) return;
+        if (target.team !== "player") return;
+        if (target.hp <= 0 || defeatedThisFrame.has(target.id)) return;
 
         const tg = unitsRef[target.id];
         if (!tg) return;
@@ -246,7 +226,7 @@ function executeCurse(
                     curse.damageType, caster ?? undefined
                 );
 
-                applyDamageToUnit(dmgCtx, target.id, tg, target.hp, dmg, targetData.name, {
+                applyDamageToUnit(dmgCtx, target.id, tg, dmg, targetData.name, {
                     color: COLORS.damageEnemy,
                     targetUnit: target
                 });
@@ -280,7 +260,9 @@ function executeCurse(
     });
 
     // Explosion visual
-    createCurseExplosion(scene, curse.centerX, curse.centerZ, curse.radius);
+    createAnimatedRing(scene, curse.centerX + 0.5, curse.centerZ + 0.5, "#8b00ff", {
+        innerRadius: 0.3, outerRadius: curse.radius, maxScale: 2.5, duration: 500, y: 0.3
+    });
 
     soundFns.playHit();
     if (hitCount > 0) {
@@ -289,43 +271,6 @@ function executeCurse(
     } else {
         addLog(`${casterName}'s ${curse.skillName} detonates harmlessly!`, COLORS.logNeutral);
     }
-}
-
-/**
- * Create a visual explosion effect when the curse detonates.
- */
-function createCurseExplosion(scene: THREE.Scene, centerX: number, centerZ: number, radius: number): void {
-    const geometry = new THREE.RingGeometry(0.3, radius, 32);
-    const material = new THREE.MeshBasicMaterial({
-        color: "#8b00ff",
-        transparent: true,
-        opacity: 0.8,
-        side: THREE.DoubleSide
-    });
-    const ring = new THREE.Mesh(geometry, material);
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.set(centerX + 0.5, 0.3, centerZ + 0.5);
-    scene.add(ring);
-
-    const startTime = getGameTime();
-    const duration = 500;
-
-    function animate(): void {
-        const elapsed = getGameTime() - startTime;
-        const progress = elapsed / duration;
-
-        if (progress >= 1) {
-            disposeBasicMesh(scene, ring);
-            return;
-        }
-
-        const scale = 1 + progress * 1.5;
-        ring.scale.set(scale, scale, scale);
-        material.opacity = 0.8 * (1 - progress);
-
-        requestAnimationFrame(animate);
-    }
-    animate();
 }
 
 /**

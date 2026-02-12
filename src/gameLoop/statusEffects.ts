@@ -25,39 +25,22 @@ const DOT_VISUAL_CONFIG: Partial<Record<StatusEffectType, { color: string; messa
 // =============================================================================
 
 /**
- * Tick an effect: decrement duration and reset timeSinceTick.
- * Returns the updated statusEffects array with expired effects removed.
+ * Tick an effect in-place: decrement duration and reset timeSinceTick.
+ * Returns true if the effect expired and should be removed.
  */
-function tickEffect(
-    effects: StatusEffect[],
-    effectType: StatusEffectType,
-    now: number,
-    tickInterval: number
-): StatusEffect[] {
-    return effects.map(e => {
-        if (e.type === effectType) {
-            const newDuration = e.duration - tickInterval;
-            return { ...e, duration: newDuration, timeSinceTick: 0, lastUpdateTime: now };
-        }
-        return { ...e, lastUpdateTime: now };
-    }).filter(e => e.duration > 0);
+function tickEffectInPlace(effect: StatusEffect, now: number): boolean {
+    effect.duration -= effect.tickInterval;
+    effect.timeSinceTick = 0;
+    effect.lastUpdateTime = now;
+    return effect.duration <= 0;
 }
 
 /**
- * Update timeSinceTick for an effect without ticking (between tick intervals).
+ * Update timeSinceTick for an effect in-place (between tick intervals).
  */
-function updateEffectTime(
-    effects: StatusEffect[],
-    effectType: StatusEffectType,
-    newTimeSinceTick: number,
-    now: number
-): StatusEffect[] {
-    return effects.map(e => {
-        if (e.type === effectType) {
-            return { ...e, timeSinceTick: newTimeSinceTick, lastUpdateTime: now };
-        }
-        return e;
-    });
+function updateEffectTimeInPlace(effect: StatusEffect, newTimeSinceTick: number, now: number): void {
+    effect.timeSinceTick = newTimeSinceTick;
+    effect.lastUpdateTime = now;
 }
 
 // =============================================================================
@@ -75,104 +58,109 @@ export function processStatusEffects(
     now: number,
     defeatedThisFrame: Set<number>
 ): void {
-    unitsState.forEach(unit => {
-        if (!isUnitAlive(unit, defeatedThisFrame)) return;
-        if (!unit.statusEffects || unit.statusEffects.length === 0) return;
+    // Phase 1: Collect all mutations from the snapshot
+    interface UnitMutation {
+        hpDelta: number;
+        maxHp: number;
+        doom: boolean;
+        newEffects: StatusEffect[];
+    }
+    const mutations = new Map<number, UnitMutation>();
+    // Side effects to run after the single setUnits call
+    const sideEffects: Array<() => void> = [];
+
+    for (const unit of unitsState) {
+        if (!isUnitAlive(unit, defeatedThisFrame)) continue;
+        if (!unit.statusEffects || unit.statusEffects.length === 0) continue;
 
         const unitG = unitsRef[unit.id];
-        if (!unitG) return;
+        if (!unitG) continue;
 
         const data = getUnitStats(unit);
+        let hpDelta = 0;
+        let doom = false;
+        // Clone effects for in-place mutation — single pass, no intermediate arrays
+        const currentEffects: StatusEffect[] = unit.statusEffects.map(e => ({ ...e }));
+        const maxHp = unit.team === "player"
+            ? getEffectiveMaxHp(unit.id, unit)
+            : data.hp;
 
-        unit.statusEffects.forEach(effect => {
-            // All effects with duration tick down automatically
-            // Calculate delta time for pause-safe accumulation
-            // Cap delta to prevent pause/unpause from causing instant multi-ticks
+        for (const effect of currentEffects) {
             const rawDelta = now - effect.lastUpdateTime;
-            const delta = Math.min(rawDelta, 100); // Max 100ms per frame
+            const delta = Math.min(rawDelta, 100);
             const newTimeSinceTick = effect.timeSinceTick + delta;
             const shouldTick = newTimeSinceTick >= effect.tickInterval;
-
-            // Check if this effect deals damage (DOT effect)
             const dealsDamage = effect.damagePerTick > 0;
 
             if (shouldTick) {
                 if (dealsDamage) {
-                    // Damage-over-time effect: deal damage and tick duration
                     const dmg = effect.damagePerTick;
-                    let wasDefeated = false;
+                    hpDelta -= dmg;
+                    tickEffectInPlace(effect, now);
 
-                    setUnits(prev => prev.map(u => {
-                        if (u.id !== unit.id) return u;
-                        const newHp = Math.max(0, u.hp - dmg);
-                        wasDefeated = newHp <= 0;
-                        const updatedEffects = tickEffect(u.statusEffects || [], effect.type, now, effect.tickInterval);
-                        return {
-                            ...u,
-                            hp: newHp,
-                            statusEffects: updatedEffects.length > 0 ? updatedEffects : undefined
-                        };
-                    }));
-
-                    // Show damage visual if we have config for this effect type
                     const config = DOT_VISUAL_CONFIG[effect.type];
                     if (config) {
-                        showDamageVisual(scene, unit.id, unitG.position.x, unitG.position.z, dmg, config.color, hitFlashRef, damageTexts, addLog, config.messageTemplate(data.name, dmg), now);
-                    }
-
-                    if (wasDefeated) {
-                        defeatedThisFrame.add(unit.id);
-                        handleUnitDefeat(unit.id, unitG, unitsRef, addLog, data.name);
+                        const msg = config.messageTemplate(data.name, dmg);
+                        const color = config.color;
+                        const ux = unitG.position.x, uz = unitG.position.z, uid = unit.id;
+                        sideEffects.push(() => showDamageVisual(scene, uid, ux, uz, dmg, color, hitFlashRef, damageTexts, addLog, msg, now));
                     }
                 } else if (effect.type === "regen") {
-                    // Regen effect: heal per tick (healPerTick stored in shieldAmount)
                     const healPerTick = effect.shieldAmount ?? 0;
-                    const maxHp = unit.team === "player"
-                        ? getEffectiveMaxHp(unit.id, unit)
-                        : data.hp;
-
-                    setUnits(prev => prev.map(u => {
-                        if (u.id !== unit.id) return u;
-                        const newHp = Math.min(maxHp, u.hp + healPerTick);
-                        const updatedEffects = tickEffect(u.statusEffects || [], effect.type, now, effect.tickInterval);
-                        return {
-                            ...u,
-                            hp: newHp,
-                            statusEffects: updatedEffects.length > 0 ? updatedEffects : undefined
-                        };
-                    }));
+                    hpDelta += healPerTick;
+                    tickEffectInPlace(effect, now);
 
                     if (healPerTick > 0) {
-                        spawnDamageNumber(scene, unitG.position.x, unitG.position.z, healPerTick, COLORS.hpHigh, damageTexts, true);
-                        addLog(`${data.name} regenerates ${healPerTick} HP.`, COLORS.hpHigh);
+                        const ux = unitG.position.x, uz = unitG.position.z;
+                        const name = data.name;
+                        sideEffects.push(() => {
+                            spawnDamageNumber(scene, ux, uz, healPerTick, COLORS.hpHigh, damageTexts, true);
+                            addLog(`${name} regenerates ${healPerTick} HP.`, COLORS.hpHigh);
+                        });
                     }
                 } else if (effect.type === "doom" && effect.duration - effect.tickInterval <= 0) {
-                    // Doom expiration: kill the unit instantly
-                    setUnits(prev => prev.map(u => {
-                        if (u.id !== unit.id) return u;
-                        return { ...u, hp: 0, statusEffects: undefined };
-                    }));
-                    defeatedThisFrame.add(unit.id);
-                    handleUnitDefeat(unit.id, unitG, unitsRef, addLog, data.name);
-                    addLog(`${data.name} succumbs to Doom!`, COLORS.doomText);
+                    doom = true;
+                    tickEffectInPlace(effect, now);
+                    const name = data.name;
+                    sideEffects.push(() => addLog(`${name} succumbs to Doom!`, COLORS.doomText));
                 } else {
-                    // Pure duration effect: just tick down duration
-                    setUnits(prev => prev.map(u => {
-                        if (u.id !== unit.id) return u;
-                        const updatedEffects = tickEffect(u.statusEffects || [], effect.type, now, effect.tickInterval);
-                        return {
-                            ...u,
-                            statusEffects: updatedEffects.length > 0 ? updatedEffects : undefined
-                        };
-                    }));
+                    tickEffectInPlace(effect, now);
                 }
             } else {
-                // Not time to tick yet - just update accumulated time
-                setUnits(prev => prev.map(u => {
-                    if (u.id !== unit.id) return u;
-                    return { ...u, statusEffects: updateEffectTime(u.statusEffects || [], effect.type, newTimeSinceTick, now) };
-                }));
+                updateEffectTimeInPlace(effect, newTimeSinceTick, now);
             }
-        });
-    });
+        }
+
+        // Single filter pass to remove expired effects
+        const finalEffects = currentEffects.filter(e => e.duration > 0);
+        mutations.set(unit.id, { hpDelta, maxHp, doom, newEffects: finalEffects });
+    }
+
+    if (mutations.size === 0) return;
+
+    // Phase 2: Single setUnits call for all units
+    setUnits(prev => prev.map(u => {
+        const mut = mutations.get(u.id);
+        if (!mut) return u;
+        if (mut.doom) return { ...u, hp: 0, statusEffects: undefined };
+        const newHp = Math.max(0, Math.min(mut.maxHp, u.hp + mut.hpDelta));
+        const effects = mut.newEffects.length > 0 ? mut.newEffects : undefined;
+        return { ...u, hp: newHp, statusEffects: effects };
+    }));
+
+    // Phase 3: Handle defeats and deferred side effects
+    for (const [unitId, mut] of mutations) {
+        const unit = unitsState.find(u => u.id === unitId)!;
+        const predictedHp = mut.doom ? 0 : Math.max(0, unit.hp + mut.hpDelta);
+        if (predictedHp <= 0 && unit.hp > 0) {
+            const unitG = unitsRef[unitId];
+            if (unitG) {
+                defeatedThisFrame.add(unitId);
+                const data = getUnitStats(unit);
+                handleUnitDefeat(unitId, unitG, unitsRef, addLog, data.name);
+            }
+        }
+    }
+
+    for (const fn of sideEffects) fn();
 }
