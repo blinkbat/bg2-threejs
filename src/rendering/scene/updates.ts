@@ -374,6 +374,7 @@ export function updateWallTransparency(
 
 // Fade speed for tree foliage reveal
 const TREE_FADE_SPEED = 0.08;
+const FOG_OCCLUDER_FADE_SPEED = 0.08;
 
 /**
  * Update tree heights based on fog of war visibility.
@@ -456,5 +457,85 @@ export function updateTreeFogVisibility(
                 mesh.userData.wasExplored = true;
             }
         }
+    }
+}
+
+function getFogOccluderMaterial(mesh: THREE.Mesh): THREE.MeshStandardMaterial | THREE.MeshBasicMaterial | null {
+    const mat = mesh.material;
+    if (Array.isArray(mat)) return null;
+    if (mat instanceof THREE.MeshStandardMaterial || mat instanceof THREE.MeshBasicMaterial) {
+        return mat;
+    }
+    return null;
+}
+
+/**
+ * Clip tall non-tree meshes (columns/walls) under unexplored fog.
+ * Once a cell is discovered (vis > 0), the mesh restores to full height.
+ */
+export function updateFogOccluderVisibility(
+    fogOccluderMeshes: THREE.Mesh[],
+    visibility: number[][]
+): void {
+    const FOG_Y = 2.6;
+    const MAX_HEIGHT_UNEXPLORED = FOG_Y - 0.1;
+
+    for (const mesh of fogOccluderMeshes) {
+        const clipX = mesh.userData.fogClipX as number | undefined;
+        const clipZ = mesh.userData.fogClipZ as number | undefined;
+        const baseY = mesh.userData.fogClipBaseY as number | undefined;
+        const fullHeight = mesh.userData.fogClipFullHeight as number | undefined;
+        const fullY = mesh.userData.fogClipFullY as number | undefined;
+        const fullScaleY = mesh.userData.fogClipFullScaleY as number | undefined;
+
+        if (
+            clipX === undefined
+            || clipZ === undefined
+            || baseY === undefined
+            || fullHeight === undefined
+            || fullY === undefined
+            || fullScaleY === undefined
+        ) {
+            continue;
+        }
+
+        const tx = Math.floor(clipX);
+        const tz = Math.floor(clipZ);
+        const discovered = (visibility[tx]?.[tz] ?? 0) > 0;
+        const wasExplored = mesh.userData.fogClipWasExplored as boolean | undefined;
+        const mat = getFogOccluderMaterial(mesh);
+
+        if (!discovered) {
+            const availableSpace = MAX_HEIGHT_UNEXPLORED - baseY;
+            if (availableSpace <= 0) {
+                mesh.visible = false;
+                if (mat) mat.opacity = 0;
+            } else {
+                const scaleFactor = Math.min(1, availableSpace / fullHeight);
+                mesh.visible = scaleFactor > 0;
+                if (mesh.visible) {
+                    mesh.scale.y = fullScaleY * scaleFactor;
+                    mesh.position.y = baseY + (fullHeight * scaleFactor) / 2;
+                    if (mat) mat.opacity = 1;
+                } else if (mat) {
+                    mat.opacity = 0;
+                }
+            }
+            mesh.userData.fogClipWasExplored = false;
+            continue;
+        }
+
+        mesh.visible = true;
+        mesh.scale.y = fullScaleY;
+        mesh.position.y = fullY;
+        if (mat) {
+            if (!wasExplored) {
+                mat.opacity = 0;
+            }
+            if (mat.opacity < 1) {
+                mat.opacity = Math.min(1, mat.opacity + FOG_OCCLUDER_FADE_SPEED);
+            }
+        }
+        mesh.userData.fogClipWasExplored = true;
     }
 }

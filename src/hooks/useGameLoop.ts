@@ -9,7 +9,7 @@ import { PAN_SPEED } from "../core/constants";
 import { updateGameClock } from "../core/gameClock";
 import { getCurrentArea } from "../game/areas";
 import type { Unit, UnitGroup } from "../core/types";
-import { updateCamera, updateWallTransparency, updateTreeFogVisibility, updateLightLOD, addUnitToScene, updateWater, updateBillboards } from "../rendering/scene";
+import { updateCamera, updateWallTransparency, updateTreeFogVisibility, updateFogOccluderVisibility, updateLightLOD, addUnitToScene, updateWater, updateBillboards } from "../rendering/scene";
 import { updateDynamicObstacles } from "../ai/pathfinding";
 import { updateUnitCache } from "../game/unitQuery";
 import { clearUnitStatsCache } from "../game/units";
@@ -217,7 +217,7 @@ export function useGameLoop({
         const {
             scene, camera, renderer, flames, candleLights, fogTexture, fogMesh, moveMarker,
             rangeIndicator, unitGroups, selectRings, targetRings, shieldIndicators,
-            unitMeshes, unitOriginalColors, maxHp, wallMeshes, treeMeshes,
+            unitMeshes, unitOriginalColors, maxHp, wallMeshes, treeMeshes, fogOccluderMeshes,
             columnMeshes, columnGroups, waterMesh, billboards, candleMeshes
         } = sceneState;
 
@@ -399,8 +399,11 @@ export function useGameLoop({
                 updateFogOfWar(refs.visibility, playerUnits, unitGroups, fogTexture, currentUnits, fogMesh);
             }
 
-            // Update tree colors based on fog
-            updateTreeFogVisibility(treeMeshes, refs.visibility);
+            if (getCurrentArea().hasFogOfWar) {
+                // Update tree and tall obstacle visibility based on fog
+                updateTreeFogVisibility(treeMeshes, refs.visibility);
+                updateFogOccluderVisibility(fogOccluderMeshes, refs.visibility);
+            }
 
             // Unit AI & movement (only when not paused)
             if (!stateRefs.pausedRef.current) {

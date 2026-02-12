@@ -54,6 +54,7 @@ import { loadFormationOrder, saveFormationOrder } from "./hooks/formationStorage
 import { HelpModal } from "./components/HelpModal";
 import { SaveLoadModal } from "./components/SaveLoadModal";
 import { type SaveSlotData, SAVE_VERSION, saveGame, loadGame } from "./game/saveLoad";
+import { clearFogVisibilityMemory } from "./game/fogMemory";
 import monkPortrait from "./assets/monk-portrait.png";
 import barbarianPortrait from "./assets/barbarian-portrait.png";
 import wizardPortrait from "./assets/wizard-portrait.png";
@@ -158,10 +159,10 @@ interface LightingTuningSettings {
 
 const DEFAULT_LIGHTING_TUNING: LightingTuningSettings = {
     shadowsEnabled: true,
-    exposureScale: 1.1,
-    ambientScale: 1.72,
-    hemisphereScale: 0.22,
-    directionalScale: 1,
+    exposureScale: 0.88,
+    ambientScale: 1.5,
+    hemisphereScale: 0,
+    directionalScale: 0.91,
     shadowRadius: 2,
     shadowBias: -0.00115,
     shadowNormalBias: 0.007,
@@ -1210,6 +1211,7 @@ export default function App() {
         setInitialOpenedSecretDoors(null);
         setInitialGold(null);
         setInitialKilledEnemies(null);
+        clearFogVisibilityMemory();
         initializeEquipmentState();
         setCurrentArea(DEFAULT_STARTING_AREA);
         setGameKey(k => k + 1);
@@ -1265,6 +1267,7 @@ export default function App() {
     const handleLoad = (slot: number) => {
         const saveData = loadGame(slot);
         if (!saveData) return;
+        clearFogVisibilityMemory();
         setAllEquipment(saveData.equipment);
         setPartyInventory(saveData.inventory);
         setCurrentArea(saveData.currentAreaId);

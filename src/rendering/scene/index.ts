@@ -20,7 +20,8 @@ export {
     updateBillboards,
     updateLightLOD,
     updateWallTransparency,
-    updateTreeFogVisibility
+    updateTreeFogVisibility,
+    updateFogOccluderVisibility
 } from "./updates";
 
 // Re-export unit functions
@@ -564,6 +565,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     const foliageColors = ["#228B22", "#2E8B57", "#3CB371", "#006400", "#32CD32", "#556B2F"];
     const trunkColors = ["#654321", "#8B4513", "#A0522D", "#5C4033", "#6F4E37"];
     const treeMeshes: THREE.Mesh[] = [];
+    const fogOccluderMeshes: THREE.Mesh[] = [];
 
     // Fog mesh Y position - trees in unexplored cells will be capped below this
     const FOG_Y = 2.6;
@@ -594,6 +596,23 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         foliageMesh.userData.fogY = FOG_Y;
         scene.add(foliageMesh);
         treeMeshes.push(foliageMesh);
+    };
+
+    const registerFogOccluderMesh = (
+        mesh: THREE.Mesh,
+        tileX: number,
+        tileZ: number,
+        baseY: number,
+        fullHeight: number
+    ): void => {
+        if (fullHeight <= 0) return;
+        mesh.userData.fogClipX = tileX;
+        mesh.userData.fogClipZ = tileZ;
+        mesh.userData.fogClipBaseY = baseY;
+        mesh.userData.fogClipFullHeight = fullHeight;
+        mesh.userData.fogClipFullY = mesh.position.y;
+        mesh.userData.fogClipFullScaleY = mesh.scale.y;
+        fogOccluderMeshes.push(mesh);
     };
 
     area.trees.forEach((tree, i) => {
@@ -791,6 +810,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 column.name = "decoration";
                 scene.add(column);
                 columnMeshes.push(column);
+                registerFogOccluderMesh(column, dec.x, dec.z, 0, columnHeight);
 
                 // Column base
                 const base = new THREE.Mesh(
@@ -800,6 +820,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 base.position.set(dec.x, 0.1, dec.z);
                 scene.add(base);
                 columnMeshes.push(base);
+                registerFogOccluderMesh(base, dec.x, dec.z, 0, 0.2);
 
                 // Column capital (top)
                 const capital = new THREE.Mesh(
@@ -809,6 +830,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 capital.position.set(dec.x, columnHeight, dec.z);
                 scene.add(capital);
                 columnMeshes.push(capital);
+                registerFogOccluderMesh(capital, dec.x, dec.z, columnHeight - 0.125, 0.25);
 
                 // Group all parts of this column together for synchronized transparency
                 columnGroups.push([column, base, capital]);
@@ -823,6 +845,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 column.position.set(dec.x, columnHeight / 2, dec.z);
                 column.name = "decoration";
                 scene.add(column);
+                registerFogOccluderMesh(column, dec.x, dec.z, 0, columnHeight);
 
                 // Column base (crumbled)
                 const base = new THREE.Mesh(
@@ -831,6 +854,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 );
                 base.position.set(dec.x, 0.075, dec.z);
                 scene.add(base);
+                registerFogOccluderMesh(base, dec.x, dec.z, 0, 0.15);
 
                 // Fallen debris pieces
                 for (let j = 0; j < 3; j++) {
@@ -858,6 +882,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 wall.rotation.y = dec.rotation ?? 0;
                 wall.name = "decoration";
                 scene.add(wall);
+                registerFogOccluderMesh(wall, dec.x, dec.z, 0, wallHeight);
 
                 // Rubble at base
                 for (let j = 0; j < 4; j++) {
@@ -1398,6 +1423,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         maxHp,
         wallMeshes,
         treeMeshes,
+        fogOccluderMeshes,
         columnMeshes,
         columnGroups,
         doorMeshes,

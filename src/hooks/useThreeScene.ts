@@ -5,7 +5,7 @@
 
 import { useRef, useEffect, useState } from "react";
 import * as THREE from "three";
-import { getCurrentArea } from "../game/areas";
+import { getCurrentArea, getCurrentAreaId } from "../game/areas";
 import type { Unit, FogTexture, Projectile, SwingAnimation, DamageText, UnitGroup, SanctuaryTile } from "../core/types";
 import type { AcidTile, LootBag } from "../core/types";
 import { createScene, updateChestStates, updateCamera, type DoorMesh, type SecretDoorMesh, type ChestMeshData } from "../rendering/scene";
@@ -13,6 +13,7 @@ import { resetFogCache, resetSpriteFacing, clearChargeAttacks, clearFireBreaths,
 import { resetAllBroodMotherScreeches } from "../game/enemyState";
 import { resetBarks } from "../combat/barks";
 import { initializeEquipmentState } from "../game/equipmentState";
+import { loadFogVisibility, saveFogVisibility } from "../game/fogMemory";
 
 /** All refs needed for Three.js scene management */
 export interface ThreeSceneState {
@@ -43,6 +44,7 @@ export interface ThreeSceneState {
     // Environment
     wallMeshes: THREE.Mesh[];
     treeMeshes: THREE.Mesh[];
+    fogOccluderMeshes: THREE.Mesh[];
     columnMeshes: THREE.Mesh[];
     columnGroups: THREE.Mesh[][];
     doorMeshes: DoorMesh[];
@@ -109,6 +111,9 @@ export function useThreeScene({
     openedChests,
     initialCameraOffset
 }: UseThreeSceneOptions): UseThreeSceneResult {
+    const initialArea = getCurrentArea();
+    const initialAreaId = getCurrentAreaId();
+
     // Scene state (stable object, populated during initialization)
     const sceneStateRef = useRef<ThreeSceneState>({
         scene: null,
@@ -131,6 +136,7 @@ export function useThreeScene({
         maxHp: {},
         wallMeshes: [],
         treeMeshes: [],
+        fogOccluderMeshes: [],
         columnMeshes: [],
         columnGroups: [],
         doorMeshes: [],
@@ -151,7 +157,7 @@ export function useThreeScene({
         swingAnimations: [],
         damageTexts: [],
         paths: {},
-        visibility: Array(getCurrentArea().gridWidth).fill(null).map(() => Array(getCurrentArea().gridHeight).fill(0)),
+        visibility: loadFogVisibility(initialAreaId, initialArea.gridWidth, initialArea.gridHeight),
         acidTiles: new Map(),
         sanctuaryTiles: new Map(),
         lootBags: [],
@@ -166,6 +172,7 @@ export function useThreeScene({
     // Initialize scene
     useEffect(() => {
         if (!containerRef.current) return;
+        const areaIdAtMount = getCurrentAreaId();
 
         // Reset module-level caches on game restart
         resetFogCache();
@@ -221,6 +228,7 @@ export function useThreeScene({
         state.maxHp = sceneRefs.maxHp;
         state.wallMeshes = sceneRefs.wallMeshes;
         state.treeMeshes = sceneRefs.treeMeshes;
+        state.fogOccluderMeshes = sceneRefs.fogOccluderMeshes;
         state.columnMeshes = sceneRefs.columnMeshes;
         state.columnGroups = sceneRefs.columnGroups;
         state.doorMeshes = sceneRefs.doorMeshes;
@@ -254,6 +262,7 @@ export function useThreeScene({
 
         // Cleanup
         return () => {
+            saveFogVisibility(areaIdAtMount, gameRefs.visibility);
             if (state.renderer) {
                 state.renderer.dispose();
                 containerRef.current?.removeChild(state.renderer.domElement);

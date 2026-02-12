@@ -46,6 +46,7 @@ export interface SceneRefs {
     maxHp: Record<number, number>;
     wallMeshes: THREE.Mesh[];
     treeMeshes: THREE.Mesh[];  // Tree foliage meshes for transparency
+    fogOccluderMeshes: THREE.Mesh[];  // Tall non-tree meshes clipped under unexplored fog
     columnMeshes: THREE.Mesh[];  // Column meshes for transparency
     columnGroups: THREE.Mesh[][];  // Groups of column parts (body, base, capital) that fade together
     doorMeshes: DoorMesh[];
