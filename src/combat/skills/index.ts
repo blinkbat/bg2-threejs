@@ -6,6 +6,7 @@ import * as THREE from "three";
 import type { Skill } from "../../core/types";
 import { COLORS } from "../../core/constants";
 import { UNIT_DATA, getEffectiveUnitData } from "../../game/playerUnits";
+import { hasStatusEffect } from "../combatMath";
 
 // Re-export types
 export type { SkillExecutionContext } from "./types";
@@ -37,7 +38,8 @@ export {
     executeReviveSkill,
     executeSunStanceSkill,
     executePangolinStanceSkill,
-    executeHighlandDefenseSkill
+    executeHighlandDefenseSkill,
+    executeDivineLatticeSkill
 } from "./support";
 
 // Re-export utility skills
@@ -55,7 +57,7 @@ export { executeDodgeSkill, executeBodySwapSkill } from "./movement";
 // Import for internal use
 import type { SkillExecutionContext } from "./types";
 import { executeAoeSkill, executeMeleeSkill, executeSmiteSkill, executeRangedSkill, executeFlurrySkill, executeMagicWaveSkill, executeHolyStrikeSkill, executeGlacialWhorlSkill } from "./damage";
-import { executeHealSkill, executeManaTransferSkill, executeBuffSkill, executeAoeBuffSkill, executeEnergyShieldSkill, executeCleanseSkill, executeRestorationSkill, executeReviveSkill, executeSunStanceSkill, executePangolinStanceSkill, executeHighlandDefenseSkill } from "./support";
+import { executeHealSkill, executeManaTransferSkill, executeBuffSkill, executeAoeBuffSkill, executeEnergyShieldSkill, executeCleanseSkill, executeRestorationSkill, executeReviveSkill, executeSunStanceSkill, executePangolinStanceSkill, executeHighlandDefenseSkill, executeDivineLatticeSkill } from "./support";
 import { executeTauntSkill, executeDebuffSkill, executeTrapSkill, executeSanctuarySkill, executeSummonSkill } from "./utility";
 import { executeDodgeSkill, executeBodySwapSkill } from "./movement";
 
@@ -79,6 +81,10 @@ export function executeSkill(
     const casterG = ctx.unitsRef.current[casterId];
 
     if (!caster || !casterG || caster.hp <= 0) return false;
+    if (hasStatusEffect(caster, "divine_lattice")) {
+        ctx.addLog(`${UNIT_DATA[casterId].name} cannot act while in Divine Lattice.`, COLORS.divineLatticeText);
+        return false;
+    }
     if ((caster.mana ?? 0) < skill.manaCost) {
         ctx.addLog(`${UNIT_DATA[casterId].name}: Not enough mana!`, COLORS.logNeutral);
         return false;
@@ -131,6 +137,11 @@ export function executeSkill(
         return executeEnergyShieldSkill(ctx, casterId, skill);
     } else if (skill.type === "buff" && skill.targetType === "ally") {
         return executeCleanseSkill(ctx, casterId, skill, targetX, targetZ);
+    } else if (skill.type === "buff" && skill.targetType === "aoe") {
+        if (skill.name === "Divine Lattice") {
+            return executeDivineLatticeSkill(ctx, casterId, skill, targetX, targetZ, targetId);
+        }
+        return false;
     } else if (skill.type === "flurry" && skill.targetType === "self") {
         return executeFlurrySkill(ctx, casterId, skill);
     } else if (skill.type === "debuff" && skill.targetType === "enemy") {

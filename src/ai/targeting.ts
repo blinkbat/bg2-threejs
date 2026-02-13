@@ -5,7 +5,7 @@
 import { DEFAULT_KITE_DISTANCE, DEFAULT_KITE_COOLDOWN } from "../core/constants";
 import { findPath, isPassable } from "./pathfinding";
 import { getEnemyKiteCooldown, setEnemyKiteCooldown, setEnemyKitingUntil } from "../game/enemyState";
-import { getDirectionAndDistance } from "../combat/combatMath";
+import { getDirectionAndDistance, hasStatusEffect } from "../combat/combatMath";
 import { getCurrentArea } from "../game/areas";
 import { findNearestUnit } from "../game/unitQuery";
 import type { Unit, UnitGroup, EnemyStats } from "../core/types";
@@ -95,7 +95,13 @@ export function tryKite(ctx: KiteContext, enemyData: EnemyStats): KiteResult {
     }
 
     // Find nearest player
-    const nearestPlayer = findNearestUnit(unitsState, unitsRef, g.position.x, g.position.z, u => u.team === "player" && u.hp > 0);
+    const nearestPlayer = findNearestUnit(
+        unitsState,
+        unitsRef,
+        g.position.x,
+        g.position.z,
+        u => u.team === "player" && u.hp > 0 && !hasStatusEffect(u, "divine_lattice")
+    );
 
     if (!nearestPlayer) {
         return { isKiting: false };

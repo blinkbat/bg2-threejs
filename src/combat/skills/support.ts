@@ -21,7 +21,7 @@ import { soundFns } from "../../audio";
 import { createAnimatedRing, createLightningPillar } from "../damageEffects";
 import { updateUnitWith } from "../../core/stateUtils";
 import type { SkillExecutionContext } from "./types";
-import { findAndValidateAllyTarget, consumeSkill } from "./helpers";
+import { findAndValidateAllyTarget, findClosestUnit, consumeSkill } from "./helpers";
 
 // =============================================================================
 // HEAL SKILL (single ally)
@@ -311,6 +311,104 @@ export function executeEnergyShieldSkill(
         logColor: "#9b59b6",
         extraEffectFields: { shieldAmount: skill.shieldAmount! },
     });
+}
+
+// =============================================================================
+// DIVINE LATTICE SKILL
+// =============================================================================
+
+/**
+ * Execute Divine Lattice - target any unit (ally or enemy):
+ * impervious to all damage, cannot act, and enemies stop targeting them.
+ */
+export function executeDivineLatticeSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill,
+    targetX: number,
+    targetZ: number,
+    targetUnitId?: number
+): boolean {
+    const { scene, unitsStateRef, unitsRef, unitMeshRef, hitFlashRef, setUnits, addLog } = ctx;
+
+    const livingUnits = unitsStateRef.current.filter(u => u.hp > 0);
+    if (livingUnits.length === 0) {
+        addLog(`${UNIT_DATA[casterId].name}: No valid target!`, COLORS.logNeutral);
+        return false;
+    }
+
+    let target = targetUnitId !== undefined
+        ? livingUnits.find(u => u.id === targetUnitId)
+        : undefined;
+    let targetG = target ? unitsRef.current[target.id] : undefined;
+
+    if (!target || !targetG) {
+        const closest = findClosestUnit(livingUnits, unitsRef.current, targetX, targetZ, 2.2);
+        if (!closest) {
+            addLog(`${UNIT_DATA[casterId].name}: No target at that location!`, COLORS.logNeutral);
+            return false;
+        }
+        target = closest.unit;
+        targetG = closest.group;
+    }
+
+    const casterG = unitsRef.current[casterId];
+    if (!casterG) return false;
+    const targetRadius = getUnitRadius(target);
+    if (!isInRange(casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, targetRadius, skill.range)) {
+        addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, COLORS.logNeutral);
+        return false;
+    }
+
+    const targetName = target.team === "player"
+        ? UNIT_DATA[target.id].name
+        : `the ${target.enemyType?.replace(/_/g, " ") ?? "enemy"}`;
+
+    if (hasStatusEffect(target, "divine_lattice")) {
+        addLog(`${UNIT_DATA[casterId].name}: ${targetName} is already in Divine Lattice!`, COLORS.logNeutral);
+        return false;
+    }
+
+    consumeSkill(ctx, casterId, skill);
+
+    const now = Date.now();
+    const latticeEffect: StatusEffect = {
+        type: "divine_lattice",
+        duration: skill.duration!,
+        tickInterval: BUFF_TICK_INTERVAL,
+        timeSinceTick: 0,
+        lastUpdateTime: now,
+        damagePerTick: 0,
+        sourceId: casterId
+    };
+
+    setUnits(prev => prev.map(u => {
+        if (u.id !== target!.id) return u;
+        return {
+            ...u,
+            target: null,
+            statusEffects: applyStatusEffect(u.statusEffects, latticeEffect)
+        };
+    }));
+
+    targetG.userData.attackTarget = null;
+
+    createAnimatedRing(scene, targetG.position.x, targetG.position.z, COLORS.divineLatticeText, {
+        innerRadius: 0.25,
+        outerRadius: 0.62,
+        maxScale: 1.9,
+        duration: 360
+    });
+    soundFns.playEnergyShield();
+
+    const mesh = unitMeshRef.current[target.id];
+    if (mesh) {
+        (mesh.material as THREE.MeshStandardMaterial).color.set("#ffffff");
+        hitFlashRef.current[target.id] = now;
+    }
+
+    addLog(`${UNIT_DATA[casterId].name} seals ${targetName} in Divine Lattice.`, COLORS.divineLatticeText);
+    return true;
 }
 
 // =============================================================================

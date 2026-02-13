@@ -199,6 +199,7 @@ const EFFECT_INFO: Record<string, { icon: string; color: string; description: st
     sun_stance: { icon: "☀", color: COLORS.sunStanceText, description: "Attacks deal bonus fire damage" },
     thorns: { icon: "✹", color: COLORS.thornsText, description: "Reflects melee damage to attackers" },
     highland_defense: { icon: "⛰", color: COLORS.highlandDefenseText, description: "Redirects nearby ally damage to the barbarian" },
+    divine_lattice: { icon: "◈", color: COLORS.divineLatticeText, description: "Impervious to damage; cannot act; ignored by enemies" },
 };
 
 /** Renders active status effects as inline icons with tooltips */
@@ -430,6 +431,12 @@ function SkillTooltip({ skill, isShielded, cantripUses }: { skill: Skill; isShie
         if (skill.name === "Raise Shield") {
             lines.push({ label: "Duration", value: `${durationSec}s`, color: COLORS.shieldedText });
             lines.push({ label: "Effect", value: "×2 armor, ×2 cooldowns", color: COLORS.shieldedText });
+        } else if (skill.name === "Divine Lattice") {
+            lines.push({ label: "Duration", value: `${durationSec}s`, color: COLORS.divineLatticeText });
+            lines.push({ label: "Effect", value: "Impervious to all damage", color: COLORS.divineLatticeText });
+            lines.push({ label: "Lockout", value: "Cannot use skills or attack", color: COLORS.divineLatticeText });
+            lines.push({ label: "Enemy AI", value: "Ignored while active", color: COLORS.divineLatticeText });
+            lines.push({ label: "Target", value: "Any unit", color: COLORS.divineLatticeText });
         } else if (skill.name === "Pangolin Stance") {
             lines.push({ label: "Duration", value: `${durationSec}s`, color: COLORS.thornsText });
             const minThorns = skill.damageRange?.[0] ?? 2;

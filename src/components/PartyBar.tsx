@@ -43,6 +43,7 @@ const EFFECT_ICONS: Record<StatusEffectType, { icon: string; color: string }> = 
     sun_stance: { icon: "☀", color: COLORS.sunStanceText },
     thorns: { icon: "✹", color: COLORS.thornsText },
     highland_defense: { icon: "⛰", color: COLORS.highlandDefenseText },
+    divine_lattice: { icon: "◈", color: COLORS.divineLatticeText },
 };
 
 interface PartyBarProps {

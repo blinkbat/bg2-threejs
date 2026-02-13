@@ -141,15 +141,19 @@ export function updateEnergyShieldVisuals(
         if (!unitGroup) continue;
 
         const hasShield = hasStatusEffect(unit, "energyShield");
+        const hasDivineLattice = hasStatusEffect(unit, "divine_lattice");
+        const hasBarrier = hasShield || hasDivineLattice;
         const existingBubble = unitGroup.getObjectByName(ENERGY_SHIELD_BUBBLE_NAME) as THREE.Mesh | undefined;
 
-        if (hasShield && !existingBubble) {
+        if (hasBarrier && !existingBubble) {
+            const bubbleColor = hasDivineLattice ? 0xffffff : 0x66ccff;
+            const bubbleOpacity = hasDivineLattice ? 0.22 : 0.25;
             // Create bubble
             const bubbleGeometry = new THREE.SphereGeometry(0.7, 24, 16);
             const bubbleMaterial = new THREE.MeshBasicMaterial({
-                color: 0x66ccff,
+                color: bubbleColor,
                 transparent: true,
-                opacity: 0.25,
+                opacity: bubbleOpacity,
                 side: THREE.DoubleSide,
                 depthWrite: false
             });
@@ -157,12 +161,20 @@ export function updateEnergyShieldVisuals(
             bubble.name = ENERGY_SHIELD_BUBBLE_NAME;
             bubble.position.y = 0.5;  // Center on unit
             unitGroup.add(bubble);
-        } else if (!hasShield && existingBubble) {
+        } else if (!hasBarrier && existingBubble) {
             // Remove bubble
             unitGroup.remove(existingBubble);
             existingBubble.geometry.dispose();
             (existingBubble.material as THREE.MeshBasicMaterial).dispose();
-        } else if (hasShield && existingBubble) {
+        } else if (hasBarrier && existingBubble) {
+            const bubbleMat = existingBubble.material as THREE.MeshBasicMaterial;
+            if (hasDivineLattice) {
+                bubbleMat.color.setHex(0xffffff);
+                bubbleMat.opacity = 0.22;
+            } else {
+                bubbleMat.color.setHex(0x66ccff);
+                bubbleMat.opacity = 0.25;
+            }
             // Animate bubble - subtle pulse
             const pulse = Math.sin(now * 0.003) * 0.05 + 1;
             existingBubble.scale.setScalar(pulse);

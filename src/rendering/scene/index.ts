@@ -1142,6 +1142,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 rock.position.set(dec.x, rockSize * 0.6, dec.z);
                 rock.rotation.set(Math.random() * 0.3, Math.random() * Math.PI, Math.random() * 0.3);
                 rock.scale.set(1, 0.7, 1.1);  // Flatten slightly
+                rock.userData.disableOcclusionFade = true;
                 rock.name = "decoration";
                 scene.add(rock);
                 columnMeshes.push(rock);
@@ -1155,6 +1156,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 rock.position.set(dec.x, rockSize * 0.5, dec.z);
                 rock.rotation.set(Math.random() * 0.5, Math.random() * Math.PI, Math.random() * 0.5);
                 rock.scale.set(1, 0.6, 1.2);
+                rock.userData.disableOcclusionFade = true;
                 rock.name = "decoration";
                 scene.add(rock);
             } else if (dec.type === "mushroom") {

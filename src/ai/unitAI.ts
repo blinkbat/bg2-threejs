@@ -21,7 +21,7 @@ import { getUnitRadius } from "../rendering/range";
 import { clampToGrid, distanceBetween } from "../game/geometry";
 import { getAttackRange } from "../game/units";
 import { ENEMY_STATS } from "../game/enemyStats";
-import { isUnitAlive } from "../combat/combatMath";
+import { hasStatusEffect, isUnitAlive } from "../combat/combatMath";
 import { isKrakenSubmerged } from "../gameLoop/enemyBehaviors";
 import { getUnitById } from "../game/unitQuery";
 import type { Unit, UnitGroup } from "../core/types";
@@ -55,6 +55,7 @@ function getMothersSightTarget(
 
     for (const player of unitsState) {
         if (player.team !== "player" || player.hp <= 0) continue;
+        if (hasStatusEffect(player, "divine_lattice")) continue;
         if (defeatedThisFrame.has(player.id)) continue;
 
         const playerG = unitsRef[player.id];
@@ -81,6 +82,7 @@ function getMothersSightTarget(
 
     for (const player of unitsState) {
         if (player.team !== "player" || player.hp <= 0) continue;
+        if (hasStatusEffect(player, "divine_lattice")) continue;
         if (defeatedThisFrame.has(player.id)) continue;
 
         const playerG = unitsRef[player.id];
@@ -170,6 +172,7 @@ export function findNearestTarget(ctx: TargetingContext, alerted: boolean = fals
 
     for (const enemy of unitsState) {
         if (enemy.team !== enemyTeam || enemy.hp <= 0) continue;
+        if (hasStatusEffect(enemy, "divine_lattice")) continue;
         if (defeatedThisFrame.has(enemy.id)) continue;
         if (blockedTargets.includes(enemy.id)) continue;
         // Skip submerged krakens - they're invulnerable underwater
@@ -270,6 +273,7 @@ function findRecentDamageSource(ctx: TargetingContext): number | null {
 
     for (const player of unitsState) {
         if (player.team !== "player" || player.hp <= 0) continue;
+        if (hasStatusEffect(player, "divine_lattice")) continue;
         if (defeatedThisFrame.has(player.id)) continue;
 
         const pg = unitsRef[player.id];
@@ -302,19 +306,34 @@ function findRecentDamageSource(ctx: TargetingContext): number | null {
 export function runTargetingPhase(ctx: TargetingContext): void {
     const { unit, g, pathsRef, now, hasFrontShield } = ctx;
     const isPlayer = unit.team === "player";
+    if (hasStatusEffect(unit, "divine_lattice")) {
+        g.userData.attackTarget = null;
+        return;
+    }
     const shouldAutoTarget = isPlayer ? unit.aiEnabled : true;
 
     // Check if enemy is alerted (was hit by a player)
     const isAlerted = !isPlayer && g.userData.alerted === true;
 
     // Check if current target is still valid
-    const { valid: targetStillValid } = validateCurrentTarget(
+    let { valid: targetStillValid } = validateCurrentTarget(
         g.userData.attackTarget,
         ctx.defeatedThisFrame
     );
+    let targetProtectedByLattice = false;
+    if (targetStillValid && g.userData.attackTarget !== null) {
+        const protectedTarget = getUnitById(g.userData.attackTarget);
+        if (protectedTarget && hasStatusEffect(protectedTarget, "divine_lattice")) {
+            targetStillValid = false;
+            targetProtectedByLattice = true;
+        }
+    }
 
     if (!targetStillValid) {
         g.userData.attackTarget = null;
+        if (!isPlayer && targetProtectedByLattice) {
+            pathsRef[unit.id] = [];
+        }
     }
 
     // Alerted enemies immediately search for nearest target, ignoring normal constraints

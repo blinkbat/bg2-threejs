@@ -200,6 +200,10 @@ function getCachedBox(mesh: THREE.Mesh): THREE.Box3 {
     return _meshBox;
 }
 
+function isOcclusionFadeDisabled(mesh: THREE.Mesh): boolean {
+    return Reflect.get(mesh.userData, "disableOcclusionFade") === true;
+}
+
 function buildTreeOcclusionCircle(meshes: THREE.Mesh[]): OcclusionCircle {
     for (const mesh of meshes) {
         const centerX = readFiniteNumber(Reflect.get(mesh.userData, "fogFootprintCenterX"));
@@ -380,6 +384,7 @@ export function updateWallTransparency(
                     // Check if any part of the group is occluding
                     let groupOccludes = false;
                     for (const mesh of group) {
+                        if (isOcclusionFadeDisabled(mesh)) continue;
                         getCachedBox(mesh);
                         if (_ray.intersectBox(_meshBox, _intersection)) {
                             if (_cameraPos.distanceTo(_intersection) < distToUnit) {
@@ -403,6 +408,7 @@ export function updateWallTransparency(
                 for (const mesh of columnMeshes) {
                     if (groupedColumnMeshes.has(mesh)) continue;
                     if (cachedOccludingMeshes.has(mesh)) continue;
+                    if (isOcclusionFadeDisabled(mesh)) continue;
                     getCachedBox(mesh);
                     if (_ray.intersectBox(_meshBox, _intersection)) {
                         if (_cameraPos.distanceTo(_intersection) < distToUnit) {
@@ -483,7 +489,9 @@ export function updateWallTransparency(
             const mat = mesh.material as THREE.MeshStandardMaterial;
             const fogState = toFogRenderState(Reflect.get(mesh.userData, "fogRenderState"));
             const fogOpacity = readFiniteNumber(Reflect.get(mesh.userData, "fogResolvedOpacity"));
-            const occlusionTarget = cachedOccludingMeshes.has(mesh) ? WALL_OPACITY_OCCLUDING : WALL_OPACITY_NORMAL;
+            const occlusionTarget = isOcclusionFadeDisabled(mesh)
+                ? WALL_OPACITY_NORMAL
+                : (cachedOccludingMeshes.has(mesh) ? WALL_OPACITY_OCCLUDING : WALL_OPACITY_NORMAL);
             let targetOpacity = occlusionTarget;
 
             if (fogOpacity !== null) {

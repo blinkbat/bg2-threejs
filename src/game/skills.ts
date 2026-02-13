@@ -125,6 +125,20 @@ export const SKILLS: Record<string, Skill> = {
         duration: 20000,  // duration in ms (20 seconds)
         damageType: "physical"
     },
+    divineLattice: {
+        name: "Divine Lattice",
+        description: "Encase a unit in radiant lattice: impervious to all damage, unable to act, and ignored by enemies.",
+        flavor: "\"Step outside the storm. Return when it passes.\"",
+        manaCost: 16,
+        cooldown: 500,
+        type: "buff",
+        targetType: "aoe",
+        range: 8,
+        duration: 10000,
+        damageType: "holy",
+        isCantrip: true,
+        maxUses: 2
+    },
     flurryOfFists: {
         name: "Flurry of Fists",
         description: "Unleash 5 rapid strikes on nearby enemies.",

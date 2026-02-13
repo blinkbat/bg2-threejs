@@ -104,6 +104,15 @@ export function updateUnitAI(
         return;
     }
 
+    // Divine Lattice: cannot use skills/attacks, but can still move.
+    if (hasStatusEffect(unit, "divine_lattice")) {
+        g.userData.attackTarget = null;
+        if (actionQueueRef && actionQueueRef[unit.id]?.type === "skill") {
+            delete actionQueueRef[unit.id];
+            setQueuedActions?.(prev => prev.filter(q => q.unitId !== unit.id));
+        }
+    }
+
     // Skip all actions if unit is charging or breathing fire
     if (!isPlayer && (isUnitCharging(unit.id) || isUnitBreathing(unit.id))) {
         return;

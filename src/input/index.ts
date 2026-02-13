@@ -643,7 +643,10 @@ export function setupTargetingMode(
             }
             aoeIndicatorRef.current.userData.isLine = false;
         }
-        (aoeIndicatorRef.current.material as THREE.MeshBasicMaterial).color.set(skill.type === "heal" ? "#22c55e" : "#ff4400");
+        const indicatorColor = skill.name === "Divine Lattice"
+            ? "#ffffff"
+            : (skill.type === "heal" ? "#22c55e" : "#ff4400");
+        (aoeIndicatorRef.current.material as THREE.MeshBasicMaterial).color.set(indicatorColor);
         (aoeIndicatorRef.current.material as THREE.MeshBasicMaterial).opacity = 0.4;
         aoeIndicatorRef.current.visible = true;
     }

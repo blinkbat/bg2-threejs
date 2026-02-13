@@ -419,8 +419,8 @@ export function applyDamageToUnit(
     // Read current state from ref
     const refUnit = targetUnit ?? unitsStateRef.current?.find(u => u.id === targetId);
 
-    // Invul status — full damage immunity (e.g. Dodge cantrip)
-    if (refUnit && hasStatusEffect(refUnit, "invul")) {
+    // Full damage immunity (e.g. Dodge or Divine Lattice)
+    if (refUnit && (hasStatusEffect(refUnit, "invul") || hasStatusEffect(refUnit, "divine_lattice"))) {
         spawnDamageNumber(scene, targetGroup.position.x, targetGroup.position.z, 0, "#ffffff", damageTexts);
         return;
     }

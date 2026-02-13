@@ -232,6 +232,9 @@ export const COLORS = {
     highlandDefense: "#6b4f2a",
     highlandDefenseText: "#d4a56a",
     highlandDefenseBg: "#24180c",
+    divineLattice: "#d8e6ff",
+    divineLatticeText: "#ffffff",
+    divineLatticeBg: "#1a2333",
     chilled: "#5dade2",             // Ice blue
     chilledText: "#85c1e9",         // Lighter ice blue
     fireBreath: "#ff4400",       // Orange-red for fire breath cone

@@ -8,7 +8,7 @@ import { COLORS } from "../core/constants";
 import { getUnitStats } from "../game/units";
 import { getEffectiveMaxHp } from "../game/playerUnits";
 import { handleUnitDefeat, showDamageVisual, spawnDamageNumber } from "../combat/damageEffects";
-import { isUnitAlive } from "../combat/combatMath";
+import { hasStatusEffect, isUnitAlive } from "../combat/combatMath";
 
 // =============================================================================
 // DOT VISUAL CONFIG (for effects that deal damage)
@@ -84,6 +84,7 @@ export function processStatusEffects(
         const maxHp = unit.team === "player"
             ? getEffectiveMaxHp(unit.id, unit)
             : data.hp;
+        const hasDivineLattice = hasStatusEffect(unit, "divine_lattice");
 
         for (const effect of currentEffects) {
             const rawDelta = now - effect.lastUpdateTime;
@@ -94,16 +95,19 @@ export function processStatusEffects(
 
             if (shouldTick) {
                 if (dealsDamage) {
-                    const dmg = effect.damagePerTick;
-                    hpDelta -= dmg;
                     tickEffectInPlace(effect, now);
 
-                    const config = DOT_VISUAL_CONFIG[effect.type];
-                    if (config) {
-                        const msg = config.messageTemplate(data.name, dmg);
-                        const color = config.color;
-                        const ux = unitG.position.x, uz = unitG.position.z, uid = unit.id;
-                        sideEffects.push(() => showDamageVisual(scene, uid, ux, uz, dmg, color, hitFlashRef, damageTexts, addLog, msg, now));
+                    if (!hasDivineLattice) {
+                        const dmg = effect.damagePerTick;
+                        hpDelta -= dmg;
+
+                        const config = DOT_VISUAL_CONFIG[effect.type];
+                        if (config) {
+                            const msg = config.messageTemplate(data.name, dmg);
+                            const color = config.color;
+                            const ux = unitG.position.x, uz = unitG.position.z, uid = unit.id;
+                            sideEffects.push(() => showDamageVisual(scene, uid, ux, uz, dmg, color, hitFlashRef, damageTexts, addLog, msg, now));
+                        }
                     }
                 } else if (effect.type === "regen") {
                     const healPerTick = effect.shieldAmount ?? 0;
@@ -118,7 +122,7 @@ export function processStatusEffects(
                             addLog(`${name} regenerates ${healPerTick} HP.`, COLORS.hpHigh);
                         });
                     }
-                } else if (effect.type === "doom" && effect.duration - effect.tickInterval <= 0) {
+                } else if (effect.type === "doom" && effect.duration - effect.tickInterval <= 0 && !hasDivineLattice) {
                     doom = true;
                     tickEffectInPlace(effect, now);
                     const name = data.name;

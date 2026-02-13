@@ -6,7 +6,7 @@
 export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba" | "acid_slug" | "basilisk" | "bat" | "undead_knight" | "ancient_construct" | "feral_hound" | "corrupt_druid" | "skeleton_warrior" | "baby_kraken" | "kraken_tentacle" | "magma_imp" | "necromancer" | "skeleton_minion" | "chittering_crabling" | "spine_spitter" | "occultist_dreamwalker" | "occultist_firebreather" | "occultist_pygmy";
 
 // Status effect types
-export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed" | "chilled" | "qi_drain" | "energyShield" | "defiance" | "doom" | "invul" | "sleep" | "sun_stance" | "thorns" | "highland_defense";
+export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed" | "chilled" | "qi_drain" | "energyShield" | "defiance" | "doom" | "invul" | "sleep" | "sun_stance" | "thorns" | "highland_defense" | "divine_lattice";
 
 export interface StatusEffect {
     type: StatusEffectType;
