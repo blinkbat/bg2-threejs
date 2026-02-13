@@ -7,7 +7,7 @@ import type { Unit, UnitGroup } from "../../core/types";
 import type { ChestMeshData } from "./types";
 
 interface LiquidTileAnimationData {
-    liquidType: "water" | "lava";
+    liquidType: "lava";
     baseY: number;
     wavePhase: number;
     waveSpeed: number;
@@ -27,7 +27,7 @@ function readLiquidData(value: unknown): LiquidTileAnimationData | null {
     const hotColor = Reflect.get(value, "hotColor");
     const baseEmissiveIntensity = Reflect.get(value, "baseEmissiveIntensity");
 
-    if (liquidType !== "water" && liquidType !== "lava") return null;
+    if (liquidType !== "lava") return null;
     if (typeof baseY !== "number" || typeof wavePhase !== "number" || typeof waveSpeed !== "number") return null;
     if (!(baseColor instanceof THREE.Color)) return null;
 
@@ -72,7 +72,7 @@ export function updateCamera(camera: THREE.OrthographicCamera, offset: { x: numb
 // =============================================================================
 
 /**
- * Update animated liquid tiles (water + lava).
+ * Update animated liquid tiles (lava only).
  */
 export function updateWater(waterMesh: THREE.Object3D | null, time: number): void {
     if (!waterMesh) return;
@@ -89,15 +89,6 @@ export function updateWater(waterMesh: THREE.Object3D | null, time: number): voi
 
         const primaryWave = Math.sin(t * liquidData.waveSpeed + liquidData.wavePhase);
         const secondaryWave = Math.sin(t * (liquidData.waveSpeed * 1.6) + liquidData.wavePhase * 0.73);
-
-        if (liquidData.liquidType === "water") {
-            const shimmer = 0.5 + (primaryWave * 0.4 + secondaryWave * 0.6) * 0.5;
-            mat.emissive.setRGB(0.02, 0.06, 0.09);
-            mat.emissiveIntensity = 0.03 + shimmer * 0.045;
-            mat.roughness = 0.52 + (1 - shimmer) * 0.08;
-            mat.metalness = 0.08;
-            return;
-        }
 
         const pulse = 0.5 + (primaryWave * 0.7 + secondaryWave * 0.3) * 0.5;
         if (liquidData.baseColor && liquidData.hotColor) {
