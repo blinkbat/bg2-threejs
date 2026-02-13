@@ -22,7 +22,7 @@ import { isConsumable } from "./core/types";
 import { updateChestStates } from "./rendering/scene";
 import { soundFns } from "./audio";
 import { findNearestPassable, findSpawnPositions } from "./ai/pathfinding";
-import { updateUnit, updateUnitWith, updateUnitsWhere } from "./core/stateUtils";
+import { updateUnit, updateUnitWith } from "./core/stateUtils";
 
 // Extracted modules
 import { executeSkill, type SkillExecutionContext } from "./combat/skills";
@@ -33,6 +33,8 @@ import {
     togglePause,
     processActionQueue,
     handleTargetingOnUnit,
+    stopSelectedUnits,
+    toggleHoldPositionForSelectedUnits,
     type ActionQueue
 } from "./input";
 
@@ -388,6 +390,16 @@ function Game({
     const boxEnd = useRef({ x: 0, y: 0 });
     const lastMouse = useRef({ x: 0, y: 0 });
     const debugGridRef = useRef<THREE.Group | null>(null);
+    const [selectedConsumableCooldownEnd, setSelectedConsumableCooldownEnd] = useState(0);
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            const selectedId = selectedRef.current[0];
+            const nextCooldown = selectedId !== undefined ? (actionCooldownRef.current[selectedId] || 0) : 0;
+            setSelectedConsumableCooldownEnd(prev => (prev === nextCooldown ? prev : nextCooldown));
+        }, 100);
+        return () => clearInterval(interval);
+    }, []);
 
     // =============================================================================
     // USE THREE SCENE HOOK
@@ -399,6 +411,12 @@ function Game({
         openedChests,
         initialCameraOffset: initialCamOffset
     });
+    const sceneRef = useRef<THREE.Scene | null>(null);
+    const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+    useEffect(() => {
+        sceneRef.current = sceneState.scene;
+        rendererRef.current = sceneState.renderer;
+    }, [sceneState.scene, sceneState.renderer]);
 
     // Preload portrait images before fade-in
     const [portraitsReady, setPortraitsReady] = useState(false);
@@ -432,8 +450,8 @@ function Game({
 
     // Live lighting tuning from debug panel
     useEffect(() => {
-        const scene = sceneState.scene;
-        const renderer = sceneState.renderer;
+        const scene = sceneRef.current;
+        const renderer = rendererRef.current;
         if (!scene || !renderer) return;
 
         const baseExposureRaw = scene.userData.baseExposure;
@@ -509,6 +527,7 @@ function Game({
     }, []);
 
     // Skill execution context
+    // eslint-disable-next-line react-hooks/preserve-manual-memoization
     const getSkillContext = useCallback((defeatedThisFrame?: Set<number>): SkillExecutionContext => ({
         scene: sceneState.scene!,
         unitsStateRef: unitsStateRef as React.RefObject<Unit[]>,
@@ -620,6 +639,7 @@ function Game({
     }, [addLog, sceneState]);
 
     // Process action queue wrapper
+    // eslint-disable-next-line react-hooks/preserve-manual-memoization
     const doProcessQueue = useCallback((defeatedThisFrame: Set<number>) => {
         const skillCtx = getSkillContext(defeatedThisFrame);
         processActionQueue(
@@ -681,31 +701,72 @@ function Game({
         };
     }, [isInitialized, sceneState]);
 
+    const inputStateRefs = useMemo(() => ({
+        unitsStateRef,
+        selectedRef,
+        pausedRef,
+        targetingModeRef,
+        consumableTargetingModeRef,
+        showPanelRef,
+        helpOpenRef,
+        openedChestsRef,
+        hotbarAssignmentsRef,
+        pauseStartTimeRef,
+        formationOrderRef,
+        commandModeRef
+    }), []);
+
+    const inputMutableRefs = useMemo(() => ({
+        actionQueueRef,
+        actionCooldownRef,
+        keysPressed,
+        isDragging,
+        didPan,
+        isBoxSel,
+        boxStart,
+        boxEnd,
+        lastMouse
+    }), []);
+
+    const inputSetters = useMemo(() => ({
+        setSelectedIds,
+        setSelBox,
+        setUnits,
+        setPaused,
+        setTargetingMode,
+        setConsumableTargetingMode,
+        setSkillCooldowns,
+        setQueuedActions,
+        setShowPanel,
+        setHoveredEnemy,
+        setHoveredChest,
+        setHoveredPlayer,
+        setHoveredDoor,
+        setHoveredSecretDoor,
+        setHoveredLootBag,
+        setOpenedChests,
+        setOpenedSecretDoors,
+        setGold,
+        setCommandMode
+    }), []);
+
+    const inputCallbacks = useMemo(() => ({
+        addLog,
+        getSkillContext,
+        handleAreaTransition,
+        onCloseHelp,
+        processActionQueue: doProcessQueue,
+        handleCastSkillRef
+    }), [addLog, getSkillContext, handleAreaTransition, onCloseHelp, doProcessQueue]);
+
     useInputHandlers({
         containerRef,
         sceneRefs: inputSceneRefs,
         gameRefs: gameRefs as React.MutableRefObject<InputGameRefs>,
-        stateRefs: {
-            unitsStateRef, selectedRef, pausedRef, targetingModeRef, consumableTargetingModeRef,
-            showPanelRef, helpOpenRef, openedChestsRef, hotbarAssignmentsRef, pauseStartTimeRef,
-            formationOrderRef,
-            commandModeRef
-        },
-        mutableRefs: {
-            actionQueueRef, actionCooldownRef, keysPressed,
-            isDragging, didPan, isBoxSel, boxStart, boxEnd, lastMouse
-        },
-        setters: {
-            setSelectedIds, setSelBox, setUnits, setPaused, setTargetingMode, setConsumableTargetingMode,
-            setSkillCooldowns, setQueuedActions, setShowPanel, setHoveredEnemy,
-            setHoveredChest, setHoveredPlayer, setHoveredDoor, setHoveredSecretDoor,
-            setHoveredLootBag, setOpenedChests, setOpenedSecretDoors, setGold,
-            setCommandMode
-        },
-        callbacks: {
-            addLog, getSkillContext, handleAreaTransition, onCloseHelp,
-            processActionQueue: doProcessQueue, handleCastSkillRef
-        }
+        stateRefs: inputStateRefs,
+        mutableRefs: inputMutableRefs,
+        setters: inputSetters,
+        callbacks: inputCallbacks
     });
 
     // =============================================================================
@@ -717,18 +778,30 @@ function Game({
         return sceneState as InitializedSceneState;
     }, [isInitialized, sceneState]);
 
+    const gameLoopStateRefs = useMemo(() => ({
+        unitsStateRef,
+        pausedRef,
+        targetingModeRef,
+        skillCooldownsRef,
+        actionQueueRef
+    }), []);
+
+    const gameLoopCallbacks = useMemo(() => ({
+        setUnits,
+        setFps,
+        setHpBarPositions,
+        setSkillCooldowns,
+        setQueuedActions,
+        addLog,
+        processActionQueue: doProcessQueue
+    }), [addLog, doProcessQueue]);
+
     useGameLoop({
         sceneState: gameLoopSceneState,
         gameRefs,
-        stateRefs: {
-            unitsStateRef, pausedRef, targetingModeRef, skillCooldownsRef, actionQueueRef
-        },
-        callbacks: {
-            setUnits, setFps, setHpBarPositions, setSkillCooldowns, setQueuedActions,
-            addLog, processActionQueue: doProcessQueue
-        },
-        keysPressed,
-        containerRef
+        stateRefs: gameLoopStateRefs,
+        callbacks: gameLoopCallbacks,
+        keysPressed
     });
 
     // =============================================================================
@@ -756,10 +829,12 @@ function Game({
         }
 
         if (newlyDead.length > 0) {
-            setKilledEnemies(prev => {
-                const next = new Set(prev);
-                for (const key of newlyDead) next.add(key);
-                return next;
+            queueMicrotask(() => {
+                setKilledEnemies(prev => {
+                    const next = new Set(prev);
+                    for (const key of newlyDead) next.add(key);
+                    return next;
+                });
             });
         }
 
@@ -771,7 +846,9 @@ function Game({
                     const z = g ? g.position.z : u.z;
                     const bag = spawnLootBag(sceneState.scene, x, z, 100);
                     gameRefs.current.lootBags.push(bag);
-                    addLog("The Kraken Nymph drops a bag of treasure!", "#ffd700");
+                    queueMicrotask(() => {
+                        addLog("The Kraken Nymph drops a bag of treasure!", "#ffd700");
+                    });
                 }
             }
         }
@@ -799,7 +876,10 @@ function Game({
             ring.visible = selectedIds.includes(Number(id)) && (unit?.hp ?? 0) > 0;
         });
         const selectedUnit = units.find(u => u.id === selectedIds[0]);
-        setShowPanel(selectedIds.length === 1 && selectedUnit?.team === "player" && (selectedUnit?.hp ?? 0) > 0);
+        const shouldShowPanel = selectedIds.length === 1 && selectedUnit?.team === "player" && (selectedUnit?.hp ?? 0) > 0;
+        queueMicrotask(() => {
+            setShowPanel(shouldShowPanel);
+        });
     }, [selectedIds, units, sceneState.selectRings]);
 
     // Debug grid
@@ -866,48 +946,36 @@ function Game({
         setupTargetingMode(casterId, skill, casterG, { current: sceneState.rangeIndicator }, { current: sceneState.aoeIndicator }, setTargetingMode);
     }, [units, sceneState, paused, getSkillContext, addLog]);
 
-    handleCastSkillRef.current = handleCastSkill;
+    useEffect(() => {
+        handleCastSkillRef.current = handleCastSkill;
+    }, [handleCastSkill]);
 
+    // eslint-disable-next-line react-hooks/preserve-manual-memoization
     const handleStop = useCallback(() => {
-        const selected = selectedRef.current;
-        if (selected.length === 0) return;
-        const selectedSet = new Set(selected);
-        selected.forEach(uid => {
-            gameRefs.current.paths[uid] = [];
-            const ug = sceneState.unitGroups[uid];
-            if (ug) {
-                ug.userData.attackTarget = null;
-                ug.userData.pendingMove = false;
-                delete ug.userData.formationRamp;
-                delete ug.userData.attackMoveTarget;
-            }
-            delete actionQueueRef.current[uid];
+        stopSelectedUnits({
+            selectedIds: selectedRef.current,
+            unitGroups: sceneState.unitGroups,
+            pathsRef: gameRefs.current.paths,
+            actionQueueRef: actionQueueRef.current,
+            setQueuedActions,
+            setUnits
         });
-        setQueuedActions(prev => prev.filter(q => !selectedSet.has(q.unitId)));
-        updateUnitsWhere(setUnits, u => selectedSet.has(u.id), { target: null });
-    }, [sceneState.unitGroups]);
+    }, [sceneState.unitGroups, gameRefs]);
 
+    // eslint-disable-next-line react-hooks/preserve-manual-memoization
     const handleHold = useCallback(() => {
-        const selected = selectedRef.current;
-        if (selected.length === 0) return;
-        const selectedSet = new Set(selected);
-        setUnits(prev => prev.map(u => {
-            if (!selectedSet.has(u.id)) return u;
-            const turningOn = !u.holdPosition;
-            if (turningOn) {
-                gameRefs.current.paths[u.id] = [];
-                const ug = sceneState.unitGroups[u.id];
-                if (ug) {
-                    ug.userData.attackTarget = null;
-                    ug.userData.pendingMove = false;
-                    delete ug.userData.formationRamp;
-                    delete ug.userData.attackMoveTarget;
-                }
-                delete actionQueueRef.current[u.id];
-            }
-            return { ...u, holdPosition: turningOn, target: turningOn ? null : u.target };
-        }));
-    }, [sceneState.unitGroups]);
+        toggleHoldPositionForSelectedUnits(
+            {
+                selectedIds: selectedRef.current,
+                unitGroups: sceneState.unitGroups,
+                pathsRef: gameRefs.current.paths,
+                actionQueueRef: actionQueueRef.current,
+                setQueuedActions,
+                setUnits
+            },
+            unitsStateRef.current
+        );
+    }, [sceneState.unitGroups, gameRefs]);
 
     const handleSelectAllPlayers = useCallback(() => {
         const controllableIds = unitsStateRef.current
@@ -1079,9 +1147,10 @@ function Game({
         setLightingTuning({ ...DEFAULT_LIGHTING_TUNING });
     }, []);
 
+    const currentAreaId = getCurrentAreaId();
     const lightingTuningOutput = useMemo(() => {
         const payload = {
-            areaId: getCurrentAreaId(),
+            areaId: currentAreaId,
             ...lightingTuning
         };
         const compact = [
@@ -1099,7 +1168,7 @@ function Game({
             `sprM=${payload.spriteMetalness.toFixed(2)}`
         ].join(" ");
         return `${JSON.stringify(payload, null, 2)}\n\n${compact}`;
-    }, [lightingTuning, sceneState.scene]);
+    }, [lightingTuning, currentAreaId]);
 
     // =============================================================================
     // RENDER
@@ -1243,7 +1312,7 @@ function Game({
                     onToggleAI={(id) => updateUnitWith(setUnits, id, u => ({ aiEnabled: !u.aiEnabled }))}
                     onCastSkill={handleCastSkill} skillCooldowns={skillCooldowns} paused={paused}
                     queuedSkills={queuedActions.filter(q => q.unitId === selectedIds[0]).map(q => q.skillName)}
-                    onUseConsumable={handleUseConsumable} consumableCooldownEnd={actionCooldownRef.current[selectedIds[0]] || 0}
+                    onUseConsumable={handleUseConsumable} consumableCooldownEnd={selectedConsumableCooldownEnd}
                     onIncrementStat={(id, stat) => setUnits(prev => prev.map(u => {
                         if (u.id === id && (u.statPoints ?? 0) > 0) {
                             const currentStats = u.stats ?? { strength: 0, dexterity: 0, vitality: 0, intelligence: 0, faith: 0 };
@@ -1297,7 +1366,7 @@ export default function App() {
     const [initialOpenedSecretDoors, setInitialOpenedSecretDoors] = useState<Set<string> | null>(null);
     const [initialGold, setInitialGold] = useState<number | null>(null);
     const [initialKilledEnemies, setInitialKilledEnemies] = useState<Set<string> | null>(null);
-    const [savePreviewTimestamp, setSavePreviewTimestamp] = useState(0);
+    const [savePreviewState, setSavePreviewState] = useState<SaveSlotData | null>(null);
     const gameStateRef = useRef<(() => SaveableGameState) | null>(null);
 
     // Transition overlay state (starts opaque so initial load fades in from black)
@@ -1343,19 +1412,45 @@ export default function App() {
         setTransitionOpacity(0);
     }, []);
 
-    useEffect(() => {
-        const updateTimestamp = () => setSavePreviewTimestamp(Date.now());
-        updateTimestamp();
-        const interval = setInterval(updateTimestamp, 1000);
-        return () => clearInterval(interval);
+    const buildCurrentSavePreview = useCallback((timestamp: number): SaveSlotData | null => {
+        if (!gameStateRef.current) return null;
+        const state = gameStateRef.current();
+        const areaData = AREAS[state.currentAreaId];
+        return {
+            version: SAVE_VERSION,
+            timestamp,
+            slotName: areaData.name,
+            players: state.players,
+            currentAreaId: state.currentAreaId,
+            openedChests: Array.from(state.openedChests),
+            openedSecretDoors: Array.from(state.openedSecretDoors),
+            killedEnemies: Array.from(state.killedEnemies),
+            gold: state.gold,
+            equipment: getAllEquipment(),
+            inventory: getPartyInventory(),
+            hotbarAssignments: loadHotbarAssignments(),
+            formationOrder: loadFormationOrder()
+        };
     }, []);
+
+    useEffect(() => {
+        if (!showSaveLoad) return;
+        const interval = setInterval(() => {
+            const preview = buildCurrentSavePreview(Date.now());
+            if (preview) {
+                setSavePreviewState(preview);
+            }
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [showSaveLoad, buildCurrentSavePreview]);
 
     const handleSave = (slot: number) => {
         if (!gameStateRef.current) return;
         const state = gameStateRef.current();
         const areaData = AREAS[state.currentAreaId];
+        const timestamp = Date.now();
         const saveData: SaveSlotData = {
-            version: SAVE_VERSION, timestamp: savePreviewTimestamp, slotName: areaData.name,
+            version: SAVE_VERSION, timestamp, slotName: areaData.name,
             players: state.players, currentAreaId: state.currentAreaId,
             openedChests: Array.from(state.openedChests), openedSecretDoors: Array.from(state.openedSecretDoors),
             killedEnemies: Array.from(state.killedEnemies), gold: state.gold,
@@ -1385,19 +1480,16 @@ export default function App() {
         setGameKey(k => k + 1);
     };
 
-    const getCurrentSaveState = (): SaveSlotData | null => {
-        if (!gameStateRef.current) return null;
-        const state = gameStateRef.current();
-        const areaData = AREAS[state.currentAreaId];
-        return {
-            version: SAVE_VERSION, timestamp: savePreviewTimestamp, slotName: areaData.name,
-            players: state.players, currentAreaId: state.currentAreaId,
-            openedChests: Array.from(state.openedChests), openedSecretDoors: Array.from(state.openedSecretDoors),
-            killedEnemies: Array.from(state.killedEnemies), gold: state.gold,
-            equipment: getAllEquipment(), inventory: getPartyInventory(),
-            hotbarAssignments: loadHotbarAssignments(), formationOrder: loadFormationOrder()
-        };
-    };
+    const openSaveLoadModal = useCallback((mode: "save" | "load") => {
+        setSaveLoadMode(mode);
+        setShowSaveLoad(true);
+        setSavePreviewState(buildCurrentSavePreview(Date.now()));
+    }, [buildCurrentSavePreview]);
+
+    const closeSaveLoadModal = useCallback(() => {
+        setShowSaveLoad(false);
+        setSavePreviewState(null);
+    }, []);
 
     return (
         <>
@@ -1406,15 +1498,15 @@ export default function App() {
                 onShowHelp={() => setShowHelp(true)} onCloseHelp={() => setShowHelp(false)}
                 helpOpen={showHelp} saveLoadOpen={showSaveLoad}
                 persistedPlayers={persistedPlayers} spawnPoint={spawnPoint} spawnDirection={spawnDirection}
-                onSaveClick={() => { setSaveLoadMode("save"); setShowSaveLoad(true); }}
-                onLoadClick={() => { setSaveLoadMode("load"); setShowSaveLoad(true); }}
+                onSaveClick={() => openSaveLoadModal("save")}
+                onLoadClick={() => openSaveLoadModal("load")}
                 gameStateRef={gameStateRef}
                 initialOpenedChests={initialOpenedChests} initialOpenedSecretDoors={initialOpenedSecretDoors}
                 initialGold={initialGold} initialKilledEnemies={initialKilledEnemies}
                 onReady={handleSceneReady}
             />
             {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
-            {showSaveLoad && <SaveLoadModal mode={saveLoadMode} onClose={() => setShowSaveLoad(false)} onSave={handleSave} onLoad={handleLoad} currentState={getCurrentSaveState()} />}
+            {showSaveLoad && <SaveLoadModal mode={saveLoadMode} onClose={closeSaveLoadModal} onSave={handleSave} onLoad={handleLoad} currentState={savePreviewState} />}
             {/* Transition overlay - fades to black during area transitions */}
             <div
                 style={{

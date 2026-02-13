@@ -10,7 +10,7 @@ import { distance, distanceToPoint } from "./geometry";
 // Updated once per frame in useGameLoop before any game logic runs.
 // =============================================================================
 
-let unitsByIdCache: Map<number, Unit> = new Map();
+const unitsByIdCache: Map<number, Unit> = new Map();
 
 /**
  * Update the unit lookup cache. Call this once per frame before AI/combat updates.

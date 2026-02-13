@@ -188,6 +188,89 @@ export function executeAttack(
     soundFns.playAttack();
 }
 
+interface SharedCommandContext {
+    selectedIds: number[];
+    unitGroups: Record<number, UnitGroup>;
+    pathsRef: Record<number, { x: number; z: number }[]>;
+    actionQueueRef: ActionQueue;
+    setQueuedActions: React.Dispatch<React.SetStateAction<{ unitId: number; skillName: string }[]>>;
+    setUnits: React.Dispatch<React.SetStateAction<Unit[]>>;
+}
+
+function clearUnitCommandState(unitGroup: UnitGroup | undefined): void {
+    if (!unitGroup) return;
+    unitGroup.userData.attackTarget = null;
+    unitGroup.userData.pendingMove = false;
+    delete unitGroup.userData.formationRamp;
+    delete unitGroup.userData.attackMoveTarget;
+    delete unitGroup.userData.moveTarget;
+    delete unitGroup.userData.formationRegroupAttempted;
+}
+
+/**
+ * Stop selected units: clear queued actions, paths, and combat target.
+ */
+export function stopSelectedUnits(
+    ctx: SharedCommandContext,
+    clearHoldPosition: boolean = false
+): void {
+    const { selectedIds, unitGroups, pathsRef, actionQueueRef, setQueuedActions, setUnits } = ctx;
+    if (selectedIds.length === 0) return;
+
+    const selectedSet = new Set(selectedIds);
+    for (const unitId of selectedIds) {
+        pathsRef[unitId] = [];
+        clearUnitCommandState(unitGroups[unitId]);
+        delete actionQueueRef[unitId];
+    }
+
+    setQueuedActions(prev => prev.filter(q => !selectedSet.has(q.unitId)));
+    setUnits(prev => prev.map(unit => {
+        if (!selectedSet.has(unit.id)) return unit;
+        if (clearHoldPosition) {
+            return { ...unit, target: null, holdPosition: false };
+        }
+        return { ...unit, target: null };
+    }));
+}
+
+/**
+ * Toggle hold position for selected units.
+ * Units toggling hold ON are stopped immediately and their queued actions are removed.
+ */
+export function toggleHoldPositionForSelectedUnits(ctx: SharedCommandContext, units: Unit[]): void {
+    const { selectedIds, unitGroups, pathsRef, actionQueueRef, setQueuedActions, setUnits } = ctx;
+    if (selectedIds.length === 0) return;
+
+    const selectedSet = new Set(selectedIds);
+    const turningOnSet = new Set<number>();
+    for (const unit of units) {
+        if (selectedSet.has(unit.id) && !unit.holdPosition) {
+            turningOnSet.add(unit.id);
+        }
+    }
+
+    for (const unitId of turningOnSet) {
+        pathsRef[unitId] = [];
+        clearUnitCommandState(unitGroups[unitId]);
+        delete actionQueueRef[unitId];
+    }
+
+    if (turningOnSet.size > 0) {
+        setQueuedActions(prev => prev.filter(q => !turningOnSet.has(q.unitId)));
+    }
+
+    setUnits(prev => prev.map(unit => {
+        if (!selectedSet.has(unit.id)) return unit;
+        const turningOn = !unit.holdPosition;
+        return {
+            ...unit,
+            holdPosition: turningOn,
+            target: turningOn ? null : unit.target
+        };
+    }));
+}
+
 // =============================================================================
 // BOX SELECTION
 // =============================================================================

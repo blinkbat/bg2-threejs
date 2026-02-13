@@ -263,7 +263,7 @@ function doesCircleOccludeSegmentXZ(
 // Throttle expensive ray-box tests - only recalculate every N frames
 const WALL_CHECK_INTERVAL = 3;
 let wallCheckFrame = 0;
-let cachedOccludingMeshes = new Set<THREE.Mesh>();
+const cachedOccludingMeshes = new Set<THREE.Mesh>();
 
 /**
  * Update wall, tree, column, and candle transparency based on unit occlusion.
@@ -291,6 +291,15 @@ export function updateWallTransparency(
         _cameraPos.copy(camera.position);
 
         const treeOcclusionGroups: TreeOcclusionGroup[] = [];
+        const groupedColumnMeshes = new Set<THREE.Mesh>();
+        if (columnGroups) {
+            for (const group of columnGroups) {
+                for (const mesh of group) {
+                    groupedColumnMeshes.add(mesh);
+                }
+            }
+        }
+
         if (treeMeshes) {
             const treeGroupMap = new Map<string, THREE.Mesh[]>();
             const standaloneTreeMeshes: THREE.Mesh[] = [];
@@ -371,13 +380,8 @@ export function updateWallTransparency(
             }
 
             // Check grouped columns first so multipart structures fade together.
-            const groupedColumnMeshes = new Set<THREE.Mesh>();
             if (columnGroups) {
                 for (const group of columnGroups) {
-                    for (const mesh of group) {
-                        groupedColumnMeshes.add(mesh);
-                    }
-
                     // Skip if already marked
                     if (group.some(mesh => cachedOccludingMeshes.has(mesh))) continue;
 

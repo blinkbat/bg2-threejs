@@ -23,6 +23,8 @@ import {
     buildMoveTargets,
     handleTargetingClick,
     queueOrExecuteSkill,
+    stopSelectedUnits,
+    toggleHoldPositionForSelectedUnits,
     type ActionQueue
 } from "../input";
 import { clearTargetingMode, type SkillExecutionContext } from "../combat/skills";
@@ -243,47 +245,44 @@ export function useInputHandlers({
                 });
             }
 
-            // Update AOE indicator position
-            if (stateRefs.targetingModeRef.current && aoeIndicator) {
-                const rect = renderer.domElement.getBoundingClientRect();
-                mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-                mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-                raycaster.setFromCamera(mouse, camera);
-                for (const hit of raycaster.intersectObjects(scene.children, true)) {
-                    if (hit.object.name === "ground") {
-                        if (aoeIndicator.userData.isLine) {
-                            // Line AOE: position at caster, rotate toward cursor
-                            const casterG = unitGroups[stateRefs.targetingModeRef.current.casterId];
-                            if (casterG) {
-                                aoeIndicator.position.x = casterG.position.x;
-                                aoeIndicator.position.z = casterG.position.z;
-                                const angle = Math.atan2(
-                                    hit.point.z - casterG.position.z,
-                                    hit.point.x - casterG.position.x
-                                );
-                                aoeIndicator.rotation.z = -angle;
-                            }
-                        } else {
-                            // Circular AOE: follow cursor
-                            aoeIndicator.position.x = hit.point.x;
-                            aoeIndicator.position.z = hit.point.z;
-                        }
-                        break;
-                    }
-                }
-            }
-
-            // Check for hovered objects
             const rect = renderer.domElement.getBoundingClientRect();
             mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
             mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
             raycaster.setFromCamera(mouse, camera);
+            const hits = raycaster.intersectObjects(scene.children, true);
+
+            // Update AOE indicator position
+            if (stateRefs.targetingModeRef.current && aoeIndicator) {
+                for (const hit of hits) {
+                    if (hit.object.name !== "ground") continue;
+                    if (aoeIndicator.userData.isLine) {
+                        // Line AOE: position at caster, rotate toward cursor
+                        const casterG = unitGroups[stateRefs.targetingModeRef.current.casterId];
+                        if (casterG) {
+                            aoeIndicator.position.x = casterG.position.x;
+                            aoeIndicator.position.z = casterG.position.z;
+                            const angle = Math.atan2(
+                                hit.point.z - casterG.position.z,
+                                hit.point.x - casterG.position.x
+                            );
+                            aoeIndicator.rotation.z = -angle;
+                        }
+                    } else {
+                        // Circular AOE: follow cursor
+                        aoeIndicator.position.x = hit.point.x;
+                        aoeIndicator.position.z = hit.point.z;
+                    }
+                    break;
+                }
+            }
+
+            // Check for hovered objects
 
             let foundEnemy: { id: number; x: number; y: number } | null = null;
             let foundChest: { x: number; y: number; chestIndex: number; chestX: number; chestZ: number } | null = null;
             let foundPlayer: { id: number; x: number; y: number } | null = null;
 
-            for (const hit of raycaster.intersectObjects(scene.children, true)) {
+            for (const hit of hits) {
                 const unitId = hit.object.userData?.unitId;
                 if (unitId !== undefined) {
                     const unit = stateRefs.unitsStateRef.current.find(u => u.id === unitId);
@@ -334,7 +333,6 @@ export function useInputHandlers({
             setters.setHoveredChest(foundChest);
             setters.setHoveredPlayer(foundPlayer);
 
-            const hits = raycaster.intersectObjects(scene.children, true);
             if (!hits.some(h => h.object.name === "door")) setters.setHoveredDoor(null);
             if (!hits.some(h => h.object.name === "secretDoor")) setters.setHoveredSecretDoor(null);
             if (!hits.some(h => h.object.name === "lootBag")) setters.setHoveredLootBag(null);
@@ -613,56 +611,27 @@ export function useInputHandlers({
             }
             // Command hotkeys (S=stop, H=hold, A=attack-move, M=move)
             if (e.code === "KeyS" && !stateRefs.targetingModeRef.current) {
-                const selected = stateRefs.selectedRef.current;
-                if (selected.length > 0) {
-                    selected.forEach(uid => {
-                        gameRefs.current.paths[uid] = [];
-                        const ug = unitGroups[uid];
-                        if (ug) {
-                            ug.userData.attackTarget = null;
-                            ug.userData.pendingMove = false;
-                            delete ug.userData.formationRamp;
-                            delete ug.userData.attackMoveTarget;
-                            delete ug.userData.moveTarget;
-                            delete ug.userData.formationRegroupAttempted;
-                        }
-                        delete mutableRefs.actionQueueRef.current[uid];
-                    });
-                    setters.setQueuedActions(prev => prev.filter(q => !selected.includes(q.unitId)));
-                    setters.setUnits(prev => prev.map(u =>
-                        selected.includes(u.id) ? { ...u, target: null, holdPosition: false } : u
-                    ));
-                }
+                stopSelectedUnits({
+                    selectedIds: stateRefs.selectedRef.current,
+                    unitGroups,
+                    pathsRef: gameRefs.current.paths,
+                    actionQueueRef: mutableRefs.actionQueueRef.current,
+                    setQueuedActions: setters.setQueuedActions,
+                    setUnits: setters.setUnits
+                });
             }
             if (e.code === "KeyH" && !stateRefs.targetingModeRef.current) {
-                const selected = stateRefs.selectedRef.current;
-                if (selected.length > 0) {
-                    // Toggle hold — when toggling ON, also stop
-                    const units = stateRefs.unitsStateRef.current;
-                    setters.setUnits(prev => prev.map(u => {
-                        if (!selected.includes(u.id)) return u;
-                        const turningOn = !u.holdPosition;
-                        if (turningOn) {
-                            // Stop movement when entering hold
-                            gameRefs.current.paths[u.id] = [];
-                            const ug = unitGroups[u.id];
-                            if (ug) {
-                                ug.userData.attackTarget = null;
-                                ug.userData.pendingMove = false;
-                                delete ug.userData.formationRamp;
-                                delete ug.userData.attackMoveTarget;
-                                delete ug.userData.moveTarget;
-                                delete ug.userData.formationRegroupAttempted;
-                            }
-                            delete mutableRefs.actionQueueRef.current[u.id];
-                        }
-                        return { ...u, holdPosition: turningOn, target: turningOn ? null : u.target };
-                    }));
-                    setters.setQueuedActions(prev => prev.filter(q => {
-                        const unit = units.find(u => u.id === q.unitId);
-                        return !(unit && selected.includes(unit.id) && !unit.holdPosition);
-                    }));
-                }
+                toggleHoldPositionForSelectedUnits(
+                    {
+                        selectedIds: stateRefs.selectedRef.current,
+                        unitGroups,
+                        pathsRef: gameRefs.current.paths,
+                        actionQueueRef: mutableRefs.actionQueueRef.current,
+                        setQueuedActions: setters.setQueuedActions,
+                        setUnits: setters.setUnits
+                    },
+                    stateRefs.unitsStateRef.current
+                );
             }
             if (e.code === "KeyA" && !stateRefs.targetingModeRef.current) {
                 if (stateRefs.selectedRef.current.length > 0) {
@@ -950,3 +919,4 @@ function handleEnemyClick(
     setters.setUnits(prev => prev.map(u => stateRefs.selectedRef.current.includes(u.id) ? { ...u, target: targetId } : u));
     soundFns.playAttack();
 }
+

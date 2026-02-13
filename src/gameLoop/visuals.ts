@@ -224,13 +224,16 @@ export function updateFogOfWar(
 
     updateVisibility(visibility, playerUnits, { current: unitsRef });
 
-    // Quick hash to detect visibility changes (sum of visible cell coords)
-    let fogHash = 0;
+    // FNV-style rolling hash to detect visibility changes with low collision risk.
+    let fogHash = 2166136261;
     for (let x = 0; x < area.gridWidth; x++) {
         for (let z = 0; z < area.gridHeight; z++) {
-            if (visibility[x]?.[z] === 2) fogHash += x * 100 + z;
+            const vis = visibility[x]?.[z] ?? 0;
+            const mixed = (x * 73856093) ^ (z * 19349663) ^ vis;
+            fogHash = Math.imul(fogHash ^ mixed, 16777619);
         }
     }
+    fogHash >>>= 0;
 
     // Only redraw fog texture if visibility changed
     if (fogHash !== lastFogHash) {

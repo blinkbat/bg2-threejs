@@ -110,7 +110,7 @@ export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, ski
             </div>
 
             <div className="unit-content">
-                {tab === "status" && <StatusTab unit={unit} effectiveData={effectiveData} onToggleAI={onToggleAI} unitId={unitId} onIncrementStat={onIncrementStat} />}
+                {tab === "status" && <StatusTab unit={unit} effectiveData={effectiveData} onToggleAI={onToggleAI} unitId={unitId} onIncrementStat={onIncrementStat} displayTime={displayTime} />}
                 {tab === "skills" && (
                     <SkillsTab
                         unitId={unitId}
@@ -203,7 +203,7 @@ const EFFECT_INFO: Record<string, { icon: string; color: string; description: st
 };
 
 /** Renders active status effects as inline icons with tooltips */
-function EffectsDisplay({ unit }: { unit: Unit }) {
+function EffectsDisplay({ unit, displayTime }: { unit: Unit; displayTime: number }) {
     if (!unit.statusEffects || unit.statusEffects.length === 0) return null;
 
     return (
@@ -212,7 +212,7 @@ function EffectsDisplay({ unit }: { unit: Unit }) {
                 const remainingSec = Math.ceil(effect.duration / 1000);
                 const info = EFFECT_INFO[effect.type] || { icon: "?", color: "#888", description: "Unknown effect" };
                 const displayName = effect.type.replace(/_/g, " ");
-                const now = Date.now();
+                const now = displayTime;
 
                 return (
                     <Tippy
@@ -266,12 +266,13 @@ function EffectsDisplay({ unit }: { unit: Unit }) {
     );
 }
 
-function StatusTab({ unit, effectiveData, onToggleAI, unitId, onIncrementStat }: {
+function StatusTab({ unit, effectiveData, onToggleAI, unitId, onIncrementStat, displayTime }: {
     unit: Unit;
     effectiveData: typeof UNIT_DATA[number];
     onToggleAI: (id: number) => void;
     unitId: number;
     onIncrementStat?: (unitId: number, stat: keyof CharacterStats) => void;
+    displayTime: number;
 }) {
     const isShielded = hasStatusEffect(unit, "shielded");
     // Base armor from equipment, doubled if shielded
@@ -293,7 +294,7 @@ function StatusTab({ unit, effectiveData, onToggleAI, unitId, onIncrementStat }:
 
     return (
         <div style={{ fontSize: 13 }}>
-            <EffectsDisplay unit={unit} />
+            <EffectsDisplay unit={unit} displayTime={displayTime} />
 
             <div className="level-exp-section">
                 <div className="level-badge">Lv {level}</div>
@@ -694,7 +695,7 @@ function SkillsTab({
 
     return (
         <div className="flex flex-col gap-8">
-            <EffectsDisplay unit={unit} />
+            <EffectsDisplay unit={unit} displayTime={displayTime} />
 
             {cantrips.length > 0 && (
                 <>

@@ -101,21 +101,8 @@ export interface UseThreeSceneResult {
     isInitialized: boolean;
 }
 
-/**
- * Initialize and manage the Three.js scene
- * Handles scene creation, cleanup, and provides refs for game state
- */
-export function useThreeScene({
-    containerRef,
-    units,
-    openedChests,
-    initialCameraOffset
-}: UseThreeSceneOptions): UseThreeSceneResult {
-    const initialArea = getCurrentArea();
-    const initialAreaId = getCurrentAreaId();
-
-    // Scene state (stable object, populated during initialization)
-    const sceneStateRef = useRef<ThreeSceneState>({
+function createEmptySceneState(): ThreeSceneState {
+    return {
         scene: null,
         camera: null,
         renderer: null,
@@ -144,7 +131,24 @@ export function useThreeScene({
         waterMesh: null,
         chestMeshes: [],
         billboards: []
-    });
+    };
+}
+
+/**
+ * Initialize and manage the Three.js scene
+ * Handles scene creation, cleanup, and provides refs for game state
+ */
+export function useThreeScene({
+    containerRef,
+    units,
+    openedChests,
+    initialCameraOffset
+}: UseThreeSceneOptions): UseThreeSceneResult {
+    const initialArea = getCurrentArea();
+    const initialAreaId = getCurrentAreaId();
+
+    // Scene state
+    const [sceneState, setSceneState] = useState<ThreeSceneState>(() => createEmptySceneState());
 
     // Game state refs (mutable values that persist across frames)
     const gameRefsRef = useRef<GameRefs>({
@@ -171,7 +175,8 @@ export function useThreeScene({
 
     // Initialize scene
     useEffect(() => {
-        if (!containerRef.current) return;
+        const container = containerRef.current;
+        if (!container) return;
         const areaIdAtMount = getCurrentAreaId();
 
         // Reset module-level caches on game restart
@@ -204,38 +209,40 @@ export function useThreeScene({
         gameRefs.swingAnimations = [];
 
         // Create the scene
-        const sceneRefs = createScene(containerRef.current, units);
+        const sceneRefs = createScene(container, units);
 
         // Populate scene state
-        const state = sceneStateRef.current;
-        state.scene = sceneRefs.scene;
-        state.camera = sceneRefs.camera;
-        state.renderer = sceneRefs.renderer;
-        state.flames = sceneRefs.flames;
-        state.candleMeshes = sceneRefs.candleMeshes;
-        state.candleLights = sceneRefs.candleLights;
-        state.fogTexture = sceneRefs.fogTexture;
-        state.fogMesh = sceneRefs.fogMesh;
-        state.moveMarker = sceneRefs.moveMarker;
-        state.rangeIndicator = sceneRefs.rangeIndicator;
-        state.aoeIndicator = sceneRefs.aoeIndicator;
-        state.unitGroups = sceneRefs.unitGroups;
-        state.selectRings = sceneRefs.selectRings;
-        state.targetRings = sceneRefs.targetRings;
-        state.shieldIndicators = sceneRefs.shieldIndicators;
-        state.unitMeshes = sceneRefs.unitMeshes;
-        state.unitOriginalColors = sceneRefs.unitOriginalColors;
-        state.maxHp = sceneRefs.maxHp;
-        state.wallMeshes = sceneRefs.wallMeshes;
-        state.treeMeshes = sceneRefs.treeMeshes;
-        state.fogOccluderMeshes = sceneRefs.fogOccluderMeshes;
-        state.columnMeshes = sceneRefs.columnMeshes;
-        state.columnGroups = sceneRefs.columnGroups;
-        state.doorMeshes = sceneRefs.doorMeshes;
-        state.secretDoorMeshes = sceneRefs.secretDoorMeshes;
-        state.waterMesh = sceneRefs.waterMesh;
-        state.chestMeshes = sceneRefs.chestMeshes;
-        state.billboards = sceneRefs.billboards;
+        const initializedState: ThreeSceneState = {
+            scene: sceneRefs.scene,
+            camera: sceneRefs.camera,
+            renderer: sceneRefs.renderer,
+            flames: sceneRefs.flames,
+            candleMeshes: sceneRefs.candleMeshes,
+            candleLights: sceneRefs.candleLights,
+            fogTexture: sceneRefs.fogTexture,
+            fogMesh: sceneRefs.fogMesh,
+            moveMarker: sceneRefs.moveMarker,
+            rangeIndicator: sceneRefs.rangeIndicator,
+            aoeIndicator: sceneRefs.aoeIndicator,
+            unitGroups: sceneRefs.unitGroups,
+            selectRings: sceneRefs.selectRings,
+            targetRings: sceneRefs.targetRings,
+            shieldIndicators: sceneRefs.shieldIndicators,
+            unitMeshes: sceneRefs.unitMeshes,
+            unitOriginalColors: sceneRefs.unitOriginalColors,
+            maxHp: sceneRefs.maxHp,
+            wallMeshes: sceneRefs.wallMeshes,
+            treeMeshes: sceneRefs.treeMeshes,
+            fogOccluderMeshes: sceneRefs.fogOccluderMeshes,
+            columnMeshes: sceneRefs.columnMeshes,
+            columnGroups: sceneRefs.columnGroups,
+            doorMeshes: sceneRefs.doorMeshes,
+            secretDoorMeshes: sceneRefs.secretDoorMeshes,
+            waterMesh: sceneRefs.waterMesh,
+            chestMeshes: sceneRefs.chestMeshes,
+            billboards: sceneRefs.billboards
+        };
+        setSceneState(initializedState);
 
         // Initialize unit paths
         units.forEach(unit => {
@@ -243,12 +250,11 @@ export function useThreeScene({
         });
 
         // Apply initial chest open states
-        updateChestStates(state.chestMeshes, openedChests);
+        updateChestStates(initializedState.chestMeshes, openedChests);
 
         // Apply initial zoom and camera position
-        const camera = state.camera;
-        const container = containerRef.current;
-        if (camera && container) {
+        const camera = initializedState.camera;
+        if (camera) {
             const aspect = container.clientWidth / container.clientHeight;
             camera.left = -gameRefs.zoomLevel * aspect;
             camera.right = gameRefs.zoomLevel * aspect;
@@ -263,13 +269,16 @@ export function useThreeScene({
         // Cleanup
         return () => {
             saveFogVisibility(areaIdAtMount, gameRefs.visibility);
-            if (state.renderer) {
-                state.renderer.dispose();
-                containerRef.current?.removeChild(state.renderer.domElement);
+            if (sceneRefs.renderer) {
+                sceneRefs.renderer.dispose();
+                if (sceneRefs.renderer.domElement.parentElement === container) {
+                    container.removeChild(sceneRefs.renderer.domElement);
+                }
             }
+            setSceneState(createEmptySceneState());
             setIsInitialized(false);
         };
     }, []); // Only run once on mount
 
-    return { sceneState: sceneStateRef.current, gameRefs: gameRefsRef, isInitialized };
+    return { sceneState, gameRefs: gameRefsRef, isInitialized };
 }

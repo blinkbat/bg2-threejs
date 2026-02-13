@@ -75,7 +75,6 @@ export interface UseGameLoopOptions {
     stateRefs: GameLoopStateRefs;
     callbacks: GameLoopCallbacks;
     keysPressed: React.MutableRefObject<Set<string>>;
-    containerRef: React.RefObject<HTMLDivElement | null>;
 }
 
 // =============================================================================
@@ -254,8 +253,7 @@ export function useGameLoop({
     gameRefs,
     stateRefs,
     callbacks,
-    keysPressed,
-    containerRef
+    keysPressed
 }: UseGameLoopOptions): void {
     // FPS tracking refs
     const fpsFrameCount = useRef(0);
@@ -549,5 +547,5 @@ export function useGameLoop({
         return () => {
             cancelAnimationFrame(animId);
         };
-    }, [sceneState, gameRefs, stateRefs, callbacks, keysPressed, updateCam, containerRef]);
+    }, [sceneState, gameRefs, stateRefs, callbacks, keysPressed, updateCam]);
 }

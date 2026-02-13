@@ -269,13 +269,12 @@ export function executeSanctuarySkill(
     const centerX = Math.floor(targetX);
     const centerZ = Math.floor(targetZ);
     const radiusCells = Math.ceil(radius);
-    let tilesCreated = 0;
 
     for (let dx = -radiusCells; dx <= radiusCells; dx++) {
         for (let dz = -radiusCells; dz <= radiusCells; dz++) {
             const dist = Math.sqrt(dx * dx + dz * dz);
             if (dist <= radius) {
-                const tile = createSanctuaryTile(
+                createSanctuaryTile(
                     scene,
                     sanctuaryTilesRef.current,
                     acidTilesRef.current,
@@ -285,7 +284,6 @@ export function executeSanctuarySkill(
                     healPerTick,
                     now
                 );
-                if (tile) tilesCreated++;
             }
         }
     }

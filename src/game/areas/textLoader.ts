@@ -11,7 +11,7 @@ const textFiles = import.meta.glob("./maps/*.txt", { eager: true, query: "?raw",
 // Parse all text maps into AreaData, keyed by their area ID from the file content
 const areaMap = new Map<string, AreaData>();
 
-for (const [_path, content] of Object.entries(textFiles)) {
+for (const content of Object.values(textFiles)) {
     const areaData = textToAreaData(content);
     areaMap.set(areaData.id, areaData);
 }

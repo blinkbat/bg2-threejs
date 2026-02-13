@@ -104,8 +104,10 @@ export function updateUnitAI(
         return;
     }
 
+    const hasDivineLattice = hasStatusEffect(unit, "divine_lattice");
+
     // Divine Lattice: cannot use skills/attacks, but can still move.
-    if (hasStatusEffect(unit, "divine_lattice")) {
+    if (hasDivineLattice) {
         g.userData.attackTarget = null;
         if (actionQueueRef && actionQueueRef[unit.id]?.type === "skill") {
             delete actionQueueRef[unit.id];
@@ -161,7 +163,7 @@ export function updateUnitAI(
     }
 
     // Phase 1.55: Acid slug patrol - circle around players spreading acid instead of attacking
-    if (!isPlayer && unit.enemyType === "acid_slug" && acidTilesRef) {
+    if (!isPlayer && !hasDivineLattice && unit.enemyType === "acid_slug" && acidTilesRef) {
         if (tryAcidSlugPatrol({
             unit, g, slugData: data as EnemyStats, unitsState, unitsRef, pathsRef, moveStartRef,
             scene, skillCooldowns, setSkillCooldowns, acidTilesRef, now
@@ -171,7 +173,7 @@ export function updateUnitAI(
     }
 
     // Phase 1.6: Enemy heal check - healer enemies try to heal injured allies
-    if (!isPlayer && 'healSkill' in data && data.healSkill) {
+    if (!isPlayer && !hasDivineLattice && 'healSkill' in data && data.healSkill) {
         const healSkill = data.healSkill;
         if (isCooldownReady(skillCooldowns, unit.id, healSkill.name, now)) {
             const executed = executeEnemyHeal(
@@ -188,7 +190,7 @@ export function updateUnitAI(
     }
 
     // Phase 1.7-1.86: Fire-and-forget pre-attack behaviors (spawn, raise, tentacle, curse, glare)
-    if (!isPlayer) {
+    if (!isPlayer && !hasDivineLattice) {
         runPreAttackBehaviors({
             unit, g, enemyStats: data as EnemyStats, unitsState, unitsRef,
             scene, setUnits, skillCooldowns, setSkillCooldowns, addLog, now,
@@ -198,7 +200,7 @@ export function updateUnitAI(
 
     let targetX = g.position.x, targetZ = g.position.z;
 
-    if (g.userData.attackTarget) {
+    if (g.userData.attackTarget && !hasDivineLattice) {
         const targetG = unitsRef[g.userData.attackTarget];
         const targetU = getUnitById(g.userData.attackTarget);
 
@@ -428,7 +430,7 @@ export function updateUnitAI(
     runMovementPhase(movementCtx);
 
     // Phase 5: Acid slug - create acid trail when moving, aura when stationary
-    if (!isPlayer && acidTilesRef) {
+    if (!isPlayer && acidTilesRef && !hasDivineLattice) {
         const newGridX = Math.floor(g.position.x);
         const newGridZ = Math.floor(g.position.z);
         processAcidTrailAndAura(data as EnemyStats, scene, acidTilesRef, skillCooldowns, setSkillCooldowns, unit.id, oldGridX, oldGridZ, newGridX, newGridZ, now);
