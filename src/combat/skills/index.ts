@@ -35,7 +35,9 @@ export {
     executeCleanseSkill,
     executeRestorationSkill,
     executeReviveSkill,
-    executeSunStanceSkill
+    executeSunStanceSkill,
+    executePangolinStanceSkill,
+    executeHighlandDefenseSkill
 } from "./support";
 
 // Re-export utility skills
@@ -43,18 +45,19 @@ export {
     executeTauntSkill,
     executeDebuffSkill,
     executeTrapSkill,
-    executeSanctuarySkill
+    executeSanctuarySkill,
+    executeSummonSkill
 } from "./utility";
 
 // Re-export movement skills
-export { executeDodgeSkill } from "./movement";
+export { executeDodgeSkill, executeBodySwapSkill } from "./movement";
 
 // Import for internal use
 import type { SkillExecutionContext } from "./types";
 import { executeAoeSkill, executeMeleeSkill, executeSmiteSkill, executeRangedSkill, executeFlurrySkill, executeMagicWaveSkill, executeHolyStrikeSkill, executeGlacialWhorlSkill } from "./damage";
-import { executeHealSkill, executeManaTransferSkill, executeBuffSkill, executeAoeBuffSkill, executeEnergyShieldSkill, executeCleanseSkill, executeRestorationSkill, executeReviveSkill, executeSunStanceSkill } from "./support";
-import { executeTauntSkill, executeDebuffSkill, executeTrapSkill, executeSanctuarySkill } from "./utility";
-import { executeDodgeSkill } from "./movement";
+import { executeHealSkill, executeManaTransferSkill, executeBuffSkill, executeAoeBuffSkill, executeEnergyShieldSkill, executeCleanseSkill, executeRestorationSkill, executeReviveSkill, executeSunStanceSkill, executePangolinStanceSkill, executeHighlandDefenseSkill } from "./support";
+import { executeTauntSkill, executeDebuffSkill, executeTrapSkill, executeSanctuarySkill, executeSummonSkill } from "./utility";
+import { executeDodgeSkill, executeBodySwapSkill } from "./movement";
 
 // =============================================================================
 // MAIN SKILL ROUTER
@@ -117,6 +120,12 @@ export function executeSkill(
         if (skill.name === "Sun Stance") {
             return executeSunStanceSkill(ctx, casterId, skill);
         }
+        if (skill.name === "Pangolin Stance") {
+            return executePangolinStanceSkill(ctx, casterId, skill);
+        }
+        if (skill.name === "Highland Defense") {
+            return executeHighlandDefenseSkill(ctx, casterId, skill);
+        }
         return executeBuffSkill(ctx, casterId, skill);
     } else if (skill.type === "energy_shield" && skill.targetType === "self") {
         return executeEnergyShieldSkill(ctx, casterId, skill);
@@ -141,7 +150,12 @@ export function executeSkill(
     } else if (skill.type === "revive" && skill.targetType === "ally") {
         return executeReviveSkill(ctx, casterId, skill, targetX, targetZ);
     } else if (skill.type === "dodge") {
+        if (skill.name === "Body Swap") {
+            return executeBodySwapSkill(ctx, casterId, skill, targetX, targetZ, targetId);
+        }
         return executeDodgeSkill(ctx, casterId, skill, targetX, targetZ);
+    } else if (skill.type === "summon" && skill.targetType === "self") {
+        return executeSummonSkill(ctx, casterId, skill);
     }
 
     return false;

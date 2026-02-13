@@ -1,4 +1,10 @@
 import type { Skill } from "../core/types";
+import {
+    THORNS_DURATION,
+    THORNS_DAMAGE_MIN,
+    THORNS_DAMAGE_MAX,
+    HIGHLAND_DEFENSE_DURATION
+} from "../core/constants";
 
 // =============================================================================
 // PLAYER SKILLS
@@ -82,6 +88,31 @@ export const SKILLS: Record<string, Skill> = {
         armorBonus: 3,
         damageType: "physical"
     },
+    summonAncestor: {
+        name: "Summon Ancestor",
+        description: "Call forth an ancestral warrior spirit. Recasting replaces the current summon.",
+        flavor: "The old blood answers, blade in hand.",
+        manaCost: 14,
+        cooldown: 12000,
+        type: "summon",
+        targetType: "self",
+        range: 0,
+        damageType: "physical"
+    },
+    highlandDefense: {
+        name: "Highland Defense",
+        description: "Guard nearby allies. Incoming damage to a nearby friend is redirected to you at half value.",
+        flavor: "\"You strike my kin, you strike me.\" - Kvel of the North",
+        manaCost: 0,
+        cooldown: 500,
+        type: "buff",
+        targetType: "self",
+        range: 0,
+        duration: HIGHLAND_DEFENSE_DURATION,
+        damageType: "physical",
+        isCantrip: true,
+        maxUses: 1
+    },
     raiseShield: {
         name: "Raise Shield",
         description: "Adopt a defensive stance, doubling armor but slowing your attacks.",
@@ -158,6 +189,20 @@ export const SKILLS: Record<string, Skill> = {
         damageType: "chaos",
         hitCount: 8,  // 8 missiles
         projectileColor: "#9966ff"  // Purple arcane color
+    },
+    bodySwap: {
+        name: "Body Swap",
+        description: "Instantly exchange positions with a chosen unit, ally or enemy.",
+        flavor: "\"Two forms, one locus. Switch.\"",
+        manaCost: 10,
+        cooldown: 500,
+        type: "dodge",
+        targetType: "aoe",
+        range: 9,
+        duration: 0,
+        damageType: "chaos",
+        isCantrip: true,
+        maxUses: 2
     },
     caltrops: {
         name: "Caltrops",
@@ -249,6 +294,21 @@ export const SKILLS: Record<string, Skill> = {
         duration: 20000,
         healRange: [4, 6],
         damageType: "fire"
+    },
+    pangolinStance: {
+        name: "Pangolin Stance",
+        description: "Brace in a scaled guard. Melee attackers take damage when they strike you.",
+        flavor: "\"Curl, endure, and let their force break upon you.\" - Master Shen",
+        manaCost: 0,
+        cooldown: 500,
+        type: "buff",
+        targetType: "self",
+        range: 0,
+        duration: THORNS_DURATION,
+        damageRange: [THORNS_DAMAGE_MIN, THORNS_DAMAGE_MAX],
+        damageType: "physical",
+        isCantrip: true,
+        maxUses: 3
     },
     glacialWhorl: {
         name: "Glacial Whorl",

@@ -5,7 +5,7 @@
 
 import { useEffect, useRef, useCallback } from "react";
 import * as THREE from "three";
-import { PAN_SPEED } from "../core/constants";
+import { PAN_SPEED, ANCESTOR_AURA_DAMAGE_BONUS, ANCESTOR_AURA_RANGE } from "../core/constants";
 import { updateGameClock } from "../core/gameClock";
 import { getCurrentArea } from "../game/areas";
 import type { Unit, UnitGroup } from "../core/types";
@@ -34,7 +34,8 @@ import {
     updateLeaps,
     updateTentacles,
     updateSubmergedKrakens,
-    updateSpriteFacing
+    updateSpriteFacing,
+    updateAncestorGhostVisuals
 } from "../gameLoop";
 import type { ActionQueue } from "../input";
 import type { ThreeSceneState, GameRefs } from "./useThreeScene";
@@ -189,6 +190,61 @@ function updateRangeIndicator(
     }
 }
 
+function updateAncestorAuraBonuses(
+    units: Unit[],
+    unitGroups: Record<number, UnitGroup>,
+    setUnits: React.Dispatch<React.SetStateAction<Unit[]>>
+): void {
+    const auraSources = units
+        .filter(u => u.team === "player" && u.hp > 0 && u.summonType === "ancestor_warrior")
+        .map(u => {
+            const group = unitGroups[u.id];
+            return {
+                id: u.id,
+                x: group?.position.x ?? u.x,
+                z: group?.position.z ?? u.z
+            };
+        });
+
+    let changed = false;
+    const nextBonusById: Record<number, number> = {};
+
+    for (const unit of units) {
+        if (unit.team !== "player") continue;
+
+        let nextBonus = 0;
+        if (unit.hp > 0 && auraSources.length > 0) {
+            const unitGroup = unitGroups[unit.id];
+            const unitX = unitGroup?.position.x ?? unit.x;
+            const unitZ = unitGroup?.position.z ?? unit.z;
+
+            for (const source of auraSources) {
+                if (source.id === unit.id) continue;
+                const dist = Math.hypot(unitX - source.x, unitZ - source.z);
+                if (dist <= ANCESTOR_AURA_RANGE) {
+                    nextBonus = ANCESTOR_AURA_DAMAGE_BONUS;
+                    break;
+                }
+            }
+        }
+
+        const prevBonus = unit.auraDamageBonus ?? 0;
+        nextBonusById[unit.id] = nextBonus;
+        if (prevBonus !== nextBonus) {
+            changed = true;
+        }
+    }
+
+    if (!changed) return;
+
+    setUnits(prev => prev.map(u => {
+        if (u.team !== "player") return u;
+        const nextBonus = nextBonusById[u.id] ?? 0;
+        if ((u.auraDamageBonus ?? 0) === nextBonus) return u;
+        return { ...u, auraDamageBonus: nextBonus };
+    }));
+}
+
 // =============================================================================
 // HOOK
 // =============================================================================
@@ -258,6 +314,8 @@ export function useGameLoop({
 
             // Game logic updates (only when not paused)
             if (!stateRefs.pausedRef.current) {
+                updateAncestorAuraBonuses(currentUnits, unitGroups, callbacks.setUnits);
+
                 // Update projectiles
                 refs.projectiles = updateProjectiles(
                     refs.projectiles,
@@ -475,6 +533,7 @@ export function useGameLoop({
 
             // Sprite facing direction (before billboard rotation so scale is current)
             updateSpriteFacing(currentUnits, unitGroups);
+            updateAncestorGhostVisuals(currentUnits, unitGroups, unitMeshes, now);
 
             // Billboard rotation
             updateBillboards(billboards, camera);

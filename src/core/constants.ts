@@ -48,6 +48,21 @@ export const DEFIANCE_COOLDOWN_MULT = 0.5; // 0.5x cooldowns when under defiance
 export const SUN_STANCE_BONUS_DAMAGE: [number, number] = [2, 3];
 export const SUN_STANCE_TINT_STRENGTH = 0.3;
 
+// Status Effects - Thorns (reflect melee damage)
+export const THORNS_DURATION = 30000;       // 30 seconds
+export const THORNS_DAMAGE_MIN = 2;
+export const THORNS_DAMAGE_MAX = 4;
+
+// Status Effects - Highland Defense (barbarian cantrip redirect)
+export const HIGHLAND_DEFENSE_DURATION = Number.MAX_SAFE_INTEGER; // Effectively permanent until intercept pool is exhausted
+export const HIGHLAND_DEFENSE_INTERCEPT_CAP = 50;        // max redirected damage before expiring
+export const HIGHLAND_DEFENSE_INTERCEPT_COOLDOWN = 5000; // once per 5s
+export const HIGHLAND_DEFENSE_RANGE = 4.5;               // nearby ally radius
+
+// Summons - Ancestor Warrior aura
+export const ANCESTOR_AURA_RANGE = 4.5;
+export const ANCESTOR_AURA_DAMAGE_BONUS = 2;
+
 // Status Effects - Doom (kills unit after duration expires, cured by Restoration)
 export const DOOM_DURATION = 10000;          // 10 seconds until death
 export const DOOM_TICK_INTERVAL = 1000;      // Tick every 1 second (for countdown)
@@ -211,6 +226,12 @@ export const COLORS = {
     sunStance: "#ff6b35",
     sunStanceText: "#ff8c5a",
     sunStanceBg: "#2a1508",
+    thorns: "#7f8c2f",
+    thornsText: "#c8da4b",
+    thornsBg: "#1f240f",
+    highlandDefense: "#6b4f2a",
+    highlandDefenseText: "#d4a56a",
+    highlandDefenseBg: "#24180c",
     chilled: "#5dade2",             // Ice blue
     chilledText: "#85c1e9",         // Lighter ice blue
     fireBreath: "#ff4400",       // Orange-red for fire breath cone
@@ -237,14 +258,14 @@ export const COLORS = {
     dmgCold: "#5dade2",        // Ice blue - cold damage
     dmgLightning: "#f4d03f",   // Yellow - lightning damage
     dmgChaos: "#9b59b6",       // Purple - chaos/arcane damage
-    dmgHoly: "#f1c40f",        // Golden - holy damage
+    dmgHoly: "#ffffff",        // White - holy damage
 };
 
 // =============================================================================
 // SKILL TYPE UI MAPPING - CSS class and border color by skill type
 // =============================================================================
 
-type SkillTypeForColor = "damage" | "heal" | "buff" | "taunt" | "flurry" | "debuff" | "trap" | "sanctuary" | "mana_transfer" | "smite" | "energy_shield" | "aoe_buff" | "restoration" | "revive" | "dodge";
+type SkillTypeForColor = "damage" | "heal" | "buff" | "taunt" | "flurry" | "debuff" | "trap" | "sanctuary" | "mana_transfer" | "smite" | "energy_shield" | "aoe_buff" | "restoration" | "revive" | "dodge" | "summon";
 
 /** Map skill type to CSS class for styling */
 export function getSkillColorClass(skillType: SkillTypeForColor | undefined): string {
@@ -265,6 +286,8 @@ export function getSkillColorClass(skillType: SkillTypeForColor | undefined): st
             return "skill-flurry";
         case "dodge":
             return "skill-dodge";
+        case "summon":
+            return "skill-buff";
         default:
             return "skill-buff";
     }
@@ -289,6 +312,8 @@ export function getSkillBorderColor(skillType: SkillTypeForColor | undefined): s
             return "#27ae60";  // Emerald
         case "dodge":
             return "#8e44ad";  // Purple (thief)
+        case "summon":
+            return "#f1c40f";  // Yellow (summon/buff)
         default:
             return "#f1c40f";  // Yellow (buff)
     }

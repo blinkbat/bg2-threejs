@@ -248,6 +248,62 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
 
     const scene = new THREE.Scene();
 
+    interface FogFootprintCell {
+        x: number;
+        z: number;
+    }
+
+    interface FogFootprintData {
+        centerX: number;
+        centerZ: number;
+        radius: number;
+        cells: FogFootprintCell[];
+    }
+
+    const buildFogFootprintCells = (
+        centerX: number,
+        centerZ: number,
+        radius: number
+    ): FogFootprintCell[] => {
+        const paddedRadius = Math.max(0.25, radius);
+        const radiusSq = paddedRadius * paddedRadius;
+        const minX = Math.max(0, Math.floor(centerX - paddedRadius - 1));
+        const maxX = Math.min(area.gridWidth - 1, Math.ceil(centerX + paddedRadius + 1));
+        const minZ = Math.max(0, Math.floor(centerZ - paddedRadius - 1));
+        const maxZ = Math.min(area.gridHeight - 1, Math.ceil(centerZ + paddedRadius + 1));
+        const cells: FogFootprintCell[] = [];
+
+        for (let x = minX; x <= maxX; x++) {
+            for (let z = minZ; z <= maxZ; z++) {
+                const cellCenterX = x + 0.5;
+                const cellCenterZ = z + 0.5;
+                const dx = cellCenterX - centerX;
+                const dz = cellCenterZ - centerZ;
+                if (dx * dx + dz * dz <= radiusSq) {
+                    cells.push({ x, z });
+                }
+            }
+        }
+
+        if (cells.length === 0) {
+            const fallbackX = THREE.MathUtils.clamp(Math.floor(centerX), 0, area.gridWidth - 1);
+            const fallbackZ = THREE.MathUtils.clamp(Math.floor(centerZ), 0, area.gridHeight - 1);
+            cells.push({ x: fallbackX, z: fallbackZ });
+        }
+
+        return cells;
+    };
+
+    const buildFogFootprintFromBounds = (bounds: THREE.Box3, padding: number): FogFootprintData => {
+        const centerX = (bounds.min.x + bounds.max.x) / 2;
+        const centerZ = (bounds.min.z + bounds.max.z) / 2;
+        const halfWidthX = Math.max(0, (bounds.max.x - bounds.min.x) / 2);
+        const halfWidthZ = Math.max(0, (bounds.max.z - bounds.min.z) / 2);
+        const radius = Math.max(0.3, Math.hypot(halfWidthX, halfWidthZ) + padding);
+        const cells = buildFogFootprintCells(centerX, centerZ, radius);
+        return { centerX, centerZ, radius, cells };
+    };
+
     // Create sky background - gradient for both outdoor and dungeon
     const canvas = document.createElement("canvas");
     canvas.width = 2;
@@ -583,7 +639,8 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         fullY: number,
         fullHeight: number,
         fullRadius: number,
-        trunkHeight: number
+        trunkHeight: number,
+        treePartMeshes: THREE.Mesh[]
     ): void => {
         foliageMesh.name = "tree";
         foliageMesh.userData.fullY = fullY;
@@ -596,6 +653,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         foliageMesh.userData.fogY = FOG_Y;
         scene.add(foliageMesh);
         treeMeshes.push(foliageMesh);
+        treePartMeshes.push(foliageMesh);
     };
 
     const registerFogOccluderMesh = (
@@ -606,16 +664,26 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         fullHeight: number
     ): void => {
         if (fullHeight <= 0) return;
-        mesh.userData.fogClipX = tileX;
-        mesh.userData.fogClipZ = tileZ;
+        const bounds = new THREE.Box3().setFromObject(mesh);
+        const footprint = buildFogFootprintFromBounds(bounds, 0.18);
+
+        mesh.userData.fogClipX = footprint.centerX;
+        mesh.userData.fogClipZ = footprint.centerZ;
         mesh.userData.fogClipBaseY = baseY;
         mesh.userData.fogClipFullHeight = fullHeight;
         mesh.userData.fogClipFullY = mesh.position.y;
         mesh.userData.fogClipFullScaleY = mesh.scale.y;
+        mesh.userData.fogClipFallbackX = tileX;
+        mesh.userData.fogClipFallbackZ = tileZ;
+        mesh.userData.fogFootprintCenterX = footprint.centerX;
+        mesh.userData.fogFootprintCenterZ = footprint.centerZ;
+        mesh.userData.fogFootprintRadius = footprint.radius;
+        mesh.userData.fogFootprintCells = footprint.cells;
         fogOccluderMeshes.push(mesh);
     };
 
     area.trees.forEach((tree, i) => {
+        const treePartMeshes: THREE.Mesh[] = [];
         const scale = tree.size * treeSizeMultiplier;
         const treeType = tree.type ?? "pine";
 
@@ -703,6 +771,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         trunk.userData.isTrunk = true;
         scene.add(trunk);
         treeMeshes.push(trunk);
+        treePartMeshes.push(trunk);
 
         // Foliage geometry depends on tree type
         const foliageColor = treeType === "palm"
@@ -756,14 +825,14 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
             const canopyTiltZ = trunkRotZ * 0.5 + Math.sin(canopyTiltDir) * canopyTilt;
             starFoliage.position.set(palmTopX, fullFoliageY, palmTopZ);
             starFoliage.rotation.set(canopyTiltX, Math.random() * Math.PI * 2, canopyTiltZ);
-            registerFoliageMesh(starFoliage, tree.x, tree.z, fullFoliageY, palmFoliageHeight, starOuterRadius, trunkHeight);
+            registerFoliageMesh(starFoliage, tree.x, tree.z, fullFoliageY, palmFoliageHeight, starOuterRadius, trunkHeight, treePartMeshes);
 
             const crownCore = new THREE.Mesh(
                 new THREE.SphereGeometry(Math.max(0.07, foliageRadius * 0.14 * canopyScale), 7, 6),
                 palmMat
             );
             crownCore.position.set(palmTopX, fullFoliageY + starThickness * 0.4, palmTopZ);
-            registerFoliageMesh(crownCore, tree.x, tree.z, fullFoliageY, palmFoliageHeight, starOuterRadius, trunkHeight);
+            registerFoliageMesh(crownCore, tree.x, tree.z, fullFoliageY, palmFoliageHeight, starOuterRadius, trunkHeight, treePartMeshes);
         } else {
             const foliageGeometry = treeType === "oak"
                 ? new THREE.SphereGeometry(foliageRadius, 8, 6)
@@ -776,7 +845,25 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 ? trunkHeight + foliageRadius * 0.7 // Sphere engulfs top of trunk
                 : trunkHeight + foliageHeight / 2;  // Cone base at trunk top
             foliage.position.set(tree.x, fullFoliageY, tree.z);
-            registerFoliageMesh(foliage, tree.x, tree.z, fullFoliageY, foliageHeight, foliageRadius, trunkHeight);
+            registerFoliageMesh(foliage, tree.x, tree.z, fullFoliageY, foliageHeight, foliageRadius, trunkHeight, treePartMeshes);
+        }
+
+        if (treePartMeshes.length > 0) {
+            const treeBounds = new THREE.Box3().setFromObject(treePartMeshes[0]);
+            for (let p = 1; p < treePartMeshes.length; p++) {
+                const partBounds = new THREE.Box3().setFromObject(treePartMeshes[p]);
+                treeBounds.union(partBounds);
+            }
+
+            const treeFootprint = buildFogFootprintFromBounds(treeBounds, 0.16);
+            const treeObjectId = `tree-${i}`;
+            for (const part of treePartMeshes) {
+                part.userData.fogObjectId = treeObjectId;
+                part.userData.fogFootprintCenterX = treeFootprint.centerX;
+                part.userData.fogFootprintCenterZ = treeFootprint.centerZ;
+                part.userData.fogFootprintRadius = treeFootprint.radius;
+                part.userData.fogFootprintCells = treeFootprint.cells;
+            }
         }
 
         // Tree shadow
@@ -986,20 +1073,22 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 const columnHeight = (0.8 + Math.random() * 0.8) * size;  // Random broken height
                 const column = new THREE.Mesh(
                     new THREE.CylinderGeometry(columnRadius * 0.9, columnRadius * 1.1, columnHeight, 12),
-                    new THREE.MeshStandardMaterial({ color: "#958f80", metalness: 0.1, roughness: 0.95 })
+                    new THREE.MeshStandardMaterial({ color: "#958f80", metalness: 0.1, roughness: 0.95, transparent: true, opacity: 1 })
                 );
                 column.position.set(dec.x, columnHeight / 2, dec.z);
                 column.name = "decoration";
                 scene.add(column);
+                columnMeshes.push(column);
                 registerFogOccluderMesh(column, dec.x, dec.z, 0, columnHeight);
 
                 // Column base (crumbled)
                 const base = new THREE.Mesh(
                     new THREE.CylinderGeometry(columnRadius * 1.3, columnRadius * 1.5, 0.15, 8),
-                    new THREE.MeshStandardMaterial({ color: "#878072", metalness: 0.1, roughness: 0.95 })
+                    new THREE.MeshStandardMaterial({ color: "#878072", metalness: 0.1, roughness: 0.95, transparent: true, opacity: 1 })
                 );
                 base.position.set(dec.x, 0.075, dec.z);
                 scene.add(base);
+                columnMeshes.push(base);
                 registerFogOccluderMesh(base, dec.x, dec.z, 0, 0.15);
 
                 // Fallen debris pieces
@@ -1022,12 +1111,13 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
 
                 const wall = new THREE.Mesh(
                     new THREE.BoxGeometry(wallLength, wallHeight, wallThick),
-                    new THREE.MeshStandardMaterial({ color: "#8f8a79", metalness: 0.1, roughness: 0.95 })
+                    new THREE.MeshStandardMaterial({ color: "#8f8a79", metalness: 0.1, roughness: 0.95, transparent: true, opacity: 1 })
                 );
                 wall.position.set(dec.x, wallHeight / 2, dec.z);
                 wall.rotation.y = dec.rotation ?? 0;
                 wall.name = "decoration";
                 scene.add(wall);
+                columnMeshes.push(wall);
                 registerFogOccluderMesh(wall, dec.x, dec.z, 0, wallHeight);
 
                 // Rubble at base
@@ -1047,13 +1137,14 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 const rockSize = 0.75 * size;  // Slightly bigger
                 const rock = new THREE.Mesh(
                     new THREE.DodecahedronGeometry(rockSize, 0),
-                    new THREE.MeshStandardMaterial({ color: "#9b907d", metalness: 0.1, roughness: 0.95 })
+                    new THREE.MeshStandardMaterial({ color: "#9b907d", metalness: 0.1, roughness: 0.95, transparent: true, opacity: 1 })
                 );
                 rock.position.set(dec.x, rockSize * 0.6, dec.z);
                 rock.rotation.set(Math.random() * 0.3, Math.random() * Math.PI, Math.random() * 0.3);
                 rock.scale.set(1, 0.7, 1.1);  // Flatten slightly
                 rock.name = "decoration";
                 scene.add(rock);
+                columnMeshes.push(rock);
             } else if (dec.type === "small_rock") {
                 // Small rock - pebble
                 const rockSize = 0.35 * size;  // Slightly bigger

@@ -11,7 +11,7 @@ import type { LootBag } from "../core/types";
 import { updateCamera } from "../rendering/scene";
 import { blocked } from "../game/dungeon";
 import { getCurrentArea, getBlocked, isTerrainBlocked, type AreaTransition } from "../game/areas";
-import { getBasicAttackSkill, getAllSkills } from "../game/playerUnits";
+import { getBasicAttackSkill, getAllSkills, isCorePlayerId } from "../game/playerUnits";
 import { getItem } from "../game/items";
 import { isKey } from "../core/types";
 import { soundFns } from "../audio";
@@ -600,7 +600,7 @@ export function useInputHandlers({
             if (["F1", "F2", "F3", "F4", "F5", "F6"].includes(e.code)) {
                 e.preventDefault();
                 const slotIndex = parseInt(e.code.charAt(1)) - 1;
-                const playerUnits = stateRefs.unitsStateRef.current.filter(u => u.team === "player");
+                const playerUnits = stateRefs.unitsStateRef.current.filter(u => u.team === "player" && isCorePlayerId(u.id));
                 const playerIds = playerUnits.map(u => u.id);
                 const effective = buildEffectiveFormationOrder(playerIds, stateRefs.formationOrderRef.current);
                 const unitId = effective[slotIndex];

@@ -28,6 +28,19 @@ export function getXpForLevel(level: number): number {
     return XP_REQUIREMENTS[level];
 }
 
+export const CORE_PLAYER_IDS = [1, 2, 3, 4, 5, 6] as const;
+export const ANCESTOR_SUMMON_ID = 7;
+
+const CORE_PLAYER_ID_SET = new Set<number>(CORE_PLAYER_IDS);
+
+export function isCorePlayerId(unitId: number): boolean {
+    return CORE_PLAYER_ID_SET.has(unitId);
+}
+
+function usesEquipmentForUnit(unitId: number): boolean {
+    return isCorePlayerId(unitId);
+}
+
 // =============================================================================
 // PLAYER UNIT DATA
 // =============================================================================
@@ -36,12 +49,13 @@ export function getXpForLevel(level: number): number {
 
 // Level 1 base stats - characters gain stats on level up
 export const UNIT_DATA: Record<number, UnitData> = {
-    1: { name: "Barbarian", class: "Barbarian", hp: 38, maxHp: 38, mana: 15, maxMana: 15, damage: [1, 4], accuracy: 70, armor: 0, color: "#c0392b", skills: [SKILLS.warcry, SKILLS.defiance, SKILLS.stunningBlow], items: [], attackCooldown: 2000, baseCrit: 3 },
+    1: { name: "Barbarian", class: "Barbarian", hp: 38, maxHp: 38, mana: 15, maxMana: 15, damage: [1, 4], accuracy: 70, armor: 0, color: "#c0392b", skills: [SKILLS.warcry, SKILLS.defiance, SKILLS.stunningBlow, SKILLS.summonAncestor, SKILLS.highlandDefense], items: [], attackCooldown: 2000, baseCrit: 3 },
     2: { name: "Paladin", class: "Paladin", hp: 35, maxHp: 35, mana: 20, maxMana: 20, damage: [1, 4], accuracy: 65, armor: 0, color: "#d4a017", skills: [SKILLS.raiseShield, SKILLS.sanctuary, SKILLS.holyStrike], items: [], attackCooldown: 2500 },
     3: { name: "Thief", class: "Thief", hp: 22, maxHp: 22, mana: 18, maxMana: 18, damage: [1, 4], accuracy: 75, armor: 0, color: "#8e44ad", skills: [SKILLS.poisonDagger, SKILLS.caltrops, SKILLS.dodge], items: [], attackCooldown: 1500, baseCrit: 5 },
-    4: { name: "Wizard", class: "Wizard", hp: 18, maxHp: 18, mana: 50, maxMana: 50, damage: [1, 4], accuracy: 60, armor: 0, color: "#3498db", skills: [SKILLS.fireball, SKILLS.magicWave, SKILLS.glacialWhorl, SKILLS.energyShield], items: [], attackCooldown: 3000, baseCrit: 2 },
-    5: { name: "Monk", class: "Monk", hp: 28, maxHp: 28, mana: 18, maxMana: 18, damage: [1, 4], accuracy: 70, armor: 0, color: "#27ae60", skills: [SKILLS.flurryOfFists, SKILLS.qiFocus, SKILLS.sunStance], items: [], attackCooldown: 1800 },
+    4: { name: "Wizard", class: "Wizard", hp: 18, maxHp: 18, mana: 50, maxMana: 50, damage: [1, 4], accuracy: 60, armor: 0, color: "#3498db", skills: [SKILLS.fireball, SKILLS.magicWave, SKILLS.glacialWhorl, SKILLS.energyShield, SKILLS.bodySwap], items: [], attackCooldown: 3000, baseCrit: 2 },
+    5: { name: "Monk", class: "Monk", hp: 28, maxHp: 28, mana: 18, maxMana: 18, damage: [1, 4], accuracy: 70, armor: 0, color: "#27ae60", skills: [SKILLS.flurryOfFists, SKILLS.qiFocus, SKILLS.sunStance, SKILLS.pangolinStance], items: [], attackCooldown: 1800 },
     6: { name: "Cleric", class: "Cleric", hp: 26, maxHp: 26, mana: 40, maxMana: 40, damage: [1, 4], accuracy: 60, armor: 0, color: "#c0c8d0", skills: [SKILLS.heal, SKILLS.cleanse, SKILLS.thunder, SKILLS.restoration, SKILLS.ankh], items: [], attackCooldown: 2500 },
+    7: { name: "Ancestor", class: "Ancestor", hp: 54, maxHp: 54, mana: 0, maxMana: 0, damage: [4, 8], accuracy: 74, armor: 2, color: "#d7c09a", skills: [], items: [], range: 1.8, attackCooldown: 2100, size: 1.08, baseCrit: 4 },
 };
 
 // =============================================================================
@@ -52,11 +66,11 @@ export const UNIT_DATA: Record<number, UnitData> = {
 export function getBasicAttackSkill(unitId: number, unit?: Unit): Skill {
     const data = UNIT_DATA[unitId];
 
-    // Get stats from equipment
-    const baseDamage = getEffectivePlayerDamage(unitId);
-    const damageType = getEffectivePlayerDamageType(unitId);
-    const range = getEffectivePlayerRange(unitId);
-    const projectileColor = getEffectivePlayerProjectileColor(unitId);
+    const usesEquipment = usesEquipmentForUnit(unitId);
+    const baseDamage = usesEquipment ? getEffectivePlayerDamage(unitId) : data.damage;
+    const damageType = usesEquipment ? getEffectivePlayerDamageType(unitId) : "physical";
+    const range = usesEquipment ? getEffectivePlayerRange(unitId) : data.range;
+    const projectileColor = usesEquipment ? getEffectivePlayerProjectileColor(unitId) : data.projectileColor;
 
     // Apply strength bonus to physical damage only
     const strengthBonus = unit && damageType === "physical" ? getStrengthDamageBonus(unit) : 0;
@@ -79,7 +93,8 @@ export function getBasicAttackSkill(unitId: number, unit?: Unit): Skill {
 export function getEffectiveMaxHp(unitId: number, unit?: Unit): number {
     const data = UNIT_DATA[unitId];
     const vitalityBonus = unit ? getVitalityHpBonus(unit) : 0;
-    return data.maxHp + getEffectivePlayerBonusMaxHp(unitId) + vitalityBonus;
+    const bonusMaxHp = usesEquipmentForUnit(unitId) ? getEffectivePlayerBonusMaxHp(unitId) : 0;
+    return data.maxHp + bonusMaxHp + vitalityBonus;
 }
 
 /** Get effective max mana for a player (base + intelligence bonus) */
@@ -91,6 +106,9 @@ export function getEffectiveMaxMana(unitId: number, unit?: Unit): number {
 
 /** Get effective armor for a player (from equipment) */
 export function getEffectiveArmor(unitId: number): number {
+    if (!usesEquipmentForUnit(unitId)) {
+        return UNIT_DATA[unitId].armor;
+    }
     return getEffectivePlayerArmor(unitId);
 }
 
@@ -113,12 +131,13 @@ export function getAvailableSkills(unitId: number): Skill[] {
 /** Get effective unit data with equipment and stat bonuses applied */
 export function getEffectiveUnitData(unitId: number, unit?: Unit): UnitData {
     const data = UNIT_DATA[unitId];
-    const baseDamage = getEffectivePlayerDamage(unitId);
-    const damageType = getEffectivePlayerDamageType(unitId);
-    const range = getEffectivePlayerRange(unitId);
-    const projectileColor = getEffectivePlayerProjectileColor(unitId);
-    const armor = getEffectivePlayerArmor(unitId);
-    const bonusMaxHp = getEffectivePlayerBonusMaxHp(unitId);
+    const usesEquipment = usesEquipmentForUnit(unitId);
+    const baseDamage = usesEquipment ? getEffectivePlayerDamage(unitId) : data.damage;
+    const damageType = usesEquipment ? getEffectivePlayerDamageType(unitId) : "physical";
+    const range = usesEquipment ? getEffectivePlayerRange(unitId) : data.range;
+    const projectileColor = usesEquipment ? getEffectivePlayerProjectileColor(unitId) : data.projectileColor;
+    const armor = usesEquipment ? getEffectivePlayerArmor(unitId) : data.armor;
+    const bonusMaxHp = usesEquipment ? getEffectivePlayerBonusMaxHp(unitId) : 0;
 
     // Apply stat bonuses
     const vitalityBonus = unit ? getVitalityHpBonus(unit) : 0;

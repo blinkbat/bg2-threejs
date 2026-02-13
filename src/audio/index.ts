@@ -5,7 +5,7 @@
 import { isMuted, setMuted, toggleMute, playTone } from "./core";
 import { playFireball, playExplosion, playDeath, playBlock } from "./combat";
 import { playScreech, playBroodMotherScreech, playGush, playBark, playSplash, playMetallicSqueal, startFireBreathScratch } from "./creatures";
-import { playHeal, playWarcry, playMagicWave, playEnergyShield, playThunder, playVines } from "./spells";
+import { playHeal, playWarcry, playMagicWave, playEnergyShield, playThunder, playHolyStrike, playVines } from "./spells";
 import { playGulp, playLevelUp, playSecretDiscovered, playCrunch, playGold, playFootsteps } from "./ui";
 
 // Re-export mute controls
@@ -32,6 +32,7 @@ export const soundFns = {
     playSecretDiscovered,
     playEnergyShield,
     playThunder,
+    playHolyStrike,
     playBark,
     playVines,
     playSplash,

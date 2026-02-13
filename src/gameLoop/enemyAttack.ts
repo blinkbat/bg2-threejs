@@ -184,7 +184,9 @@ export function executeEnemyMeleeAttack(ctx: EnemyAttackContext): void {
             slow: willSlow ? { sourceId: attacker.id } : undefined,
             hitMessage: { text: hitText, color: COLORS.damageEnemy },
             targetUnit: target,
-            isCrit
+            isCrit,
+            attackerId: attacker.id,
+            isMeleeHit: true
         });
 
         soundFns.playHit();

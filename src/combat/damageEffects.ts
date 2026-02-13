@@ -4,7 +4,14 @@
 
 import * as THREE from "three";
 import type { DamageText, UnitGroup, Unit, DamageType } from "../core/types";
-import { PROJECTILE_CONFIG, COLORS, RING_EXPAND_DURATION } from "../core/constants";
+import {
+    PROJECTILE_CONFIG,
+    COLORS,
+    RING_EXPAND_DURATION,
+    HIGHLAND_DEFENSE_INTERCEPT_CAP,
+    HIGHLAND_DEFENSE_INTERCEPT_COOLDOWN,
+    HIGHLAND_DEFENSE_RANGE
+} from "../core/constants";
 import { getUnitRadius, isInRange } from "../rendering/range";
 import { distanceToPoint } from "../game/geometry";
 import { soundFns } from "../audio";
@@ -15,7 +22,7 @@ import { logDefeated, applyPoison, applySlowed, hasStatusEffect, isUnitAlive } f
 import { tryKillBark } from "./barks";
 import { getNextUnitId } from "../core/unitIds";
 import { ENEMY_STATS } from "../game/enemyStats";
-import { getXpForLevel, getEffectiveMaxHp, getEffectiveMaxMana } from "../game/playerUnits";
+import { UNIT_DATA, getXpForLevel, getEffectiveMaxHp, getEffectiveMaxMana } from "../game/playerUnits";
 import { LEVEL_UP_HP, LEVEL_UP_MANA, LEVEL_UP_STAT_POINTS, LEVEL_UP_SKILL_POINTS } from "../game/statBonuses";
 import { trySubmergeKraken, isKrakenSubmerged } from "../gameLoop/enemyBehaviors";
 
@@ -359,6 +366,19 @@ export interface DamageOptions {
     attackerPosition?: { x: number; z: number };  // Position of attacker (for shield facing)
     damageType?: DamageType;  // Type of damage (for energy shield - chaos does 2x)
     isCrit?: boolean;  // Whether this was a critical hit (shows gold damage text)
+    attackerId?: number;  // Unit ID of the attacker (used for retaliation effects)
+    isMeleeHit?: boolean;  // Whether this hit was melee contact (for thorns)
+    skipHighlandDefense?: boolean;  // Internal: bypass ally-damage interception checks
+}
+
+function getUnitDisplayName(unit: Unit): string {
+    if (unit.team === "player") {
+        return UNIT_DATA[unit.id]?.name ?? "Unknown";
+    }
+    if (unit.enemyType) {
+        return ENEMY_STATS[unit.enemyType].name;
+    }
+    return "Unknown";
 }
 
 /**
@@ -374,7 +394,21 @@ export function applyDamageToUnit(
     options: DamageOptions = {}
 ): void {
     const { scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now, defeatedThisFrame } = ctx;
-    const { poison, slow, color = COLORS.damageEnemy, skipDefeatTracking = false, attackerName, hitMessage, targetUnit, attackerPosition, damageType, isCrit = false } = options;
+    const {
+        poison,
+        slow,
+        color = COLORS.damageEnemy,
+        skipDefeatTracking = false,
+        attackerName,
+        hitMessage,
+        targetUnit,
+        attackerPosition,
+        damageType,
+        isCrit = false,
+        attackerId,
+        isMeleeHit = false,
+        skipHighlandDefense = false
+    } = options;
 
     // Skip already-defeated targets this frame
     if (defeatedThisFrame?.has(targetId)) return;
@@ -417,6 +451,83 @@ export function applyDamageToUnit(
             // Shield absorbs all damage
             shieldAbsorbed = shieldDamage;
             effectiveDamage = 0;
+        }
+    }
+
+    // Highland Defense: nearby barbarian can redirect part of this damage.
+    if (
+        !skipHighlandDefense
+        && refUnit
+        && refUnit.team === "player"
+        && effectiveDamage > 0
+    ) {
+        let chosenDefender: { unit: Unit; group: UnitGroup; distance: number; remaining: number } | null = null;
+
+        for (const candidate of unitsStateRef.current) {
+            if (candidate.team !== "player" || candidate.hp <= 0 || candidate.id === targetId) continue;
+            if (UNIT_DATA[candidate.id]?.class !== "Barbarian") continue;
+
+            const status = candidate.statusEffects?.find(e => e.type === "highland_defense");
+            if (!status) continue;
+
+            const remaining = Math.max(0, status.interceptRemaining ?? HIGHLAND_DEFENSE_INTERCEPT_CAP);
+            const cooldownEnd = status.interceptCooldownEnd ?? 0;
+            if (remaining <= 0 || now < cooldownEnd) continue;
+
+            const defenderGroup = unitsRef[candidate.id];
+            if (!defenderGroup) continue;
+
+            const distance = Math.hypot(
+                defenderGroup.position.x - targetGroup.position.x,
+                defenderGroup.position.z - targetGroup.position.z
+            );
+            if (distance > HIGHLAND_DEFENSE_RANGE) continue;
+
+            if (!chosenDefender || distance < chosenDefender.distance) {
+                chosenDefender = { unit: candidate, group: defenderGroup, distance, remaining };
+            }
+        }
+
+        if (chosenDefender) {
+            const defenderName = getUnitDisplayName(chosenDefender.unit);
+            const rawRedirect = Math.max(1, Math.ceil(effectiveDamage / 2));
+            const redirectDamage = Math.min(rawRedirect, chosenDefender.remaining);
+            const preventedDamage = Math.min(effectiveDamage, redirectDamage * 2);
+            const remainingAfter = Math.max(0, chosenDefender.remaining - redirectDamage);
+            const cooldownEnd = now + HIGHLAND_DEFENSE_INTERCEPT_COOLDOWN;
+
+            if (redirectDamage > 0 && preventedDamage > 0) {
+                effectiveDamage -= preventedDamage;
+                const defenderId = chosenDefender.unit.id;
+
+                setUnits(prev => prev.map(u => {
+                    if (u.id !== defenderId) return u;
+                    const effects = (u.statusEffects ?? [])
+                        .map(e => e.type === "highland_defense"
+                            ? { ...e, interceptRemaining: remainingAfter, interceptCooldownEnd: cooldownEnd }
+                            : e
+                        )
+                        .filter(e => !(e.type === "highland_defense" && remainingAfter <= 0));
+                    return { ...u, statusEffects: effects.length > 0 ? effects : undefined };
+                }));
+
+                applyDamageToUnit(ctx, chosenDefender.unit.id, chosenDefender.group, redirectDamage, defenderName, {
+                    color: COLORS.highlandDefenseText,
+                    hitMessage: {
+                        text: `${defenderName} intercepts ${preventedDamage} damage for ${targetName}!`,
+                        color: COLORS.highlandDefenseText
+                    },
+                    targetUnit: chosenDefender.unit,
+                    attackerId,
+                    attackerPosition: { x: targetGroup.position.x, z: targetGroup.position.z },
+                    damageType: "physical",
+                    skipHighlandDefense: true
+                });
+
+                if (remainingAfter <= 0) {
+                    addLog(`${defenderName}'s Highland Defense is exhausted.`, COLORS.highlandDefenseText);
+                }
+            }
         }
     }
 
@@ -548,7 +659,7 @@ export function applyDamageToUnit(
     // Visual effects
     hitFlashRef[targetId] = now;
     // Show absorbed damage differently if shield took it
-    const displayDamage = shieldAbsorbed > 0 ? damage : damage;
+    const displayDamage = shieldAbsorbed > 0 ? damage : effectiveDamage;
     const displayColor = shieldAbsorbed > 0 && effectiveDamage === 0 ? "#66ccff" : color;
     spawnDamageNumber(scene, targetGroup.position.x, targetGroup.position.z, displayDamage, displayColor, damageTexts, false, isCrit);
 
@@ -563,6 +674,27 @@ export function applyDamageToUnit(
     // Log hit message before defeat message (if provided)
     if (hitMessage) {
         addLog(hitMessage.text, hitMessage.color);
+    }
+
+    // Thorns retaliation: reflect damage to the melee attacker.
+    if (isMeleeHit && attackerId !== undefined && attackerId !== targetId && refUnit && hasStatusEffect(refUnit, "thorns")) {
+        const attackerUnit = unitsStateRef.current.find(u => u.id === attackerId);
+        const attackerGroup = unitsRef[attackerId];
+        const thornsEffect = refUnit.statusEffects?.find(e => e.type === "thorns");
+        const thornsDamage = Math.max(1, thornsEffect?.thornsDamage ?? 2);
+
+        if (attackerUnit && attackerGroup && attackerUnit.hp > 0) {
+            const attackerDataName = getUnitDisplayName(attackerUnit);
+
+            applyDamageToUnit(ctx, attackerId, attackerGroup, thornsDamage, attackerDataName, {
+                color: COLORS.thornsText,
+                hitMessage: { text: `${targetName}'s thorns strike back for ${thornsDamage}!`, color: COLORS.thornsText },
+                targetUnit: attackerUnit,
+                attackerName: targetName,
+                attackerPosition: { x: targetGroup.position.x, z: targetGroup.position.z },
+                damageType: "physical"
+            });
+        }
     }
 
     // Defeat handling

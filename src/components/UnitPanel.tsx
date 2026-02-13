@@ -24,6 +24,7 @@ const CLASS_PORTRAITS: Record<string, string> = {
     Thief: thiefPortrait,
     Cleric: clericPortrait,
     Monk: monkPortrait,
+    Ancestor: barbarianPortrait,
 };
 const getPortrait = (className: string) => CLASS_PORTRAITS[className] ?? monkPortrait;
 
@@ -33,6 +34,7 @@ const PORTRAIT_POS: Record<string, string> = {
     Paladin: "center 80%",
     Thief: "65% bottom",
     Wizard: "65% bottom",
+    Ancestor: "center 78%",
 };
 
 interface UnitPanelProps {
@@ -195,6 +197,8 @@ const EFFECT_INFO: Record<string, { icon: string; color: string; description: st
     regen: { icon: "💚", color: COLORS.hpHigh, description: "Healing over time" },
     invul: { icon: "✦", color: "#8e44ad", description: "Immune to all damage" },
     sun_stance: { icon: "☀", color: COLORS.sunStanceText, description: "Attacks deal bonus fire damage" },
+    thorns: { icon: "✹", color: COLORS.thornsText, description: "Reflects melee damage to attackers" },
+    highland_defense: { icon: "⛰", color: COLORS.highlandDefenseText, description: "Redirects nearby ally damage to the barbarian" },
 };
 
 /** Renders active status effects as inline icons with tooltips */
@@ -207,6 +211,7 @@ function EffectsDisplay({ unit }: { unit: Unit }) {
                 const remainingSec = Math.ceil(effect.duration / 1000);
                 const info = EFFECT_INFO[effect.type] || { icon: "?", color: "#888", description: "Unknown effect" };
                 const displayName = effect.type.replace(/_/g, " ");
+                const now = Date.now();
 
                 return (
                     <Tippy
@@ -217,11 +222,30 @@ function EffectsDisplay({ unit }: { unit: Unit }) {
                                     {info.icon} {displayName}
                                 </div>
                                 <div className="effect-tooltip-desc">{info.description}</div>
-                                <div className="effect-tooltip-time">{remainingSec}s remaining</div>
+                                <div className="effect-tooltip-time">
+                                    {effect.type === "highland_defense" ? "Until exhausted" : `${remainingSec}s remaining`}
+                                </div>
                                 {effect.type === "energyShield" && effect.shieldAmount !== undefined && (
                                     <div className="effect-tooltip-extra" style={{ color: info.color }}>
                                         {effect.shieldAmount} HP remaining
                                     </div>
+                                )}
+                                {effect.type === "thorns" && effect.thornsDamage !== undefined && (
+                                    <div className="effect-tooltip-extra" style={{ color: info.color }}>
+                                        Reflects {effect.thornsDamage} melee damage
+                                    </div>
+                                )}
+                                {effect.type === "highland_defense" && (
+                                    <>
+                                        <div className="effect-tooltip-extra" style={{ color: info.color }}>
+                                            Redirect pool: {Math.max(0, Math.round(effect.interceptRemaining ?? 50))}
+                                        </div>
+                                        <div className="effect-tooltip-extra" style={{ color: info.color }}>
+                                            {now >= (effect.interceptCooldownEnd ?? 0)
+                                                ? "Intercept ready"
+                                                : `Intercept ready in ${Math.max(1, Math.ceil(((effect.interceptCooldownEnd ?? 0) - now) / 1000))}s`}
+                                        </div>
+                                    </>
                                 )}
                             </div>
                         }
@@ -353,7 +377,7 @@ function StatusTab({ unit, effectiveData, onToggleAI, unitId, onIncrementStat }:
                 className={`toggle-row ${unit.aiEnabled ? "active" : ""}`}
                 onClick={() => onToggleAI(unitId)}
             >
-                <span style={{ color: unit.aiEnabled ? "#4ade80" : "#888" }}>Auto Battle</span>
+                <span style={{ color: unit.aiEnabled ? "#4ade80" : "#888" }}>Auto-Battle</span>
                 <span className={`toggle-track ${unit.aiEnabled ? "active" : ""}`}>
                     <span className={`toggle-thumb ${unit.aiEnabled ? "active" : ""}`} />
                 </span>
@@ -406,6 +430,17 @@ function SkillTooltip({ skill, isShielded, cantripUses }: { skill: Skill; isShie
         if (skill.name === "Raise Shield") {
             lines.push({ label: "Duration", value: `${durationSec}s`, color: COLORS.shieldedText });
             lines.push({ label: "Effect", value: "×2 armor, ×2 cooldowns", color: COLORS.shieldedText });
+        } else if (skill.name === "Pangolin Stance") {
+            lines.push({ label: "Duration", value: `${durationSec}s`, color: COLORS.thornsText });
+            const minThorns = skill.damageRange?.[0] ?? 2;
+            const maxThorns = skill.damageRange?.[1] ?? 4;
+            lines.push({ label: "Thorns", value: `${minThorns}-${maxThorns} melee reflect`, color: COLORS.thornsText });
+        } else if (skill.name === "Highland Defense") {
+            lines.push({ label: "Duration", value: "Until 50 absorbed", color: COLORS.highlandDefenseText });
+            lines.push({ label: "Effect", value: "Nearby ally damage is redirected", color: COLORS.highlandDefenseText });
+            lines.push({ label: "Redirect", value: "50% damage to barbarian", color: COLORS.highlandDefenseText });
+            lines.push({ label: "Trigger", value: "Once every 5s", color: COLORS.highlandDefenseText });
+            lines.push({ label: "Range", value: "4.5", color: COLORS.highlandDefenseText });
         } else if (skill.name === "Cleanse") {
             lines.push({ label: "Duration", value: `${durationSec}s`, color: COLORS.cleansedText });
             lines.push({ label: "Effect", value: "Removes poison", color: COLORS.poisonText });
@@ -457,9 +492,18 @@ function SkillTooltip({ skill, isShielded, cantripUses }: { skill: Skill; isShie
         lines.push({ label: "Duration", value: `${durationSec}s`, color: "#9b59b6" });
         lines.push({ label: "Weakness", value: "Chaos ×2 penetration", color: COLORS.dmgChaos });
     } else if (skill.type === "dodge") {
-        const durationSec = Math.round(skill.duration! / 1000 * 10) / 10;
-        lines.push({ label: "Invul", value: `${durationSec}s`, color: "#8e44ad" });
-        lines.push({ label: "Dash range", value: `${skill.range}`, color: "#8e44ad" });
+        if (skill.name === "Body Swap") {
+            lines.push({ label: "Effect", value: "Swap places with ally or enemy", color: "#8e44ad" });
+            lines.push({ label: "Swap range", value: `${skill.range}`, color: "#8e44ad" });
+            lines.push({ label: "Target", value: "Any living unit", color: "#8e44ad" });
+        } else {
+            const durationSec = Math.round(skill.duration! / 1000 * 10) / 10;
+            lines.push({ label: "Invul", value: `${durationSec}s`, color: "#8e44ad" });
+            lines.push({ label: "Dash range", value: `${skill.range}`, color: "#8e44ad" });
+        }
+    } else if (skill.type === "summon") {
+        lines.push({ label: "Effect", value: "Summons Ancestor warrior", color: "#d7c09a" });
+        lines.push({ label: "Limit", value: "1 active summon", color: "#d7c09a" });
     }
 
     // Range (skip for self-targeted AOE skills that use range as radius, and dodge which shows it inline)
@@ -723,7 +767,7 @@ const SLOT_LABELS: Record<string, string> = {
 
 const DAMAGE_TYPE_COLORS: Record<string, string> = {
     physical: "#aaa",
-    holy: "#ffffaa",
+    holy: "#ffffff",
     chaos: "#ff6600",
     fire: "#ff4444",
     poison: "#44ff44",

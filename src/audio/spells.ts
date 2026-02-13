@@ -298,6 +298,91 @@ export const playThunder = () => {
     thump.stop(ctx.currentTime + 0.35);
 };
 
+// Holy Strike - radiant impact with bell chime and airy shimmer
+export const playHolyStrike = () => {
+    if (isMuted()) return;
+    const ctx = getAudioCtx();
+    const now = ctx.currentTime;
+
+    // Bright impact transient
+    const impactBuffer = createNoiseBuffer(ctx, 0.09, (i, size) => {
+        const t = i / size;
+        const envelope = Math.exp(-t * 18);
+        const spike = Math.random() > 0.86 ? 1.6 : 1.0;
+        return (Math.random() * 2 - 1) * envelope * spike;
+    });
+    const impact = ctx.createBufferSource();
+    impact.buffer = impactBuffer;
+    const impactFilter = ctx.createBiquadFilter();
+    impactFilter.type = "highpass";
+    impactFilter.frequency.setValueAtTime(1400, now);
+    const impactGain = ctx.createGain();
+    impactGain.gain.setValueAtTime(0.24, now);
+    impactGain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+    impact.connect(impactFilter);
+    impactFilter.connect(impactGain);
+    impactGain.connect(ctx.destination);
+    impact.start(now);
+    impact.stop(now + 0.1);
+
+    // Main holy body tone
+    const body = ctx.createOscillator();
+    body.type = "triangle";
+    body.frequency.setValueAtTime(900, now);
+    body.frequency.exponentialRampToValueAtTime(540, now + 0.22);
+    const bodyFilter = ctx.createBiquadFilter();
+    bodyFilter.type = "lowpass";
+    bodyFilter.frequency.setValueAtTime(2300, now);
+    bodyFilter.frequency.exponentialRampToValueAtTime(950, now + 0.28);
+    const bodyGain = ctx.createGain();
+    bodyGain.gain.setValueAtTime(0, now);
+    bodyGain.gain.linearRampToValueAtTime(0.18, now + 0.012);
+    bodyGain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+    body.connect(bodyFilter);
+    bodyFilter.connect(bodyGain);
+    bodyGain.connect(ctx.destination);
+    body.start(now);
+    body.stop(now + 0.32);
+
+    // Bell-like harmonics
+    const harmonics = [1175, 1568, 2093];
+    harmonics.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        osc.type = "sine";
+        const start = now + 0.01 + i * 0.014;
+        osc.frequency.setValueAtTime(freq, start);
+        osc.frequency.exponentialRampToValueAtTime(freq * 0.97, start + 0.26);
+
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0, start);
+        gain.gain.linearRampToValueAtTime(0.085 - i * 0.012, start + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.3);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(start);
+        osc.stop(start + 0.32);
+    });
+
+    // Airy radiant tail
+    const shimmerNoise = ctx.createBufferSource();
+    shimmerNoise.buffer = createWhiteNoiseBuffer(ctx, 0.45);
+    const shimmerFilter = ctx.createBiquadFilter();
+    shimmerFilter.type = "bandpass";
+    shimmerFilter.frequency.setValueAtTime(4500, now + 0.04);
+    shimmerFilter.frequency.exponentialRampToValueAtTime(3200, now + 0.45);
+    shimmerFilter.Q.setValueAtTime(1.4, now);
+    const shimmerGain = ctx.createGain();
+    shimmerGain.gain.setValueAtTime(0, now + 0.04);
+    shimmerGain.gain.linearRampToValueAtTime(0.06, now + 0.12);
+    shimmerGain.gain.exponentialRampToValueAtTime(0.001, now + 0.48);
+    shimmerNoise.connect(shimmerFilter);
+    shimmerFilter.connect(shimmerGain);
+    shimmerGain.connect(ctx.destination);
+    shimmerNoise.start(now + 0.03);
+    shimmerNoise.stop(now + 0.5);
+};
+
 // Vines - earthy rustling/growing sound for entangle
 export const playVines = () => {
     if (isMuted()) return;

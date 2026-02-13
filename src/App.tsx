@@ -8,11 +8,11 @@ import * as THREE from "three";
 
 // Constants & Types
 import { setDebugSpeedMultiplier } from "./core/constants";
-import type { Unit, UnitGroup, Skill, CombatLogEntry, SelectionBox, CharacterStats } from "./core/types";
+import type { Unit, UnitGroup, Skill, CombatLogEntry, SelectionBox, CharacterStats, SummonType } from "./core/types";
 
 // Game Logic
 import { getCurrentArea, getCurrentAreaId, setCurrentArea, AREAS, DEFAULT_STARTING_AREA, DEFAULT_SPAWN_POINT, type AreaId, type AreaTransition } from "./game/areas";
-import { UNIT_DATA, getEffectiveMaxHp, getEffectiveMaxMana } from "./game/playerUnits";
+import { UNIT_DATA, CORE_PLAYER_IDS, getEffectiveMaxHp, getEffectiveMaxMana, getXpForLevel, isCorePlayerId } from "./game/playerUnits";
 import { LEVEL_UP_HP, LEVEL_UP_MANA, LEVEL_UP_STAT_POINTS, LEVEL_UP_SKILL_POINTS, HP_PER_VITALITY, MP_PER_INTELLIGENCE } from "./game/statBonuses";
 import { ENEMY_STATS } from "./game/enemyStats";
 import { initializeEquipmentState, getPartyInventory, setPartyInventory, getAllEquipment, setAllEquipment } from "./game/equipmentState";
@@ -21,14 +21,13 @@ import { getItem } from "./game/items";
 import { isConsumable } from "./core/types";
 import { updateChestStates } from "./rendering/scene";
 import { soundFns } from "./audio";
-import { findSpawnPositions } from "./ai/pathfinding";
+import { findNearestPassable, findSpawnPositions } from "./ai/pathfinding";
 import { updateUnit, updateUnitWith, updateUnitsWhere } from "./core/stateUtils";
 
 // Extracted modules
 import { executeSkill, type SkillExecutionContext } from "./combat/skills";
 import { setupTargetingMode } from "./input";
 import { createLightningPillar } from "./combat/damageEffects";
-import { getXpForLevel } from "./game/playerUnits";
 import { initializeUnitIdCounter, spawnLootBag } from "./gameLoop";
 import {
     togglePause,
@@ -96,6 +95,16 @@ function reviveUnitVisual(
     reviveGroup.userData.targetZ = reviveZ;
 }
 
+function getForwardVectorForDirection(direction?: "north" | "south" | "east" | "west"): { x: number; z: number } {
+    switch (direction ?? "south") {
+        case "north": return { x: 0, z: 1 };
+        case "south": return { x: 0, z: -1 };
+        case "east": return { x: 1, z: 0 };
+        case "west": return { x: -1, z: 0 };
+        default: return { x: 0, z: -1 };
+    }
+}
+
 // =============================================================================
 // TYPES
 // =============================================================================
@@ -112,6 +121,8 @@ interface PersistedPlayer {
     learnedSkills?: string[];
     statusEffects?: Unit["statusEffects"];
     cantripUses?: Record<string, number>;
+    summonType?: SummonType;
+    summonedBy?: number;
 }
 
 interface GameProps {
@@ -189,11 +200,10 @@ function Game({
     // Create initial units
     const createUnitsForArea = useCallback((): Unit[] => {
         const area = getCurrentArea();
-        const allPlayerIds = Object.keys(UNIT_DATA).map(Number);
         const spawn = spawnPoint ?? DEFAULT_SPAWN_POINT;
         // Sort player IDs by formation order so slot 0 (tip) goes to the right unit
         const fOrder = loadFormationOrder();
-        const playerIds = [...allPlayerIds].sort((a, b) => {
+        const playerIds = [...CORE_PLAYER_IDS].sort((a, b) => {
             const ai = fOrder.indexOf(a);
             const bi = fOrder.indexOf(b);
             return (ai === -1 ? 100 + a : ai) - (bi === -1 ? 100 + b : bi);
@@ -209,6 +219,9 @@ function Game({
             const learnedSkills = devMode
                 ? data.skills.map(s => s.name)
                 : (persisted?.learnedSkills ?? []);
+            const defaultCantripUses = data.skills
+                .filter(s => s.isCantrip && s.maxUses)
+                .reduce<Record<string, number>>((acc, s) => ({ ...acc, [s.name]: s.maxUses! }), {});
             return {
                 id,
                 x: pos.x,
@@ -225,10 +238,44 @@ function Game({
                 target: null,
                 aiEnabled: true,
                 statusEffects: persisted?.statusEffects,
-                cantripUses: persisted?.cantripUses ?? data.skills
-                    .filter(s => s.isCantrip && s.maxUses)
-                    .reduce<Record<string, number>>((acc, s) => ({ ...acc, [s.name]: s.maxUses! }), {})
+                cantripUses: { ...defaultCantripUses, ...(persisted?.cantripUses ?? {}) }
             };
+        });
+
+        const summonPersisted = (persistedPlayers ?? [])
+            .filter(p => p.summonType === "ancestor_warrior" && p.hp > 0)
+            .slice(0, 1);
+        const forward = getForwardVectorForDirection(spawnDirection);
+        const side = { x: -forward.z, z: forward.x };
+        const summons: Unit[] = [];
+        summonPersisted.forEach((persisted, i) => {
+            const data = UNIT_DATA[persisted.id];
+            if (!data) return;
+            const rank = Math.floor(i / 2);
+            const lane = i % 2 === 0 ? -1 : 1;
+            const desiredX = spawn.x - forward.x * (3.3 + rank * 1.2) + side.x * lane * 1.2;
+            const desiredZ = spawn.z - forward.z * (3.3 + rank * 1.2) + side.z * lane * 1.2;
+            const pos = findNearestPassable(desiredX, desiredZ, 5) ?? { x: spawn.x, z: spawn.z };
+            summons.push({
+                id: persisted.id,
+                x: pos.x,
+                z: pos.z,
+                hp: persisted.hp,
+                mana: persisted.mana ?? data.mana,
+                level: persisted.level ?? 1,
+                exp: persisted.exp ?? 0,
+                stats: persisted.stats,
+                statPoints: persisted.statPoints ?? 0,
+                skillPoints: persisted.skillPoints ?? 0,
+                learnedSkills: persisted.learnedSkills ?? [],
+                team: "player" as const,
+                target: null,
+                aiEnabled: true,
+                statusEffects: persisted.statusEffects,
+                cantripUses: persisted.cantripUses,
+                summonType: persisted.summonType,
+                summonedBy: persisted.summonedBy
+            });
         });
 
         const areaId = getCurrentAreaId();
@@ -251,7 +298,7 @@ function Game({
             });
         });
 
-        const allUnits = [...players, ...enemies];
+        const allUnits = [...players, ...summons, ...enemies];
         initializeUnitIdCounter(allUnits);
         return allUnits;
     }, [persistedPlayers, spawnPoint, spawnDirection, initialKilledEnemies, devMode]);
@@ -261,7 +308,12 @@ function Game({
     // =============================================================================
 
     const [units, setUnits] = useState<Unit[]>(createUnitsForArea);
-    const [selectedIds, setSelectedIds] = useState<number[]>(() => Object.keys(UNIT_DATA).map(Number));
+    const [selectedIds, setSelectedIds] = useState<number[]>(() => {
+        const persistedAliveIds = (persistedPlayers ?? [])
+            .filter(player => player.hp > 0)
+            .map(player => player.id);
+        return persistedAliveIds.length > 0 ? persistedAliveIds : [...CORE_PLAYER_IDS];
+    });
     const [selBox, setSelBox] = useState<SelectionBox | null>(null);
     const [showPanel, setShowPanel] = useState(false);
     const [combatLog, setCombatLog] = useState<CombatLogEntry[]>(() => [{ text: `The party enters ${getCurrentArea().name}.`, color: "#f59e0b" }]);
@@ -577,16 +629,38 @@ function Game({
         );
     }, [getSkillContext, sceneState.unitGroups, gameRefs, executeConsumable]);
 
+    const buildPersistedPlayers = useCallback((allUnits: Unit[]): PersistedPlayer[] => {
+        const players = allUnits.filter(u => u.team === "player");
+        const corePlayers = players.filter(u => !u.summonType);
+        const summon = players.find(u => u.summonType === "ancestor_warrior" && u.hp > 0);
+
+        const toPersisted = (u: Unit): PersistedPlayer => ({
+            id: u.id,
+            hp: u.hp,
+            mana: u.mana,
+            level: u.level,
+            exp: u.exp,
+            stats: u.stats,
+            statPoints: u.statPoints,
+            skillPoints: u.skillPoints,
+            learnedSkills: u.learnedSkills,
+            statusEffects: u.statusEffects,
+            cantripUses: u.cantripUses,
+            summonType: u.summonType,
+            summonedBy: u.summonedBy
+        });
+
+        return [
+            ...corePlayers.map(toPersisted),
+            ...(summon ? [toPersisted(summon)] : [])
+        ];
+    }, []);
+
     // Area transition handler
     const handleAreaTransition = useCallback((transition: AreaTransition) => {
-        const playerUnits = unitsStateRef.current.filter(u => u.team === "player");
-        const persistedState: PersistedPlayer[] = playerUnits.map(u => ({
-            id: u.id, hp: u.hp, mana: u.mana, level: u.level, exp: u.exp,
-            stats: u.stats, statPoints: u.statPoints, skillPoints: u.skillPoints,
-            learnedSkills: u.learnedSkills, statusEffects: u.statusEffects, cantripUses: u.cantripUses
-        }));
+        const persistedState = buildPersistedPlayers(unitsStateRef.current);
         onAreaTransition(persistedState, transition.targetArea, transition.targetSpawn, transition.direction);
-    }, [onAreaTransition]);
+    }, [buildPersistedPlayers, onAreaTransition]);
 
     // =============================================================================
     // INPUT HANDLERS HOOK
@@ -708,20 +782,15 @@ function Game({
     // Expose game state for save
     useEffect(() => {
         gameStateRef.current = () => {
-            const playerUnits = unitsStateRef.current.filter(u => u.team === "player");
             return {
-                players: playerUnits.map(u => ({
-                    id: u.id, hp: u.hp, mana: u.mana, level: u.level, exp: u.exp,
-                    stats: u.stats, statPoints: u.statPoints, statusEffects: u.statusEffects,
-                    cantripUses: u.cantripUses
-                })),
+                players: buildPersistedPlayers(unitsStateRef.current),
                 currentAreaId: getCurrentAreaId(),
                 openedChests: openedChestsRef.current,
                 openedSecretDoors, gold, killedEnemies
             };
         };
         return () => { gameStateRef.current = null; };
-    }, [gameStateRef, openedSecretDoors, gold, killedEnemies]);
+    }, [buildPersistedPlayers, gameStateRef, openedSecretDoors, gold, killedEnemies]);
 
     // Update selection rings
     useEffect(() => {
@@ -840,6 +909,37 @@ function Game({
         }));
     }, [sceneState.unitGroups]);
 
+    const handleSelectAllPlayers = useCallback(() => {
+        const controllableIds = unitsStateRef.current
+            .filter(u => u.team === "player" && u.hp > 0)
+            .map(u => u.id);
+        setSelectedIds(controllableIds);
+        if (controllableIds.length === 0) {
+            setCommandMode(null);
+        }
+    }, []);
+
+    const handleDeselectAllPlayers = useCallback(() => {
+        setSelectedIds([]);
+        setCommandMode(null);
+    }, []);
+
+    const handleTogglePartyAutoBattle = useCallback(() => {
+        const players = unitsStateRef.current.filter(u => u.team === "player");
+        if (players.length === 0) return;
+
+        const enableAutoBattle = players.some(u => !u.aiEnabled);
+        setUnits(prev => prev.map(u => (
+            u.team === "player"
+                ? { ...u, aiEnabled: enableAutoBattle }
+                : u
+        )));
+        addLog(
+            `Auto-battle ${enableAutoBattle ? "enabled" : "disabled"} for party and summons.`,
+            enableAutoBattle ? "#22c55e" : "#f59e0b"
+        );
+    }, [addLog]);
+
     const handleTogglePause = useCallback(() => {
         togglePause(
             { pauseStartTimeRef, actionCooldownRef },
@@ -899,14 +999,9 @@ function Game({
     }, [units, paused, addLog, executeConsumable, consumableTargetingMode]);
 
     const handleWarpToArea = useCallback((areaId: AreaId) => {
-        const playerUnits = unitsStateRef.current.filter(u => u.team === "player");
-        const persistedState: PersistedPlayer[] = playerUnits.map(u => ({
-            id: u.id, hp: u.hp, mana: u.mana, level: u.level, exp: u.exp,
-            stats: u.stats, statPoints: u.statPoints, skillPoints: u.skillPoints,
-            learnedSkills: u.learnedSkills, statusEffects: u.statusEffects, cantripUses: u.cantripUses
-        }));
+        const persistedState = buildPersistedPlayers(unitsStateRef.current);
         onAreaTransition(persistedState, areaId, AREAS[areaId].defaultSpawn);
-    }, [onAreaTransition]);
+    }, [buildPersistedPlayers, onAreaTransition]);
 
     const handleAddXp = useCallback((amount: number) => {
         const scene = sceneState.scene;
@@ -1010,7 +1105,9 @@ function Game({
     // RENDER
     // =============================================================================
 
-    const alivePlayers = units.filter(u => u.team === "player" && u.hp > 0).length;
+    const alivePlayers = units.filter(u => u.team === "player" && isCorePlayerId(u.id) && u.hp > 0).length;
+    const partyAutoBattleActive = units.some(u => u.team === "player")
+        && units.filter(u => u.team === "player").every(u => u.aiEnabled);
     const areaData = getCurrentArea();
 
     return (
@@ -1098,8 +1195,12 @@ function Game({
                 onStop={handleStop}
                 onHold={handleHold}
                 onAttackMove={() => setCommandMode("attackMove")}
+                onSelectAll={handleSelectAllPlayers}
+                onDeselectAll={handleDeselectAllPlayers}
+                onToggleAutoBattle={handleTogglePartyAutoBattle}
                 hasSelection={selectedIds.length > 0}
                 holdActive={units.some(u => selectedIds.includes(u.id) && u.holdPosition)}
+                partyAutoBattleActive={partyAutoBattleActive}
             />
             <PartyBar
                 units={units} selectedIds={selectedIds} onSelect={setSelectedIds} targetingMode={targetingMode}

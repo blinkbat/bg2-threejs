@@ -96,14 +96,15 @@ export function rollDamageWithCrit(
  */
 export function calculateStatBonus(unit: Unit | undefined, damageType: DamageType): number {
     if (!unit) return 0;
+    const auraBonus = unit.auraDamageBonus ?? 0;
     if (damageType === "physical") {
-        return getStrengthDamageBonus(unit);
+        return getStrengthDamageBonus(unit) + auraBonus;
     } else if (damageType === "fire" || damageType === "cold" || damageType === "lightning" || damageType === "chaos") {
-        return getIntelligenceMagicDamageBonus(unit);
+        return getIntelligenceMagicDamageBonus(unit) + auraBonus;
     } else if (damageType === "holy") {
-        return getFaithHolyDamageBonus(unit);
+        return getFaithHolyDamageBonus(unit) + auraBonus;
     }
-    return 0;
+    return auraBonus;
 }
 
 /**

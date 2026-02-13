@@ -169,16 +169,91 @@ const _dirToUnit = new THREE.Vector3();
 const _intersection = new THREE.Vector3();
 const _ray = new THREE.Ray();
 const _meshBox = new THREE.Box3();
+const _treeUnionBox = new THREE.Box3();
+
+interface OcclusionCircle {
+    x: number;
+    z: number;
+    radius: number;
+}
+
+interface TreeOcclusionGroup {
+    meshes: THREE.Mesh[];
+    circle: OcclusionCircle;
+}
+
+const TREE_OCCLUSION_RADIUS_PAD = 0.2;
 
 /** Get or compute a cached bounding box for a static mesh. */
-function getCachedBox(mesh: THREE.Mesh): THREE.Box3 {
+function getStableCachedBox(mesh: THREE.Mesh): THREE.Box3 {
     let cached = mesh.userData.cachedBox as THREE.Box3 | undefined;
     if (!cached) {
         cached = new THREE.Box3().setFromObject(mesh);
         mesh.userData.cachedBox = cached;
     }
-    _meshBox.copy(cached);
+    return cached;
+}
+
+/** Get a copy of cached bounds into a reusable temp box. */
+function getCachedBox(mesh: THREE.Mesh): THREE.Box3 {
+    _meshBox.copy(getStableCachedBox(mesh));
     return _meshBox;
+}
+
+function buildTreeOcclusionCircle(meshes: THREE.Mesh[]): OcclusionCircle {
+    for (const mesh of meshes) {
+        const centerX = readFiniteNumber(Reflect.get(mesh.userData, "fogFootprintCenterX"));
+        const centerZ = readFiniteNumber(Reflect.get(mesh.userData, "fogFootprintCenterZ"));
+        const radius = readFiniteNumber(Reflect.get(mesh.userData, "fogFootprintRadius"));
+        if (centerX !== null && centerZ !== null && radius !== null && radius > 0) {
+            return { x: centerX, z: centerZ, radius: radius + TREE_OCCLUSION_RADIUS_PAD };
+        }
+    }
+
+    _treeUnionBox.makeEmpty();
+    for (const mesh of meshes) {
+        _treeUnionBox.union(getStableCachedBox(mesh));
+    }
+    if (_treeUnionBox.isEmpty()) {
+        const fallback = meshes[0];
+        return { x: fallback.position.x, z: fallback.position.z, radius: 0.8 };
+    }
+
+    const centerX = (_treeUnionBox.min.x + _treeUnionBox.max.x) * 0.5;
+    const centerZ = (_treeUnionBox.min.z + _treeUnionBox.max.z) * 0.5;
+    const halfWidthX = Math.max(0, (_treeUnionBox.max.x - _treeUnionBox.min.x) * 0.5);
+    const halfWidthZ = Math.max(0, (_treeUnionBox.max.z - _treeUnionBox.min.z) * 0.5);
+    const radius = Math.max(0.6, Math.hypot(halfWidthX, halfWidthZ) + TREE_OCCLUSION_RADIUS_PAD);
+
+    return { x: centerX, z: centerZ, radius };
+}
+
+/**
+ * Fast XZ occlusion test for orthographic isometric view.
+ * Returns true when the camera->unit segment passes through the tree circle.
+ */
+function doesCircleOccludeSegmentXZ(
+    cameraX: number,
+    cameraZ: number,
+    unitX: number,
+    unitZ: number,
+    circle: OcclusionCircle
+): boolean {
+    const segX = unitX - cameraX;
+    const segZ = unitZ - cameraZ;
+    const segLenSq = segX * segX + segZ * segZ;
+    if (segLenSq <= 0.0001) return false;
+
+    const relX = circle.x - cameraX;
+    const relZ = circle.z - cameraZ;
+    const t = (relX * segX + relZ * segZ) / segLenSq;
+    if (t <= 0 || t >= 1) return false;
+
+    const closestX = cameraX + segX * t;
+    const closestZ = cameraZ + segZ * t;
+    const dx = circle.x - closestX;
+    const dz = circle.z - closestZ;
+    return dx * dx + dz * dz <= circle.radius * circle.radius;
 }
 
 // Throttle expensive ray-box tests - only recalculate every N frames
@@ -211,6 +286,39 @@ export function updateWallTransparency(
 
         _cameraPos.copy(camera.position);
 
+        const treeOcclusionGroups: TreeOcclusionGroup[] = [];
+        if (treeMeshes) {
+            const treeGroupMap = new Map<string, THREE.Mesh[]>();
+            const standaloneTreeMeshes: THREE.Mesh[] = [];
+            for (const mesh of treeMeshes) {
+                const fogObjectId = Reflect.get(mesh.userData, "fogObjectId");
+                if (typeof fogObjectId === "string" && fogObjectId.length > 0) {
+                    const existingGroup = treeGroupMap.get(fogObjectId);
+                    if (existingGroup) {
+                        existingGroup.push(mesh);
+                    } else {
+                        treeGroupMap.set(fogObjectId, [mesh]);
+                    }
+                } else {
+                    standaloneTreeMeshes.push(mesh);
+                }
+            }
+
+            for (const group of treeGroupMap.values()) {
+                treeOcclusionGroups.push({
+                    meshes: group,
+                    circle: buildTreeOcclusionCircle(group),
+                });
+            }
+
+            for (const mesh of standaloneTreeMeshes) {
+                treeOcclusionGroups.push({
+                    meshes: [mesh],
+                    circle: buildTreeOcclusionCircle([mesh]),
+                });
+            }
+        }
+
         // Only check player units for occlusion (enemies don't need wall transparency)
         for (const unit of unitsState) {
             if (unit.hp <= 0 || unit.team !== "player") continue;
@@ -235,24 +343,41 @@ export function updateWallTransparency(
             }
 
             // Check trees if provided
-            if (treeMeshes) {
-                for (const mesh of treeMeshes) {
-                    if (cachedOccludingMeshes.has(mesh)) continue;
-                    getCachedBox(mesh);
-                    if (_ray.intersectBox(_meshBox, _intersection)) {
-                        if (_cameraPos.distanceTo(_intersection) < distToUnit) {
+            if (treeOcclusionGroups.length > 0) {
+                const cameraX = _cameraPos.x;
+                const cameraZ = _cameraPos.z;
+                const unitX = unitGroup.position.x;
+                const unitZ = unitGroup.position.z;
+
+                for (const group of treeOcclusionGroups) {
+                    if (group.meshes.some(mesh => cachedOccludingMeshes.has(mesh))) continue;
+                    const groupOccludes = doesCircleOccludeSegmentXZ(
+                        cameraX,
+                        cameraZ,
+                        unitX,
+                        unitZ,
+                        group.circle
+                    );
+                    if (groupOccludes) {
+                        for (const mesh of group.meshes) {
                             cachedOccludingMeshes.add(mesh);
                         }
                     }
                 }
             }
 
-            // Check columns if provided - use groups so all parts fade together
+            // Check grouped columns first so multipart structures fade together.
+            const groupedColumnMeshes = new Set<THREE.Mesh>();
             if (columnGroups) {
                 for (const group of columnGroups) {
+                    for (const mesh of group) {
+                        groupedColumnMeshes.add(mesh);
+                    }
+
                     // Skip if already marked
                     if (group.some(mesh => cachedOccludingMeshes.has(mesh))) continue;
-                    // Check if any part of the column is occluding
+
+                    // Check if any part of the group is occluding
                     let groupOccludes = false;
                     for (const mesh of group) {
                         getCachedBox(mesh);
@@ -263,16 +388,20 @@ export function updateWallTransparency(
                             }
                         }
                     }
-                    // If any part occludes, mark ALL parts of the column
+
+                    // If any part occludes, mark ALL parts of the group
                     if (groupOccludes) {
                         for (const mesh of group) {
                             cachedOccludingMeshes.add(mesh);
                         }
                     }
                 }
-            } else if (columnMeshes) {
-                // Fallback: check individual meshes if no groups provided
+            }
+
+            // Check standalone tall meshes that are not part of an explicit group.
+            if (columnMeshes) {
                 for (const mesh of columnMeshes) {
+                    if (groupedColumnMeshes.has(mesh)) continue;
                     if (cachedOccludingMeshes.has(mesh)) continue;
                     getCachedBox(mesh);
                     if (_ray.intersectBox(_meshBox, _intersection)) {
@@ -330,7 +459,19 @@ export function updateWallTransparency(
     if (treeMeshes) {
         for (const mesh of treeMeshes) {
             const mat = mesh.material as THREE.MeshStandardMaterial;
-            const targetOpacity = cachedOccludingMeshes.has(mesh) ? WALL_OPACITY_OCCLUDING : WALL_OPACITY_NORMAL;
+            const fogState = toFogRenderState(Reflect.get(mesh.userData, "fogRenderState"));
+            const fogOpacity = readFiniteNumber(Reflect.get(mesh.userData, "fogResolvedOpacity"));
+            const occlusionTarget = cachedOccludingMeshes.has(mesh) ? WALL_OPACITY_OCCLUDING : WALL_OPACITY_NORMAL;
+            let targetOpacity = occlusionTarget;
+
+            if (fogOpacity !== null) {
+                if (fogState === FOG_STATE_UNEXPLORED) {
+                    targetOpacity = fogOpacity;
+                } else {
+                    targetOpacity = Math.min(fogOpacity, occlusionTarget);
+                }
+            }
+
             mat.opacity += (targetOpacity - mat.opacity) * WALL_OPACITY_LERP_SPEED;
             if (Math.abs(mat.opacity - targetOpacity) < 0.01) mat.opacity = targetOpacity;
         }
@@ -340,7 +481,19 @@ export function updateWallTransparency(
     if (columnMeshes) {
         for (const mesh of columnMeshes) {
             const mat = mesh.material as THREE.MeshStandardMaterial;
-            const targetOpacity = cachedOccludingMeshes.has(mesh) ? WALL_OPACITY_OCCLUDING : WALL_OPACITY_NORMAL;
+            const fogState = toFogRenderState(Reflect.get(mesh.userData, "fogRenderState"));
+            const fogOpacity = readFiniteNumber(Reflect.get(mesh.userData, "fogResolvedOpacity"));
+            const occlusionTarget = cachedOccludingMeshes.has(mesh) ? WALL_OPACITY_OCCLUDING : WALL_OPACITY_NORMAL;
+            let targetOpacity = occlusionTarget;
+
+            if (fogOpacity !== null) {
+                if (fogState === FOG_STATE_UNEXPLORED) {
+                    targetOpacity = fogOpacity;
+                } else {
+                    targetOpacity = Math.min(fogOpacity, occlusionTarget);
+                }
+            }
+
             mat.opacity += (targetOpacity - mat.opacity) * WALL_OPACITY_LERP_SPEED;
             if (Math.abs(mat.opacity - targetOpacity) < 0.01) mat.opacity = targetOpacity;
         }
@@ -372,70 +525,284 @@ export function updateWallTransparency(
 // TREE FOG VISIBILITY
 // =============================================================================
 
-// Fade speed for tree foliage reveal
-const TREE_FADE_SPEED = 0.08;
-const FOG_OCCLUDER_FADE_SPEED = 0.08;
+type FogRenderState = 0 | 1 | 2;
+
+interface FogFootprintCell {
+    x: number;
+    z: number;
+}
+
+interface FogTransitionSnapshot {
+    opacity: number;
+    scaleY: number;
+    posY: number;
+}
+
+interface FogTransitionResult {
+    opacity: number;
+    scaleY: number;
+    posY: number;
+    progress: number;
+}
+
+const FOG_STATE_UNEXPLORED: FogRenderState = 0;
+const FOG_STATE_REVEALED_NOT_VISIBLE: FogRenderState = 1;
+const FOG_STATE_VISIBLE: FogRenderState = 2;
+
+const UNEXPLORED_TRUNK_STUMP_HEIGHT = 0.42;
+const FOG_TRANSITION_BASE_MS = 220;
+const FOG_TRANSITION_JITTER_MS = 40;
+const FOG_DITHER_OPACITY_VARIANCE = 0.04;
+
+interface AlphaHashCapableMaterial extends THREE.Material {
+    alphaHash: boolean;
+}
+
+function readFiniteNumber(value: unknown): number | null {
+    return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function toFogRenderState(value: unknown): FogRenderState | null {
+    if (value === FOG_STATE_UNEXPLORED) return FOG_STATE_UNEXPLORED;
+    if (value === FOG_STATE_REVEALED_NOT_VISIBLE) return FOG_STATE_REVEALED_NOT_VISIBLE;
+    if (value === FOG_STATE_VISIBLE) return FOG_STATE_VISIBLE;
+    return null;
+}
+
+function isAlphaHashCapableMaterial(material: THREE.Material): material is AlphaHashCapableMaterial {
+    return "alphaHash" in material && typeof Reflect.get(material, "alphaHash") === "boolean";
+}
+
+function getFogDitherSeed(mesh: THREE.Mesh): number {
+    const existing = readFiniteNumber(Reflect.get(mesh.userData, "fogDitherSeed"));
+    if (existing !== null) return existing;
+    const seed = Math.abs(Math.sin(mesh.id * 12.9898 + 78.233)) % 1;
+    mesh.userData.fogDitherSeed = seed;
+    return seed;
+}
+
+function getFogTransitionDurationMs(mesh: THREE.Mesh): number {
+    const existing = readFiniteNumber(Reflect.get(mesh.userData, "fogTransitionDurationMs"));
+    if (existing !== null) return existing;
+    const seed = getFogDitherSeed(mesh);
+    const jitter = (seed * 2 - 1) * FOG_TRANSITION_JITTER_MS;
+    const duration = THREE.MathUtils.clamp(FOG_TRANSITION_BASE_MS + jitter, 150, 300);
+    mesh.userData.fogTransitionDurationMs = duration;
+    return duration;
+}
+
+function readFogFootprintCells(mesh: THREE.Mesh): FogFootprintCell[] | null {
+    const rawCells = Reflect.get(mesh.userData, "fogFootprintCells");
+    if (!Array.isArray(rawCells) || rawCells.length === 0) return null;
+
+    const cells: FogFootprintCell[] = [];
+    for (const rawCell of rawCells) {
+        if (!rawCell || typeof rawCell !== "object") continue;
+        const x = readFiniteNumber(Reflect.get(rawCell, "x"));
+        const z = readFiniteNumber(Reflect.get(rawCell, "z"));
+        if (x === null || z === null) continue;
+        cells.push({ x: Math.floor(x), z: Math.floor(z) });
+    }
+
+    return cells.length > 0 ? cells : null;
+}
+
+function resolveFogStateFromVisibility(
+    mesh: THREE.Mesh,
+    visibility: number[][],
+    fallbackX: number,
+    fallbackZ: number
+): FogRenderState {
+    let maxVis = 0;
+    const footprintCells = readFogFootprintCells(mesh);
+
+    if (footprintCells) {
+        for (const cell of footprintCells) {
+            const vis = visibility[cell.x]?.[cell.z] ?? 0;
+            if (vis > maxVis) maxVis = vis;
+            if (maxVis === FOG_STATE_VISIBLE) break;
+        }
+    } else {
+        const tx = Math.floor(fallbackX);
+        const tz = Math.floor(fallbackZ);
+        maxVis = visibility[tx]?.[tz] ?? 0;
+    }
+
+    if (maxVis >= FOG_STATE_VISIBLE) return FOG_STATE_VISIBLE;
+    if (maxVis >= FOG_STATE_REVEALED_NOT_VISIBLE) return FOG_STATE_REVEALED_NOT_VISIBLE;
+    return FOG_STATE_UNEXPLORED;
+}
+
+function readFogTransitionSnapshot(
+    mesh: THREE.Mesh,
+    fallbackOpacity: number,
+    fallbackScaleY: number,
+    fallbackPosY: number
+): FogTransitionSnapshot {
+    return {
+        opacity: readFiniteNumber(Reflect.get(mesh.userData, "fogTransitionFromOpacity")) ?? fallbackOpacity,
+        scaleY: readFiniteNumber(Reflect.get(mesh.userData, "fogTransitionFromScaleY")) ?? fallbackScaleY,
+        posY: readFiniteNumber(Reflect.get(mesh.userData, "fogTransitionFromPosY")) ?? fallbackPosY,
+    };
+}
+
+function computeFogTransition(
+    mesh: THREE.Mesh,
+    nextState: FogRenderState,
+    now: number,
+    currentOpacity: number,
+    currentScaleY: number,
+    currentPosY: number,
+    targetOpacity: number,
+    targetScaleY: number,
+    targetPosY: number
+): FogTransitionResult {
+    const previousState = toFogRenderState(Reflect.get(mesh.userData, "fogRenderState"));
+
+    if (previousState === null) {
+        mesh.userData.fogRenderState = nextState;
+        mesh.userData.fogTransitionStartMs = now;
+        mesh.userData.fogTransitionFromOpacity = targetOpacity;
+        mesh.userData.fogTransitionFromScaleY = targetScaleY;
+        mesh.userData.fogTransitionFromPosY = targetPosY;
+        return {
+            opacity: targetOpacity,
+            scaleY: targetScaleY,
+            posY: targetPosY,
+            progress: 1,
+        };
+    }
+
+    if (previousState !== nextState) {
+        mesh.userData.fogRenderState = nextState;
+        mesh.userData.fogTransitionStartMs = now;
+        mesh.userData.fogTransitionFromOpacity = currentOpacity;
+        mesh.userData.fogTransitionFromScaleY = currentScaleY;
+        mesh.userData.fogTransitionFromPosY = currentPosY;
+    }
+
+    const startMs = readFiniteNumber(Reflect.get(mesh.userData, "fogTransitionStartMs")) ?? now;
+    const durationMs = getFogTransitionDurationMs(mesh);
+    const rawProgress = THREE.MathUtils.clamp((now - startMs) / durationMs, 0, 1);
+    const easedProgress = rawProgress * rawProgress * (3 - 2 * rawProgress);
+    const fromSnapshot = readFogTransitionSnapshot(mesh, currentOpacity, currentScaleY, currentPosY);
+
+    return {
+        opacity: THREE.MathUtils.lerp(fromSnapshot.opacity, targetOpacity, easedProgress),
+        scaleY: THREE.MathUtils.lerp(fromSnapshot.scaleY, targetScaleY, easedProgress),
+        posY: THREE.MathUtils.lerp(fromSnapshot.posY, targetPosY, easedProgress),
+        progress: rawProgress,
+    };
+}
+
+function applyFogOpacity(
+    mesh: THREE.Mesh,
+    material: THREE.MeshStandardMaterial | THREE.MeshBasicMaterial,
+    opacity: number
+): void {
+    const clampedOpacity = THREE.MathUtils.clamp(opacity, 0, 1);
+    const wantsDither = clampedOpacity > 0 && clampedOpacity < 1;
+    if (isAlphaHashCapableMaterial(material)) {
+        material.alphaHash = wantsDither;
+    }
+    material.transparent = true;
+
+    const seed = getFogDitherSeed(mesh);
+    const ditherOffset = wantsDither ? (seed - 0.5) * FOG_DITHER_OPACITY_VARIANCE : 0;
+    material.opacity = THREE.MathUtils.clamp(clampedOpacity + ditherOffset, 0, 1);
+}
 
 /**
- * Update tree heights based on fog of war visibility.
- * Trees in unexplored (vis=0) cells are cut below the fog layer.
- * Trees in seen or visible areas are shown at full height with fade-in.
+ * Update trees with object-level FoW states:
+ * - `unexplored`: short trunk stump, no canopy
+ * - `revealed_not_visible`: full tree
+ * - `visible`: full tree
  */
 export function updateTreeFogVisibility(
     treeMeshes: THREE.Mesh[],
     visibility: number[][]
 ): void {
-    const UNEXPLORED_TRUNK_STUMP_HEIGHT = 0.42;
+    const now = Date.now();
 
     for (const mesh of treeMeshes) {
-        const tx = Math.floor(mesh.userData.treeX ?? mesh.position.x);
-        const tz = Math.floor(mesh.userData.treeZ ?? mesh.position.z);
+        const treeX = readFiniteNumber(Reflect.get(mesh.userData, "treeX")) ?? mesh.position.x;
+        const treeZ = readFiniteNumber(Reflect.get(mesh.userData, "treeZ")) ?? mesh.position.z;
+        const fogState = resolveFogStateFromVisibility(mesh, visibility, treeX, treeZ);
         const mat = mesh.material as THREE.MeshStandardMaterial;
 
-        // Track previous visibility state for fade-in detection
-        const wasExplored = mesh.userData.wasExplored as boolean | undefined;
-
-        // Tree is discovered if the base cell is explored - reveals the whole tree
-        const treeDiscovered = (visibility[tx]?.[tz] ?? 0) > 0;
-
         if (mesh.userData.isTrunk) {
-            const fullHeight = mesh.userData.fullHeight as number;
-            if (!treeDiscovered) {
-                // Unexplored - keep only a short stump to avoid floating half-trees at fog edge.
-                const cappedHeight = Math.min(fullHeight, UNEXPLORED_TRUNK_STUMP_HEIGHT);
-                mesh.scale.y = cappedHeight / fullHeight;
-                mesh.position.y = cappedHeight / 2;
-                mesh.userData.wasExplored = false;
+            const fullHeight = readFiniteNumber(Reflect.get(mesh.userData, "fullHeight"));
+            if (fullHeight === null || fullHeight <= 0) continue;
+
+            const stumpHeight = Math.min(fullHeight, UNEXPLORED_TRUNK_STUMP_HEIGHT);
+            const stumpScaleY = stumpHeight / fullHeight;
+            const stumpPosY = stumpHeight / 2;
+
+            let targetScaleY = 1;
+            let targetPosY = fullHeight / 2;
+            let targetOpacity = 1;
+
+            if (fogState === FOG_STATE_UNEXPLORED) {
+                targetScaleY = stumpScaleY;
+                targetPosY = stumpPosY;
+                targetOpacity = 1;
             } else {
-                // Discovered - full height
-                mesh.scale.y = 1;
-                mesh.position.y = fullHeight / 2;
-                mesh.userData.wasExplored = true;
+                targetScaleY = 1;
+                targetPosY = fullHeight / 2;
+                targetOpacity = 1;
             }
+
+            const transition = computeFogTransition(
+                mesh,
+                fogState,
+                now,
+                mat.opacity,
+                mesh.scale.y,
+                mesh.position.y,
+                targetOpacity,
+                targetScaleY,
+                targetPosY
+            );
+
+            mesh.visible = true;
+            mesh.scale.y = transition.scaleY;
+            mesh.position.y = transition.posY;
+            applyFogOpacity(mesh, mat, transition.opacity);
+            mesh.userData.fogResolvedOpacity = mat.opacity;
         } else if (mesh.userData.isFoliage) {
-            const fullY = mesh.userData.fullY as number;
+            const fullY = readFiniteNumber(Reflect.get(mesh.userData, "fullY"));
+            if (fullY === null) continue;
 
-            if (!treeDiscovered) {
-                // Unexplored - hide all canopy parts; reveal once base cell is discovered.
-                mesh.visible = false;
-                mat.opacity = 0;
-                mesh.userData.wasExplored = false;
-            } else {
-                // Discovered - full height with fade-in
+            let targetOpacity = 0;
+            if (fogState === FOG_STATE_REVEALED_NOT_VISIBLE || fogState === FOG_STATE_VISIBLE) {
+                targetOpacity = 1;
+            }
+
+            if (fogState !== FOG_STATE_UNEXPLORED) {
                 mesh.visible = true;
-                mesh.scale.y = 1;
-                mesh.position.y = fullY;
+            }
 
-                // Fade in if just revealed
-                if (!wasExplored) {
-                    mat.opacity = 0;
-                }
-                // Lerp opacity towards 1
-                if (mat.opacity < 1) {
-                    mat.opacity = Math.min(1, mat.opacity + TREE_FADE_SPEED);
-                }
+            const transition = computeFogTransition(
+                mesh,
+                fogState,
+                now,
+                mat.opacity,
+                mesh.scale.y,
+                mesh.position.y,
+                targetOpacity,
+                1,
+                fullY
+            );
 
-                mesh.userData.wasExplored = true;
+            mesh.scale.y = transition.scaleY;
+            mesh.position.y = transition.posY;
+            applyFogOpacity(mesh, mat, transition.opacity);
+            mesh.userData.fogResolvedOpacity = mat.opacity;
+
+            if (fogState === FOG_STATE_UNEXPLORED && transition.progress >= 1 && mat.opacity <= 0.01) {
+                mesh.visible = false;
+            } else {
+                mesh.visible = true;
             }
         }
     }
@@ -451,72 +818,101 @@ function getFogOccluderMaterial(mesh: THREE.Mesh): THREE.MeshStandardMaterial | 
 }
 
 /**
- * Clip tall non-tree meshes (columns/walls) under unexplored fog.
- * Once a cell is discovered (vis > 0), the mesh restores to full height.
+ * Update tall non-tree meshes with object-level FoW states:
+ * - `unexplored`: clipped below fog plane
+ * - `revealed_not_visible`: full mesh
+ * - `visible`: full mesh
  */
 export function updateFogOccluderVisibility(
     fogOccluderMeshes: THREE.Mesh[],
     visibility: number[][]
 ): void {
+    const now = Date.now();
     const FOG_Y = 2.6;
     const MAX_HEIGHT_UNEXPLORED = FOG_Y - 0.1;
 
     for (const mesh of fogOccluderMeshes) {
-        const clipX = mesh.userData.fogClipX as number | undefined;
-        const clipZ = mesh.userData.fogClipZ as number | undefined;
-        const baseY = mesh.userData.fogClipBaseY as number | undefined;
-        const fullHeight = mesh.userData.fogClipFullHeight as number | undefined;
-        const fullY = mesh.userData.fogClipFullY as number | undefined;
-        const fullScaleY = mesh.userData.fogClipFullScaleY as number | undefined;
+        const clipX = readFiniteNumber(Reflect.get(mesh.userData, "fogClipX"));
+        const clipZ = readFiniteNumber(Reflect.get(mesh.userData, "fogClipZ"));
+        const baseY = readFiniteNumber(Reflect.get(mesh.userData, "fogClipBaseY"));
+        const fullHeight = readFiniteNumber(Reflect.get(mesh.userData, "fogClipFullHeight"));
+        const fullY = readFiniteNumber(Reflect.get(mesh.userData, "fogClipFullY"));
+        const fullScaleY = readFiniteNumber(Reflect.get(mesh.userData, "fogClipFullScaleY"));
 
         if (
-            clipX === undefined
-            || clipZ === undefined
-            || baseY === undefined
-            || fullHeight === undefined
-            || fullY === undefined
-            || fullScaleY === undefined
+            clipX === null
+            || clipZ === null
+            || baseY === null
+            || fullHeight === null
+            || fullY === null
+            || fullScaleY === null
         ) {
             continue;
         }
 
-        const tx = Math.floor(clipX);
-        const tz = Math.floor(clipZ);
-        const discovered = (visibility[tx]?.[tz] ?? 0) > 0;
-        const wasExplored = mesh.userData.fogClipWasExplored as boolean | undefined;
+        const fogState = resolveFogStateFromVisibility(mesh, visibility, clipX, clipZ);
         const mat = getFogOccluderMaterial(mesh);
+        let targetOpacity = 1;
+        let targetScaleY = fullScaleY;
+        let targetPosY = fullY;
+        let targetVisible = true;
 
-        if (!discovered) {
+        if (fogState === FOG_STATE_UNEXPLORED) {
             const availableSpace = MAX_HEIGHT_UNEXPLORED - baseY;
             if (availableSpace <= 0) {
-                mesh.visible = false;
-                if (mat) mat.opacity = 0;
+                targetVisible = false;
+                targetOpacity = 0;
+                targetScaleY = 0;
+                targetPosY = baseY;
             } else {
                 const scaleFactor = Math.min(1, availableSpace / fullHeight);
-                mesh.visible = scaleFactor > 0;
-                if (mesh.visible) {
-                    mesh.scale.y = fullScaleY * scaleFactor;
-                    mesh.position.y = baseY + (fullHeight * scaleFactor) / 2;
-                    if (mat) mat.opacity = 1;
-                } else if (mat) {
-                    mat.opacity = 0;
-                }
+                targetVisible = scaleFactor > 0;
+                targetOpacity = targetVisible ? 1 : 0;
+                targetScaleY = fullScaleY * scaleFactor;
+                targetPosY = baseY + (fullHeight * scaleFactor) / 2;
             }
-            mesh.userData.fogClipWasExplored = false;
-            continue;
+        } else {
+            targetVisible = true;
+            targetOpacity = 1;
+            targetScaleY = fullScaleY;
+            targetPosY = fullY;
         }
 
-        mesh.visible = true;
-        mesh.scale.y = fullScaleY;
-        mesh.position.y = fullY;
-        if (mat) {
-            if (!wasExplored) {
-                mat.opacity = 0;
-            }
-            if (mat.opacity < 1) {
-                mat.opacity = Math.min(1, mat.opacity + FOG_OCCLUDER_FADE_SPEED);
-            }
+        if (targetVisible) {
+            mesh.visible = true;
         }
-        mesh.userData.fogClipWasExplored = true;
+
+        const currentOpacity = mat ? mat.opacity : 1;
+        const transition = computeFogTransition(
+            mesh,
+            fogState,
+            now,
+            currentOpacity,
+            mesh.scale.y,
+            mesh.position.y,
+            targetOpacity,
+            targetScaleY,
+            targetPosY
+        );
+
+        mesh.scale.y = transition.scaleY;
+        mesh.position.y = transition.posY;
+        if (mat) {
+            applyFogOpacity(mesh, mat, transition.opacity);
+            mesh.userData.fogResolvedOpacity = mat.opacity;
+        } else {
+            mesh.userData.fogResolvedOpacity = transition.opacity;
+        }
+
+        if (!targetVisible && transition.progress >= 1) {
+            const opacityNow = mat ? mat.opacity : transition.opacity;
+            if (opacityNow <= 0.01 && mesh.scale.y <= 0.001) {
+                mesh.visible = false;
+            } else {
+                mesh.visible = true;
+            }
+        } else {
+            mesh.visible = true;
+        }
     }
 }

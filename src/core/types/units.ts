@@ -6,7 +6,7 @@
 export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba" | "acid_slug" | "basilisk" | "bat" | "undead_knight" | "ancient_construct" | "feral_hound" | "corrupt_druid" | "skeleton_warrior" | "baby_kraken" | "kraken_tentacle" | "magma_imp" | "necromancer" | "skeleton_minion" | "chittering_crabling" | "spine_spitter" | "occultist_dreamwalker" | "occultist_firebreather" | "occultist_pygmy";
 
 // Status effect types
-export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed" | "chilled" | "qi_drain" | "energyShield" | "defiance" | "doom" | "invul" | "sleep" | "sun_stance";
+export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed" | "chilled" | "qi_drain" | "energyShield" | "defiance" | "doom" | "invul" | "sleep" | "sun_stance" | "thorns" | "highland_defense";
 
 export interface StatusEffect {
     type: StatusEffectType;
@@ -17,6 +17,9 @@ export interface StatusEffect {
     damagePerTick: number;    // damage dealt each tick
     sourceId: number;         // who applied the effect
     shieldAmount?: number;    // for energyShield: remaining shield HP
+    thornsDamage?: number;    // for thorns: reflected melee damage
+    interceptRemaining?: number;   // for highland_defense: remaining redirect pool
+    interceptCooldownEnd?: number; // for highland_defense: next time redirect can trigger
 }
 
 // =============================================================================
@@ -31,6 +34,8 @@ export interface CharacterStats {
     intelligence: number; // +1 MP per point, +1 elemental/chaos damage per 2 points
     faith: number;        // +1 holy damage per 2 points, +1 healing power per 2 points
 }
+
+export type SummonType = "ancestor_warrior";
 
 export interface Unit {
     id: number;
@@ -54,6 +59,9 @@ export interface Unit {
     facing?: number;  // Direction unit is facing in radians (for front-shielded enemies)
     cantripUses?: Record<string, number>;  // Remaining cantrip charges keyed by skill name
     holdPosition?: boolean;  // Hold stance - attacks in range but never chases
+    summonType?: SummonType;  // For player-controlled summoned allies
+    summonedBy?: number;  // Summoner unit ID (player team summons)
+    auraDamageBonus?: number;  // Flat bonus damage from active auras (runtime)
 }
 
 import type { Skill } from "./combat";

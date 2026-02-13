@@ -2,7 +2,7 @@
 // SAVE/LOAD SYSTEM - Persistence for game state
 // =============================================================================
 
-import type { CharacterEquipment, PartyInventory, CharacterStats, StatusEffect } from "../core/types";
+import type { CharacterEquipment, PartyInventory, CharacterStats, StatusEffect, SummonType } from "../core/types";
 import type { AreaId } from "./areas";
 import type { HotbarAssignments } from "../hooks/localStorage";
 
@@ -31,6 +31,8 @@ export interface SavedPlayer {
     learnedSkills?: string[];
     statusEffects?: StatusEffect[];
     cantripUses?: Record<string, number>;
+    summonType?: SummonType;
+    summonedBy?: number;
 }
 
 /** Complete save slot data */
@@ -168,9 +170,10 @@ export function formatSaveTimestamp(timestamp: number): string {
 
 /** Get average party level for display */
 export function getPartyLevel(players: SavedPlayer[]): number {
-    if (players.length === 0) return 1;
-    const total = players.reduce((sum, p) => sum + (p.level ?? 1), 0);
-    return Math.round(total / players.length);
+    const corePlayers = players.filter(p => !p.summonType);
+    if (corePlayers.length === 0) return 1;
+    const total = corePlayers.reduce((sum, p) => sum + (p.level ?? 1), 0);
+    return Math.round(total / corePlayers.length);
 }
 
 /** Get slot display info */

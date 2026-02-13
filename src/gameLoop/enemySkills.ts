@@ -78,7 +78,12 @@ export function executeEnemySwipe(
 
         if (rollHit(enemyData.accuracy)) {
             const { damage: dmg } = calculateDamageWithCrit(skill.damage[0], skill.damage[1], getEffectiveArmor(target, targetData.armor), skill.damageType, unit);
-            applyDamageToUnit(dmgCtx, target.id, tg, dmg, targetData.name, { color: COLORS.damageEnemy, targetUnit: target });
+            applyDamageToUnit(dmgCtx, target.id, tg, dmg, targetData.name, {
+                color: COLORS.damageEnemy,
+                targetUnit: target,
+                attackerId: unit.id,
+                isMeleeHit: true
+            });
             hitCount++;
             totalDamage += dmg;
         }

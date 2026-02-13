@@ -187,19 +187,23 @@ export function executeTargetedDamageSkill(
             getEffectiveArmor(targetEnemy, targetData.armor), skill.damageType, casterUnit
         );
         const willPoison = delivery.mode === "melee" && skill.poisonChance ? rollChance(skill.poisonChance) : false;
+        const damageColor = skill.damageType === "holy" ? COLORS.dmgHoly : COLORS.damagePlayer;
 
         const dmgCtx: DamageContext = {
             scene, damageTexts: damageTexts.current, hitFlashRef: hitFlashRef.current,
             unitsRef: unitsRef.current, unitsStateRef, setUnits, addLog, now, defeatedThisFrame
         };
         applyDamageToUnit(dmgCtx, targetId, targetG, dmg, targetData.name, {
-            color: COLORS.damagePlayer,
+            color: damageColor,
             poison: willPoison ? { sourceId: casterId } : undefined,
             attackerName: casterData.name,
-            hitMessage: { text: logHit(casterData.name, skill.name, targetData.name, dmg) + (isCrit ? " Critical hit!" : ""), color: isCrit ? COLORS.damageCrit : COLORS.damagePlayer },
+            hitMessage: { text: logHit(casterData.name, skill.name, targetData.name, dmg) + (isCrit ? " Critical hit!" : ""), color: isCrit ? COLORS.damageCrit : damageColor },
             targetUnit: targetEnemy,
             attackerPosition: { x: casterG.position.x, z: casterG.position.z },
-            isCrit
+            damageType: skill.damageType,
+            isCrit,
+            attackerId: casterId,
+            isMeleeHit: delivery.mode === "melee"
         });
 
         // Sun Stance: bonus fire damage on hit
@@ -326,7 +330,9 @@ export function executeFlurrySkill(
                 attackerName: casterData.name,
                 targetUnit: target,
                 attackerPosition: { x: casterG.position.x, z: casterG.position.z },
-                isCrit
+                isCrit,
+                attackerId: casterId,
+                isMeleeHit: true
             });
 
             totalHits++;
@@ -537,7 +543,7 @@ export function executeHolyStrikeSkill(
         baseRadius: 1
     });
 
-    soundFns.playHit();
+    soundFns.playHolyStrike();
 
     // Deal damage
     const dmgCtx: DamageContext = {
@@ -563,10 +569,11 @@ export function executeHolyStrikeSkill(
             );
 
             applyDamageToUnit(dmgCtx, target.id, tg, dmg, targetData.name, {
-                color: COLORS.damagePlayer,
+                color: COLORS.dmgHoly,
                 attackerName: casterData.name,
                 targetUnit: target,
                 attackerPosition: { x: casterG.position.x, z: casterG.position.z },
+                damageType: skill.damageType,
                 isCrit
             });
 
@@ -578,11 +585,11 @@ export function executeHolyStrikeSkill(
 
     if (hitCount > 0) {
         const critText = totalCrits > 0 ? ` (${totalCrits} critical!)` : "";
-        addLog(logAoeHit(casterData.name, skill.name, hitCount, totalDamage) + critText, COLORS.damagePlayer);
+        addLog(logAoeHit(casterData.name, skill.name, hitCount, totalDamage) + critText, COLORS.dmgHoly);
     } else if (enemiesInLine.length > 0) {
         addLog(logAoeMiss(casterData.name, skill.name), COLORS.logNeutral);
     } else {
-        addLog(logCast(casterData.name, skill.name), "#ffd700");
+        addLog(logCast(casterData.name, skill.name), COLORS.dmgHoly);
     }
 
     return true;

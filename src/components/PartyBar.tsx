@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import Tippy from "@tippyjs/react";
 import type { Unit, Skill, StatusEffectType } from "../core/types";
-import { COLORS } from "../core/constants";
-import { UNIT_DATA, getEffectiveMaxHp } from "../game/playerUnits";
+import { COLORS, ANCESTOR_AURA_DAMAGE_BONUS, ANCESTOR_AURA_RANGE } from "../core/constants";
+import { UNIT_DATA, getEffectiveMaxHp, isCorePlayerId } from "../game/playerUnits";
 import { getHpPercentage, getHpColor } from "../combat/combatMath";
 import { SkillHotbar } from "./SkillHotbar";
 import type { HotbarAssignments } from "../hooks/hotbarStorage";
@@ -20,6 +21,7 @@ const CLASS_PORTRAITS: Record<string, string> = {
     Thief: thiefPortrait,
     Cleric: clericPortrait,
     Monk: monkPortrait,
+    Ancestor: barbarianPortrait,
 };
 const getPortrait = (className: string) => CLASS_PORTRAITS[className] ?? monkPortrait;
 
@@ -39,6 +41,8 @@ const EFFECT_ICONS: Record<StatusEffectType, { icon: string; color: string }> = 
     chilled: { icon: "❄", color: COLORS.chilledText },
     sleep: { icon: "💤", color: COLORS.sleepText },
     sun_stance: { icon: "☀", color: COLORS.sunStanceText },
+    thorns: { icon: "✹", color: COLORS.thornsText },
+    highland_defense: { icon: "⛰", color: COLORS.highlandDefenseText },
 };
 
 interface PartyBarProps {
@@ -75,10 +79,12 @@ export function PartyBar({
     onReorderFormation
 }: PartyBarProps) {
     const playerUnits = useMemo(() => units.filter((u: Unit) => u.team === "player"), [units]);
+    const corePlayerUnits = useMemo(() => playerUnits.filter(u => isCorePlayerId(u.id)), [playerUnits]);
+    const summonUnits = useMemo(() => playerUnits.filter(u => !isCorePlayerId(u.id) && !!u.summonType), [playerUnits]);
     const effectiveOrder = useMemo(() => {
-        const playerIds = playerUnits.map(u => u.id);
+        const playerIds = corePlayerUnits.map(u => u.id);
         return buildEffectiveFormationOrder(playerIds, formationOrder);
-    }, [playerUnits, formationOrder]);
+    }, [corePlayerUnits, formationOrder]);
     const effectiveOrderRef = useRef(effectiveOrder);
     useEffect(() => {
         effectiveOrderRef.current = effectiveOrder;
@@ -156,7 +162,7 @@ export function PartyBar({
     }, [insertIdx, onReorderFormation]);
 
     // Sort playerUnits by effective formation order for rendering
-    const sortedUnits = [...playerUnits].sort((a, b) => effectiveOrder.indexOf(a.id) - effectiveOrder.indexOf(b.id));
+    const sortedUnits = [...corePlayerUnits].sort((a, b) => effectiveOrder.indexOf(a.id) - effectiveOrder.indexOf(b.id));
 
     // Dragged unit color for the spacer bar
     const dragColor = draggingId !== null ? (UNIT_DATA[draggingId]?.color ?? "#999") : "#999";
@@ -324,22 +330,95 @@ export function PartyBar({
     if (insertIdx === sortedUnits.length) elements.push(spacer);
 
     return (
-        <div
-            ref={barRef}
-            className="party-bar glass-panel"
-            onDragOver={(e) => {
-                e.preventDefault();
-                e.dataTransfer.dropEffect = "move";
-                if (dragIdRef.current !== null) {
-                    setInsertIdx(computeInsertIdxFromX(dragIdRef.current, e.clientX));
-                }
-            }}
-            onDrop={(e) => { e.preventDefault(); executeDrop(); }}
-            onDragLeave={(e) => {
-                if (!e.currentTarget.contains(e.relatedTarget as Node)) setInsertIdx(null);
-            }}
-        >
-            {elements}
+        <div className="party-bar-stack">
+            <div
+                ref={barRef}
+                className="party-bar glass-panel"
+                onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                    if (dragIdRef.current !== null) {
+                        setInsertIdx(computeInsertIdxFromX(dragIdRef.current, e.clientX));
+                    }
+                }}
+                onDrop={(e) => { e.preventDefault(); executeDrop(); }}
+                onDragLeave={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget as Node)) setInsertIdx(null);
+                }}
+            >
+                {elements}
+            </div>
+            {summonUnits.length > 0 && (
+                <div className="party-bar-summons glass-panel">
+                    {summonUnits.map(unit => {
+                        const data = UNIT_DATA[unit.id];
+                        if (!data) return null;
+
+                        const isSelected = selectedIds.includes(unit.id);
+                        const effectiveMaxHp = getEffectiveMaxHp(unit.id, unit);
+                        const hpPct = getHpPercentage(unit.hp, effectiveMaxHp);
+                        const hpColor = getHpColor(hpPct);
+
+                        const isTargetingAlly = targetingMode?.skill.targetType === "ally";
+                        const isReviveSkill = targetingMode?.skill.type === "revive";
+                        const isTargetingDeadAlly = consumableTargetingMode !== null && consumableTargetingMode !== undefined;
+                        const isValidTarget = (targetingMode && isTargetingAlly && (isReviveSkill ? unit.hp <= 0 : unit.hp > 0)) ||
+                            (isTargetingDeadAlly && unit.hp <= 0 && unit.team === "player");
+
+                        const handleClick = (e: React.MouseEvent) => {
+                            e.stopPropagation();
+                            if (isTargetingDeadAlly && unit.hp <= 0 && onTargetUnit) {
+                                onTargetUnit(unit.id);
+                                return;
+                            }
+                            if (targetingMode && isTargetingAlly && isReviveSkill && unit.hp <= 0 && onTargetUnit) {
+                                onTargetUnit(unit.id);
+                                return;
+                            }
+                            if (unit.hp <= 0) return;
+                            if (targetingMode && isTargetingAlly && onTargetUnit) {
+                                onTargetUnit(unit.id);
+                                return;
+                            }
+                            onSelect(e.shiftKey ? (prev: number[]) => prev.includes(unit.id) ? prev.filter((i: number) => i !== unit.id) : [...prev, unit.id] : [unit.id]);
+                        };
+
+                        const chipClass = [
+                            "summon-chip",
+                            isSelected ? "selected" : "",
+                            isValidTarget ? "valid-target" : "",
+                            unit.hp <= 0 ? "dead" : "",
+                            (isTargetingAlly || isTargetingDeadAlly) ? "targeting" : ""
+                        ].filter(Boolean).join(" ");
+
+                        return (
+                            <Tippy
+                                key={unit.id}
+                                content={
+                                    <div className="summon-chip-tooltip">
+                                        <div className="summon-chip-tooltip-name">{data.name}</div>
+                                        <div className="summon-chip-tooltip-row">HP: {Math.max(0, unit.hp)} / {effectiveMaxHp}</div>
+                                        <div className="summon-chip-tooltip-row">Aura: +{ANCESTOR_AURA_DAMAGE_BONUS} dmg ({ANCESTOR_AURA_RANGE.toFixed(1)} range)</div>
+                                    </div>
+                                }
+                                placement="top"
+                                delay={[120, 0]}
+                            >
+                                <button
+                                    className={chipClass}
+                                    onClick={handleClick}
+                                    type="button"
+                                >
+                                    <span className="summon-chip-letter">A</span>
+                                    <span className="summon-chip-hp">
+                                        <span className="summon-chip-hp-fill" style={{ width: `${Math.max(0, hpPct)}%`, backgroundColor: hpColor }} />
+                                    </span>
+                                </button>
+                            </Tippy>
+                        );
+                    })}
+                </div>
+            )}
         </div>
     );
 }

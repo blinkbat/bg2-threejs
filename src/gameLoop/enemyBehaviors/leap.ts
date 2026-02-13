@@ -187,7 +187,9 @@ export function updateLeaps(
                     applyDamageToUnit(dmgCtx, leap.targetId, targetG, damage, targetData.name, {
                         color: COLORS.damageEnemy,
                         hitMessage: { text: `Feral Hound's leap deals ${damage} damage!`, color: "#ff6600" },
-                        targetUnit
+                        targetUnit,
+                        attackerId: leap.unitId,
+                        isMeleeHit: true
                     });
 
                     soundFns.playHit();

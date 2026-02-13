@@ -143,7 +143,8 @@ export function updateProjectiles(
                         applyDamageToUnit(dmgCtx, target.id, tg, dmg, targetData.name, {
                             color: getDamageColor(target.team, true),
                             attackerName: attackerUnit?.team === "player" ? attackerData?.name : undefined,
-                            targetUnit: target
+                            targetUnit: target,
+                            damageType: proj.damageType
                         });
                         hitCount++;
                         totalDamage += dmg;
@@ -256,7 +257,8 @@ export function updateProjectiles(
                             color: "#9966ff",
                             attackerName: attackerUnit.team === "player" ? getUnitStats(attackerUnit).name : undefined,
                             targetUnit: targetUnit,
-                            attackerPosition: mmAttackerG ? { x: mmAttackerG.position.x, z: mmAttackerG.position.z } : undefined
+                            attackerPosition: mmAttackerG ? { x: mmAttackerG.position.x, z: mmAttackerG.position.z } : undefined,
+                            damageType: mmProj.damageType
                         });
 
                         soundFns.playHit();
@@ -512,7 +514,8 @@ export function updateProjectiles(
                     applyDamageToUnit(dmgCtx, target.id, targetG, dmg, targetData.name, {
                         color: COLORS.dmgCold,
                         attackerName: attackerUnit ? getUnitStats(attackerUnit).name : undefined,
-                        targetUnit: target
+                        targetUnit: target,
+                        damageType: pProj.damageType
                     });
 
                     // Roll for chill
@@ -603,7 +606,8 @@ export function updateProjectiles(
                     applyDamageToUnit(dmgCtx, target.id, targetG, dmg, targetData.name, {
                         color: getDamageColor(target.team, true),
                         attackerName: attackerData?.name,
-                        targetUnit: target
+                        targetUnit: target,
+                        damageType: fbProj.damageType
                     });
 
                     soundFns.playHit();
@@ -673,7 +677,14 @@ export function updateProjectiles(
 
             if (rollHit(attackerData.accuracy)) {
                 const dmgType = getBasicAttackDamageType(attackerUnit, attackerData);
-                const { damage: dmg, isCrit } = calculateDamageWithCrit(attackerData.damage[0], attackerData.damage[1], getEffectiveArmor(targetUnit, targetData.armor), dmgType, attackerUnit);
+                const auraBonus = attackerUnit.auraDamageBonus ?? 0;
+                const { damage: dmg, isCrit } = calculateDamageWithCrit(
+                    attackerData.damage[0] + auraBonus,
+                    attackerData.damage[1] + auraBonus,
+                    getEffectiveArmor(targetUnit, targetData.armor),
+                    dmgType,
+                    attackerUnit
+                );
                 const willPoison = attackerUnit.team === "enemy" && shouldApplyPoison(attackerData as EnemyStats);
                 const poisonDmg = willPoison && 'poisonDamage' in attackerData ? (attackerData as EnemyStats).poisonDamage : undefined;
 
@@ -685,15 +696,17 @@ export function updateProjectiles(
                 const hitText = healAmount > 0
                     ? logLifestealHit(attackerData.name, targetData.name, dmg, healAmount)
                     : logHit(attackerData.name, "Attack", targetData.name, dmg);
+                const damageColor = dmgType === "holy" ? COLORS.dmgHoly : logColor;
 
                 /* use shared dmgCtx */
                 applyDamageToUnit(dmgCtx, targetUnit.id, targetG, dmg, targetData.name, {
-                    color: logColor,
+                    color: damageColor,
                     poison: willPoison ? { sourceId: attackerUnit.id, damagePerTick: poisonDmg } : undefined,
                     attackerName: attackerUnit.team === "player" ? attackerData.name : undefined,
-                    hitMessage: { text: hitText, color: logColor },
+                    hitMessage: { text: hitText, color: damageColor },
                     targetUnit: targetUnit,
                     attackerPosition: attackerG ? { x: attackerG.position.x, z: attackerG.position.z } : undefined,
+                    damageType: dmgType,
                     isCrit
                 });
 

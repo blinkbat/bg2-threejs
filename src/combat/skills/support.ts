@@ -4,7 +4,14 @@
 
 import * as THREE from "three";
 import type { Skill, StatusEffect, StatusEffectType } from "../../core/types";
-import { COLORS, BUFF_TICK_INTERVAL, QI_DRAIN_DURATION, QI_DRAIN_TICK_INTERVAL, POISON_TICK_INTERVAL } from "../../core/constants";
+import {
+    COLORS,
+    BUFF_TICK_INTERVAL,
+    QI_DRAIN_DURATION,
+    QI_DRAIN_TICK_INTERVAL,
+    POISON_TICK_INTERVAL,
+    HIGHLAND_DEFENSE_INTERCEPT_CAP
+} from "../../core/constants";
 import { UNIT_DATA, getEffectiveMaxHp } from "../../game/playerUnits";
 import { getFaithHealingBonus } from "../../game/statBonuses";
 import { rollDamage, hasStatusEffect, logHeal, logBuff, logCleanse, applyStatusEffect } from "../combatMath";
@@ -601,4 +608,54 @@ export function executeSunStanceSkill(
     }
 
     return success;
+}
+
+// =============================================================================
+// PANGOLIN STANCE SKILL (self-buff thorns)
+// =============================================================================
+
+/**
+ * Execute Pangolin Stance - self-buff that reflects melee damage back to attackers.
+ */
+export function executePangolinStanceSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill
+): boolean {
+    const thornsDamage = skill.damageRange
+        ? rollDamage(skill.damageRange[0], skill.damageRange[1])
+        : 2;
+
+    return applyBuffFromTemplate(ctx, casterId, skill, {
+        effectType: "thorns",
+        ringColor: "#c8da4b",
+        ringOpts: { innerRadius: 0.35, outerRadius: 0.55, maxScale: 1.6, duration: 320 },
+        sound: soundFns.playHeal,
+        logMessage: (name, skillName) => `${name} assumes ${skillName}!`,
+        logColor: COLORS.thornsText,
+        extraEffectFields: { thornsDamage },
+    });
+}
+
+// =============================================================================
+// HIGHLAND DEFENSE SKILL (self-buff ally intercept)
+// =============================================================================
+
+/**
+ * Execute Highland Defense - redirects nearby ally damage to the barbarian.
+ */
+export function executeHighlandDefenseSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill
+): boolean {
+    return applyBuffFromTemplate(ctx, casterId, skill, {
+        effectType: "highland_defense",
+        ringColor: COLORS.highlandDefenseText,
+        ringOpts: { innerRadius: 0.35, outerRadius: 0.6, maxScale: 1.8, duration: 360 },
+        sound: soundFns.playWarcry,
+        logMessage: (name, skillName) => `${name} channels ${skillName}!`,
+        logColor: COLORS.highlandDefenseText,
+        extraEffectFields: { interceptRemaining: HIGHLAND_DEFENSE_INTERCEPT_CAP, interceptCooldownEnd: 0 },
+    });
 }

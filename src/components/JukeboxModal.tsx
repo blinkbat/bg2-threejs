@@ -25,6 +25,7 @@ const SOUND_METADATA: Partial<Record<SoundKey, SoundMeta>> = {
     playHeal: { name: "Heal", category: "Skills" },
     playWarcry: { name: "Warcry", category: "Skills" },
     playThunder: { name: "Thunder", category: "Skills" },
+    playHolyStrike: { name: "Holy Strike", category: "Skills" },
     playMagicWave: { name: "Magic Wave", category: "Skills" },
     playEnergyShield: { name: "Energy Shield", category: "Skills" },
     playVines: { name: "Vines", category: "Skills" },

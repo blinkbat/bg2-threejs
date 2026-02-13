@@ -3,9 +3,9 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Skill, StatusEffect, TrapProjectile } from "../../core/types";
+import type { Skill, StatusEffect, TrapProjectile, Unit } from "../../core/types";
 import { COLORS, BUFF_TICK_INTERVAL, TRAP_FLIGHT_DURATION, TRAP_ARC_HEIGHT, TRAP_MESH_SIZE, SANCTUARY_HEAL_PER_TICK, DEFAULT_TAUNT_CHANCE, DEFAULT_STUN_CHANCE } from "../../core/constants";
-import { UNIT_DATA } from "../../game/playerUnits";
+import { UNIT_DATA, ANCESTOR_SUMMON_ID, getEffectiveMaxHp } from "../../game/playerUnits";
 import { getUnitStats } from "../../game/units";
 import { rollChance, rollHit, hasStatusEffect, logTaunt, logTauntMiss, logStunned, logTrapThrown, applyStatusEffect, checkEnemyDefenses } from "../combatMath";
 import { ENEMY_STATS } from "../../game/enemyStats";
@@ -14,6 +14,7 @@ import { getAliveUnits } from "../../game/unitQuery";
 import { soundFns } from "../../audio";
 import { createAnimatedRing } from "../damageEffects";
 import { createSanctuaryTile } from "../../gameLoop/sanctuaryTiles";
+import { findNearestPassable } from "../../ai/pathfinding";
 import type { SkillExecutionContext } from "./types";
 import { findAndValidateEnemyTarget, consumeSkill } from "./helpers";
 
@@ -295,5 +296,96 @@ export function executeSanctuarySkill(
     addLog(`${casterData.name} casts ${skill.name}, consecrating the ground!`, COLORS.sanctuaryText);
     soundFns.playHeal();  // Holy sound
 
+    return true;
+}
+
+// =============================================================================
+// SUMMON SKILL (Summon Ancestor)
+// =============================================================================
+
+function findAncestorSummon(units: Unit[]): Unit | undefined {
+    return units.find(u => u.team === "player" && u.summonType === "ancestor_warrior");
+}
+
+function getAncestorSpawnPosition(casterX: number, casterZ: number): { x: number; z: number } {
+    const desiredX = casterX + 1.25;
+    const desiredZ = casterZ + 0.6;
+    return findNearestPassable(desiredX, desiredZ, 4) ?? { x: casterX, z: casterZ };
+}
+
+/**
+ * Execute Summon Ancestor - replaces any existing ancestor summon.
+ */
+export function executeSummonSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill
+): boolean {
+    const { unitsStateRef, unitsRef, setUnits, addLog } = ctx;
+    const caster = unitsStateRef.current.find(u => u.id === casterId);
+    const casterG = unitsRef.current[casterId];
+    if (!caster || !casterG) return false;
+
+    consumeSkill(ctx, casterId, skill);
+
+    const existingSummon = findAncestorSummon(unitsStateRef.current);
+    const summonId = existingSummon?.id ?? ANCESTOR_SUMMON_ID;
+    const spawnPos = getAncestorSpawnPosition(casterG.position.x, casterG.position.z);
+    const summonHp = getEffectiveMaxHp(ANCESTOR_SUMMON_ID);
+
+    const summonedUnit: Unit = {
+        id: summonId,
+        x: spawnPos.x,
+        z: spawnPos.z,
+        hp: summonHp,
+        mana: 0,
+        team: "player",
+        target: null,
+        aiEnabled: true,
+        statusEffects: undefined,
+        holdPosition: false,
+        summonType: "ancestor_warrior",
+        summonedBy: casterId,
+        auraDamageBonus: 0
+    };
+
+    setUnits(prev => {
+        const currentSummon = findAncestorSummon(prev);
+        if (!currentSummon) {
+            return [...prev, summonedUnit];
+        }
+        return prev.map(u => u.id === currentSummon.id
+            ? {
+                ...u,
+                ...summonedUnit,
+                id: currentSummon.id
+            }
+            : u
+        );
+    });
+
+    const summonGroup = unitsRef.current[summonId];
+    if (summonGroup) {
+        summonGroup.visible = true;
+        summonGroup.position.set(spawnPos.x, summonGroup.userData.flyHeight, spawnPos.z);
+        summonGroup.userData.targetX = spawnPos.x;
+        summonGroup.userData.targetZ = spawnPos.z;
+        summonGroup.userData.attackTarget = null;
+    }
+
+    createAnimatedRing(ctx.scene, spawnPos.x, spawnPos.z, "#d7c09a", {
+        innerRadius: 0.4,
+        outerRadius: 0.65,
+        maxScale: 1.8
+    });
+    soundFns.playWarcry();
+
+    const casterData = UNIT_DATA[casterId];
+    addLog(
+        existingSummon && existingSummon.hp > 0
+            ? `${casterData.name} recalls and resummons an Ancestor.`
+            : `${casterData.name} summons an Ancestor.`,
+        "#d7c09a"
+    );
     return true;
 }

@@ -577,7 +577,7 @@ export function handleTargetingOnUnit(
         return true;
     }
 
-    return queueOrExecuteSkill(casterId, skill, targetX, targetZ, refs, state, setters, skillCtx, addLog);
+    return queueOrExecuteSkill(casterId, skill, targetX, targetZ, refs, state, setters, skillCtx, addLog, targetUnitId);
 }
 
 // =============================================================================

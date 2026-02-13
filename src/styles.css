@@ -1010,19 +1010,24 @@ html, body, #root {
 }
 
 .skill-tooltip-row {
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 12px;
+    align-items: start;
     padding: 2px 0;
 }
 
 .skill-tooltip-label {
     color: #888;
-    margin-right: 12px;
+    white-space: nowrap;
 }
 
 .skill-tooltip-value {
     color: #fff;
     font-weight: 500;
+    text-align: right;
+    justify-self: end;
+    line-height: 1.25;
 }
 
 .skill-tooltip-flavor {
@@ -1451,15 +1456,17 @@ html, body, #root {
    COMMAND BAR
    ----------------------------------------------------------------------------- */
 .command-bar {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    padding: 4px;
+    display: grid;
+    grid-template-columns: repeat(2, 36px);
+    grid-template-rows: repeat(3, 36px);
     justify-content: center;
+    align-content: center;
+    gap: 2px;
+    padding: 4px 7px;
 }
 .cmd-btn {
     width: 36px;
-    flex: 1;
+    height: 36px;
     border: 1px solid rgba(100, 100, 130, 0.5);
     border-radius: 4px;
     background: rgba(0, 0, 0, 0.35);
@@ -1483,6 +1490,10 @@ html, body, #root {
     background: rgba(74, 144, 217, 0.15);
     color: #8cc4ff;
 }
+.cmd-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
 
 /* -----------------------------------------------------------------------------
    PARTY BAR
@@ -1493,12 +1504,43 @@ html, body, #root {
     gap: 6px;
 }
 
+.party-bar-stack {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    gap: 6px;
+}
+
+.party-bar-summons {
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 2px;
+    min-width: 44px;
+}
+
+.party-bar-summons-label {
+    font-family: monospace;
+    font-size: 10px;
+    color: #8f96a8;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+}
+
+.party-bar-summons-list {
+    display: flex;
+    gap: 6px;
+}
+
 .party-bar-hotbar {
     position: absolute;
     bottom: 100%;
     left: 50%;
     transform: translateX(-50%);
-    margin-bottom: 8px;
+    margin-bottom: 20px;
 }
 
 .party-portrait {
@@ -1509,6 +1551,10 @@ html, body, #root {
     border-radius: 6px;
     padding: 5px;
     transition: border-color 0.15s, background 0.15s;
+}
+
+.party-portrait-summon {
+    width: 76px;
 }
 
 .party-portrait.selected {
@@ -1611,6 +1657,13 @@ html, body, #root {
     color: white;
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9), 0 0 6px rgba(0, 0, 0, 0.7);
     line-height: 1;
+}
+
+.portrait-fkey-summon {
+    left: 4px;
+    font-size: 9px;
+    color: #ffd796;
+    letter-spacing: 0.04em;
 }
 
 .portrait-effects {
@@ -2259,6 +2312,93 @@ html, body, #root {
 
 .hud-debug-group {
     margin-bottom: 8px;
+}
+
+.summon-chip {
+    width: 36px;
+    flex: 0 0 calc(33.333% - 2px);
+    height: calc(33.333% - 2px);
+    min-height: 24px;
+    max-height: 42px;
+    border: 1px solid rgba(173, 126, 12, 0.9);
+    border-radius: 4px;
+    background: linear-gradient(180deg, #e9bc2e 0%, #c78e12 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 237, 180, 0.35);
+    cursor: pointer;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: filter 0.12s, border-color 0.12s, box-shadow 0.12s;
+}
+
+.summon-chip:hover {
+    filter: brightness(1.06);
+}
+
+.summon-chip.selected {
+    border-color: #fff2bf;
+    box-shadow: 0 0 0 1px rgba(255, 242, 191, 0.4), inset 0 1px 0 rgba(255, 237, 180, 0.45);
+}
+
+.summon-chip.valid-target {
+    border-color: #22c55e;
+    box-shadow: 0 0 10px rgba(34, 197, 94, 0.3), inset 0 1px 0 rgba(255, 237, 180, 0.45);
+}
+
+.summon-chip.dead {
+    opacity: 0.45;
+    filter: grayscale(100%);
+    cursor: not-allowed;
+}
+
+.summon-chip.targeting {
+    cursor: crosshair;
+}
+
+.summon-chip-letter {
+    color: #fff;
+    font-family: monospace;
+    font-size: 16px;
+    font-weight: bold;
+    line-height: 1;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
+    pointer-events: none;
+}
+
+.summon-chip-hp {
+    position: absolute;
+    left: 4px;
+    right: 4px;
+    bottom: 3px;
+    height: 4px;
+    border-radius: 3px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(0, 0, 0, 0.22);
+    pointer-events: none;
+}
+
+.summon-chip-hp-fill {
+    display: block;
+    height: 100%;
+}
+
+.summon-chip-tooltip {
+    text-align: center;
+    padding: 4px;
+}
+
+.summon-chip-tooltip-name {
+    font-weight: bold;
+    color: #fff;
+    margin-bottom: 2px;
+}
+
+.summon-chip-tooltip-row {
+    font-size: 11px;
+    color: #ddd;
 }
 
 .hud-debug-group:last-child {

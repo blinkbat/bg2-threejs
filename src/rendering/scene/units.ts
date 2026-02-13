@@ -108,6 +108,7 @@ function getSpriteConfigs(): Record<number, SpriteConfig> {
         4: { texture: wizardTexture, width: 110, height: 196, brightness: 0.07 },     // Wizard
         5: { texture: monkTexture, width: 128, height: 196, offsetX: -0.1, brightness: 0.07 },       // Monk
         6: { texture: clericTexture, width: 128, height: 196, color: 0xcccccc, brightness: 0.07 },   // Cleric
+        7: { texture: barbarianTexture, width: 196, height: 195, offsetX: -0.1, color: 0xe8d6b8, brightness: 0.09, spriteHeight: 2.0, opacity: 0.3 }, // Ancestor summon
     };
 }
 
@@ -125,11 +126,12 @@ function applySpriteEdgeBlur(material: THREE.MeshStandardMaterial, textureWidth:
             "#include <alphatest_fragment>",
             [
                 "{",
-                "    float a = diffuseColor.a;",
-                "    float aL = texture2D(map, vMapUv + vec2(-1.0, 0.0) * uTexelSize).a;",
-                "    float aR = texture2D(map, vMapUv + vec2( 1.0, 0.0) * uTexelSize).a;",
-                "    float aU = texture2D(map, vMapUv + vec2(0.0,  1.0) * uTexelSize).a;",
-                "    float aD = texture2D(map, vMapUv + vec2(0.0, -1.0) * uTexelSize).a;",
+                "    float alphaMul = opacity;",
+                "    float a = texture2D(map, vMapUv).a * alphaMul;",
+                "    float aL = texture2D(map, vMapUv + vec2(-1.0, 0.0) * uTexelSize).a * alphaMul;",
+                "    float aR = texture2D(map, vMapUv + vec2( 1.0, 0.0) * uTexelSize).a * alphaMul;",
+                "    float aU = texture2D(map, vMapUv + vec2(0.0,  1.0) * uTexelSize).a * alphaMul;",
+                "    float aD = texture2D(map, vMapUv + vec2(0.0, -1.0) * uTexelSize).a * alphaMul;",
                 "    float blurA = (a * 2.0 + aL + aR + aU + aD) / 6.0;",
                 "    if (blurA < 0.01) discard;",
                 "    diffuseColor.a = blurA;",

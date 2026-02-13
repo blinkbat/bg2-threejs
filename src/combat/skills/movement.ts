@@ -5,13 +5,15 @@
 import type { Skill, StatusEffect } from "../../core/types";
 import { BUFF_TICK_INTERVAL, COLORS } from "../../core/constants";
 import { UNIT_DATA } from "../../game/playerUnits";
+import { getUnitStats } from "../../game/units";
+import { getUnitRadius, isInRange } from "../../rendering/range";
 import { applyStatusEffect } from "../combatMath";
 import { soundFns } from "../../audio";
 import { createAnimatedRing } from "../damageEffects";
 import { updateUnitWith } from "../../core/stateUtils";
 import { getGameTime } from "../../core/gameClock";
 import type { SkillExecutionContext } from "./types";
-import { consumeSkill } from "./helpers";
+import { consumeSkill, findClosestUnit } from "./helpers";
 
 // =============================================================================
 // DODGE ANIMATION
@@ -148,6 +150,95 @@ export function executeDodgeSkill(
 
     soundFns.playMiss(); // Reuse whoosh sound
     ctx.addLog(`${casterData.name} dodges!`, "#8e44ad");
+
+    return true;
+}
+
+// =============================================================================
+// BODY SWAP SKILL
+// =============================================================================
+
+/**
+ * Execute Body Swap cantrip — instantly swap places with a targeted unit (ally or enemy).
+ */
+export function executeBodySwapSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill,
+    targetX: number,
+    targetZ: number,
+    targetUnitId?: number
+): boolean {
+    const { scene, unitsStateRef, unitsRef, setUnits } = ctx;
+
+    const caster = unitsStateRef.current.find(u => u.id === casterId);
+    const casterG = unitsRef.current[casterId];
+    if (!caster || !casterG || caster.hp <= 0) return false;
+
+    if ((caster.cantripUses?.[skill.name] ?? 0) <= 0) {
+        ctx.addLog(`${UNIT_DATA[casterId].name}: No uses remaining!`, COLORS.logNeutral);
+        return false;
+    }
+
+    const otherLivingUnits = unitsStateRef.current.filter(u => u.id !== casterId && u.hp > 0);
+    if (otherLivingUnits.length === 0) {
+        ctx.addLog(`${UNIT_DATA[casterId].name}: No valid swap target!`, COLORS.logNeutral);
+        return false;
+    }
+
+    let target = targetUnitId !== undefined
+        ? otherLivingUnits.find(u => u.id === targetUnitId)
+        : undefined;
+    let targetG = target ? unitsRef.current[target.id] : undefined;
+
+    if (!target || !targetG) {
+        const closest = findClosestUnit(otherLivingUnits, unitsRef.current, targetX, targetZ, 2.2);
+        if (!closest) {
+            ctx.addLog(`${UNIT_DATA[casterId].name}: No target at that location!`, COLORS.logNeutral);
+            return false;
+        }
+        target = closest.unit;
+        targetG = closest.group;
+    }
+
+    const targetRadius = getUnitRadius(target);
+    if (!isInRange(casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, targetRadius, skill.range + 0.4)) {
+        ctx.addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, COLORS.logNeutral);
+        return false;
+    }
+
+    const casterPos = { x: casterG.position.x, z: casterG.position.z };
+    const targetPos = { x: targetG.position.x, z: targetG.position.z };
+
+    consumeSkill(ctx, casterId, skill);
+
+    setUnits(prev => prev.map(u => {
+        if (u.id === casterId) return { ...u, x: targetPos.x, z: targetPos.z };
+        if (u.id === target!.id) return { ...u, x: casterPos.x, z: casterPos.z };
+        return u;
+    }));
+
+    // Teleport both groups instantly and reset their immediate movement targets.
+    casterG.position.set(targetPos.x, casterG.userData.flyHeight ?? 0, targetPos.z);
+    casterG.userData.targetX = targetPos.x;
+    casterG.userData.targetZ = targetPos.z;
+    casterG.userData.attackTarget = null;
+
+    targetG.position.set(casterPos.x, targetG.userData.flyHeight ?? 0, casterPos.z);
+    targetG.userData.targetX = casterPos.x;
+    targetG.userData.targetZ = casterPos.z;
+    targetG.userData.attackTarget = null;
+
+    createAnimatedRing(scene, casterPos.x, casterPos.z, "#8e44ad", {
+        innerRadius: 0.2, outerRadius: 0.45, maxScale: 1.3, duration: 260
+    });
+    createAnimatedRing(scene, targetPos.x, targetPos.z, "#8e44ad", {
+        innerRadius: 0.2, outerRadius: 0.45, maxScale: 1.3, duration: 260
+    });
+
+    const targetData = getUnitStats(target);
+    soundFns.playMagicWave();
+    ctx.addLog(`${UNIT_DATA[casterId].name} swaps places with ${targetData.name}!`, "#8e44ad");
 
     return true;
 }

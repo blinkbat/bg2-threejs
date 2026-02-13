@@ -323,6 +323,76 @@ export function updateSpriteFacing(
     }
 }
 
+// =============================================================================
+// ANCESTOR GHOST PULSE
+// =============================================================================
+
+const ANCESTOR_GHOST_PULSE_SPEED = 0.0012;
+const ANCESTOR_GHOST_PULSE_AMPLITUDE = 0.1;
+const ANCESTOR_GHOST_OPACITY_MIN = 0.12;
+const ANCESTOR_GHOST_OPACITY_MAX = 0.62;
+
+function findBillboardMesh(group: UnitGroup | undefined): THREE.Mesh | null {
+    if (!group) return null;
+    for (const child of group.children) {
+        if (child instanceof THREE.Mesh && child.userData?.isBillboard === true) {
+            return child;
+        }
+    }
+    return null;
+}
+
+/**
+ * Apply a subtle breathing opacity pulse to ancestor summons for a ghostly look.
+ */
+export function updateAncestorGhostVisuals(
+    unitsState: Unit[],
+    unitsRef: Record<number, UnitGroup>,
+    unitMeshRef: Record<number, THREE.Mesh>,
+    now: number
+): void {
+    for (const unit of unitsState) {
+        if (unit.hp <= 0 || unit.team !== "player") {
+            continue;
+        }
+
+        const isAncestorSummon = unit.summonType === "ancestor_warrior" || unit.id === 7;
+        if (!isAncestorSummon) continue;
+
+        const mesh = unitMeshRef[unit.id] ?? findBillboardMesh(unitsRef[unit.id]);
+        if (!mesh) continue;
+
+        const material = mesh.material;
+        if (!(material instanceof THREE.MeshStandardMaterial) && !(material instanceof THREE.MeshBasicMaterial)) {
+            continue;
+        }
+
+        const baseOpacityMaybe = material.userData.ancestorBaseOpacity;
+        const baseOpacity = typeof baseOpacityMaybe === "number" ? baseOpacityMaybe : material.opacity;
+        if (typeof baseOpacityMaybe !== "number") {
+            material.userData.ancestorBaseOpacity = baseOpacity;
+        }
+
+        if (!material.transparent) {
+            material.transparent = true;
+        }
+
+        const pulse = Math.sin(now * ANCESTOR_GHOST_PULSE_SPEED + unit.id * 0.73);
+        const opacity = baseOpacity + pulse * ANCESTOR_GHOST_PULSE_AMPLITUDE;
+        material.opacity = THREE.MathUtils.clamp(opacity, ANCESTOR_GHOST_OPACITY_MIN, ANCESTOR_GHOST_OPACITY_MAX);
+
+        if (material instanceof THREE.MeshStandardMaterial) {
+            const baseEmissiveMaybe = material.userData.ancestorBaseEmissiveIntensity;
+            const baseEmissive = typeof baseEmissiveMaybe === "number" ? baseEmissiveMaybe : material.emissiveIntensity;
+            if (typeof baseEmissiveMaybe !== "number") {
+                material.userData.ancestorBaseEmissiveIntensity = baseEmissive;
+            }
+            const pulse01 = (pulse + 1) * 0.5;
+            material.emissiveIntensity = baseEmissive * (0.92 + pulse01 * 0.16);
+        }
+    }
+}
+
 /**
  * Clear cached previous positions (call on area transition / game restart).
  */
