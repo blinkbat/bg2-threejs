@@ -28,7 +28,8 @@ export {
     type InitializedSceneState,
     type GameLoopStateRefs,
     type GameLoopCallbacks,
-    type UseGameLoopOptions
+    type UseGameLoopOptions,
+    type PerfFrameSample
 } from "./useGameLoop";
 
 export {

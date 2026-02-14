@@ -334,8 +334,14 @@ function applyShadowDefaults(scene: THREE.Scene): void {
             return;
         }
 
-        if (object.name === "obstacle" || object.name === "chest" || object.name === "decoration") {
+        if (object.name === "obstacle") {
             object.castShadow = true;
+            object.receiveShadow = true;
+            return;
+        }
+
+        if (object.name === "chest" || object.name === "decoration") {
+            object.castShadow = false;
             object.receiveShadow = true;
             return;
         }
@@ -365,6 +371,7 @@ interface CandleLightCluster {
 
 const CANDLE_LIGHT_CLUSTER_RADIUS = 5.5;
 const CANDLE_LIGHT_CLUSTER_MAX_MEMBERS = 6;
+const DIRECTIONAL_SHADOW_MAP_SIZE = 1024;
 
 function normalizeHexColor(color: string | undefined, fallback: string): string {
     if (typeof color === "string" && /^#[0-9a-fA-F]{6}$/.test(color)) {
@@ -535,6 +542,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     scene.userData.baseExposure = baseExposure;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.autoUpdate = false;
     container.appendChild(renderer.domElement);
 
     // Skip atmospheric fog on FoW maps to avoid double-overlay artifacts.
@@ -567,7 +575,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     dir.target = dirTarget;
     dir.castShadow = true;
     const shadowExtent = Math.max(area.gridWidth, area.gridHeight);
-    dir.shadow.mapSize.set(2048, 2048);
+    dir.shadow.mapSize.set(DIRECTIONAL_SHADOW_MAP_SIZE, DIRECTIONAL_SHADOW_MAP_SIZE);
     dir.shadow.camera.left = -shadowExtent;
     dir.shadow.camera.right = shadowExtent;
     dir.shadow.camera.top = shadowExtent;
@@ -1720,7 +1728,11 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
             1.0,
             transition.z + transition.h / 2
         );
+        doorLight.userData.baseIntensity = 1.2;
+        doorLight.userData.flickerStrength = 0;
+        doorLight.userData.lightRole = "area";
         scene.add(doorLight);
+        candleLights.push(doorLight);
     });
 
     // Secret doors - wall segment with cracks that gets removed when clicked
@@ -1898,6 +1910,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     });
 
     applyShadowDefaults(scene);
+    renderer.shadowMap.needsUpdate = true;
 
     return {
         scene,

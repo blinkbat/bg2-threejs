@@ -454,7 +454,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         }
     },
     skeleton_minion: {
-        name: "Skeleton Minion",
+        name: "Zombie",
         hp: 12,
         maxHp: 12,
         damage: [2, 4],

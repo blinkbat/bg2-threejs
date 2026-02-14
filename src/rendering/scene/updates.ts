@@ -147,7 +147,9 @@ export function updateBillboards(billboards: THREE.Mesh[], camera: THREE.Camera)
 // Light LOD: only enable lights within this distance of camera focus
 const LIGHT_LOD_DISTANCE = 25;
 const MAX_VISIBLE_FLAME_LIGHTS = 4;
+const LIGHT_LOD_UPDATE_INTERVAL = 4;
 const flameLightDistances: Array<{ light: THREE.Light; distSq: number }> = [];
+let lightLodFrame = 0;
 
 /**
  * Update light LOD - disable lights that are far from camera to save GPU cycles.
@@ -157,6 +159,12 @@ export function updateLightLOD(
     candleLights: THREE.Light[],
     cameraOffset: { x: number; z: number }
 ): void {
+    lightLodFrame++;
+    if (lightLodFrame < LIGHT_LOD_UPDATE_INTERVAL) {
+        return;
+    }
+    lightLodFrame = 0;
+
     const lodDistanceSq = LIGHT_LOD_DISTANCE * LIGHT_LOD_DISTANCE;
     flameLightDistances.length = 0;
 
@@ -178,6 +186,13 @@ export function updateLightLOD(
         }
 
         flameLightDistances.push({ light, distSq });
+    }
+
+    if (flameLightDistances.length <= MAX_VISIBLE_FLAME_LIGHTS) {
+        for (let i = 0; i < flameLightDistances.length; i++) {
+            flameLightDistances[i].light.visible = true;
+        }
+        return;
     }
 
     flameLightDistances.sort((a, b) => a.distSq - b.distSq);

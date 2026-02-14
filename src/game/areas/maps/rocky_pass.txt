@@ -2,9 +2,9 @@
 name: Rocky Pass
 flavor: Wind howls through the jagged stones of this narrow passage.
 size: 50x50
-background: #87CEEB
+background: #484960
 ground: #5a7a4a
-ambient: 0.55
+ambient: 0.5
 directional: 0.85
 fog: true
 spawn: 47,25
@@ -293,5 +293,5 @@ ddDddd.ddddd.............................dDDdd....
 17,11:blocking=16,11,3,1
 
 === CANDLES ===
-10.85,5.5:dir=1,0
-25,1.85:dir=0,1
+10.85,5.5:dir=1,0,kind=candle,color=#ffaa44
+25,1.85:dir=0,1,kind=candle,color=#ffaa44

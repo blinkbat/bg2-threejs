@@ -60,6 +60,62 @@ export function saveMapPlugin(): Plugin {
                     }
                 });
             });
+
+            server.middlewares.use("/__perf-log", (req, res) => {
+                if (req.method !== "POST") {
+                    res.statusCode = 405;
+                    res.end(JSON.stringify({ error: "Method not allowed" }));
+                    return;
+                }
+
+                let body = "";
+                req.on("data", (chunk: Buffer) => {
+                    body += chunk.toString();
+                });
+                req.on("end", () => {
+                    try {
+                        const parsed = body.length > 0 ? JSON.parse(body) : {};
+                        const linesRaw = Reflect.get(parsed, "lines");
+                        const sessionIdRaw = Reflect.get(parsed, "sessionId");
+
+                        if (!Array.isArray(linesRaw) || linesRaw.some(line => typeof line !== "string")) {
+                            res.statusCode = 400;
+                            res.end(JSON.stringify({ error: "Missing or invalid lines" }));
+                            return;
+                        }
+
+                        const safeSessionId = typeof sessionIdRaw === "string"
+                            ? sessionIdRaw.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64)
+                            : "dev";
+                        const lines = linesRaw
+                            .slice(0, 2000)
+                            .map(line => line.replace(/\r?\n/g, " ").slice(0, 4000));
+
+                        if (lines.length === 0) {
+                            res.setHeader("Content-Type", "application/json");
+                            res.end(JSON.stringify({ success: true, appended: 0 }));
+                            return;
+                        }
+
+                        const logsDir = path.join(process.cwd(), "logs");
+                        const filePath = path.join(logsDir, "perf-debug.txt");
+
+                        if (!fs.existsSync(logsDir)) {
+                            fs.mkdirSync(logsDir, { recursive: true });
+                        }
+
+                        const payload = lines.map(line => `[${safeSessionId}] ${line}`).join("\n") + "\n";
+                        fs.appendFileSync(filePath, payload, "utf-8");
+
+                        res.setHeader("Content-Type", "application/json");
+                        res.end(JSON.stringify({ success: true, appended: lines.length, path: filePath }));
+                    } catch (err) {
+                        console.error("[perf-log] Error:", err);
+                        res.statusCode = 500;
+                        res.end(JSON.stringify({ error: String(err) }));
+                    }
+                });
+            });
         },
     };
 }

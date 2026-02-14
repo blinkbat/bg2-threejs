@@ -295,11 +295,13 @@ function buildUnitGroup(
     shadow.position.y = 0.004 - flyHeight;
     group.add(shadow);
 
-    // All units get subtle innate light (enemies dimmer than players)
-    const lightIntensity = isPlayer ? 0.15 : 0.08;
-    const unitLight = new THREE.PointLight(data.color, lightIntensity, 2, 2);
-    unitLight.position.y = boxH / 2;
-    group.add(unitLight);
+    // Keep per-unit dynamic lights on player-controlled units only.
+    // Enemy swarms with individual lights are a large GPU cost multipler.
+    if (isPlayer) {
+        const unitLight = new THREE.PointLight(data.color, 0.15, 2, 2);
+        unitLight.position.y = boxH / 2;
+        group.add(unitLight);
+    }
 
     // Selection ring
     const selInner = 0.5 * size;

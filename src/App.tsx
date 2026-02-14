@@ -39,7 +39,7 @@ import {
 } from "./input";
 
 // Hooks
-import { useThreeScene, useGameLoop, useInputHandlers, type InitializedSceneState, type InputGameRefs } from "./hooks";
+import { useThreeScene, useGameLoop, useInputHandlers, type InitializedSceneState, type InputGameRefs, type PerfFrameSample } from "./hooks";
 
 // UI Components
 import { PartyBar } from "./components/PartyBar";
@@ -193,6 +193,49 @@ const ZERO_STATS: CharacterStats = {
 };
 
 const STAT_BOOST_AMOUNT = 10;
+const PERF_LOG_FLUSH_INTERVAL_MS = 3000;
+const PERF_LOG_BUFFER_LIMIT = 2000;
+const PERF_LOG_ENDPOINT = "/__perf-log";
+
+function formatPerfLogLine(sample: PerfFrameSample): string {
+    const ts = new Date(sample.timestamp).toISOString();
+    const heap = sample.jsHeapMb !== null ? sample.jsHeapMb.toFixed(1) : "na";
+    const programs = sample.programs !== null ? String(sample.programs) : "na";
+    const mode = sample.belowThreshold ? "trigger" : "capture";
+    return [
+        ts,
+        `mode=${mode}`,
+        `fps=${sample.fps.toFixed(1)}`,
+        `frame=${sample.frameMs.toFixed(2)}ms`,
+        `paused=${sample.paused ? 1 : 0}`,
+        `units=${sample.units}`,
+        `aliveP=${sample.playersAlive}`,
+        `aliveE=${sample.enemiesAlive}`,
+        `proj=${sample.projectiles}`,
+        `dmgTxt=${sample.damageTexts}`,
+        `acid=${sample.acidTiles}`,
+        `sanct=${sample.sanctuaryTiles}`,
+        `lights=${sample.lightsVisible}/${sample.lightsTotal}`,
+        `draw=${sample.drawCalls}`,
+        `tris=${sample.triangles}`,
+        `geo=${sample.geometries}`,
+        `tex=${sample.textures}`,
+        `prog=${programs}`,
+        `heapMb=${heap}`,
+        `t_cache=${sample.cacheMs.toFixed(2)}`,
+        `t_visual=${sample.visualMs.toFixed(2)}`,
+        `t_combat=${sample.combatMs.toFixed(2)}`,
+        `t_proj=${sample.projectilesMs.toFixed(2)}`,
+        `t_status=${sample.statusMs.toFixed(2)}`,
+        `t_fog=${sample.fogMs.toFixed(2)}`,
+        `t_ai=${sample.aiMs.toFixed(2)}`,
+        `t_unitAi=${sample.unitAiMs.toFixed(2)}`,
+        `t_hp=${sample.hpBarsMs.toFixed(2)}`,
+        `t_wall=${sample.wallMs.toFixed(2)}`,
+        `t_lod=${sample.lightLodMs.toFixed(2)}`,
+        `t_render=${sample.renderMs.toFixed(2)}`
+    ].join(" ");
+}
 
 // =============================================================================
 // GAME COMPONENT
@@ -401,6 +444,11 @@ function Game({
     const lastMouse = useRef({ x: 0, y: 0 });
     const debugGridRef = useRef<THREE.Group | null>(null);
     const [selectedConsumableCooldownEnd, setSelectedConsumableCooldownEnd] = useState(0);
+    const perfLogBufferRef = useRef<string[]>([]);
+    const perfLogFlushInFlightRef = useRef(false);
+    const perfSessionIdRef = useRef(`${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`);
+    const perfSessionHeaderWrittenRef = useRef(false);
+    const lastPerfTriggerAtRef = useRef(0);
 
     useEffect(() => {
         const interval = setInterval(() => {
@@ -535,6 +583,64 @@ function Game({
     const addLog = useCallback((text: string, color?: string) => {
         setCombatLog(prev => [...prev.slice(-50), { text, color }]);
     }, []);
+
+    const flushPerfLogs = useCallback(async () => {
+        if (!import.meta.env.DEV) return;
+        if (perfLogFlushInFlightRef.current) return;
+        if (perfLogBufferRef.current.length === 0) return;
+
+        const batch = perfLogBufferRef.current.splice(0, perfLogBufferRef.current.length);
+        perfLogFlushInFlightRef.current = true;
+        try {
+            const response = await fetch(PERF_LOG_ENDPOINT, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    sessionId: perfSessionIdRef.current,
+                    lines: batch
+                })
+            });
+            if (!response.ok) {
+                throw new Error(`Perf log flush failed: ${response.status}`);
+            }
+        } catch {
+            const merged = [...batch, ...perfLogBufferRef.current];
+            perfLogBufferRef.current = merged.slice(-PERF_LOG_BUFFER_LIMIT);
+        } finally {
+            perfLogFlushInFlightRef.current = false;
+        }
+    }, []);
+
+    const onPerfSample = useCallback((sample: PerfFrameSample) => {
+        if (!import.meta.env.DEV) return;
+
+        if (!perfSessionHeaderWrittenRef.current) {
+            perfSessionHeaderWrittenRef.current = true;
+            perfLogBufferRef.current.push(`=== perf-session ${perfSessionIdRef.current} ${new Date().toISOString()} ===`);
+        }
+
+        if (sample.belowThreshold && sample.timestamp - lastPerfTriggerAtRef.current > 1000) {
+            lastPerfTriggerAtRef.current = sample.timestamp;
+            perfLogBufferRef.current.push(`--- dip-trigger ${new Date(sample.timestamp).toISOString()} fps=${sample.fps.toFixed(1)} ---`);
+        }
+
+        perfLogBufferRef.current.push(formatPerfLogLine(sample));
+        if (perfLogBufferRef.current.length > PERF_LOG_BUFFER_LIMIT) {
+            perfLogBufferRef.current.splice(0, perfLogBufferRef.current.length - PERF_LOG_BUFFER_LIMIT);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (!import.meta.env.DEV) return;
+        const intervalId = window.setInterval(() => {
+            void flushPerfLogs();
+        }, PERF_LOG_FLUSH_INTERVAL_MS);
+
+        return () => {
+            window.clearInterval(intervalId);
+            void flushPerfLogs();
+        };
+    }, [flushPerfLogs]);
 
     // Skill execution context
     // eslint-disable-next-line react-hooks/preserve-manual-memoization
@@ -803,8 +909,9 @@ function Game({
         setSkillCooldowns,
         setQueuedActions,
         addLog,
-        processActionQueue: doProcessQueue
-    }), [addLog, doProcessQueue]);
+        processActionQueue: doProcessQueue,
+        onPerfSample
+    }), [addLog, doProcessQueue, onPerfSample]);
 
     useGameLoop({
         sceneState: gameLoopSceneState,

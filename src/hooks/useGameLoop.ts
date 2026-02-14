@@ -9,7 +9,7 @@ import { PAN_SPEED, ANCESTOR_AURA_DAMAGE_BONUS, ANCESTOR_AURA_RANGE } from "../c
 import { updateGameClock } from "../core/gameClock";
 import { getCurrentArea } from "../game/areas";
 import type { Unit, UnitGroup } from "../core/types";
-import { updateCamera, updateWallTransparency, updateTreeFogVisibility, updateFogOccluderVisibility, updateLightLOD, addUnitToScene, updateWater, updateBillboards } from "../rendering/scene";
+import { updateCamera, updateWallTransparency, updateTreeFogVisibility, updateFogOccluderVisibility, updateLightLOD, addUnitToScene, updateBillboards } from "../rendering/scene";
 import { updateDynamicObstacles } from "../ai/pathfinding";
 import { updateUnitCache } from "../game/unitQuery";
 import { clearUnitStatsCache } from "../game/units";
@@ -67,6 +67,7 @@ export interface GameLoopCallbacks {
     setQueuedActions: React.Dispatch<React.SetStateAction<{ unitId: number; skillName: string }[]>>;
     addLog: (text: string, color?: string) => void;
     processActionQueue: (defeatedThisFrame: Set<number>) => void;
+    onPerfSample?: (sample: PerfFrameSample) => void;
 }
 
 export interface UseGameLoopOptions {
@@ -77,76 +78,71 @@ export interface UseGameLoopOptions {
     keysPressed: React.MutableRefObject<Set<string>>;
 }
 
+export interface PerfFrameSample {
+    timestamp: number;
+    frameMs: number;
+    fps: number;
+    belowThreshold: boolean;
+    paused: boolean;
+    units: number;
+    playersAlive: number;
+    enemiesAlive: number;
+    projectiles: number;
+    damageTexts: number;
+    acidTiles: number;
+    sanctuaryTiles: number;
+    lightsTotal: number;
+    lightsVisible: number;
+    drawCalls: number;
+    triangles: number;
+    geometries: number;
+    textures: number;
+    programs: number | null;
+    jsHeapMb: number | null;
+    cacheMs: number;
+    visualMs: number;
+    combatMs: number;
+    projectilesMs: number;
+    statusMs: number;
+    fogMs: number;
+    aiMs: number;
+    unitAiMs: number;
+    hpBarsMs: number;
+    wallMs: number;
+    lightLodMs: number;
+    renderMs: number;
+}
+
 // =============================================================================
 // VISUAL UPDATES (run every frame, even when paused)
 // =============================================================================
 
-const CANDLE_FLICKER_INTERVAL_MS = 50;
-const DEFAULT_CANDLE_LIGHT_INTENSITY = 12;
-let lastCandleFlickerUpdate = 0;
+const PERF_SAMPLE_FPS_THRESHOLD = 45;
+const PERF_CAPTURE_WINDOW_MS = 5000;
 
-function getStablePhase(
-    userData: Record<string, unknown>,
-    key: string,
-    fallback: number
-): number {
-    const value = Reflect.get(userData, key);
-    if (typeof value === "number") return value;
-    userData[key] = fallback;
-    return fallback;
+function getProgramCount(info: THREE.WebGLInfo): number | null {
+    const programs = Reflect.get(info, "programs");
+    return Array.isArray(programs) ? programs.length : null;
+}
+
+function getJsHeapUsedMb(): number | null {
+    const perf = Reflect.get(globalThis, "performance");
+    if (!perf || typeof perf !== "object") return null;
+
+    const memory = Reflect.get(perf, "memory");
+    if (!memory || typeof memory !== "object") return null;
+
+    const usedBytes = Reflect.get(memory, "usedJSHeapSize");
+    if (typeof usedBytes !== "number" || !Number.isFinite(usedBytes)) return null;
+
+    return usedBytes / (1024 * 1024);
 }
 
 function updateVisualEffects(
     sceneState: InitializedSceneState,
-    gameRefs: GameRefs,
-    now: number
+    gameRefs: GameRefs
 ): void {
-    const { flames, candleLights, doorMeshes } = sceneState;
-
-    // Candle flicker is intentionally throttled and deterministic:
-    // avoids per-frame Math.random() churn while preserving motion.
-    if (now - lastCandleFlickerUpdate >= CANDLE_FLICKER_INTERVAL_MS) {
-        const t = now * 0.001;
-
-        for (let i = 0; i < flames.length; i++) {
-            const flame = flames[i];
-            const phase = getStablePhase(flame.userData, "flickerPhase", i * 1.618);
-            const primary = Math.sin(t * 12 + phase);
-            const secondary = Math.sin(t * 19 + phase * 0.73);
-            const flicker = THREE.MathUtils.clamp(0.72 + primary * 0.13 + secondary * 0.07, 0.45, 1.0);
-            flame.scale.y = 1.55 + primary * 0.25 + secondary * 0.15;
-            (flame.material as THREE.MeshBasicMaterial).opacity = flicker;
-        }
-
-        for (let i = 0; i < candleLights.length; i++) {
-            const light = candleLights[i];
-            const userData = light.userData as Record<string, unknown>;
-            const baseIntensityRaw = Reflect.get(userData, "baseIntensity");
-            const baseIntensity = typeof baseIntensityRaw === "number"
-                ? baseIntensityRaw
-                : DEFAULT_CANDLE_LIGHT_INTENSITY;
-            if (typeof baseIntensityRaw !== "number") {
-                userData.baseIntensity = baseIntensity;
-            }
-
-            const flickerStrengthRaw = Reflect.get(userData, "flickerStrength");
-            const flickerStrength = typeof flickerStrengthRaw === "number"
-                ? Math.max(0, flickerStrengthRaw)
-                : 0.12;
-            if (flickerStrength <= 0) {
-                light.intensity = baseIntensity;
-                continue;
-            }
-
-            const phase = getStablePhase(userData, "flickerPhase", i * 2.173);
-            const primary = Math.sin(t * 8 + phase);
-            const secondary = Math.sin(t * 13 + phase * 0.81);
-            const normalized = 1 + (primary * 0.66 + secondary * 0.34) * flickerStrength;
-            light.intensity = Math.max(0, baseIntensity * normalized);
-        }
-
-        lastCandleFlickerUpdate = now;
-    }
+    const { doorMeshes } = sceneState;
 
     // Door hover glow effect
     doorMeshes.forEach(doorMesh => {
@@ -306,6 +302,7 @@ export function useGameLoop({
     // FPS tracking refs
     const fpsFrameCount = useRef(0);
     const fpsLastTime = useRef(Date.now());
+    const perfCaptureUntilRef = useRef(0);
 
     const updateCam = useCallback(() => {
         if (sceneState?.camera) {
@@ -320,7 +317,7 @@ export function useGameLoop({
             scene, camera, renderer, flames, candleLights, fogTexture, fogMesh, moveMarker,
             rangeIndicator, unitGroups, selectRings, targetRings, shieldIndicators,
             unitMeshes, unitOriginalColors, maxHp, wallMeshes, treeMeshes, fogOccluderMeshes,
-            columnMeshes, columnGroups, waterMesh, billboards, candleMeshes
+            columnMeshes, columnGroups, billboards, candleMeshes
         } = sceneState;
 
         let animId: number;
@@ -328,15 +325,19 @@ export function useGameLoop({
         let cachedRect = renderer.domElement.getBoundingClientRect();
 
         const animate = () => {
+            const frameStart = performance.now();
             animId = requestAnimationFrame(animate);
             const now = Date.now();
             updateGameClock();
             const refs = gameRefs.current;
+            const isPaused = stateRefs.pausedRef.current;
 
             // Snapshot units and populate O(1) lookup caches for all systems this frame
             const currentUnits = stateRefs.unitsStateRef.current;
+            let sectionStart = performance.now();
             updateUnitCache(currentUnits);
             clearUnitStatsCache();
+            const cacheMs = performance.now() - sectionStart;
 
             // FPS counter
             fpsFrameCount.current++;
@@ -346,23 +347,26 @@ export function useGameLoop({
                 fpsLastTime.current = now;
             }
 
-            // Visual effects (flames, lights, doors)
-            updateVisualEffects(sceneState, refs, now);
-
-            // Keyboard panning
+            // Visual effects (doors), camera panning, and damage text updates
+            sectionStart = performance.now();
+            updateVisualEffects(sceneState, refs);
             updateKeyboardPanning(keysPressed.current, refs.cameraOffset, camera, updateCam);
-
-            // Update damage texts
-            refs.damageTexts = updateDamageTexts(refs.damageTexts, camera, scene, stateRefs.pausedRef.current);
+            refs.damageTexts = updateDamageTexts(refs.damageTexts, camera, scene, isPaused);
+            let visualMs = performance.now() - sectionStart;
 
             // Track units defeated this frame
             const defeatedThisFrame = new Set<number>();
+            let projectilesMs = 0;
+            let statusMs = 0;
+            let combatMs = 0;
 
             // Game logic updates (only when not paused)
-            if (!stateRefs.pausedRef.current) {
+            if (!isPaused) {
+                const combatStart = performance.now();
                 updateAncestorAuraBonuses(currentUnits, unitGroups, callbacks.setUnits);
 
                 // Update projectiles
+                sectionStart = performance.now();
                 refs.projectiles = updateProjectiles(
                     refs.projectiles,
                     unitGroups,
@@ -375,8 +379,10 @@ export function useGameLoop({
                     now,
                     defeatedThisFrame
                 );
+                projectilesMs = performance.now() - sectionStart;
 
                 // Process status effects
+                sectionStart = performance.now();
                 processStatusEffects(
                     currentUnits,
                     unitGroups,
@@ -388,6 +394,7 @@ export function useGameLoop({
                     now,
                     defeatedThisFrame
                 );
+                statusMs = performance.now() - sectionStart;
 
                 // Process acid tiles
                 processAcidTiles(
@@ -491,13 +498,17 @@ export function useGameLoop({
 
                 // Update shield facing
                 updateShieldFacing(currentUnits, unitGroups, shieldIndicators, callbacks.setUnits);
+                combatMs = performance.now() - combatStart;
             }
 
             // Visual updates (run even when paused)
+            sectionStart = performance.now();
             updateHitFlash(refs.hitFlash, unitMeshes, unitOriginalColors, now);
             updatePoisonVisuals(currentUnits, unitMeshes, unitOriginalColors, refs.hitFlash);
+            visualMs += performance.now() - sectionStart;
 
             // Fog of war
+            sectionStart = performance.now();
             const playerUnits = currentUnits.filter(u => u.team === "player" && u.hp > 0);
             if (fogTexture && fogMesh) {
                 updateFogOfWar(refs.visibility, playerUnits, unitGroups, fogTexture, currentUnits, fogMesh);
@@ -508,9 +519,13 @@ export function useGameLoop({
                 updateTreeFogVisibility(treeMeshes, refs.visibility);
                 updateFogOccluderVisibility(fogOccluderMeshes, refs.visibility);
             }
+            const fogMs = performance.now() - sectionStart;
+            let aiMs = 0;
+            let unitAiMs = 0;
 
             // Unit AI & movement (only when not paused)
-            if (!stateRefs.pausedRef.current) {
+            if (!isPaused) {
+                const aiStart = performance.now();
                 callbacks.processActionQueue(defeatedThisFrame);
 
                 // Check for newly spawned units
@@ -536,6 +551,7 @@ export function useGameLoop({
                 updateDynamicObstacles(currentUnits, unitGroups);
 
                 // Update each unit's AI
+                sectionStart = performance.now();
                 currentUnits.forEach(unit => {
                     const g = unitGroups[unit.id];
                     if (!g || unit.hp <= 0) return;
@@ -550,42 +566,110 @@ export function useGameLoop({
                         refs.acidTiles
                     );
                 });
+                unitAiMs = performance.now() - sectionStart;
 
                 // Update swing animations
                 refs.swingAnimations = updateSwingAnimations(refs.swingAnimations, scene, now);
+                aiMs = performance.now() - aiStart;
             }
 
             // Marker animations
+            sectionStart = performance.now();
             updateMarkerAnimations(moveMarker, refs.moveMarkerStart, targetRings, refs.targetRingTimers, now);
-
-            // Range indicator follows caster
             updateRangeIndicator(stateRefs.targetingModeRef.current, rangeIndicator, unitGroups);
+            visualMs += performance.now() - sectionStart;
 
             // HP bar positions (rect measurement cached — only re-measured every 60 frames)
+            sectionStart = performance.now();
             hpBarFrame++;
             if (hpBarFrame % 60 === 0) {
                 cachedRect = renderer.domElement.getBoundingClientRect();
             }
             callbacks.setHpBarPositions(updateHpBarPositions(currentUnits, unitGroups, camera, cachedRect, refs.zoomLevel));
+            const hpBarsMs = performance.now() - sectionStart;
 
             // Wall/tree/candle transparency
+            sectionStart = performance.now();
             updateWallTransparency(camera, wallMeshes, unitGroups, currentUnits, treeMeshes, columnMeshes, columnGroups, candleMeshes, flames);
+            const wallMs = performance.now() - sectionStart;
 
             // Light LOD
+            sectionStart = performance.now();
             updateLightLOD(candleLights, refs.cameraOffset);
+            const lightLodMs = performance.now() - sectionStart;
 
-            // Water animation
-            updateWater(waterMesh, now);
-
+            sectionStart = performance.now();
             // Sprite facing direction (before billboard rotation so scale is current)
             updateSpriteFacing(currentUnits, unitGroups);
             updateAncestorGhostVisuals(currentUnits, unitGroups, unitMeshes, now);
 
             // Billboard rotation
             updateBillboards(billboards, camera);
+            visualMs += performance.now() - sectionStart;
 
             // Render
+            sectionStart = performance.now();
             renderer.render(scene, camera);
+            const renderMs = performance.now() - sectionStart;
+
+            const frameMs = performance.now() - frameStart;
+            const fps = frameMs > 0 ? 1000 / frameMs : 0;
+            const belowThreshold = fps < PERF_SAMPLE_FPS_THRESHOLD;
+            if (belowThreshold) {
+                perfCaptureUntilRef.current = now + PERF_CAPTURE_WINDOW_MS;
+            }
+            if (callbacks.onPerfSample && now <= perfCaptureUntilRef.current) {
+                let playersAlive = 0;
+                let enemiesAlive = 0;
+                for (const unit of currentUnits) {
+                    if (unit.hp <= 0) continue;
+                    if (unit.team === "player") {
+                        playersAlive++;
+                    } else {
+                        enemiesAlive++;
+                    }
+                }
+
+                let lightsVisible = 0;
+                for (const light of candleLights) {
+                    if (light.visible) lightsVisible++;
+                }
+
+                callbacks.onPerfSample?.({
+                    timestamp: now,
+                    frameMs,
+                    fps,
+                    belowThreshold,
+                    paused: isPaused,
+                    units: currentUnits.length,
+                    playersAlive,
+                    enemiesAlive,
+                    projectiles: refs.projectiles.length,
+                    damageTexts: refs.damageTexts.length,
+                    acidTiles: refs.acidTiles.size,
+                    sanctuaryTiles: refs.sanctuaryTiles.size,
+                    lightsTotal: candleLights.length,
+                    lightsVisible,
+                    drawCalls: renderer.info.render.calls,
+                    triangles: renderer.info.render.triangles,
+                    geometries: renderer.info.memory.geometries,
+                    textures: renderer.info.memory.textures,
+                    programs: getProgramCount(renderer.info),
+                    jsHeapMb: getJsHeapUsedMb(),
+                    cacheMs,
+                    visualMs,
+                    combatMs,
+                    projectilesMs,
+                    statusMs,
+                    fogMs,
+                    aiMs,
+                    unitAiMs,
+                    hpBarsMs,
+                    wallMs,
+                    lightLodMs,
+                    renderMs
+                });
+            }
         };
 
         // Schedule first frame instead of calling animate() directly
