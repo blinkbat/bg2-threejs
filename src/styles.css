@@ -1706,6 +1706,10 @@ html, body, #root {
     margin-top: 4px;
 }
 
+.portrait-mana {
+    margin-top: 2px;
+}
+
 .portrait-name {
     font-size: 10px;
     color: #aaa;

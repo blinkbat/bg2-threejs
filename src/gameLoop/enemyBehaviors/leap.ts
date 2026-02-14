@@ -9,7 +9,7 @@ import { soundFns } from "../../audio";
 import { setSkillCooldown } from "../../combat/combatMath";
 import { COLORS, LEAP_DURATION, LEAP_ARC_HEIGHT, LEAP_DAMAGE_RADIUS, LEAP_MIN_LANDING_DIST, LEAP_LANDING_OFFSET } from "../../core/constants";
 import { accumulateDelta } from "../../core/gameClock";
-import { applyDamageToUnit, type DamageContext } from "../../combat/damageEffects";
+import { applyDamageToUnit, createAnimatedRing, type DamageContext } from "../../combat/damageEffects";
 import type { LeapContext } from "./types";
 
 // =============================================================================
@@ -155,6 +155,12 @@ export function updateLeaps(
         if (progress >= 1) {
             // Land and deal damage
             g.position.y = 0;
+            createAnimatedRing(scene, leap.endX, leap.endZ, "#ff6600", {
+                innerRadius: 0.2,
+                outerRadius: 0.5,
+                maxScale: 1.9,
+                duration: 280
+            });
 
             // Reset shadow position
             if (shadow) {

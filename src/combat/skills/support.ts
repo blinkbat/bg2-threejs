@@ -20,8 +20,58 @@ import { getUnitRadius, isInRange } from "../../rendering/range";
 import { soundFns } from "../../audio";
 import { createAnimatedRing, createLightningPillar } from "../damageEffects";
 import { updateUnitWith } from "../../core/stateUtils";
+import { getGameTime } from "../../core/gameClock";
 import type { SkillExecutionContext } from "./types";
 import { findAndValidateAllyTarget, findClosestUnit, consumeSkill } from "./helpers";
+
+const UP_AXIS = new THREE.Vector3(0, 1, 0);
+
+function createPulseBeam(
+    scene: THREE.Scene,
+    fromX: number,
+    fromZ: number,
+    toX: number,
+    toZ: number,
+    color: string,
+    duration: number = 300
+): void {
+    const from = new THREE.Vector3(fromX, 0.85, fromZ);
+    const to = new THREE.Vector3(toX, 0.85, toZ);
+    const direction = new THREE.Vector3().subVectors(to, from);
+    const beamLength = direction.length();
+    if (beamLength < 0.05) return;
+
+    direction.normalize();
+
+    const beam = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.045, 0.045, beamLength, 10, 1, true),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85 })
+    );
+    beam.position.copy(from).add(to).multiplyScalar(0.5);
+    beam.quaternion.setFromUnitVectors(UP_AXIS, direction);
+    scene.add(beam);
+
+    const startTime = getGameTime();
+
+    const animate = () => {
+        const elapsed = getGameTime() - startTime;
+        const t = Math.min(1, elapsed / duration);
+        const material = beam.material as THREE.MeshBasicMaterial;
+
+        material.opacity = 0.85 * (1 - t);
+        const pulseScale = 1 + Math.sin(t * Math.PI) * 0.35;
+        beam.scale.set(pulseScale, 1, pulseScale);
+
+        if (t < 1) {
+            requestAnimationFrame(animate);
+        } else {
+            scene.remove(beam);
+            beam.geometry.dispose();
+            material.dispose();
+        }
+    };
+    requestAnimationFrame(animate);
+}
 
 // =============================================================================
 // HEAL SKILL (single ally)
@@ -37,7 +87,7 @@ export function executeHealSkill(
     targetX: number,
     targetZ: number
 ): boolean {
-    const { unitsStateRef, unitMeshRef, hitFlashRef, setUnits, addLog } = ctx;
+    const { scene, unitsStateRef, unitsRef, unitMeshRef, hitFlashRef, setUnits, addLog } = ctx;
 
     const target = findAndValidateAllyTarget(ctx, casterId, targetX, targetZ);
     if (!target) return false;
@@ -45,10 +95,12 @@ export function executeHealSkill(
     const { unit: targetAlly, group: targetG } = target;
     const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
     const targetMaxHp = getEffectiveMaxHp(targetAlly.id, targetAlly);
+    const casterG = unitsRef.current[casterId];
     if (targetAlly.hp >= targetMaxHp) {
         addLog(`${UNIT_DATA[casterId].name}: ${UNIT_DATA[targetAlly.id].name} is at full health!`, COLORS.logNeutral);
         return false;
     }
+    if (!casterG) return false;
 
     consumeSkill(ctx, casterId, skill);
 
@@ -70,6 +122,28 @@ export function executeHealSkill(
         hitFlashRef.current[healTargetId] = Date.now();
     }
 
+    createAnimatedRing(scene, targetG.position.x, targetG.position.z, COLORS.logHeal, {
+        innerRadius: 0.2,
+        outerRadius: 0.45,
+        maxScale: 1.8,
+        duration: 320
+    });
+    createAnimatedRing(scene, casterG.position.x, casterG.position.z, "#b6f7c1", {
+        innerRadius: 0.16,
+        outerRadius: 0.34,
+        maxScale: 1.05,
+        duration: 240
+    });
+    createPulseBeam(
+        scene,
+        casterG.position.x,
+        casterG.position.z,
+        targetG.position.x,
+        targetG.position.z,
+        COLORS.logHeal,
+        280
+    );
+
     return true;
 }
 
@@ -87,7 +161,7 @@ export function executeManaTransferSkill(
     targetX: number,
     targetZ: number
 ): boolean {
-    const { unitsStateRef, unitsRef, unitMeshRef, hitFlashRef, setUnits, addLog } = ctx;
+    const { scene, unitsStateRef, unitsRef, unitMeshRef, hitFlashRef, setUnits, addLog } = ctx;
 
     const target = findAndValidateAllyTarget(ctx, casterId, targetX, targetZ);
     if (!target) return false;
@@ -163,6 +237,34 @@ export function executeManaTransferSkill(
         hitFlashRef.current[healTargetId] = now;
     }
 
+    const casterMesh = unitMeshRef.current[casterId];
+    if (casterMesh) {
+        (casterMesh.material as THREE.MeshStandardMaterial).color.set("#e74c3c");
+        hitFlashRef.current[casterId] = now;
+    }
+
+    createAnimatedRing(scene, casterG.position.x, casterG.position.z, "#e74c3c", {
+        innerRadius: 0.25,
+        outerRadius: 0.45,
+        maxScale: 1.3,
+        duration: 300
+    });
+    createAnimatedRing(scene, targetG.position.x, targetG.position.z, COLORS.mana, {
+        innerRadius: 0.2,
+        outerRadius: 0.42,
+        maxScale: 1.6,
+        duration: 300
+    });
+    createPulseBeam(
+        scene,
+        casterG.position.x,
+        casterG.position.z,
+        targetG.position.x,
+        targetG.position.z,
+        COLORS.mana,
+        320
+    );
+
     return true;
 }
 
@@ -228,6 +330,16 @@ function applyBuffFromTemplate(
         setUnits(prev => prev.map(u =>
             alliesInRange.includes(u.id) ? { ...u, statusEffects: applyStatusEffect(u.statusEffects, effect) } : u
         ));
+        for (const allyId of alliesInRange) {
+            const allyG = unitsRef.current[allyId];
+            if (!allyG) continue;
+            createAnimatedRing(scene, allyG.position.x, allyG.position.z, template.ringColor, {
+                innerRadius: 0.14,
+                outerRadius: 0.28,
+                maxScale: 1.0,
+                duration: Math.max(180, Math.floor((template.ringOpts.duration ?? 260) * 0.8))
+            });
+        }
 
         template.sound();
         addLog(template.logMessage(casterData.name, skill.name, alliesInRange.length), template.logColor);
@@ -648,6 +760,16 @@ export function executeReviveSkill(
 
     soundFns.playHeal();
     addLog(`${casterData.name}'s ${skill.name} revives ${targetData.name}!`, "#ffd700");
+
+    if (casterG) {
+        createAnimatedRing(scene, casterG.position.x, casterG.position.z, "#ffd700", {
+            innerRadius: 0.2,
+            outerRadius: 0.4,
+            maxScale: 1.15,
+            duration: 260
+        });
+        createPulseBeam(scene, casterG.position.x, casterG.position.z, reviveX, reviveZ, "#ffd700", 320);
+    }
 
     // Visual effect - golden lightning pillar at revive location
     createLightningPillar(scene, reviveX, reviveZ, {

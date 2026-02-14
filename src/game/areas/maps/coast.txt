@@ -2,7 +2,7 @@
 name: Seaswept Coastline
 flavor: Salt air fills your lungs as waves crash against the shore.
 size: 50x50
-background: #87CEEB
+background: #306b82
 ground: #b8aa7f
 ambient: 0.6
 directional: 0.9
@@ -188,10 +188,14 @@ d...............SSSSS..............wwwWWWWWWWWWW..
 20,7:1,palm
 16,8:1,palm
 9,12:1,palm
+7,15:1,palm
 5,20:1,palm
 21,26:1,palm
+13,28:1,palm
 6,29:1,palm
 32,29:1,palm
+7,30:1,palm
+23,37:1,palm
 8,38:1
 28,38:1,palm
 42,40:1.1
@@ -308,3 +312,9 @@ d...............SSSSS..............wwwWWWWWWWWWW..
 31,48:mushroom
 32,48:mushroom
 33,48:small_mushroom
+
+=== LIGHTS ===
+24.5,15.5:radius=12,angle=45,tint=#ffd28a,brightness=50,height=8,diffusion=1,decay=1.2
+26.5,33.5:radius=12,angle=45,tint=#ffd28a,brightness=30,height=8,diffusion=0.35,decay=1.2
+9.5,24.5:radius=12,angle=45,tint=#ffd28a,brightness=40,height=8,diffusion=0.35,decay=1.2
+16.5,38.5:radius=12,angle=45,tint=#ffd28a,brightness=6,height=8,diffusion=0.35,decay=1.2

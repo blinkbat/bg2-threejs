@@ -8,6 +8,7 @@ import { isPlayerVisible } from "../../game/unitQuery";
 import { getNextUnitId } from "../../core/unitIds";
 import { findSpawnPositions } from "../../ai/pathfinding";
 import { setSkillCooldown } from "../../combat/combatMath";
+import { createAnimatedRing } from "../../combat/damageEffects";
 import type { RaiseContext } from "./types";
 
 // =============================================================================
@@ -20,7 +21,7 @@ import type { RaiseContext } from "./types";
  * @returns true if a raise occurred
  */
 export function tryRaiseDead(ctx: RaiseContext): boolean {
-    const { unit, g, enemyStats, raiseSkill, unitsState, unitsRef, skillCooldowns, setSkillCooldowns, setUnits, addLog, now } = ctx;
+    const { unit, g, enemyStats, raiseSkill, unitsState, unitsRef, scene, skillCooldowns, setSkillCooldowns, setUnits, addLog, now } = ctx;
 
     const raiseCooldownKey = `${unit.id}-raise`;
     const raiseCooldownEnd = skillCooldowns[raiseCooldownKey]?.end ?? 0;
@@ -54,6 +55,14 @@ export function tryRaiseDead(ctx: RaiseContext): boolean {
     }));
 
     setUnits(prev => [...prev, ...newMinions]);
+    for (const minion of newMinions) {
+        createAnimatedRing(scene, minion.x, minion.z, "#8b5fbf", {
+            innerRadius: 0.18,
+            outerRadius: 0.4,
+            maxScale: 1.25,
+            duration: 280
+        });
+    }
 
     addLog(`${enemyStats.name} raises ${raiseSkill.spawnCount} ${ENEMY_STATS[raiseSkill.spawnType].name}s from the dead!`, "#8b5fbf");
 

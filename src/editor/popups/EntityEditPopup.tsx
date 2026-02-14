@@ -3,8 +3,18 @@
 // =============================================================================
 
 import { useState } from "react";
-import type { AreaId } from "../../game/areas/types";
+import {
+    DEFAULT_AREA_LIGHT_ANGLE,
+    DEFAULT_AREA_LIGHT_BRIGHTNESS,
+    DEFAULT_AREA_LIGHT_DECAY,
+    DEFAULT_AREA_LIGHT_DIFFUSION,
+    DEFAULT_AREA_LIGHT_HEIGHT,
+    DEFAULT_AREA_LIGHT_RADIUS,
+    DEFAULT_AREA_LIGHT_TINT,
+    type AreaId,
+} from "../../game/areas/types";
 import type { EnemyType } from "../../core/types";
+import { DEFAULT_CANDLE_LIGHT_COLOR, DEFAULT_TORCH_LIGHT_COLOR } from "../../core/constants";
 import type { EntityDef } from "../types";
 import { useClampedPosition } from "../hooks/useClampedPosition";
 import { getAvailableAreaIds, ENEMY_TYPES, popupStyle, inputStyle, selectStyle, buttonStyle } from "../constants";
@@ -20,6 +30,14 @@ const ITEM_CATEGORIES = [
     { label: "Accessories", items: Object.keys(ACCESSORIES) },
     { label: "Keys", items: Object.keys(KEYS) },
 ];
+
+function isHexColor(value: string | undefined): value is string {
+    return typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value);
+}
+
+function getDefaultLightTintForEntity(type: "candle" | "torch"): string {
+    return type === "torch" ? DEFAULT_TORCH_LIGHT_COLOR : DEFAULT_CANDLE_LIGHT_COLOR;
+}
 
 interface EntityEditPopupProps {
     entity: EntityDef;
@@ -153,27 +171,126 @@ export function EntityEditPopup({ entity, screenX, screenY, onSave, onClose, onN
                 </>
             )}
 
-            {draft.type === "candle" && (
-                <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-                    <label style={{ flex: 1 }}>
-                        <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Dir X</span>
+            {(draft.type === "candle" || draft.type === "torch") && (
+                <>
+                    <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                        <label style={{ flex: 1 }}>
+                            <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Dir X</span>
+                            <input
+                                type="number"
+                                style={inputStyle}
+                                value={draft.candleDx || 0}
+                                onChange={e => setDraft({ ...draft, candleDx: parseFloat(e.target.value) || 0 })}
+                            />
+                        </label>
+                        <label style={{ flex: 1 }}>
+                            <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Dir Z</span>
+                            <input
+                                type="number"
+                                style={inputStyle}
+                                value={draft.candleDz || 0}
+                                onChange={e => setDraft({ ...draft, candleDz: parseFloat(e.target.value) || 0 })}
+                            />
+                        </label>
+                    </div>
+                    <label style={{ display: "block", marginBottom: 10 }}>
+                        <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Light Tint</span>
                         <input
-                            type="number"
-                            style={inputStyle}
-                            value={draft.candleDx || 0}
-                            onChange={e => setDraft({ ...draft, candleDx: parseFloat(e.target.value) || 0 })}
+                            type="color"
+                            style={{ ...inputStyle, height: 38, padding: 2 }}
+                            value={isHexColor(draft.lightColor) ? draft.lightColor : getDefaultLightTintForEntity(draft.type)}
+                            onChange={e => setDraft({ ...draft, lightColor: e.target.value })}
                         />
                     </label>
-                    <label style={{ flex: 1 }}>
-                        <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Dir Z</span>
+                </>
+            )}
+
+            {draft.type === "light" && (
+                <>
+                    <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                        <label style={{ flex: 1 }}>
+                            <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Radius</span>
+                            <input
+                                type="number"
+                                min={1}
+                                step={0.5}
+                                style={inputStyle}
+                                value={draft.lightRadius ?? DEFAULT_AREA_LIGHT_RADIUS}
+                                onChange={e => setDraft({ ...draft, lightRadius: parseFloat(e.target.value) || DEFAULT_AREA_LIGHT_RADIUS })}
+                            />
+                        </label>
+                        <label style={{ flex: 1 }}>
+                            <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Angle (deg)</span>
+                            <input
+                                type="number"
+                                min={5}
+                                max={90}
+                                step={1}
+                                style={inputStyle}
+                                value={draft.lightAngle ?? DEFAULT_AREA_LIGHT_ANGLE}
+                                onChange={e => setDraft({ ...draft, lightAngle: parseFloat(e.target.value) || DEFAULT_AREA_LIGHT_ANGLE })}
+                            />
+                        </label>
+                    </div>
+                    <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                        <label style={{ flex: 1 }}>
+                            <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Brightness</span>
+                            <input
+                                type="number"
+                                min={0}
+                                step={0.25}
+                                style={inputStyle}
+                                value={draft.lightBrightness ?? DEFAULT_AREA_LIGHT_BRIGHTNESS}
+                                onChange={e => setDraft({ ...draft, lightBrightness: parseFloat(e.target.value) || 0 })}
+                            />
+                        </label>
+                        <label style={{ flex: 1 }}>
+                            <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Height</span>
+                            <input
+                                type="number"
+                                min={1}
+                                step={0.5}
+                                style={inputStyle}
+                                value={draft.lightHeight ?? DEFAULT_AREA_LIGHT_HEIGHT}
+                                onChange={e => setDraft({ ...draft, lightHeight: parseFloat(e.target.value) || DEFAULT_AREA_LIGHT_HEIGHT })}
+                            />
+                        </label>
+                    </div>
+                    <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                        <label style={{ flex: 1 }}>
+                            <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Diffusion</span>
+                            <input
+                                type="number"
+                                min={0}
+                                max={1}
+                                step={0.05}
+                                style={inputStyle}
+                                value={draft.lightDiffusion ?? DEFAULT_AREA_LIGHT_DIFFUSION}
+                                onChange={e => setDraft({ ...draft, lightDiffusion: parseFloat(e.target.value) || 0 })}
+                            />
+                        </label>
+                        <label style={{ flex: 1 }}>
+                            <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Decay</span>
+                            <input
+                                type="number"
+                                min={0}
+                                step={0.1}
+                                style={inputStyle}
+                                value={draft.lightDecay ?? DEFAULT_AREA_LIGHT_DECAY}
+                                onChange={e => setDraft({ ...draft, lightDecay: parseFloat(e.target.value) || 0 })}
+                            />
+                        </label>
+                    </div>
+                    <label style={{ display: "block", marginBottom: 10 }}>
+                        <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Tint</span>
                         <input
-                            type="number"
-                            style={inputStyle}
-                            value={draft.candleDz || 0}
-                            onChange={e => setDraft({ ...draft, candleDz: parseFloat(e.target.value) || 0 })}
+                            type="color"
+                            style={{ ...inputStyle, height: 38, padding: 2 }}
+                            value={isHexColor(draft.lightColor) ? draft.lightColor : DEFAULT_AREA_LIGHT_TINT}
+                            onChange={e => setDraft({ ...draft, lightColor: e.target.value })}
                         />
                     </label>
-                </div>
+                </>
             )}
 
             {draft.type === "secret_door" && (

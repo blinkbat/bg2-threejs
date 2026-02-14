@@ -91,7 +91,7 @@ export function executeDebuffSkill(
     targetX: number,
     targetZ: number
 ): boolean {
-    const { unitsRef, hitFlashRef, setUnits, addLog } = ctx;
+    const { scene, unitsRef, hitFlashRef, setUnits, addLog } = ctx;
 
     // Find closest enemy to target position
     const target = findAndValidateEnemyTarget(ctx, casterId, targetX, targetZ);
@@ -117,6 +117,12 @@ export function executeDebuffSkill(
 
     const now = Date.now();
     consumeSkill(ctx, casterId, skill);
+    createAnimatedRing(scene, casterG.position.x, casterG.position.z, "#9b59b6", {
+        innerRadius: 0.14,
+        outerRadius: 0.28,
+        maxScale: 1.0,
+        duration: 180
+    });
 
     const casterData = UNIT_DATA[casterId];
     const targetData = getUnitStats(targetEnemy);
@@ -128,6 +134,12 @@ export function executeDebuffSkill(
         if (checkEnemyDefenses(enemyStats, targetEnemy.facing, casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z) === "frontShield") {
             soundFns.playBlock();
             addLog(`${casterData.name}'s ${skill.name} is blocked by ${targetData.name}'s shield!`, "#4488ff");
+            createAnimatedRing(scene, targetG.position.x, targetG.position.z, "#4488ff", {
+                innerRadius: 0.2,
+                outerRadius: 0.4,
+                maxScale: 1.2,
+                duration: 220
+            });
             return true;
         }
     }
@@ -156,6 +168,12 @@ export function executeDebuffSkill(
             soundFns.playHit();
             addLog(`${casterData.name}'s ${skill.name} hits ${targetData.name}!`, COLORS.damagePlayer);
             addLog(logStunned(targetData.name), "#9b59b6");
+            createAnimatedRing(scene, targetG.position.x, targetG.position.z, "#9b59b6", {
+                innerRadius: 0.2,
+                outerRadius: 0.45,
+                maxScale: 1.4,
+                duration: 320
+            });
 
             // Visual effect - purple flash
             const mesh = ctx.unitMeshRef.current[targetId];
@@ -166,6 +184,12 @@ export function executeDebuffSkill(
         } else {
             soundFns.playHit();
             addLog(`${casterData.name}'s ${skill.name} hits ${targetData.name}, but they resist the stun!`, COLORS.logNeutral);
+            createAnimatedRing(scene, targetG.position.x, targetG.position.z, "#bbbbbb", {
+                innerRadius: 0.12,
+                outerRadius: 0.3,
+                maxScale: 1.0,
+                duration: 180
+            });
         }
     } else {
         soundFns.playMiss();
@@ -226,6 +250,20 @@ export function executeTrapSkill(
     };
 
     projectilesRef.current.push(trapProjectile);
+
+    createAnimatedRing(scene, casterG.position.x, casterG.position.z, "#888888", {
+        innerRadius: 0.16,
+        outerRadius: 0.32,
+        maxScale: 1.0,
+        duration: 180
+    });
+    createAnimatedRing(scene, targetX, targetZ, COLORS.pinnedText, {
+        innerRadius: 0.25,
+        outerRadius: 0.45,
+        maxScale: skill.aoeRadius ?? 2,
+        duration: 420,
+        initialOpacity: 0.45
+    });
 
     addLog(logTrapThrown(casterData.name, skill.name), "#888888");
     soundFns.playAttack();  // Throwing sound
@@ -289,6 +327,12 @@ export function executeSanctuarySkill(
     }
 
     // Create visual ring effect
+    createAnimatedRing(scene, casterG.position.x, casterG.position.z, COLORS.sanctuary, {
+        innerRadius: 0.2,
+        outerRadius: 0.4,
+        maxScale: 1.15,
+        duration: 260
+    });
     createAnimatedRing(scene, targetX, targetZ, COLORS.sanctuary, { maxScale: radius });
 
     addLog(`${casterData.name} casts ${skill.name}, consecrating the ground!`, COLORS.sanctuaryText);
@@ -319,7 +363,7 @@ export function executeSummonSkill(
     casterId: number,
     skill: Skill
 ): boolean {
-    const { unitsStateRef, unitsRef, setUnits, addLog } = ctx;
+    const { scene, unitsStateRef, unitsRef, setUnits, addLog } = ctx;
     const caster = unitsStateRef.current.find(u => u.id === casterId);
     const casterG = unitsRef.current[casterId];
     if (!caster || !casterG) return false;
@@ -371,7 +415,13 @@ export function executeSummonSkill(
         summonGroup.userData.attackTarget = null;
     }
 
-    createAnimatedRing(ctx.scene, spawnPos.x, spawnPos.z, "#d7c09a", {
+    createAnimatedRing(scene, casterG.position.x, casterG.position.z, "#d7c09a", {
+        innerRadius: 0.16,
+        outerRadius: 0.34,
+        maxScale: 1.1,
+        duration: 230
+    });
+    createAnimatedRing(scene, spawnPos.x, spawnPos.z, "#d7c09a", {
         innerRadius: 0.4,
         outerRadius: 0.65,
         maxScale: 1.8

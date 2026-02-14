@@ -27,7 +27,7 @@ export interface EntityDef {
     id: string;
     x: number;
     z: number;
-    type: "enemy" | "chest" | "transition" | "candle" | "secret_door";
+    type: "enemy" | "chest" | "transition" | "candle" | "torch" | "light" | "secret_door";
     enemyType?: EnemyType;
     chestGold?: number;
     chestItems?: string;
@@ -40,6 +40,13 @@ export interface EntityDef {
     transitionH?: number;
     candleDx?: number;
     candleDz?: number;
+    lightColor?: string;
+    lightRadius?: number;
+    lightAngle?: number;
+    lightBrightness?: number;
+    lightHeight?: number;
+    lightDiffusion?: number;
+    lightDecay?: number;
     secretBlockX?: number;
     secretBlockZ?: number;
     secretBlockW?: number;

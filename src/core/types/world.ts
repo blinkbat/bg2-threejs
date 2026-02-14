@@ -9,6 +9,8 @@ export interface CandlePosition {
     z: number;
     dx: number;
     dz: number;
+    kind?: "candle" | "torch";
+    lightColor?: string;
 }
 
 export interface MergedObstacle {
@@ -72,6 +74,7 @@ export interface UnitGroup extends THREE.Group {
         facingRight?: boolean;  // Sprite facing direction (true = right, default)
         attackMoveTarget?: { x: number; z: number };  // Attack-move destination (resume after combat)
         visualFacing?: number;  // Smooth per-frame shield facing (decoupled from React state)
+        viewFadeOpacity?: number;  // Runtime fog visibility fade (0-1)
     };
 }
 

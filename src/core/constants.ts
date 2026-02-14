@@ -97,6 +97,8 @@ export const TRAP_MESH_SIZE = 0.25;        // Size of trap mesh
 // Visual Effects
 export const HEAL_FLASH_DURATION = 200;    // ms for green healing flash
 export const RING_EXPAND_DURATION = 400;   // ms for taunt ring animation
+export const DEFAULT_CANDLE_LIGHT_COLOR = "#ffaa44";
+export const DEFAULT_TORCH_LIGHT_COLOR = "#ff8844";
 
 // Animation Durations
 export const SWING_DURATION = 150;

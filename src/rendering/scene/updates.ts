@@ -8,7 +8,6 @@ import type { ChestMeshData } from "./types";
 
 interface LiquidTileAnimationData {
     liquidType: "lava";
-    baseY: number;
     wavePhase: number;
     waveSpeed: number;
     baseColor: THREE.Color;
@@ -20,7 +19,6 @@ function readLiquidData(value: unknown): LiquidTileAnimationData | null {
     if (!value || typeof value !== "object") return null;
 
     const liquidType = Reflect.get(value, "liquidType");
-    const baseY = Reflect.get(value, "baseY");
     const wavePhase = Reflect.get(value, "wavePhase");
     const waveSpeed = Reflect.get(value, "waveSpeed");
     const baseColor = Reflect.get(value, "baseColor");
@@ -28,12 +26,11 @@ function readLiquidData(value: unknown): LiquidTileAnimationData | null {
     const baseEmissiveIntensity = Reflect.get(value, "baseEmissiveIntensity");
 
     if (liquidType !== "lava") return null;
-    if (typeof baseY !== "number" || typeof wavePhase !== "number" || typeof waveSpeed !== "number") return null;
+    if (typeof wavePhase !== "number" || typeof waveSpeed !== "number") return null;
     if (!(baseColor instanceof THREE.Color)) return null;
 
     return {
         liquidType,
-        baseY,
         wavePhase,
         waveSpeed,
         baseColor,
@@ -71,13 +68,46 @@ export function updateCamera(camera: THREE.OrthographicCamera, offset: { x: numb
 // WATER
 // =============================================================================
 
+const LAVA_UPDATE_INTERVAL_MS = 66;
+let lastLavaUpdateTime = 0;
+
+function applyLavaPulse(
+    material: THREE.MeshStandardMaterial,
+    liquidData: LiquidTileAnimationData,
+    t: number
+): void {
+    const primaryWave = Math.sin(t * liquidData.waveSpeed + liquidData.wavePhase);
+    const secondaryWave = Math.sin(t * (liquidData.waveSpeed * 1.6) + liquidData.wavePhase * 0.73);
+    const pulse = 0.5 + (primaryWave * 0.7 + secondaryWave * 0.3) * 0.5;
+
+    if (liquidData.baseColor && liquidData.hotColor) {
+        material.color.copy(liquidData.baseColor).lerp(liquidData.hotColor, pulse * 0.35);
+    }
+    material.emissive.setRGB(1.0, 0.2, 0.05);
+    material.emissiveIntensity = (liquidData.baseEmissiveIntensity ?? 0.8) + pulse * 0.35;
+    material.roughness = 0.36 + (1 - pulse) * 0.12;
+    material.metalness = 0.16;
+}
+
 /**
  * Update animated liquid tiles (lava only).
  */
 export function updateWater(waterMesh: THREE.Object3D | null, time: number): void {
     if (!waterMesh) return;
+    if (time - lastLavaUpdateTime < LAVA_UPDATE_INTERVAL_MS) return;
+    lastLavaUpdateTime = time;
 
     const t = time * 0.001;
+    const sharedLiquidData = readLiquidData(Reflect.get(waterMesh.userData, "sharedLava"));
+    if (sharedLiquidData) {
+        const sharedMaterial = Reflect.get(waterMesh.userData, "sharedLava") as { material?: unknown };
+        const mat = sharedMaterial.material;
+        if (mat instanceof THREE.MeshStandardMaterial) {
+            applyLavaPulse(mat, sharedLiquidData, t);
+            return;
+        }
+    }
+
     waterMesh.traverse((obj: THREE.Object3D) => {
         if (!(obj instanceof THREE.Mesh)) return;
 
@@ -87,17 +117,7 @@ export function updateWater(waterMesh: THREE.Object3D | null, time: number): voi
         const mat = obj.material;
         if (!(mat instanceof THREE.MeshStandardMaterial)) return;
 
-        const primaryWave = Math.sin(t * liquidData.waveSpeed + liquidData.wavePhase);
-        const secondaryWave = Math.sin(t * (liquidData.waveSpeed * 1.6) + liquidData.wavePhase * 0.73);
-
-        const pulse = 0.5 + (primaryWave * 0.7 + secondaryWave * 0.3) * 0.5;
-        if (liquidData.baseColor && liquidData.hotColor) {
-            mat.color.copy(liquidData.baseColor).lerp(liquidData.hotColor, pulse * 0.35);
-        }
-        mat.emissive.setRGB(1.0, 0.2, 0.05);
-        mat.emissiveIntensity = (liquidData.baseEmissiveIntensity ?? 0.8) + pulse * 0.35;
-        mat.roughness = 0.36 + (1 - pulse) * 0.12;
-        mat.metalness = 0.16;
+        applyLavaPulse(mat, liquidData, t);
     });
 }
 
@@ -126,21 +146,43 @@ export function updateBillboards(billboards: THREE.Mesh[], camera: THREE.Camera)
 
 // Light LOD: only enable lights within this distance of camera focus
 const LIGHT_LOD_DISTANCE = 25;
+const MAX_VISIBLE_FLAME_LIGHTS = 4;
+const flameLightDistances: Array<{ light: THREE.Light; distSq: number }> = [];
 
 /**
  * Update light LOD - disable lights that are far from camera to save GPU cycles.
- * Since we now have ~9 room lights instead of 72, this is less critical but still helpful.
+ * Flame lights are additionally capped to nearest N to protect performance in dense areas.
  */
 export function updateLightLOD(
-    candleLights: THREE.PointLight[],
+    candleLights: THREE.Light[],
     cameraOffset: { x: number; z: number }
 ): void {
+    const lodDistanceSq = LIGHT_LOD_DISTANCE * LIGHT_LOD_DISTANCE;
+    flameLightDistances.length = 0;
+
     for (const light of candleLights) {
         const dx = light.position.x - cameraOffset.x;
         const dz = light.position.z - cameraOffset.z;
-        const dist = Math.sqrt(dx * dx + dz * dz);
-        // Enable light if within LOD distance, disable if far away
-        light.visible = dist < LIGHT_LOD_DISTANCE;
+        const distSq = dx * dx + dz * dz;
+        const withinLod = distSq < lodDistanceSq;
+        const role = Reflect.get(light.userData, "lightRole");
+
+        if (role === "area") {
+            light.visible = withinLod;
+            continue;
+        }
+
+        if (!withinLod) {
+            light.visible = false;
+            continue;
+        }
+
+        flameLightDistances.push({ light, distSq });
+    }
+
+    flameLightDistances.sort((a, b) => a.distSq - b.distSq);
+    for (let i = 0; i < flameLightDistances.length; i++) {
+        flameLightDistances[i].light.visible = i < MAX_VISIBLE_FLAME_LIGHTS;
     }
 }
 

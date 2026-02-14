@@ -5,7 +5,8 @@
 
 import type { Unit } from "./types";
 
-let nextUnitId = 1000;  // Start high to avoid collision with initial party IDs
+const MIN_DYNAMIC_UNIT_ID = 1000;
+let nextUnitId = MIN_DYNAMIC_UNIT_ID;  // Keep spawned IDs in a safe non-static range
 
 /** Get the next unique unit ID for spawning */
 export function getNextUnitId(): number {
@@ -15,5 +16,5 @@ export function getNextUnitId(): number {
 /** Initialize the unit ID counter based on existing units (call on game start/restart) */
 export function initializeUnitIdCounter(units: Unit[]): void {
     const maxId = Math.max(...units.map(u => u.id), 0);
-    nextUnitId = maxId + 1;
+    nextUnitId = Math.max(maxId + 1, MIN_DYNAMIC_UNIT_ID);
 }

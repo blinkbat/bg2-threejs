@@ -3,8 +3,20 @@
 // =============================================================================
 
 import * as THREE from "three";
-import { FOG_SCALE } from "../../core/constants";
+import { FOG_SCALE, DEFAULT_CANDLE_LIGHT_COLOR, DEFAULT_TORCH_LIGHT_COLOR } from "../../core/constants";
 import { getCurrentArea, getComputedAreaData } from "../../game/areas";
+import {
+    DEFAULT_AREA_LIGHT_ANGLE,
+    DEFAULT_AREA_LIGHT_BRIGHTNESS,
+    DEFAULT_AREA_LIGHT_DECAY,
+    DEFAULT_AREA_LIGHT_DIFFUSION,
+    DEFAULT_AREA_LIGHT_HEIGHT,
+    DEFAULT_AREA_LIGHT_RADIUS,
+    DEFAULT_AREA_LIGHT_TINT,
+    MAX_PINE_TREE_SIZE,
+    MAX_TREE_SIZE,
+    MIN_TREE_SIZE,
+} from "../../game/areas/types";
 import { getUnitStats } from "../../game/units";
 import type { Unit, UnitGroup, FogTexture } from "../../core/types";
 
@@ -250,34 +262,42 @@ function getFloorVariantColor(baseColor: string, x: number, z: number, char: str
     return varied;
 }
 
-interface LiquidTileAnimationData {
+interface SharedLavaAnimationData {
     liquidType: "lava";
-    baseY: number;
     wavePhase: number;
     waveSpeed: number;
     baseColor: THREE.Color;
-    hotColor?: THREE.Color;
+    hotColor: THREE.Color;
     baseEmissiveIntensity: number;
+    material: THREE.MeshStandardMaterial;
 }
 
-function registerLiquidTile(tile: THREE.Mesh, liquidType: "lava", x: number, z: number): void {
-    const mat = tile.material;
-    if (!(mat instanceof THREE.MeshStandardMaterial)) return;
+function hashAreaIdToUnitRange(areaId: string): number {
+    let hash = 0;
+    for (let i = 0; i < areaId.length; i++) {
+        hash = ((hash << 5) - hash) + areaId.charCodeAt(i);
+        hash |= 0;
+    }
+    const normalized = Math.abs(hash % 1000) / 1000;
+    return normalized;
+}
 
-    const wavePhase = (x * 0.73 + z * 1.21) % (Math.PI * 2);
-    const waveSpeed = 1.8 + ((x + z) % 4) * 0.16;
-
-    const liquidData: LiquidTileAnimationData = {
-        liquidType,
-        baseY: tile.position.y,
-        wavePhase,
-        waveSpeed,
-        baseColor: mat.color.clone(),
-        baseEmissiveIntensity: mat.emissiveIntensity,
+function createSharedLavaAnimationData(
+    areaId: string,
+    lavaTileCount: number,
+    material: THREE.MeshStandardMaterial
+): SharedLavaAnimationData {
+    const seed = hashAreaIdToUnitRange(areaId);
+    const densityFactor = Math.min(1, lavaTileCount / 180);
+    return {
+        liquidType: "lava",
+        wavePhase: seed * Math.PI * 2,
+        waveSpeed: 1.7 + densityFactor * 0.35,
+        baseColor: material.color.clone(),
+        hotColor: new THREE.Color("#ff8a00"),
+        baseEmissiveIntensity: material.emissiveIntensity,
+        material,
     };
-    liquidData.hotColor = new THREE.Color("#ff8a00");
-
-    tile.userData.liquid = liquidData;
 }
 
 function hasLitMaterial(material: THREE.Material | THREE.Material[]): boolean {
@@ -320,6 +340,99 @@ function applyShadowDefaults(scene: THREE.Scene): void {
             return;
         }
     });
+}
+
+interface CandleLightSource {
+    x: number;
+    y: number;
+    z: number;
+    kind: "candle" | "torch";
+    colorHex: string;
+    intensity: number;
+    range: number;
+}
+
+interface CandleLightCluster {
+    colorHex: string;
+    members: CandleLightSource[];
+    weightedX: number;
+    weightedY: number;
+    weightedZ: number;
+    totalWeight: number;
+    maxRange: number;
+    totalIntensity: number;
+}
+
+const CANDLE_LIGHT_CLUSTER_RADIUS = 5.5;
+const CANDLE_LIGHT_CLUSTER_MAX_MEMBERS = 6;
+
+function normalizeHexColor(color: string | undefined, fallback: string): string {
+    if (typeof color === "string" && /^#[0-9a-fA-F]{6}$/.test(color)) {
+        return color.toLowerCase();
+    }
+    return fallback;
+}
+
+function clampFinite(value: number | undefined, min: number, max: number, fallback: number): number {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+        return fallback;
+    }
+    return Math.max(min, Math.min(max, value));
+}
+
+function createCluster(source: CandleLightSource): CandleLightCluster {
+    return {
+        colorHex: source.colorHex,
+        members: [source],
+        weightedX: source.x * source.intensity,
+        weightedY: source.y * source.intensity,
+        weightedZ: source.z * source.intensity,
+        totalWeight: source.intensity,
+        maxRange: source.range,
+        totalIntensity: source.intensity,
+    };
+}
+
+function addSourceToCluster(cluster: CandleLightCluster, source: CandleLightSource): void {
+    cluster.members.push(source);
+    cluster.weightedX += source.x * source.intensity;
+    cluster.weightedY += source.y * source.intensity;
+    cluster.weightedZ += source.z * source.intensity;
+    cluster.totalWeight += source.intensity;
+    cluster.maxRange = Math.max(cluster.maxRange, source.range);
+    cluster.totalIntensity += source.intensity;
+}
+
+function buildCandleLightClusters(sources: CandleLightSource[]): CandleLightCluster[] {
+    const clusters: CandleLightCluster[] = [];
+
+    for (const source of sources) {
+        let bestCluster: CandleLightCluster | null = null;
+        let bestDistance = Number.POSITIVE_INFINITY;
+
+        for (const cluster of clusters) {
+            if (cluster.colorHex !== source.colorHex) continue;
+            if (cluster.members.length >= CANDLE_LIGHT_CLUSTER_MAX_MEMBERS) continue;
+
+            const cx = cluster.weightedX / cluster.totalWeight;
+            const cz = cluster.weightedZ / cluster.totalWeight;
+            const dx = source.x - cx;
+            const dz = source.z - cz;
+            const distance = Math.hypot(dx, dz);
+            if (distance <= CANDLE_LIGHT_CLUSTER_RADIUS && distance < bestDistance) {
+                bestCluster = cluster;
+                bestDistance = distance;
+            }
+        }
+
+        if (bestCluster) {
+            addSourceToCluster(bestCluster, source);
+        } else {
+            clusters.push(createCluster(source));
+        }
+    }
+
+    return clusters;
 }
 
 // =============================================================================
@@ -391,22 +504,19 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         return { centerX, centerZ, radius, cells };
     };
 
-    // Create sky background - gradient for both outdoor and dungeon
+    // Create sky background - derived from area background color.
     const canvas = document.createElement("canvas");
     canvas.width = 2;
     canvas.height = 256;
     const ctx = canvas.getContext("2d")!;
     const gradient = ctx.createLinearGradient(0, 0, 0, 256);
-    if (area.id === "forest") {
-        gradient.addColorStop(0, "#0a1520");    // Very dark blue at top
-        gradient.addColorStop(0.5, "#1a3040");  // Dark blue-gray
-        gradient.addColorStop(1, "#2a4a60");    // Medium dark blue at bottom (horizon)
-    } else {
-        // Dungeon gradient - very dark with subtle color variation
-        gradient.addColorStop(0, "#020204");    // Almost black at top
-        gradient.addColorStop(0.5, "#050508");  // Very dark blue-gray
-        gradient.addColorStop(1, "#08080c");    // Slightly lighter at bottom
-    }
+    const backgroundBase = new THREE.Color(area.backgroundColor);
+    const topColor = backgroundBase.clone().lerp(new THREE.Color("#000000"), area.id === "forest" ? 0.72 : 0.82);
+    const midColor = backgroundBase.clone().lerp(new THREE.Color("#000000"), area.id === "forest" ? 0.52 : 0.68);
+    const bottomColor = backgroundBase.clone().lerp(new THREE.Color("#000000"), area.id === "forest" ? 0.28 : 0.5);
+    gradient.addColorStop(0, `#${topColor.getHexString()}`);
+    gradient.addColorStop(0.5, `#${midColor.getHexString()}`);
+    gradient.addColorStop(1, `#${bottomColor.getHexString()}`);
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, 2, 256);
     const skyTexture = new THREE.CanvasTexture(canvas);
@@ -586,16 +696,12 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
             metalness: 0.4,
             roughness: 0.3,
         });
+        const lavaPositions: Array<{ x: number; z: number }> = [];
         for (let z = 0; z < area.terrain.length; z++) {
             for (let x = 0; x < (area.terrain[z]?.length ?? 0); x++) {
                 const char = area.terrain[z][x];
                 if (char === "~") {
-                    const tile = new THREE.Mesh(tileGeo, lavaMat);
-                    tile.rotation.x = -Math.PI / 2;
-                    tile.position.set(x + 0.5, 0.002, z + 0.5);
-                    tile.name = "lava";
-                    registerLiquidTile(tile, "lava", x, z);
-                    liquidTiles.add(tile);
+                    lavaPositions.push({ x, z });
                     hasLiquidTiles = true;
                 } else if (char === "w") {
                     const corners = getFloorCornerFlags(area.terrain, x, z, "w");
@@ -611,6 +717,23 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 }
             }
         }
+
+        if (lavaPositions.length > 0) {
+            const lavaMesh = new THREE.InstancedMesh(tileGeo, lavaMat, lavaPositions.length);
+            lavaMesh.name = "lava";
+            lavaMesh.userData.liquid = true;
+            const transform = new THREE.Object3D();
+            transform.rotation.x = -Math.PI / 2;
+            for (let i = 0; i < lavaPositions.length; i++) {
+                const pos = lavaPositions[i];
+                transform.position.set(pos.x + 0.5, 0.002, pos.z + 0.5);
+                transform.updateMatrix();
+                lavaMesh.setMatrixAt(i, transform.matrix);
+            }
+            lavaMesh.instanceMatrix.needsUpdate = true;
+            liquidTiles.add(lavaMesh);
+            liquidTiles.userData.sharedLava = createSharedLavaAnimationData(area.id, lavaPositions.length, lavaMat);
+        }
     }
     if (hasLiquidTiles) {
         waterMesh = liquidTiles;
@@ -618,43 +741,114 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         scene.remove(liquidTiles);
     }
 
-    // Torches with flames and lights (only in areas with candles)
-    // PERF OPTIMIZATION: Use 1 light per room instead of per-candle (~72 -> ~9 lights)
+    // Candle/torch meshes + clustered lights for performance.
     const flames: THREE.Mesh[] = [];
-    const candleMeshes: THREE.Mesh[] = [];  // Track candle bodies for occlusion fading
-    const candleLights: THREE.PointLight[] = [];
+    const candleMeshes: THREE.Mesh[] = [];  // Track candle and torch bodies for occlusion fading
+    const candleLights: THREE.Light[] = [];
+    const candleLightSources: CandleLightSource[] = [];
 
-    // Share materials across all candles for better batching
-    // Each candle needs its own material instance for individual opacity control
     const baseCandleMat = { color: "#e8d4a8", metalness: 0.1, roughness: 0.9, transparent: true, opacity: 1 };
-    const flameMat = new THREE.MeshBasicMaterial({ color: "#ffcc44", transparent: true, opacity: 0.85 });
+    const baseTorchMat = { color: "#b2874a", metalness: 0.22, roughness: 0.72, transparent: true, opacity: 1 };
+    const baseFlameMat = new THREE.MeshBasicMaterial({ color: "#ffcc44", transparent: true, opacity: 0.85 });
     const candleGeo = new THREE.CylinderGeometry(0.06, 0.08, 0.3, 6);
-    const flameGeo = new THREE.SphereGeometry(0.08, 4, 4);
+    const torchGeo = new THREE.CylinderGeometry(0.09, 0.12, 0.48, 7);
+    const candleFlameGeo = new THREE.SphereGeometry(0.08, 5, 5);
+    const torchFlameGeo = new THREE.SphereGeometry(0.13, 6, 6);
 
-    computed.candlePositions.forEach((pos, index) => {
-        // Each candle needs its own material for individual opacity
-        const candleMat = new THREE.MeshStandardMaterial(baseCandleMat);
-        const candle = new THREE.Mesh(candleGeo, candleMat);
-        candle.position.set(pos.x + pos.dx * 0.3, 1.85, pos.z + pos.dz * 0.3);
-        scene.add(candle);
-        candleMeshes.push(candle);
+    for (let index = 0; index < computed.candlePositions.length; index++) {
+        const pos = computed.candlePositions[index];
+        const kind = pos.kind === "torch" ? "torch" : "candle";
+        const defaultColor = kind === "torch" ? DEFAULT_TORCH_LIGHT_COLOR : DEFAULT_CANDLE_LIGHT_COLOR;
+        const lightColorHex = normalizeHexColor(pos.lightColor, defaultColor);
+        const offset = kind === "torch" ? 0.35 : 0.3;
+        const x = pos.x + pos.dx * offset;
+        const z = pos.z + pos.dz * offset;
+        const bodyY = kind === "torch" ? 1.95 : 1.85;
+        const flameY = kind === "torch" ? 2.24 : 2.05;
 
-        // Flame also needs own material for individual opacity
-        const flameMatInstance = flameMat.clone();
-        const flame = new THREE.Mesh(flameGeo, flameMatInstance);
-        flame.position.set(pos.x + pos.dx * 0.3, 2.05, pos.z + pos.dz * 0.3);
-        flame.scale.y = 1.8;
+        const bodyMat = new THREE.MeshStandardMaterial(kind === "torch" ? baseTorchMat : baseCandleMat);
+        const body = new THREE.Mesh(kind === "torch" ? torchGeo : candleGeo, bodyMat);
+        body.position.set(x, bodyY, z);
+        scene.add(body);
+        candleMeshes.push(body);
+
+        const flameMat = baseFlameMat.clone();
+        const flameColor = new THREE.Color(lightColorHex).lerp(new THREE.Color("#ffdd88"), 0.22);
+        flameMat.color.copy(flameColor);
+        const flame = new THREE.Mesh(kind === "torch" ? torchFlameGeo : candleFlameGeo, flameMat);
+        flame.position.set(x, flameY, z);
+        flame.scale.y = kind === "torch" ? 2.2 : 1.8;
         scene.add(flame);
         flames.push(flame);
 
-        // Create one light per candle cluster (every 4th candle to reduce light count)
-        if (index % 4 === 0) {
-            const light = new THREE.PointLight("#ffaa44", 12, 8, 1.5);
-            light.position.set(pos.x + pos.dx * 0.3, 2.5, pos.z + pos.dz * 0.3);
-            scene.add(light);
-            candleLights.push(light);
+        candleLightSources.push({
+            x,
+            y: flameY + 0.38,
+            z,
+            kind,
+            colorHex: lightColorHex,
+            intensity: kind === "torch" ? 16 : 10,
+            range: kind === "torch" ? 10 : 7,
+        });
+    }
+
+    const lightClusters = buildCandleLightClusters(candleLightSources);
+    for (const cluster of lightClusters) {
+        const firstMember = cluster.members[0];
+        if (!firstMember) continue;
+        const isSingle = cluster.members.length === 1;
+        const centerX = cluster.weightedX / cluster.totalWeight;
+        const centerY = cluster.weightedY / cluster.totalWeight;
+        const centerZ = cluster.weightedZ / cluster.totalWeight;
+
+        let maxDistanceFromCenter = 0;
+        for (const member of cluster.members) {
+            const dx = member.x - centerX;
+            const dz = member.z - centerZ;
+            maxDistanceFromCenter = Math.max(maxDistanceFromCenter, Math.hypot(dx, dz));
         }
-    });
+
+        const baseIntensity = isSingle
+            ? firstMember.intensity
+            : Math.min(30, cluster.totalIntensity * 0.72);
+        const radiusBoost = Math.log2(cluster.members.length + 1) * 0.8 + maxDistanceFromCenter * 1.6;
+        const lightRange = isSingle
+            ? firstMember.range
+            : Math.min(18, cluster.maxRange + radiusBoost);
+
+        const light = new THREE.PointLight(cluster.colorHex, baseIntensity, lightRange, 1.45);
+        light.position.set(centerX, centerY, centerZ);
+        light.userData.baseIntensity = baseIntensity;
+        light.userData.flickerStrength = 0.12;
+        light.userData.lightRole = "flame";
+        scene.add(light);
+        candleLights.push(light);
+    }
+
+    // Editor-authored high lights.
+    if (area.lights) {
+        for (const areaLight of area.lights) {
+            const tint = normalizeHexColor(areaLight.tint, DEFAULT_AREA_LIGHT_TINT);
+            const radius = clampFinite(areaLight.radius, 1, 60, DEFAULT_AREA_LIGHT_RADIUS);
+            const angleDeg = clampFinite(areaLight.angle, 5, 90, DEFAULT_AREA_LIGHT_ANGLE);
+            const brightness = clampFinite(areaLight.brightness, 0, 50, DEFAULT_AREA_LIGHT_BRIGHTNESS);
+            const height = clampFinite(areaLight.height, 1, 30, DEFAULT_AREA_LIGHT_HEIGHT);
+            const diffusion = clampFinite(areaLight.diffusion, 0, 1, DEFAULT_AREA_LIGHT_DIFFUSION);
+            const decay = clampFinite(areaLight.decay, 0, 3, DEFAULT_AREA_LIGHT_DECAY);
+            const angleRad = THREE.MathUtils.degToRad(angleDeg);
+
+            const spot = new THREE.SpotLight(tint, brightness, radius, angleRad, diffusion, decay);
+            spot.position.set(areaLight.x, height, areaLight.z);
+            spot.target.position.set(areaLight.x, 0, areaLight.z);
+            spot.castShadow = false;
+            spot.userData.baseIntensity = brightness;
+            spot.userData.flickerStrength = 0;
+            spot.userData.lightRole = "area";
+            scene.add(spot);
+            scene.add(spot.target);
+            candleLights.push(spot);
+        }
+    }
 
     // Treasure chests from area data
     // Shared geometries for all chests
@@ -778,8 +972,12 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
 
     area.trees.forEach((tree, i) => {
         const treePartMeshes: THREE.Mesh[] = [];
-        const scale = tree.size * treeSizeMultiplier;
         const treeType = tree.type ?? "pine";
+        const clampedSize = Math.max(MIN_TREE_SIZE, Math.min(MAX_TREE_SIZE, tree.size));
+        const effectiveSize = treeType === "pine"
+            ? Math.min(clampedSize, MAX_PINE_TREE_SIZE)
+            : clampedSize;
+        const scale = effectiveSize * treeSizeMultiplier;
 
         // Taller trees are skinnier - use inverse relationship with randomness
         // skinnyFactor ranges from ~0.6 (for large trees) to ~1.0 (for small trees)

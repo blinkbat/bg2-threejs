@@ -1,9 +1,29 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Link } from "react-router-dom";
 import Tippy from "@tippyjs/react";
-import type { AreaId, AreaData } from "../game/areas/types";
+import {
+    DEFAULT_AREA_LIGHT_ANGLE,
+    DEFAULT_AREA_LIGHT_BRIGHTNESS,
+    DEFAULT_AREA_LIGHT_DECAY,
+    DEFAULT_AREA_LIGHT_DIFFUSION,
+    DEFAULT_AREA_LIGHT_HEIGHT,
+    DEFAULT_AREA_LIGHT_RADIUS,
+    DEFAULT_AREA_LIGHT_TINT,
+    MAX_PINE_TREE_SIZE,
+    MAX_TREE_SIZE,
+    MIN_TREE_SIZE,
+    type AreaId,
+    type AreaData,
+    type EnemySpawn,
+    type AreaTransition,
+    type ChestLocation,
+    type TreeLocation,
+    type Decoration,
+    type AreaLight,
+} from "../game/areas/types";
 import { AREAS } from "../game/areas";
 import { areaDataToText } from "./areaTextFormat";
+import { DEFAULT_CANDLE_LIGHT_COLOR, DEFAULT_TORCH_LIGHT_COLOR } from "../core/constants";
 
 // Editor modules
 import type { Tool, Layer, MapMetadata, EntityDef, TreeDef, DecorationDef, EditorSnapshot } from "./types";
@@ -11,6 +31,42 @@ import { getAvailableAreaIds, BASE_CELL_SIZE, MAX_HISTORY, LAYER_COLORS, LAYER_B
 import { registerAreaFromText } from "../game/areas";
 import { EntityEditPopup, TreeEditPopup, DecorationEditPopup } from "./popups";
 import { ConnectionsPanel } from "./panels";
+
+function getCharColor(char: string, layer: Layer): string {
+    return LAYER_COLORS[layer].get(char) ?? "#666";
+}
+
+function getLayerColor(layer: Layer): string {
+    switch (layer) {
+        case "geometry": return "#888";
+        case "terrain": return "#f80";
+        case "floor": return "#a86";
+        case "props": return "#4a4";
+        case "entities": return "#f44";
+    }
+}
+
+function drawLayer(ctx: CanvasRenderingContext2D, layer: string[][], layerType: Layer, cellSize: number): void {
+    for (let z = 0; z < layer.length; z++) {
+        for (let x = 0; x < layer[z].length; x++) {
+            const char = layer[z][x];
+            if (char === ".") continue;
+
+            const color = getCharColor(char, layerType);
+            ctx.fillStyle = color;
+            ctx.fillRect(x * cellSize + 1, z * cellSize + 1, cellSize - 2, cellSize - 2);
+
+            // Draw char label (skip for floor layer - just show color)
+            if (layerType !== "floor") {
+                ctx.fillStyle = "#fff";
+                ctx.font = "14px monospace";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText(char, x * cellSize + cellSize / 2, z * cellSize + cellSize / 2);
+            }
+        }
+    }
+}
 
 // =============================================================================
 // COMPONENT
@@ -71,6 +127,7 @@ export function MapEditor() {
 
     // Canvas refs
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const saveMapRef = useRef<(() => void) | null>(null);
     const [isPainting, setIsPainting] = useState(false);
     const [zoom, setZoom] = useState(1);
     const [isometric, setIsometric] = useState(false);
@@ -142,7 +199,7 @@ export function MapEditor() {
         if (historyRef.current.length === 0) {
             pushHistory();
         }
-    }, []);
+    }, [pushHistory]);
 
     // Keyboard shortcuts for undo/redo
     useEffect(() => {
@@ -207,11 +264,11 @@ export function MapEditor() {
 
     // Resize layers when dimensions change
     useEffect(() => {
-        setGeometryLayer(resizeLayer(geometryLayer, metadata.width, metadata.height, "."));
-        setTerrainLayer(resizeLayer(terrainLayer, metadata.width, metadata.height, "."));
-        setFloorLayer(resizeLayer(floorLayer, metadata.width, metadata.height, "."));
-        setPropsLayer(resizeLayer(propsLayer, metadata.width, metadata.height, "."));
-        setEntitiesLayer(resizeLayer(entitiesLayer, metadata.width, metadata.height, "."));
+        setGeometryLayer(prev => resizeLayer(prev, metadata.width, metadata.height, "."));
+        setTerrainLayer(prev => resizeLayer(prev, metadata.width, metadata.height, "."));
+        setFloorLayer(prev => resizeLayer(prev, metadata.width, metadata.height, "."));
+        setPropsLayer(prev => resizeLayer(prev, metadata.width, metadata.height, "."));
+        setEntitiesLayer(prev => resizeLayer(prev, metadata.width, metadata.height, "."));
     }, [metadata.width, metadata.height]);
 
     // Draw canvas
@@ -230,11 +287,11 @@ export function MapEditor() {
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         // Draw layers bottom to top (floor first as base, then everything on top)
-        if (layerVisibility.floor) drawLayer(ctx, floorLayer, "floor");
-        if (layerVisibility.geometry) drawLayer(ctx, geometryLayer, "geometry");
-        if (layerVisibility.terrain) drawLayer(ctx, terrainLayer, "terrain");
-        if (layerVisibility.props) drawLayer(ctx, propsLayer, "props");
-        if (layerVisibility.entities) drawLayer(ctx, entitiesLayer, "entities");
+        if (layerVisibility.floor) drawLayer(ctx, floorLayer, "floor", CELL_SIZE);
+        if (layerVisibility.geometry) drawLayer(ctx, geometryLayer, "geometry", CELL_SIZE);
+        if (layerVisibility.terrain) drawLayer(ctx, terrainLayer, "terrain", CELL_SIZE);
+        if (layerVisibility.props) drawLayer(ctx, propsLayer, "props", CELL_SIZE);
+        if (layerVisibility.entities) drawLayer(ctx, entitiesLayer, "entities", CELL_SIZE);
 
         // Grid
         if (showGrid) {
@@ -326,42 +383,6 @@ export function MapEditor() {
 
     }, [geometryLayer, terrainLayer, floorLayer, propsLayer, entitiesLayer, metadata, showGrid, layerVisibility, activeLayer, CELL_SIZE, doorDrag, entities]);
 
-    function drawLayer(ctx: CanvasRenderingContext2D, layer: string[][], layerType: Layer) {
-        for (let z = 0; z < layer.length; z++) {
-            for (let x = 0; x < layer[z].length; x++) {
-                const char = layer[z][x];
-                if (char === ".") continue;
-
-                const color = getCharColor(char, layerType);
-                ctx.fillStyle = color;
-                ctx.fillRect(x * CELL_SIZE + 1, z * CELL_SIZE + 1, CELL_SIZE - 2, CELL_SIZE - 2);
-
-                // Draw char label (skip for floor layer - just show color)
-                if (layerType !== "floor") {
-                    ctx.fillStyle = "#fff";
-                    ctx.font = "14px monospace";
-                    ctx.textAlign = "center";
-                    ctx.textBaseline = "middle";
-                    ctx.fillText(char, x * CELL_SIZE + CELL_SIZE / 2, z * CELL_SIZE + CELL_SIZE / 2);
-                }
-            }
-        }
-    }
-
-    function getCharColor(char: string, layer: Layer): string {
-        return LAYER_COLORS[layer].get(char) ?? "#666";
-    }
-
-    function getLayerColor(layer: Layer): string {
-        switch (layer) {
-            case "geometry": return "#888";
-            case "terrain": return "#f80";
-            case "floor": return "#a86";
-            case "props": return "#4a4";
-            case "entities": return "#f44";
-        }
-    }
-
     const getActiveLayer = useCallback((): string[][] => {
         switch (activeLayer) {
             case "geometry": return geometryLayer;
@@ -385,6 +406,15 @@ export function MapEditor() {
     const paintCell = useCallback((x: number, z: number) => {
         const layer = getActiveLayer();
         if (x < 0 || x >= metadata.width || z < 0 || z >= metadata.height) return;
+        if (
+            activeLayer === "entities"
+            && activeTool === "paint"
+            && activeBrush === "E"
+            && isBlockingPropCell(propsLayer, x, z)
+        ) {
+            console.warn(`Blocked enemy placement at (${x}, ${z}) due to blocking prop/tree.`);
+            return;
+        }
 
         const newLayer = layer.map(row => [...row]);
         const halfSize = Math.floor(brushSize / 2);
@@ -428,7 +458,26 @@ export function MapEditor() {
                     }]);
                 } else if (activeBrush === "L") {
                     setEntities(prev => [...prev, {
-                        id: entityId, x, z, type: "candle", candleDx: 0, candleDz: 1
+                        id: entityId, x, z, type: "candle",
+                        candleDx: 0, candleDz: 1,
+                        lightColor: DEFAULT_CANDLE_LIGHT_COLOR
+                    }]);
+                } else if (activeBrush === "Y") {
+                    setEntities(prev => [...prev, {
+                        id: entityId, x, z, type: "torch",
+                        candleDx: 0, candleDz: 1,
+                        lightColor: DEFAULT_TORCH_LIGHT_COLOR
+                    }]);
+                } else if (activeBrush === "H") {
+                    setEntities(prev => [...prev, {
+                        id: entityId, x: x + 0.5, z: z + 0.5, type: "light",
+                        lightRadius: DEFAULT_AREA_LIGHT_RADIUS,
+                        lightAngle: DEFAULT_AREA_LIGHT_ANGLE,
+                        lightColor: DEFAULT_AREA_LIGHT_TINT,
+                        lightBrightness: DEFAULT_AREA_LIGHT_BRIGHTNESS,
+                        lightHeight: DEFAULT_AREA_LIGHT_HEIGHT,
+                        lightDiffusion: DEFAULT_AREA_LIGHT_DIFFUSION,
+                        lightDecay: DEFAULT_AREA_LIGHT_DECAY,
                     }]);
                 } else if (activeBrush === "S") {
                     setEntities(prev => [...prev, {
@@ -446,7 +495,7 @@ export function MapEditor() {
                 }
             }
         }
-    }, [getActiveLayer, setActiveLayerData, activeTool, activeBrush, brushSize, metadata.width, metadata.height, activeLayer, entities]);
+    }, [getActiveLayer, setActiveLayerData, activeTool, activeBrush, brushSize, metadata.width, metadata.height, activeLayer, entities, propsLayer]);
 
     const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
         // Ignore right-click (handled by onContextMenu)
@@ -594,7 +643,13 @@ export function MapEditor() {
 
     const updateTree = (index: number, updated: TreeDef) => {
         pushHistory();
-        setTrees(prev => prev.map((t, i) => i === index ? updated : t));
+        const normalizedType = updated.type ?? "pine";
+        const normalized: TreeDef = {
+            ...updated,
+            type: normalizedType,
+            size: clampTreeSizeByType(updated.size, normalizedType),
+        };
+        setTrees(prev => prev.map((t, i) => i === index ? normalized : t));
         setEditingTree(null);
     };
 
@@ -643,7 +698,15 @@ export function MapEditor() {
         setEntitiesLayer(newEntities);
 
         // Store detailed data that can't be shown in grid
-        setTrees(area.trees.map(t => ({ x: t.x, z: t.z, size: t.size, type: t.type })));
+        setTrees(area.trees.map(t => {
+            const normalizedType = t.type ?? "pine";
+            return {
+                x: t.x,
+                z: t.z,
+                size: clampTreeSizeByType(t.size, normalizedType),
+                type: normalizedType,
+            };
+        }));
         setDecorations((area.decorations ?? []).map(d => ({ x: d.x, z: d.z, type: d.type, rotation: d.rotation, size: d.size })));
 
         // Build entity definitions
@@ -667,7 +730,30 @@ export function MapEditor() {
             });
         });
         (area.candles ?? []).forEach(c => {
-            entityDefs.push({ id: `e${entityId++}`, x: c.x, z: c.z, type: "candle", candleDx: c.dx, candleDz: c.dz });
+            entityDefs.push({
+                id: `e${entityId++}`,
+                x: c.x,
+                z: c.z,
+                type: c.kind === "torch" ? "torch" : "candle",
+                candleDx: c.dx,
+                candleDz: c.dz,
+                lightColor: normalizeLightHexColor(c.lightColor, c.kind === "torch" ? DEFAULT_TORCH_LIGHT_COLOR : DEFAULT_CANDLE_LIGHT_COLOR),
+            });
+        });
+        (area.lights ?? []).forEach(l => {
+            entityDefs.push({
+                id: `e${entityId++}`,
+                x: l.x,
+                z: l.z,
+                type: "light",
+                lightRadius: l.radius,
+                lightAngle: l.angle,
+                lightColor: normalizeLightHexColor(l.tint, DEFAULT_AREA_LIGHT_TINT),
+                lightBrightness: l.brightness,
+                lightHeight: l.height,
+                lightDiffusion: l.diffusion,
+                lightDecay: l.decay ?? DEFAULT_AREA_LIGHT_DECAY,
+            });
         });
         (area.secretDoors ?? []).forEach(s => {
             entityDefs.push({
@@ -747,6 +833,26 @@ export function MapEditor() {
             setSaveStatus("error");
         }
     };
+    saveMapRef.current = () => {
+        if (saveStatus !== "saving") {
+            void saveMap();
+        }
+    };
+
+    useEffect(() => {
+        const handleSaveKeyDown = (e: KeyboardEvent) => {
+            const isSaveShortcut = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s";
+            if (!isSaveShortcut || e.repeat) {
+                return;
+            }
+
+            e.preventDefault();
+            saveMapRef.current?.();
+        };
+
+        window.addEventListener("keydown", handleSaveKeyDown);
+        return () => window.removeEventListener("keydown", handleSaveKeyDown);
+    }, []);
 
     const buildAreaDataFromEditor = (): AreaData => {
         // Extract trees and decorations from props layer, merging with detailed state for metadata
@@ -754,7 +860,14 @@ export function MapEditor() {
         const mergedTrees: TreeLocation[] = gridProps.trees.map(gt => {
             // Find matching tree in state for metadata (size), grid-derived type wins
             const stateTree = trees.find(t => Math.floor(t.x) === gt.x && Math.floor(t.z) === gt.z);
-            return stateTree ? { ...stateTree, type: gt.type } : { x: gt.x, z: gt.z, size: 1.0, type: gt.type };
+            const normalizedType = gt.type ?? stateTree?.type ?? "pine";
+            const sourceSize = stateTree?.size ?? gt.size;
+            return {
+                x: gt.x,
+                z: gt.z,
+                size: clampTreeSizeByType(sourceSize, normalizedType),
+                type: normalizedType,
+            };
         });
         const mergedDecorations: Decoration[] = gridProps.decorations.map(gd => {
             // Find matching decoration in state for metadata (rotation, size)
@@ -764,10 +877,18 @@ export function MapEditor() {
 
         // Extract enemies and chests from entities layer, merging with detailed state
         const gridEntities = extractEntitiesFromGrid(entitiesLayer);
-        const enemySpawns: EnemySpawn[] = gridEntities.enemies.map(ge => {
+        const rawEnemySpawns: EnemySpawn[] = gridEntities.enemies.map(ge => {
             const stateEnemy = entities.find(e => e.type === "enemy" && Math.floor(e.x) === ge.x && Math.floor(e.z) === ge.z);
             return { x: ge.x + 0.5, z: ge.z + 0.5, type: stateEnemy?.enemyType ?? "skeleton_warrior" };
         });
+        const enemySpawns = sanitizeEnemySpawns(
+            rawEnemySpawns,
+            geometryLayer,
+            terrainLayer,
+            propsLayer,
+            metadata.width,
+            metadata.height
+        );
         const chestList: ChestLocation[] = gridEntities.chests.map(gc => {
             const stateChest = entities.find(e => e.type === "chest" && Math.floor(e.x) === gc.x && Math.floor(e.z) === gc.z);
             if (stateChest) {
@@ -798,8 +919,35 @@ export function MapEditor() {
 
         // Candles come from state
         const candleList = entities
-            .filter(e => e.type === "candle")
-            .map(e => ({ x: e.x, z: e.z, dx: e.candleDx ?? 0, dz: e.candleDz ?? 0 }));
+            .filter(e => e.type === "candle" || e.type === "torch")
+            .map(e => {
+                const kind: "candle" | "torch" = e.type === "torch" ? "torch" : "candle";
+                const defaultColor = kind === "torch" ? DEFAULT_TORCH_LIGHT_COLOR : DEFAULT_CANDLE_LIGHT_COLOR;
+                const normalizedColor = normalizeLightHexColor(e.lightColor, defaultColor);
+                return {
+                    x: e.x,
+                    z: e.z,
+                    dx: e.candleDx ?? 0,
+                    dz: e.candleDz ?? 0,
+                    kind,
+                    lightColor: normalizedColor,
+                };
+            });
+
+        // High lights come from state
+        const lightList: AreaLight[] = entities
+            .filter(e => e.type === "light")
+            .map(e => ({
+                x: e.x,
+                z: e.z,
+                radius: clampFiniteNumber(e.lightRadius, 1, 60, DEFAULT_AREA_LIGHT_RADIUS),
+                angle: clampFiniteNumber(e.lightAngle, 5, 90, DEFAULT_AREA_LIGHT_ANGLE),
+                tint: normalizeLightHexColor(e.lightColor, DEFAULT_AREA_LIGHT_TINT),
+                brightness: clampFiniteNumber(e.lightBrightness, 0, 50, DEFAULT_AREA_LIGHT_BRIGHTNESS),
+                height: clampFiniteNumber(e.lightHeight, 1, 30, DEFAULT_AREA_LIGHT_HEIGHT),
+                diffusion: clampFiniteNumber(e.lightDiffusion, 0, 1, DEFAULT_AREA_LIGHT_DIFFUSION),
+                decay: clampFiniteNumber(e.lightDecay, 0, 3, DEFAULT_AREA_LIGHT_DECAY),
+            }));
 
         // Secret doors come from state
         const secretDoorList = entities
@@ -831,6 +979,7 @@ export function MapEditor() {
             trees: mergedTrees,
             decorations: mergedDecorations.length > 0 ? mergedDecorations : undefined,
             candles: candleList.length > 0 ? candleList : undefined,
+            lights: lightList.length > 0 ? lightList : undefined,
             secretDoors: secretDoorList.length > 0 ? secretDoorList : undefined,
         };
     };
@@ -841,6 +990,29 @@ export function MapEditor() {
 
     return (
         <div style={{ display: "flex", height: "100vh", background: "#1a1a2e", color: "#eee", fontFamily: "sans-serif" }}>
+            <button
+                onClick={saveMap}
+                disabled={saveStatus === "saving"}
+                title="Save map (Ctrl+S)"
+                style={{
+                    position: "fixed",
+                    top: 16,
+                    right: 16,
+                    zIndex: 1000,
+                    padding: "14px 34px",
+                    fontSize: 18,
+                    fontWeight: 600,
+                    background: saveStatus === "saved" ? "#2a6" : saveStatus === "error" ? "#a44" : "#4a9",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 6,
+                    cursor: saveStatus === "saving" ? "wait" : "pointer",
+                    boxShadow: "0 4px 10px rgba(0, 0, 0, 0.35)",
+                }}
+            >
+                {saveStatus === "saving" ? "Saving..." : saveStatus === "saved" ? "Saved!" : saveStatus === "error" ? "Error" : "Save Map"}
+            </button>
+
             {/* Left Panel - Tools */}
             <div style={{ width: 280, padding: 20, borderRight: "1px solid #333", display: "flex", flexDirection: "column", gap: 20, overflowY: "auto" }}>
                 <Link to="/" style={{ color: "#4af", textDecoration: "none" }}>&larr; Back to Game</Link>
@@ -1032,28 +1204,10 @@ export function MapEditor() {
                         <button onClick={() => setZoom(z => Math.min(3, z + 0.25))} style={{ flex: 1, padding: 8, background: "#333", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}>+</button>
                     </div>
                 </div>
-
-                {/* Save */}
-                <button
-                    onClick={saveMap}
-                    disabled={saveStatus === "saving"}
-                    style={{
-                        padding: "12px 20px",
-                        fontSize: 14,
-                        background: saveStatus === "saved" ? "#2a6" : saveStatus === "error" ? "#a44" : "#4a9",
-                        color: "#fff",
-                        border: "none",
-                        borderRadius: 6,
-                        cursor: saveStatus === "saving" ? "wait" : "pointer",
-                        marginTop: "auto",
-                    }}
-                >
-                    {saveStatus === "saving" ? "Saving..." : saveStatus === "saved" ? "Saved!" : saveStatus === "error" ? "Error" : "Save Map"}
-                </button>
             </div>
 
             {/* Center - Canvas */}
-            <div style={{ flex: 1, overflow: "auto", padding: 16 }}>
+            <div style={{ flex: 1, overflow: "auto", padding: 16, background: metadata.background }}>
                 <div style={{
                     perspective: isometric ? "1000px" : "none",
                     perspectiveOrigin: "center center",
@@ -1265,6 +1419,20 @@ export function MapEditor() {
 // HELPERS
 // =============================================================================
 
+function normalizeLightHexColor(color: string | undefined, fallback: string): string {
+    if (typeof color === "string" && /^#[0-9a-fA-F]{6}$/.test(color)) {
+        return color.toLowerCase();
+    }
+    return fallback;
+}
+
+function clampFiniteNumber(value: number | undefined, min: number, max: number, fallback: number): number {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+        return fallback;
+    }
+    return Math.max(min, Math.min(max, value));
+}
+
 function createEmptyLayer(width: number, height: number, fill: string): string[][] {
     return Array.from({ length: height }, () => Array(width).fill(fill));
 }
@@ -1288,8 +1456,6 @@ function resizeLayer(layer: string[][], newWidth: number, newHeight: number, fil
 // =============================================================================
 // AREA DATA CONVERSION HELPERS
 // =============================================================================
-
-import type { EnemySpawn, AreaTransition, ChestLocation, TreeLocation, Decoration } from "../game/areas/types";
 
 function computePropsFromArea(area: AreaData, width: number, height: number): string[][] {
     const grid: string[][] = Array.from({ length: height }, () => Array(width).fill("."));
@@ -1356,7 +1522,18 @@ function computeEntitiesFromArea(area: AreaData, width: number, height: number):
         for (const candle of area.candles) {
             const x = Math.floor(candle.x);
             const z = Math.floor(candle.z);
-            if (x >= 0 && x < width && z >= 0 && z < height) grid[z][x] = "L";
+            if (x >= 0 && x < width && z >= 0 && z < height) {
+                grid[z][x] = candle.kind === "torch" ? "Y" : "L";
+            }
+        }
+    }
+
+    // High lights
+    if (area.lights) {
+        for (const light of area.lights) {
+            const x = Math.floor(light.x);
+            const z = Math.floor(light.z);
+            if (x >= 0 && x < width && z >= 0 && z < height) grid[z][x] = "H";
         }
     }
 
@@ -1406,4 +1583,151 @@ function extractEntitiesFromGrid(entitiesLayer: string[][]): { enemies: { x: num
     }
 
     return { enemies, chests };
+}
+
+const NON_BLOCKING_PROP_DECORATIONS = new Set<Decoration["type"]>([
+    "small_rock",
+    "mushroom",
+    "small_mushroom",
+    "fern",
+    "small_fern",
+    "seaweed",
+    "small_seaweed",
+]);
+
+function clampTreeSizeByType(size: number, treeType: TreeLocation["type"]): number {
+    const normalizedType = treeType ?? "pine";
+    const clampedBase = Math.max(MIN_TREE_SIZE, Math.min(MAX_TREE_SIZE, Number.isFinite(size) ? size : 1));
+    if (normalizedType === "pine") {
+        return Math.min(clampedBase, MAX_PINE_TREE_SIZE);
+    }
+    return clampedBase;
+}
+
+function isBlockingPropCell(propsLayer: string[][], x: number, z: number): boolean {
+    const char = propsLayer[z]?.[x] ?? ".";
+    if (PROP_TREE_CHARS.has(char)) {
+        return true;
+    }
+    const decType = PROP_CHAR_TO_TYPE.get(char);
+    if (!decType) {
+        return false;
+    }
+    return !NON_BLOCKING_PROP_DECORATIONS.has(decType);
+}
+
+function isValidEnemySpawnCell(
+    x: number,
+    z: number,
+    geometryLayer: string[][],
+    terrainLayer: string[][],
+    propsLayer: string[][],
+    width: number,
+    height: number,
+    occupied: Set<string>
+): boolean {
+    if (x < 0 || z < 0 || x >= width || z >= height) {
+        return false;
+    }
+
+    if ((geometryLayer[z]?.[x] ?? "#") !== ".") {
+        return false;
+    }
+
+    const terrain = terrainLayer[z]?.[x] ?? ".";
+    if (terrain === "~" || terrain === "w") {
+        return false;
+    }
+
+    if (isBlockingPropCell(propsLayer, x, z)) {
+        return false;
+    }
+
+    return !occupied.has(`${x},${z}`);
+}
+
+function findNearestValidEnemySpawnCell(
+    startX: number,
+    startZ: number,
+    geometryLayer: string[][],
+    terrainLayer: string[][],
+    propsLayer: string[][],
+    width: number,
+    height: number,
+    occupied: Set<string>
+): { x: number; z: number } | null {
+    if (isValidEnemySpawnCell(startX, startZ, geometryLayer, terrainLayer, propsLayer, width, height, occupied)) {
+        return { x: startX, z: startZ };
+    }
+
+    const maxRadius = Math.max(width, height);
+    for (let radius = 1; radius <= maxRadius; radius++) {
+        let best: { x: number; z: number; distSq: number } | null = null;
+
+        for (let dz = -radius; dz <= radius; dz++) {
+            for (let dx = -radius; dx <= radius; dx++) {
+                if (Math.abs(dx) !== radius && Math.abs(dz) !== radius) {
+                    continue;
+                }
+
+                const x = startX + dx;
+                const z = startZ + dz;
+                if (!isValidEnemySpawnCell(x, z, geometryLayer, terrainLayer, propsLayer, width, height, occupied)) {
+                    continue;
+                }
+
+                const distSq = dx * dx + dz * dz;
+                if (
+                    best === null
+                    || distSq < best.distSq
+                    || (distSq === best.distSq && (z < best.z || (z === best.z && x < best.x)))
+                ) {
+                    best = { x, z, distSq };
+                }
+            }
+        }
+
+        if (best) {
+            return { x: best.x, z: best.z };
+        }
+    }
+
+    return null;
+}
+
+function sanitizeEnemySpawns(
+    spawns: EnemySpawn[],
+    geometryLayer: string[][],
+    terrainLayer: string[][],
+    propsLayer: string[][],
+    width: number,
+    height: number
+): EnemySpawn[] {
+    const sanitized: EnemySpawn[] = [];
+    const occupied = new Set<string>();
+
+    for (const spawn of spawns) {
+        const startX = Math.floor(spawn.x);
+        const startZ = Math.floor(spawn.z);
+        const nearest = findNearestValidEnemySpawnCell(
+            startX,
+            startZ,
+            geometryLayer,
+            terrainLayer,
+            propsLayer,
+            width,
+            height,
+            occupied
+        );
+
+        if (!nearest) {
+            sanitized.push(spawn);
+            continue;
+        }
+
+        occupied.add(`${nearest.x},${nearest.z}`);
+        sanitized.push({ ...spawn, x: nearest.x + 0.5, z: nearest.z + 0.5 });
+    }
+
+    return sanitized;
 }

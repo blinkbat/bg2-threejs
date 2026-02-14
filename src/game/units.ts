@@ -15,7 +15,14 @@ export const DEFAULT_MELEE_RANGE = 1.8;
 // Player unit stats are expensive to compute (equipment + stat bonuses).
 // Cache results per frame to avoid redundant recalculations.
 
-const statsCache: Map<number, UnitData | EnemyStats> = new Map();
+const statsCache: Map<string, UnitData | EnemyStats> = new Map();
+
+function getStatsCacheKey(unit: Unit): string {
+    if (unit.team === "player") {
+        return `player:${unit.id}`;
+    }
+    return `enemy:${unit.id}:${unit.enemyType ?? "unknown"}`;
+}
 
 /** Clear the per-frame stats cache. Call once at the start of each game loop frame. */
 export function clearUnitStatsCache(): void {
@@ -28,7 +35,8 @@ export function clearUnitStatsCache(): void {
  * Results are cached per frame — call clearUnitStatsCache() at frame start.
  */
 export function getUnitStats(unit: Unit): UnitData | EnemyStats {
-    const cached = statsCache.get(unit.id);
+    const cacheKey = getStatsCacheKey(unit);
+    const cached = statsCache.get(cacheKey);
     if (cached) return cached;
 
     let result: UnitData | EnemyStats;
@@ -40,7 +48,7 @@ export function getUnitStats(unit: Unit): UnitData | EnemyStats {
         result = ENEMY_STATS[unit.enemyType];
     }
 
-    statsCache.set(unit.id, result);
+    statsCache.set(cacheKey, result);
     return result;
 }
 

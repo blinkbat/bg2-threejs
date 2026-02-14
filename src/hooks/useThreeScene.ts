@@ -10,9 +10,9 @@ import type { Unit, FogTexture, Projectile, SwingAnimation, DamageText, UnitGrou
 import type { AcidTile, LootBag } from "../core/types";
 import { createScene, updateChestStates, updateCamera, type DoorMesh, type SecretDoorMesh, type ChestMeshData } from "../rendering/scene";
 import { resetFogCache, resetSpriteFacing, clearChargeAttacks, clearFireBreaths, clearCurses, clearGlares, clearLeaps, clearTentacles, resetLootBagIds } from "../gameLoop";
-import { resetAllBroodMotherScreeches } from "../game/enemyState";
+import { resetAllBroodMotherScreeches, resetAllEnemyKiteCooldowns, resetAllEnemyKitingState } from "../game/enemyState";
+import { resetAllMovementState } from "../ai/movement";
 import { resetBarks } from "../combat/barks";
-import { initializeEquipmentState } from "../game/equipmentState";
 import { loadFogVisibility, saveFogVisibility } from "../game/fogMemory";
 
 /** All refs needed for Three.js scene management */
@@ -25,7 +25,7 @@ export interface ThreeSceneState {
     // Visual elements
     flames: THREE.Mesh[];
     candleMeshes: THREE.Mesh[];
-    candleLights: THREE.PointLight[];
+    candleLights: THREE.Light[];
     fogTexture: FogTexture | null;
     fogMesh: THREE.Mesh | null;
     moveMarker: THREE.Mesh | null;
@@ -134,6 +134,80 @@ function createEmptySceneState(): ThreeSceneState {
     };
 }
 
+const MATERIAL_TEXTURE_KEYS = [
+    "map",
+    "alphaMap",
+    "aoMap",
+    "bumpMap",
+    "displacementMap",
+    "emissiveMap",
+    "envMap",
+    "lightMap",
+    "metalnessMap",
+    "normalMap",
+    "roughnessMap",
+    "specularMap",
+] as const;
+
+function disposeCanvasTexture(texture: THREE.Texture, disposedTextures: Set<THREE.Texture>): void {
+    if (!(texture instanceof THREE.CanvasTexture)) return;
+    if (disposedTextures.has(texture)) return;
+    disposedTextures.add(texture);
+    texture.dispose();
+}
+
+function disposeMaterial(
+    material: THREE.Material,
+    disposedMaterials: Set<THREE.Material>,
+    disposedTextures: Set<THREE.Texture>
+): void {
+    if (disposedMaterials.has(material)) return;
+    disposedMaterials.add(material);
+
+    for (const key of MATERIAL_TEXTURE_KEYS) {
+        const texture = Reflect.get(material, key);
+        if (texture instanceof THREE.Texture) {
+            disposeCanvasTexture(texture, disposedTextures);
+        }
+    }
+
+    material.dispose();
+}
+
+function disposeSceneResources(scene: THREE.Scene): void {
+    const disposedGeometries = new Set<THREE.BufferGeometry>();
+    const disposedMaterials = new Set<THREE.Material>();
+    const disposedTextures = new Set<THREE.Texture>();
+
+    scene.traverse((object: THREE.Object3D) => {
+        if (!(object instanceof THREE.Mesh || object instanceof THREE.Line || object instanceof THREE.Points)) {
+            return;
+        }
+
+        const geometry = object.geometry;
+        if (geometry && !disposedGeometries.has(geometry)) {
+            disposedGeometries.add(geometry);
+            geometry.dispose();
+        }
+
+        const material = object.material;
+        if (Array.isArray(material)) {
+            material.forEach(mat => disposeMaterial(mat, disposedMaterials, disposedTextures));
+        } else if (material) {
+            disposeMaterial(material, disposedMaterials, disposedTextures);
+        }
+    });
+
+    if (scene.background instanceof THREE.Texture) {
+        disposeCanvasTexture(scene.background, disposedTextures);
+    }
+    if (scene.environment instanceof THREE.Texture) {
+        disposeCanvasTexture(scene.environment, disposedTextures);
+    }
+
+    scene.clear();
+}
+
 /**
  * Initialize and manage the Three.js scene
  * Handles scene creation, cleanup, and provides refs for game state
@@ -149,6 +223,8 @@ export function useThreeScene({
 
     // Scene state
     const [sceneState, setSceneState] = useState<ThreeSceneState>(() => createEmptySceneState());
+    const initialUnitsRef = useRef<Unit[]>(units);
+    const initialOpenedChestsRef = useRef<Set<string>>(openedChests);
 
     // Game state refs (mutable values that persist across frames)
     const gameRefsRef = useRef<GameRefs>({
@@ -179,12 +255,14 @@ export function useThreeScene({
         if (!container) return;
         const areaIdAtMount = getCurrentAreaId();
 
-        // Reset module-level caches on game restart
+        // Reset module-level caches and runtime state for this scene mount
         resetFogCache();
         resetSpriteFacing();
         resetAllBroodMotherScreeches();
+        resetAllEnemyKiteCooldowns();
+        resetAllEnemyKitingState();
+        resetAllMovementState();
         resetBarks();
-        initializeEquipmentState();
 
         // Clear local refs that persist between game sessions
         const gameRefs = gameRefsRef.current;
@@ -209,7 +287,7 @@ export function useThreeScene({
         gameRefs.swingAnimations = [];
 
         // Create the scene
-        const sceneRefs = createScene(container, units);
+        const sceneRefs = createScene(container, initialUnitsRef.current);
 
         // Populate scene state
         const initializedState: ThreeSceneState = {
@@ -245,12 +323,12 @@ export function useThreeScene({
         setSceneState(initializedState);
 
         // Initialize unit paths
-        units.forEach(unit => {
+        initialUnitsRef.current.forEach(unit => {
             gameRefs.paths[unit.id] = [];
         });
 
         // Apply initial chest open states
-        updateChestStates(initializedState.chestMeshes, openedChests);
+        updateChestStates(initializedState.chestMeshes, initialOpenedChestsRef.current);
 
         // Apply initial zoom and camera position
         const camera = initializedState.camera;
@@ -269,6 +347,7 @@ export function useThreeScene({
         // Cleanup
         return () => {
             saveFogVisibility(areaIdAtMount, gameRefs.visibility);
+            disposeSceneResources(sceneRefs.scene);
             if (sceneRefs.renderer) {
                 sceneRefs.renderer.dispose();
                 if (sceneRefs.renderer.domElement.parentElement === container) {
@@ -278,7 +357,7 @@ export function useThreeScene({
             setSceneState(createEmptySceneState());
             setIsInitialized(false);
         };
-    }, []); // Only run once on mount
+    }, [containerRef]); // Runs once; container ref identity is stable
 
     return { sceneState, gameRefs: gameRefsRef, isInitialized };
 }

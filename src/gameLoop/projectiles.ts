@@ -11,7 +11,7 @@ import { distance } from "../game/geometry";
 import { accumulateDelta } from "../core/gameClock";
 import { isBlocked } from "../ai/pathfinding";
 import { ENEMY_STATS } from "../game/enemyStats";
-import { applyDamageToUnit, animateExpandingMesh, buildDamageContext, applyLifesteal } from "../combat/damageEffects";
+import { applyDamageToUnit, animateExpandingMesh, buildDamageContext, applyLifesteal, createAnimatedRing } from "../combat/damageEffects";
 import { soundFns } from "../audio";
 import { getUnitById } from "../game/unitQuery";
 
@@ -61,8 +61,24 @@ function getPiercingHitRadius(proj: PiercingProjectile): number {
 
 function disposeProjectile(scene: THREE.Scene, proj: Projectile): void {
     scene.remove(proj.mesh);
-    // Geometry is shared — only dispose material
+    // Geometry is shared - only dispose material
     (proj.mesh.material as THREE.Material).dispose();
+}
+
+function spawnProjectileImpact(
+    scene: THREE.Scene,
+    x: number,
+    z: number,
+    color: string,
+    maxScale: number = 1.0,
+    duration: number = 170
+): void {
+    createAnimatedRing(scene, x, z, color, {
+        innerRadius: 0.09,
+        outerRadius: 0.25,
+        maxScale,
+        duration
+    });
 }
 
 // =============================================================================
@@ -220,6 +236,7 @@ export function updateProjectiles(
                         magicWaveVolleys.delete(mmProj.volleyId);
                     }
 
+                    spawnProjectileImpact(scene, proj.mesh.position.x, proj.mesh.position.z, COLORS.logNeutral, 0.9, 140);
                     disposeProjectile(scene, proj);
                     return false;
                 }
@@ -243,6 +260,7 @@ export function updateProjectiles(
                         if (attackerG && checkEnemyDefenses(enemyStats, targetUnit.facing, attackerG.position.x, attackerG.position.z, targetG.position.x, targetG.position.z, undefined, 0.5) === "frontShield") {
                             soundFns.playBlock();
                             shieldBlocked = true;
+                            spawnProjectileImpact(scene, targetG.position.x, targetG.position.z, "#4488ff", 1.05, 170);
                         }
                     }
 
@@ -260,6 +278,7 @@ export function updateProjectiles(
                             attackerPosition: mmAttackerG ? { x: mmAttackerG.position.x, z: mmAttackerG.position.z } : undefined,
                             damageType: mmProj.damageType
                         });
+                        spawnProjectileImpact(scene, targetG.position.x, targetG.position.z, "#9966ff", 1.2, 180);
 
                         soundFns.playHit();
                     }
@@ -471,6 +490,7 @@ export function updateProjectiles(
                 burst.position.copy(proj.mesh.position);
                 scene.add(burst);
                 animateExpandingMesh(scene, burst, { duration: 250, initialOpacity: 0.8, maxScale: 1.2, baseRadius: 0.3 });
+                spawnProjectileImpact(scene, proj.mesh.position.x, proj.mesh.position.z, COLORS.dmgCold, 1.25, 190);
                 disposeProjectile(scene, proj);
                 return false;
             }
@@ -517,6 +537,7 @@ export function updateProjectiles(
                         targetUnit: target,
                         damageType: pProj.damageType
                     });
+                    spawnProjectileImpact(scene, targetG.position.x, targetG.position.z, COLORS.dmgCold, 1.15, 180);
 
                     // Roll for chill
                     if (rollChance(pProj.chillChance)) {
@@ -609,6 +630,7 @@ export function updateProjectiles(
                         targetUnit: target,
                         damageType: fbProj.damageType
                     });
+                    spawnProjectileImpact(scene, targetG.position.x, targetG.position.z, COLORS.dmgFire, 1.2, 190);
 
                     soundFns.playHit();
 
@@ -670,6 +692,7 @@ export function updateProjectiles(
                         ? `${attackerData.name}'s attack is blocked by ${targetData.name}'s shield!`
                         : `${targetData.name} blocks ${attackerData.name}'s attack!`,
                         defense === "frontShield" ? "#4488ff" : "#aaaaaa");
+                    spawnProjectileImpact(scene, targetG.position.x, targetG.position.z, defense === "frontShield" ? "#4488ff" : "#aaaaaa", 1.05, 170);
                     disposeProjectile(scene, proj);
                     return false;
                 }
@@ -709,6 +732,7 @@ export function updateProjectiles(
                     damageType: dmgType,
                     isCrit
                 });
+                spawnProjectileImpact(scene, targetG.position.x, targetG.position.z, damageColor, isCrit ? 1.35 : 1.05, 180);
 
                 // Sun Stance: bonus fire damage on player ranged hit
                 if (attackerUnit.team === "player" && hasStatusEffect(attackerUnit, "sun_stance")) {
@@ -734,6 +758,7 @@ export function updateProjectiles(
             } else {
                 soundFns.playMiss();
                 addLog(logMiss(attackerData.name, "Attack", targetData.name), COLORS.logNeutral);
+                spawnProjectileImpact(scene, targetG.position.x, targetG.position.z, COLORS.logNeutral, 0.9, 140);
             }
 
             disposeProjectile(scene, proj);
@@ -746,3 +771,4 @@ export function updateProjectiles(
         return true;
     });
 }
+

@@ -2,6 +2,7 @@
 // MOVEMENT SKILLS - Dodge and other positional cantrips
 // =============================================================================
 
+import * as THREE from "three";
 import type { Skill, StatusEffect } from "../../core/types";
 import { BUFF_TICK_INTERVAL, COLORS } from "../../core/constants";
 import { UNIT_DATA } from "../../game/playerUnits";
@@ -20,6 +21,53 @@ import { consumeSkill, findClosestUnit } from "./helpers";
 // =============================================================================
 
 const DODGE_DASH_DURATION = 200; // ms for the dash animation
+const UP_AXIS = new THREE.Vector3(0, 1, 0);
+
+function createSwapBeam(
+    scene: THREE.Scene,
+    fromX: number,
+    fromZ: number,
+    toX: number,
+    toZ: number,
+    color: string,
+    duration: number = 260
+): void {
+    const from = new THREE.Vector3(fromX, 0.85, fromZ);
+    const to = new THREE.Vector3(toX, 0.85, toZ);
+    const dir = new THREE.Vector3().subVectors(to, from);
+    const beamLength = dir.length();
+    if (beamLength < 0.05) return;
+
+    dir.normalize();
+
+    const beam = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.04, 0.04, beamLength, 10, 1, true),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.82 })
+    );
+    beam.position.copy(from).add(to).multiplyScalar(0.5);
+    beam.quaternion.setFromUnitVectors(UP_AXIS, dir);
+    scene.add(beam);
+
+    const startTime = getGameTime();
+    const animate = () => {
+        const elapsed = getGameTime() - startTime;
+        const t = Math.min(1, elapsed / duration);
+        const material = beam.material as THREE.MeshBasicMaterial;
+        material.opacity = 0.82 * (1 - t);
+        const pulseScale = 1 + Math.sin(t * Math.PI) * 0.25;
+        beam.scale.set(pulseScale, 1, pulseScale);
+
+        if (t < 1) {
+            requestAnimationFrame(animate);
+            return;
+        }
+
+        scene.remove(beam);
+        beam.geometry.dispose();
+        material.dispose();
+    };
+    requestAnimationFrame(animate);
+}
 
 /**
  * Animate a smooth dash from origin to target over DODGE_DASH_DURATION ms.
@@ -147,6 +195,9 @@ export function executeDodgeSkill(
     createAnimatedRing(scene, targetX, targetZ, "#8e44ad", {
         innerRadius: 0.2, outerRadius: 0.4, maxScale: 1.5, duration: 250
     });
+    createAnimatedRing(scene, (originX + targetX) * 0.5, (originZ + targetZ) * 0.5, "#b06ad9", {
+        innerRadius: 0.1, outerRadius: 0.25, maxScale: 1.1, duration: 180
+    });
 
     soundFns.playMiss(); // Reuse whoosh sound
     ctx.addLog(`${casterData.name} dodges!`, "#8e44ad");
@@ -169,7 +220,7 @@ export function executeBodySwapSkill(
     targetZ: number,
     targetUnitId?: number
 ): boolean {
-    const { scene, unitsStateRef, unitsRef, setUnits } = ctx;
+    const { scene, unitsStateRef, unitsRef, unitMeshRef, hitFlashRef, setUnits } = ctx;
 
     const caster = unitsStateRef.current.find(u => u.id === casterId);
     const casterG = unitsRef.current[casterId];
@@ -235,6 +286,24 @@ export function executeBodySwapSkill(
     createAnimatedRing(scene, targetPos.x, targetPos.z, "#8e44ad", {
         innerRadius: 0.2, outerRadius: 0.45, maxScale: 1.3, duration: 260
     });
+    createSwapBeam(scene, casterPos.x, casterPos.z, targetPos.x, targetPos.z, COLORS.dmgChaos);
+    createAnimatedRing(scene, casterPos.x, casterPos.z, COLORS.dmgChaos, {
+        innerRadius: 0.12, outerRadius: 0.28, maxScale: 1.0, duration: 200
+    });
+    createAnimatedRing(scene, targetPos.x, targetPos.z, COLORS.dmgChaos, {
+        innerRadius: 0.12, outerRadius: 0.28, maxScale: 1.0, duration: 200
+    });
+
+    const casterMesh = unitMeshRef.current[casterId];
+    if (casterMesh) {
+        (casterMesh.material as THREE.MeshStandardMaterial).color.set(COLORS.dmgChaos);
+        hitFlashRef.current[casterId] = Date.now();
+    }
+    const targetMesh = unitMeshRef.current[target.id];
+    if (targetMesh) {
+        (targetMesh.material as THREE.MeshStandardMaterial).color.set(COLORS.dmgChaos);
+        hitFlashRef.current[target.id] = Date.now();
+    }
 
     const targetData = getUnitStats(target);
     soundFns.playMagicWave();

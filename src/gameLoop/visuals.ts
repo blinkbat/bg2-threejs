@@ -190,6 +190,58 @@ export function updateEnergyShieldVisuals(
 
 // Cache for fog change detection - simple hash of visible cells
 let lastFogHash = 0;
+const ENEMY_VIEW_FADE_LERP = 0.32;
+const ENEMY_VIEW_FADE_MIN_VISIBLE = 0.02;
+
+function applyViewFadeToGroup(group: UnitGroup, opacity: number): void {
+    const clampedOpacity = THREE.MathUtils.clamp(opacity, 0, 1);
+    group.userData.viewFadeOpacity = clampedOpacity;
+
+    group.traverse(obj => {
+        if (obj instanceof THREE.Light) {
+            const baseIntensityRaw = Reflect.get(obj.userData, "viewFadeBaseIntensity");
+            const baseIntensity = typeof baseIntensityRaw === "number" ? baseIntensityRaw : obj.intensity;
+            if (typeof baseIntensityRaw !== "number") {
+                obj.userData.viewFadeBaseIntensity = baseIntensity;
+            }
+            obj.intensity = baseIntensity * clampedOpacity;
+            obj.visible = clampedOpacity > ENEMY_VIEW_FADE_MIN_VISIBLE;
+            return;
+        }
+
+        if (!(obj instanceof THREE.Mesh)) return;
+        const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+        for (const material of materials) {
+            const baseOpacityRaw = Reflect.get(material.userData, "viewFadeBaseOpacity");
+            const baseOpacity = typeof baseOpacityRaw === "number" ? baseOpacityRaw : material.opacity;
+            if (typeof baseOpacityRaw !== "number") {
+                material.userData.viewFadeBaseOpacity = baseOpacity;
+            }
+            material.opacity = baseOpacity * clampedOpacity;
+            if (!material.transparent && (baseOpacity < 1 || clampedOpacity < 1)) {
+                material.transparent = true;
+            }
+        }
+    });
+}
+
+function updateEnemyGroupFade(group: UnitGroup, shouldBeVisible: boolean): void {
+    const rawOpacity = Reflect.get(group.userData, "viewFadeOpacity");
+    const currentOpacity = typeof rawOpacity === "number" ? rawOpacity : (shouldBeVisible ? 1 : 0);
+    const targetOpacity = shouldBeVisible ? 1 : 0;
+    let nextOpacity = THREE.MathUtils.lerp(currentOpacity, targetOpacity, ENEMY_VIEW_FADE_LERP);
+
+    if (Math.abs(nextOpacity - targetOpacity) < 0.02) {
+        nextOpacity = targetOpacity;
+    }
+
+    group.visible = shouldBeVisible || nextOpacity > ENEMY_VIEW_FADE_MIN_VISIBLE;
+    applyViewFadeToGroup(group, nextOpacity);
+
+    if (!shouldBeVisible && nextOpacity <= ENEMY_VIEW_FADE_MIN_VISIBLE) {
+        group.visible = false;
+    }
+}
 
 /**
  * Reset fog hash cache (call on game restart).
@@ -214,7 +266,13 @@ export function updateFogOfWar(
         // Make all enemies visible (except submerged krakens)
         unitsState.filter(u => u.team === "enemy").forEach(u => {
             const g = unitsRef[u.id];
-            if (g) g.visible = u.hp > 0 && !isKrakenFullySubmerged(u.id);
+            if (!g) return;
+            if (u.hp <= 0) {
+                g.visible = false;
+                applyViewFadeToGroup(g, 0);
+                return;
+            }
+            updateEnemyGroupFade(g, !isKrakenFullySubmerged(u.id));
         });
         return;
     }
@@ -263,9 +321,15 @@ export function updateFogOfWar(
     unitsState.filter(u => u.team === "enemy").forEach(u => {
         const g = unitsRef[u.id];
         if (!g) return;
+        if (u.hp <= 0) {
+            g.visible = false;
+            applyViewFadeToGroup(g, 0);
+            return;
+        }
         const cx = Math.floor(g.position.x), cz = Math.floor(g.position.z);
         const vis = visibility[cx]?.[cz] ?? 0;
-        g.visible = u.hp > 0 && vis === 2 && !isKrakenFullySubmerged(u.id);
+        const shouldBeVisible = vis === 2 && !isKrakenFullySubmerged(u.id);
+        updateEnemyGroupFade(g, shouldBeVisible);
     });
 }
 
@@ -343,8 +407,8 @@ export function updateSpriteFacing(
 // =============================================================================
 
 const ANCESTOR_GHOST_PULSE_SPEED = 0.0012;
-const ANCESTOR_GHOST_PULSE_AMPLITUDE = 0.1;
-const ANCESTOR_GHOST_OPACITY_MIN = 0.12;
+const ANCESTOR_GHOST_PULSE_AMPLITUDE = 0.3;
+const ANCESTOR_GHOST_OPACITY_MIN = 0.35;
 const ANCESTOR_GHOST_OPACITY_MAX = 0.62;
 
 function findBillboardMesh(group: UnitGroup | undefined): THREE.Mesh | null {

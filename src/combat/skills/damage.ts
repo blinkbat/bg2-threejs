@@ -38,6 +38,13 @@ export function executeAoeSkill(
 
     consumeSkill(ctx, casterId, skill);
 
+    createAnimatedRing(scene, casterG.position.x, casterG.position.z, skill.projectileColor ?? COLORS.dmgFire, {
+        innerRadius: 0.15,
+        outerRadius: 0.35,
+        maxScale: 1.1,
+        duration: 220
+    });
+
     // Create projectile toward target location
     const projectile = createProjectile(scene, "aoe", casterG.position.x, casterG.position.z, skill.projectileColor);
 
@@ -145,11 +152,31 @@ export function executeTargetedDamageSkill(
     // Melee: swing animation
     if (delivery.mode === "melee") {
         spawnSwingIndicator(scene, casterG, targetG, true, swingAnimationsRef.current, now);
+        if (skill.name !== "Attack") {
+            createAnimatedRing(scene, casterG.position.x, casterG.position.z, COLORS.damagePlayer, {
+                innerRadius: 0.14,
+                outerRadius: 0.3,
+                maxScale: 1.0,
+                duration: 180
+            });
+        }
     }
 
     // Smite: lightning pillar
     if (delivery.mode === "smite") {
         createLightningPillar(scene, targetG.position.x, targetG.position.z);
+        createAnimatedRing(scene, casterG.position.x, casterG.position.z, COLORS.dmgLightning, {
+            innerRadius: 0.16,
+            outerRadius: 0.34,
+            maxScale: 1.15,
+            duration: 230
+        });
+        createAnimatedRing(scene, targetG.position.x, targetG.position.z, COLORS.dmgLightning, {
+            innerRadius: 0.22,
+            outerRadius: 0.44,
+            maxScale: 1.9,
+            duration: 260
+        });
         soundFns.playThunder();
     }
 
@@ -216,6 +243,15 @@ export function executeTargetedDamageSkill(
 
         if (delivery.mode === "melee") {
             soundFns.playHit();
+        }
+
+        if (skill.name === "Poison Dagger" && willPoison) {
+            createAnimatedRing(scene, targetG.position.x, targetG.position.z, COLORS.poisonText, {
+                innerRadius: 0.16,
+                outerRadius: 0.34,
+                maxScale: 1.25,
+                duration: 260
+            });
         }
 
         if (willPoison) {
@@ -379,10 +415,22 @@ export function executeMagicWaveSkill(
     if (!casterG) return false;
 
     consumeSkill(ctx, casterId, skill);
-
     const casterData = UNIT_DATA[casterId];
     const missileCount = skill.hitCount ?? 8;
     const aoeRadius = skill.aoeRadius ?? 3;
+
+    createAnimatedRing(scene, casterG.position.x, casterG.position.z, skill.projectileColor ?? COLORS.dmgChaos, {
+        innerRadius: 0.2,
+        outerRadius: 0.42,
+        maxScale: 1.3,
+        duration: 260
+    });
+    createAnimatedRing(scene, targetX, targetZ, skill.projectileColor ?? COLORS.dmgChaos, {
+        innerRadius: 0.2,
+        outerRadius: 0.5,
+        maxScale: aoeRadius,
+        duration: 300
+    });
 
     // Find enemies near the target position (within aoe radius)
     const enemies = getAliveUnits(unitsStateRef.current, "enemy");
@@ -505,6 +553,8 @@ export function executeHolyStrikeSkill(
     const length = skill.range;
     const lineWidth = skill.lineWidth ?? 1.5;
     const halfWidth = lineWidth / 2;
+    const endX = casterG.position.x + Math.cos(facingAngle) * length;
+    const endZ = casterG.position.z + Math.sin(facingAngle) * length;
 
     // Find all enemies in the rectangle
     const enemies = getAliveUnits(unitsStateRef.current, "enemy");
@@ -541,6 +591,12 @@ export function executeHolyStrikeSkill(
         initialOpacity: 0.7,
         maxScale: 1.2,
         baseRadius: 1
+    });
+    createAnimatedRing(scene, endX, endZ, COLORS.dmgHoly, {
+        innerRadius: 0.25,
+        outerRadius: 0.5,
+        maxScale: 1.7,
+        duration: 320
     });
 
     soundFns.playHolyStrike();
@@ -616,6 +672,12 @@ export function executeGlacialWhorlSkill(
     if (!casterG) return false;
 
     consumeSkill(ctx, casterId, skill);
+    createAnimatedRing(scene, casterG.position.x, casterG.position.z, COLORS.dmgCold, {
+        innerRadius: 0.18,
+        outerRadius: 0.4,
+        maxScale: 1.25,
+        duration: 240
+    });
 
     const casterData = UNIT_DATA[casterId];
 

@@ -184,6 +184,16 @@ const DEFAULT_LIGHTING_TUNING: LightingTuningSettings = {
     spriteMetalness: 0
 };
 
+const ZERO_STATS: CharacterStats = {
+    strength: 0,
+    dexterity: 0,
+    vitality: 0,
+    intelligence: 0,
+    faith: 0
+};
+
+const STAT_BOOST_AMOUNT = 10;
+
 // =============================================================================
 // GAME COMPONENT
 // =============================================================================
@@ -812,12 +822,13 @@ function Game({
     const prevAliveEnemiesRef = useRef<Set<number>>(new Set());
     useEffect(() => {
         const areaId = getCurrentAreaId();
+        const staticEnemyMaxId = 99 + getCurrentArea().enemySpawns.length;
         const currentAlive = new Set<number>();
         const newlyDead: string[] = [];
         const newlyDeadUnits: Unit[] = [];
 
         for (const u of units) {
-            if (u.team === "enemy" && u.id >= 100) {
+            if (u.team === "enemy" && u.id >= 100 && u.id <= staticEnemyMaxId) {
                 if (u.hp > 0) {
                     currentAlive.add(u.id);
                 } else if (prevAliveEnemiesRef.current.has(u.id)) {
@@ -1114,6 +1125,40 @@ function Game({
         }
     }, [sceneState, addLog]);
 
+    const handleStatBoost = useCallback(() => {
+        setUnits(prev => prev.map(u => {
+            if (u.team !== "player") return u;
+
+            const currentStats = u.stats ?? ZERO_STATS;
+            const boostedStats: CharacterStats = {
+                strength: currentStats.strength + STAT_BOOST_AMOUNT,
+                dexterity: currentStats.dexterity + STAT_BOOST_AMOUNT,
+                vitality: currentStats.vitality + STAT_BOOST_AMOUNT,
+                intelligence: currentStats.intelligence + STAT_BOOST_AMOUNT,
+                faith: currentStats.faith + STAT_BOOST_AMOUNT
+            };
+
+            const updatedUnit: Unit = { ...u, stats: boostedStats };
+            if (u.hp <= 0) {
+                return updatedUnit;
+            }
+
+            const nextHpCap = getEffectiveMaxHp(u.id, updatedUnit);
+            const nextManaCap = getEffectiveMaxMana(u.id, updatedUnit);
+            const nextMana = u.mana === undefined
+                ? undefined
+                : Math.min(u.mana + STAT_BOOST_AMOUNT * MP_PER_INTELLIGENCE, nextManaCap);
+
+            return {
+                ...updatedUnit,
+                hp: Math.min(u.hp + STAT_BOOST_AMOUNT * HP_PER_VITALITY, nextHpCap),
+                mana: nextMana
+            };
+        }));
+
+        addLog(`Debug: Stat Boost applied (+${STAT_BOOST_AMOUNT} to all stats).`, "#9b59b6");
+    }, [addLog]);
+
     const handleToggleDevMode = useCallback(() => {
         const next = !devMode;
         setDevMode(next);
@@ -1255,7 +1300,7 @@ function Game({
             <div style={{ position: "absolute", top: 10, right: 10, color: "#888", fontSize: 11, fontFamily: "monospace", opacity: 0.6 }}>{fps} fps</div>
 
             {/* UI Components */}
-            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onPause={() => setPaused(true)} onShowHelp={onShowHelp} onRestart={onRestart} onSaveClick={onSaveClick} onLoadClick={onLoadClick} debug={debug} onToggleDebug={() => setDebug(d => !d)} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} onToggleDevMode={handleToggleDevMode} devModeEnabled={devMode} onToggleFastMove={() => setFastMove(f => !f)} fastMoveEnabled={fastMove} lightingTuning={lightingTuning} onUpdateLightingTuning={handleUpdateLightingTuning} onResetLightingTuning={handleResetLightingTuning} lightingTuningOutput={lightingTuningOutput} otherModalOpen={helpOpen || saveLoadOpen} hasSelection={selectedIds.length > 0} />
+            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onShowHelp={onShowHelp} onRestart={onRestart} onSaveClick={onSaveClick} onLoadClick={onLoadClick} debug={debug} onToggleDebug={() => setDebug(d => !d)} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} onStatBoost={handleStatBoost} onToggleDevMode={handleToggleDevMode} devModeEnabled={devMode} onToggleFastMove={() => setFastMove(f => !f)} fastMoveEnabled={fastMove} lightingTuning={lightingTuning} onUpdateLightingTuning={handleUpdateLightingTuning} onResetLightingTuning={handleResetLightingTuning} lightingTuningOutput={lightingTuningOutput} otherModalOpen={helpOpen || saveLoadOpen} hasSelection={selectedIds.length > 0} />
             <CombatLog log={combatLog} />
             <FormationIndicator units={units} formationOrder={formationOrder} />
             <div className="bottom-bar-container">

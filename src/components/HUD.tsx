@@ -24,7 +24,6 @@ interface HUDProps {
     alivePlayers: number;
     paused: boolean;
     onTogglePause: () => void;
-    onPause: () => void;
     onShowHelp: () => void;
     onRestart: () => void;
     onSaveClick: () => void;
@@ -33,6 +32,7 @@ interface HUDProps {
     onToggleDebug: () => void;
     onWarpToArea?: (areaId: AreaId) => void;
     onAddXp?: (amount: number) => void;
+    onStatBoost?: () => void;
     onToggleDevMode?: () => void;
     devModeEnabled?: boolean;
     onToggleFastMove?: () => void;
@@ -51,7 +51,6 @@ export function HUD({
     alivePlayers,
     paused,
     onTogglePause,
-    onPause,
     onShowHelp,
     onRestart,
     onSaveClick,
@@ -60,6 +59,7 @@ export function HUD({
     onToggleDebug,
     onWarpToArea,
     onAddXp,
+    onStatBoost,
     onToggleDevMode,
     devModeEnabled,
     onToggleFastMove,
@@ -84,7 +84,7 @@ export function HUD({
         } else if (!debugPanelOpen && debug) {
             onToggleDebug();
         }
-    }, [debugPanelOpen]);
+    }, [debugPanelOpen, debug, onToggleDebug]);
 
     const areaList = Object.entries(AREAS).map(([id, data]) => ({
         id: id as AreaId,
@@ -97,10 +97,10 @@ export function HUD({
     // Handle opening menu - pause and open
     const handleOpenMenu = useCallback(() => {
         if (!paused) {
-            onPause();
+            onTogglePause();
         }
         setMenuOpen(true);
-    }, [paused, onPause]);
+    }, [paused, onTogglePause]);
 
     // Handle closing menu
     const handleCloseMenu = useCallback(() => {
@@ -211,6 +211,9 @@ export function HUD({
                                         <button className="btn btn-tiny" onClick={() => onAddXp(50)}>+50 XP</button>
                                         <button className="btn btn-tiny" onClick={() => onAddXp(500)}>+500 XP</button>
                                     </>
+                                )}
+                                {onStatBoost && (
+                                    <button className="btn btn-tiny" onClick={onStatBoost}>+10 Stats</button>
                                 )}
                                 {onToggleDevMode && (
                                     <button

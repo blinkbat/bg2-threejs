@@ -54,11 +54,11 @@ export function runPreAttackBehaviors(ctx: PreAttackContext): void {
     const base = { unit, g, enemyStats, skillCooldowns, setSkillCooldowns, addLog, now };
 
     if (enemyStats.spawnSkill) {
-        trySpawnMinion({ ...base, spawnSkill: enemyStats.spawnSkill, unitsState, unitsRef, setUnits });
+        trySpawnMinion({ ...base, spawnSkill: enemyStats.spawnSkill, unitsState, unitsRef, scene, setUnits });
     }
 
     if (enemyStats.raiseSkill) {
-        tryRaiseDead({ ...base, raiseSkill: enemyStats.raiseSkill, unitsState, unitsRef, setUnits });
+        tryRaiseDead({ ...base, raiseSkill: enemyStats.raiseSkill, unitsState, unitsRef, scene, setUnits });
     }
 
     if (enemyStats.tentacleSkill) {

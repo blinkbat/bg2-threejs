@@ -9,6 +9,7 @@ import { getNextUnitId } from "../../core/unitIds";
 import { soundFns } from "../../audio";
 import { hasBroodMotherScreeched, markBroodMotherScreeched } from "../../game/enemyState";
 import { setSkillCooldown } from "../../combat/combatMath";
+import { createAnimatedRing } from "../../combat/damageEffects";
 import type { SpawnContext } from "./types";
 
 // =============================================================================
@@ -21,7 +22,7 @@ import type { SpawnContext } from "./types";
  * @returns true if a spawn occurred
  */
 export function trySpawnMinion(ctx: SpawnContext): boolean {
-    const { unit, g, enemyStats, spawnSkill, unitsState, unitsRef, skillCooldowns, setSkillCooldowns, setUnits, addLog, now } = ctx;
+    const { unit, g, enemyStats, spawnSkill, unitsState, unitsRef, scene, skillCooldowns, setSkillCooldowns, setUnits, addLog, now } = ctx;
 
     const spawnCooldownKey = `${unit.id}-spawn`;
     const spawnCooldownEnd = skillCooldowns[spawnCooldownKey]?.end ?? 0;
@@ -64,6 +65,13 @@ export function trySpawnMinion(ctx: SpawnContext): boolean {
     };
 
     setUnits(prev => [...prev, spawnedUnit]);
+
+    createAnimatedRing(scene, spawnX, spawnZ, "#cc6600", {
+        innerRadius: 0.2,
+        outerRadius: 0.45,
+        maxScale: 1.35,
+        duration: 320
+    });
 
     // Play screech sound for broodling spawns
     if (spawnSkill.spawnType === "broodling") {

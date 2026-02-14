@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import Tippy from "@tippyjs/react";
 import type { Unit, Skill, StatusEffectType } from "../core/types";
 import { COLORS, ANCESTOR_AURA_DAMAGE_BONUS, ANCESTOR_AURA_RANGE } from "../core/constants";
-import { UNIT_DATA, getEffectiveMaxHp, isCorePlayerId } from "../game/playerUnits";
+import { UNIT_DATA, getEffectiveMaxHp, getEffectiveMaxMana, isCorePlayerId } from "../game/playerUnits";
 import { getHpPercentage, getHpColor } from "../combat/combatMath";
 import { SkillHotbar } from "./SkillHotbar";
 import type { HotbarAssignments } from "../hooks/hotbarStorage";
@@ -191,6 +191,9 @@ export function PartyBar({
         const effectiveMaxHp = getEffectiveMaxHp(unit.id, unit);
         const hpPct = getHpPercentage(unit.hp, effectiveMaxHp);
         const hpColor = getHpColor(hpPct);
+        const effectiveMaxMana = getEffectiveMaxMana(unit.id, unit);
+        const hasMana = effectiveMaxMana > 0;
+        const manaPct = hasMana ? getHpPercentage(unit.mana ?? 0, effectiveMaxMana) : 0;
 
         const isTargetingAlly = targetingMode?.skill.targetType === "ally";
         const isReviveSkill = targetingMode?.skill.type === "revive";
@@ -298,6 +301,11 @@ export function PartyBar({
                 <div className="progress-bar-sm portrait-hp">
                     <div className="progress-fill" style={{ width: `${Math.max(0, hpPct)}%`, backgroundColor: hpColor }} />
                 </div>
+                {hasMana && (
+                    <div className="progress-bar-sm portrait-mana">
+                        <div className="progress-fill progress-fill-mana" style={{ width: `${Math.max(0, manaPct)}%` }} />
+                    </div>
+                )}
                 <div className="portrait-name">{data.name}</div>
 
                 {/* Context menu */}

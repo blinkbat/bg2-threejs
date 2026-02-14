@@ -46,6 +46,10 @@ export interface ChestLocation {
 
 export type TreeType = "pine" | "palm" | "oak";
 
+export const MIN_TREE_SIZE = 0.4;
+export const MAX_TREE_SIZE = 2.0;
+export const MAX_PINE_TREE_SIZE = 1.35;
+
 export interface TreeLocation {
     x: number;
     z: number;
@@ -67,6 +71,26 @@ export interface SecretDoor {
     // The wall segment that blocks entry (removed when opened)
     blockingWall: { x: number; z: number; w: number; h: number };
     hint?: string;  // Optional hint text when inspected
+}
+
+export const DEFAULT_AREA_LIGHT_RADIUS = 12;
+export const DEFAULT_AREA_LIGHT_ANGLE = 45;
+export const DEFAULT_AREA_LIGHT_TINT = "#ffd28a";
+export const DEFAULT_AREA_LIGHT_BRIGHTNESS = 6;
+export const DEFAULT_AREA_LIGHT_HEIGHT = 8;
+export const DEFAULT_AREA_LIGHT_DIFFUSION = 0.35;
+export const DEFAULT_AREA_LIGHT_DECAY = 1.2;
+
+export interface AreaLight {
+    x: number;
+    z: number;
+    radius: number;
+    angle: number;
+    tint: string;
+    brightness: number;
+    height: number;
+    diffusion: number;
+    decay?: number;
 }
 
 export interface LavaZone {
@@ -94,6 +118,7 @@ export interface AreaData {
     trees: TreeLocation[];
     decorations?: Decoration[];  // Columns, broken walls, etc.
     secretDoors?: SecretDoor[];  // Hidden doors that require inspection to use
+    lights?: AreaLight[];        // Manual overhead spot lights
     candles?: CandlePosition[];  // Manual candle placements
     ambientLight: number;        // Ambient light intensity
     directionalLight: number;    // Directional light intensity

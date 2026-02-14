@@ -2,8 +2,26 @@
 // AREA TEXT FORMAT - Parser and serializer for human-readable map format
 // =============================================================================
 
-import { GRID_SIZE } from "../core/constants";
-import type { AreaData, AreaId, EnemySpawn, AreaTransition, ChestLocation, TreeLocation, TreeType, Decoration, SecretDoor } from "../game/areas/types";
+import { GRID_SIZE, DEFAULT_CANDLE_LIGHT_COLOR, DEFAULT_TORCH_LIGHT_COLOR } from "../core/constants";
+import {
+    DEFAULT_AREA_LIGHT_ANGLE,
+    DEFAULT_AREA_LIGHT_BRIGHTNESS,
+    DEFAULT_AREA_LIGHT_DECAY,
+    DEFAULT_AREA_LIGHT_DIFFUSION,
+    DEFAULT_AREA_LIGHT_HEIGHT,
+    DEFAULT_AREA_LIGHT_RADIUS,
+    DEFAULT_AREA_LIGHT_TINT,
+    type AreaData,
+    type AreaId,
+    type EnemySpawn,
+    type AreaTransition,
+    type ChestLocation,
+    type TreeLocation,
+    type TreeType,
+    type Decoration,
+    type SecretDoor,
+    type AreaLight,
+} from "../game/areas/types";
 import type { CandlePosition, EnemyType } from "../core/types";
 
 // =============================================================================
@@ -48,8 +66,11 @@ import type { CandlePosition, EnemyType } from "../core/types";
 // === SECRET_DOORS ===
 // x,z:blocking=bx,bz,bw,bh,hint=text
 //
+// === LIGHTS ===
+// x,z:radius=12,angle=45,tint=#ffd28a,brightness=6,height=8,diffusion=0.35,decay=1.2
+//
 // === CANDLES ===
-// x,z:dir=dx,dz
+// x,z:dir=dx,dz,kind=candle|torch,color=#rrggbb
 // =============================================================================
 
 interface ParsedArea {
@@ -76,7 +97,15 @@ interface ParsedArea {
     trees: TreeLocation[];
     decorations: Decoration[];
     secretDoors: SecretDoor[];
+    lights: AreaLight[];
     candles: CandlePosition[];
+}
+
+function normalizeHexColor(color: string | undefined, fallback: string): string {
+    if (typeof color === "string" && /^#[0-9a-fA-F]{6}$/.test(color)) {
+        return color.toLowerCase();
+    }
+    return fallback;
 }
 
 // =============================================================================
@@ -182,11 +211,27 @@ export function areaDataToText(area: AreaData): string {
         lines.push("");
     }
 
+    // Editor lights
+    if (area.lights && area.lights.length > 0) {
+        lines.push("=== LIGHTS ===");
+        area.lights.forEach(light => {
+            const tint = normalizeHexColor(light.tint, DEFAULT_AREA_LIGHT_TINT);
+            const decay = light.decay ?? DEFAULT_AREA_LIGHT_DECAY;
+            lines.push(
+                `${light.x},${light.z}:radius=${light.radius},angle=${light.angle},tint=${tint},brightness=${light.brightness},height=${light.height},diffusion=${light.diffusion},decay=${decay}`
+            );
+        });
+        lines.push("");
+    }
+
     // Candles
     if (area.candles && area.candles.length > 0) {
         lines.push("=== CANDLES ===");
         area.candles.forEach(candle => {
-            lines.push(`${candle.x},${candle.z}:dir=${candle.dx},${candle.dz}`);
+            const kind = candle.kind === "torch" ? "torch" : "candle";
+            const fallbackColor = kind === "torch" ? DEFAULT_TORCH_LIGHT_COLOR : DEFAULT_CANDLE_LIGHT_COLOR;
+            const color = normalizeHexColor(candle.lightColor, fallbackColor);
+            lines.push(`${candle.x},${candle.z}:dir=${candle.dx},${candle.dz},kind=${kind},color=${color}`);
         });
         lines.push("");
     }
@@ -232,6 +277,7 @@ function parseTextFormat(text: string): ParsedArea {
         trees: [],
         decorations: [],
         secretDoors: [],
+        lights: [],
         candles: [],
     };
 
@@ -288,6 +334,9 @@ function parseTextFormat(text: string): ParsedArea {
                 break;
             case "secret_doors":
                 parseSecretDoorLine(line, result.secretDoors);
+                break;
+            case "lights":
+                parseLightLine(line, result.lights);
                 break;
             case "candles":
                 parseCandleLine(line, result.candles);
@@ -443,12 +492,65 @@ function parseCandleLine(line: string, candles: CandlePosition[]) {
 
     const dirMatch = props.match(/dir=([\d.-]+),([\d.-]+)/);
     if (dirMatch) {
+        const kindMatch = props.match(/kind=(candle|torch)/);
+        const colorMatch = props.match(/color=(#[0-9a-fA-F]{6})/);
+        const kind = kindMatch?.[1] === "torch" ? "torch" : "candle";
+        const fallbackColor = kind === "torch" ? DEFAULT_TORCH_LIGHT_COLOR : DEFAULT_CANDLE_LIGHT_COLOR;
         candles.push({
             x, z,
             dx: parseFloat(dirMatch[1]),
-            dz: parseFloat(dirMatch[2])
+            dz: parseFloat(dirMatch[2]),
+            kind,
+            lightColor: normalizeHexColor(colorMatch?.[1], fallbackColor),
         });
     }
+}
+
+function parseLightLine(line: string, lights: AreaLight[]) {
+    const [coords, props] = line.split(":");
+    if (!coords || !props) return;
+    const [xStr, zStr] = coords.split(",");
+    const x = parseFloat(xStr);
+    const z = parseFloat(zStr);
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+
+    const defaults: AreaLight = {
+        x,
+        z,
+        radius: DEFAULT_AREA_LIGHT_RADIUS,
+        angle: DEFAULT_AREA_LIGHT_ANGLE,
+        tint: DEFAULT_AREA_LIGHT_TINT,
+        brightness: DEFAULT_AREA_LIGHT_BRIGHTNESS,
+        height: DEFAULT_AREA_LIGHT_HEIGHT,
+        diffusion: DEFAULT_AREA_LIGHT_DIFFUSION,
+        decay: DEFAULT_AREA_LIGHT_DECAY,
+    };
+
+    const propsMap = new Map<string, string>();
+    for (const part of props.split(",")) {
+        const [k, v] = part.split("=");
+        if (!k || v === undefined) continue;
+        propsMap.set(k.trim().toLowerCase(), v.trim());
+    }
+
+    const toNumber = (key: string, fallback: number): number => {
+        const raw = propsMap.get(key);
+        if (raw === undefined) return fallback;
+        const parsed = parseFloat(raw);
+        return Number.isFinite(parsed) ? parsed : fallback;
+    };
+
+    lights.push({
+        x,
+        z,
+        radius: toNumber("radius", defaults.radius),
+        angle: toNumber("angle", defaults.angle),
+        tint: normalizeHexColor(propsMap.get("tint"), defaults.tint),
+        brightness: toNumber("brightness", defaults.brightness),
+        height: toNumber("height", defaults.height),
+        diffusion: toNumber("diffusion", defaults.diffusion),
+        decay: toNumber("decay", defaults.decay ?? DEFAULT_AREA_LIGHT_DECAY),
+    });
 }
 
 function convertParsedToAreaData(parsed: ParsedArea): AreaData {
@@ -481,6 +583,7 @@ function convertParsedToAreaData(parsed: ParsedArea): AreaData {
         trees: parsed.trees,
         decorations: parsed.decorations.length > 0 ? parsed.decorations : undefined,
         secretDoors: parsed.secretDoors.length > 0 ? parsed.secretDoors : undefined,
+        lights: parsed.lights.length > 0 ? parsed.lights : undefined,
         candles: parsed.candles.length > 0 ? parsed.candles : undefined,
     };
 }

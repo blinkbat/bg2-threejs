@@ -3,7 +3,7 @@
 // =============================================================================
 
 import type { CandlePosition, MergedObstacle } from "../../core/types";
-import type { AreaData, ComputedAreaData } from "./types";
+import { MAX_PINE_TREE_SIZE, MAX_TREE_SIZE, MIN_TREE_SIZE, type AreaData, type ComputedAreaData } from "./types";
 
 /**
  * Build blocked grid from geometry grid.
@@ -70,7 +70,11 @@ function mergeObstacles(blocked: boolean[][], gridWidth: number, gridHeight: num
  */
 function estimateTreeLosRadius(areaId: string, treeSize: number, treeType: "pine" | "palm" | "oak"): number {
     const treeSizeMultiplier = areaId === "forest" ? 1.5 : 1.0;
-    const scale = treeSize * treeSizeMultiplier;
+    const clampedSize = Math.max(MIN_TREE_SIZE, Math.min(MAX_TREE_SIZE, treeSize));
+    const effectiveSize = treeType === "pine"
+        ? Math.min(clampedSize, MAX_PINE_TREE_SIZE)
+        : clampedSize;
+    const scale = effectiveSize * treeSizeMultiplier;
     const skinnyFactor = Math.min(1, 1 / Math.sqrt(Math.max(scale, 0.0001)));
 
     if (treeType === "palm") {

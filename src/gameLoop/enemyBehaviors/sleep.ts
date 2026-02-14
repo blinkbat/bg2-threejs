@@ -59,9 +59,19 @@ export function trySleep(ctx: SleepContext): boolean {
     }
 
     // Visual — purple pulse ring at AoE center
+    createAnimatedRing(scene, g.position.x, g.position.z, COLORS.sleepText, {
+        innerRadius: 0.2, outerRadius: 0.4, maxScale: 1.15, duration: 220
+    });
     createAnimatedRing(scene, centerX, centerZ, COLORS.sleep, {
         innerRadius: 0.1, outerRadius: sleepSkill.radius, maxScale: 1.0, duration: 400
     });
+    for (const targetId of hitIds) {
+        const targetGroup = unitsRef[targetId];
+        if (!targetGroup) continue;
+        createAnimatedRing(scene, targetGroup.position.x, targetGroup.position.z, COLORS.sleepText, {
+            innerRadius: 0.12, outerRadius: 0.28, maxScale: 1.0, duration: 180
+        });
+    }
 
     soundFns.playMagicWave();
 

@@ -159,11 +159,13 @@ function getEnemySpriteConfigs(): Record<string, SpriteConfig> {
 // =============================================================================
 
 function resolveSpriteConfig(unit: Unit): SpriteConfig | undefined {
-    const spriteConfigs = getSpriteConfigs();
+    const playerSpriteConfigs = getSpriteConfigs();
     const enemySpriteConfigs = getEnemySpriteConfigs();
 
-    // Player sprites are keyed by unit ID
-    if (spriteConfigs[unit.id]) return spriteConfigs[unit.id];
+    // Player sprites are keyed by unit ID, but only for the player team.
+    if (unit.team === "player") {
+        return playerSpriteConfigs[unit.id];
+    }
 
     // Enemy sprites keyed by type (amoebas vary by split count)
     let enemySpriteKey: string | undefined = unit.enemyType;

@@ -27,6 +27,7 @@ export interface SpawnContext extends BehaviorBaseContext {
     spawnSkill: EnemySpawnSkill;
     unitsState: Unit[];
     unitsRef: Record<number, UnitGroup>;
+    scene: THREE.Scene;
     setUnits: React.Dispatch<React.SetStateAction<Unit[]>>;
 }
 
@@ -69,6 +70,7 @@ export interface RaiseContext extends BehaviorBaseContext {
     raiseSkill: EnemyRaiseSkill;
     unitsState: Unit[];
     unitsRef: Record<number, UnitGroup>;
+    scene: THREE.Scene;
     setUnits: React.Dispatch<React.SetStateAction<Unit[]>>;
 }
 

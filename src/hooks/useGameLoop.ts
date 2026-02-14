@@ -81,6 +81,21 @@ export interface UseGameLoopOptions {
 // VISUAL UPDATES (run every frame, even when paused)
 // =============================================================================
 
+const CANDLE_FLICKER_INTERVAL_MS = 50;
+const DEFAULT_CANDLE_LIGHT_INTENSITY = 12;
+let lastCandleFlickerUpdate = 0;
+
+function getStablePhase(
+    userData: Record<string, unknown>,
+    key: string,
+    fallback: number
+): number {
+    const value = Reflect.get(userData, key);
+    if (typeof value === "number") return value;
+    userData[key] = fallback;
+    return fallback;
+}
+
 function updateVisualEffects(
     sceneState: InitializedSceneState,
     gameRefs: GameRefs,
@@ -88,17 +103,50 @@ function updateVisualEffects(
 ): void {
     const { flames, candleLights, doorMeshes } = sceneState;
 
-    // Flickering flames - slow, intense flicker
-    flames.forEach((flame: THREE.Mesh, i: number) => {
-        const flicker = 0.6 + Math.sin(now * 0.004 + i * 2) * 0.25 + Math.random() * 0.1;
-        flame.scale.y = 1.6 + Math.sin(now * 0.005 + i) * 0.5;
-        (flame.material as THREE.MeshBasicMaterial).opacity = flicker;
-    });
+    // Candle flicker is intentionally throttled and deterministic:
+    // avoids per-frame Math.random() churn while preserving motion.
+    if (now - lastCandleFlickerUpdate >= CANDLE_FLICKER_INTERVAL_MS) {
+        const t = now * 0.001;
 
-    // Room lights flicker subtly
-    candleLights.forEach((light: THREE.PointLight, i: number) => {
-        light.intensity = 12 + Math.sin(now * 0.003 + i * 1.7) * 3 + Math.random() * 1;
-    });
+        for (let i = 0; i < flames.length; i++) {
+            const flame = flames[i];
+            const phase = getStablePhase(flame.userData, "flickerPhase", i * 1.618);
+            const primary = Math.sin(t * 12 + phase);
+            const secondary = Math.sin(t * 19 + phase * 0.73);
+            const flicker = THREE.MathUtils.clamp(0.72 + primary * 0.13 + secondary * 0.07, 0.45, 1.0);
+            flame.scale.y = 1.55 + primary * 0.25 + secondary * 0.15;
+            (flame.material as THREE.MeshBasicMaterial).opacity = flicker;
+        }
+
+        for (let i = 0; i < candleLights.length; i++) {
+            const light = candleLights[i];
+            const userData = light.userData as Record<string, unknown>;
+            const baseIntensityRaw = Reflect.get(userData, "baseIntensity");
+            const baseIntensity = typeof baseIntensityRaw === "number"
+                ? baseIntensityRaw
+                : DEFAULT_CANDLE_LIGHT_INTENSITY;
+            if (typeof baseIntensityRaw !== "number") {
+                userData.baseIntensity = baseIntensity;
+            }
+
+            const flickerStrengthRaw = Reflect.get(userData, "flickerStrength");
+            const flickerStrength = typeof flickerStrengthRaw === "number"
+                ? Math.max(0, flickerStrengthRaw)
+                : 0.12;
+            if (flickerStrength <= 0) {
+                light.intensity = baseIntensity;
+                continue;
+            }
+
+            const phase = getStablePhase(userData, "flickerPhase", i * 2.173);
+            const primary = Math.sin(t * 8 + phase);
+            const secondary = Math.sin(t * 13 + phase * 0.81);
+            const normalized = 1 + (primary * 0.66 + secondary * 0.34) * flickerStrength;
+            light.intensity = Math.max(0, baseIntensity * normalized);
+        }
+
+        lastCandleFlickerUpdate = now;
+    }
 
     // Door hover glow effect
     doorMeshes.forEach(doorMesh => {

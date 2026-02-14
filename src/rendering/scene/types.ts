@@ -31,7 +31,7 @@ export interface SceneRefs {
     renderer: THREE.WebGLRenderer;
     flames: THREE.Mesh[];
     candleMeshes: THREE.Mesh[];  // Candle body meshes for occlusion transparency
-    candleLights: THREE.PointLight[];
+    candleLights: THREE.Light[];
     fogTexture: FogTexture;
     fogMesh: THREE.Mesh;
     moveMarker: THREE.Mesh;

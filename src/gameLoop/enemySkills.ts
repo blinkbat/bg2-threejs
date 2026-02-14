@@ -8,7 +8,7 @@ import { COLORS, SWIPE_ANIMATE_DURATION } from "../core/constants";
 import { getUnitStats } from "../game/units";
 import { calculateDamageWithCrit, rollHit, getEffectiveArmor, logAoeHit, logAoeMiss } from "../combat/combatMath";
 import { distance } from "../game/geometry";
-import { applyDamageToUnit, animateExpandingMesh, getAliveUnitsInRange, spawnDamageNumber, buildDamageContext } from "../combat/damageEffects";
+import { applyDamageToUnit, animateExpandingMesh, getAliveUnitsInRange, spawnDamageNumber, buildDamageContext, createAnimatedRing } from "../combat/damageEffects";
 import { soundFns } from "../audio";
 
 // =============================================================================
@@ -63,6 +63,12 @@ export function executeEnemySwipe(
         maxScale: 1.3,
         baseRadius: 1
     });
+    createAnimatedRing(scene, g.position.x, g.position.z, "#ff4444", {
+        innerRadius: 0.2,
+        outerRadius: 0.45,
+        maxScale: 1.2,
+        duration: 220
+    });
 
     // Play sound
     soundFns.playHit();
@@ -83,6 +89,12 @@ export function executeEnemySwipe(
                 targetUnit: target,
                 attackerId: unit.id,
                 isMeleeHit: true
+            });
+            createAnimatedRing(scene, tg.position.x, tg.position.z, COLORS.damageEnemy, {
+                innerRadius: 0.14,
+                outerRadius: 0.3,
+                maxScale: 1.05,
+                duration: 180
             });
             hitCount++;
             totalDamage += dmg;
@@ -169,6 +181,18 @@ export function executeEnemyHeal(
     ring.position.set(bestTarget.group.position.x, 0.1, bestTarget.group.position.z);
     scene.add(ring);
     animateExpandingMesh(scene, ring, { maxScale: 1.5, baseRadius: 0.4, duration: 300 });
+    createAnimatedRing(scene, g.position.x, g.position.z, "#9932CC", {
+        innerRadius: 0.2,
+        outerRadius: 0.4,
+        maxScale: 1.1,
+        duration: 220
+    });
+    createAnimatedRing(scene, bestTarget.group.position.x, bestTarget.group.position.z, "#b56de0", {
+        innerRadius: 0.2,
+        outerRadius: 0.45,
+        maxScale: 1.5,
+        duration: 260
+    });
 
     soundFns.playHeal();
     addLog(`${enemyData.name} heals ${targetStats.name} for ${estimatedHeal}!`, "#9932CC");
