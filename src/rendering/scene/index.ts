@@ -371,7 +371,11 @@ interface CandleLightCluster {
 
 const CANDLE_LIGHT_CLUSTER_RADIUS = 5.5;
 const CANDLE_LIGHT_CLUSTER_MAX_MEMBERS = 6;
-const DIRECTIONAL_SHADOW_MAP_SIZE = 1024;
+const DIRECTIONAL_SHADOW_MAP_SIZE = 512;
+const MAX_FLAME_CLUSTER_LIGHTS = 2;
+const MAX_AREA_LIGHTS = 2;
+const ENABLE_DOOR_POINT_LIGHTS = false;
+const RENDERER_MAX_PIXEL_RATIO = 1.25;
 
 function normalizeHexColor(color: string | undefined, fallback: string): string {
     if (typeof color === "string" && /^#[0-9a-fA-F]{6}$/.test(color)) {
@@ -532,15 +536,15 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     const aspect = container.clientWidth / container.clientHeight;
     const camera = new THREE.OrthographicCamera(-15 * aspect, 15 * aspect, 15, -15, 0.1, 1000);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
     renderer.setSize(container.clientWidth, container.clientHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, RENDERER_MAX_PIXEL_RATIO));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     const baseExposure = area.id === "forest" ? 1.12 : 1.1;
     renderer.toneMappingExposure = baseExposure;
     scene.userData.baseExposure = baseExposure;
-    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.enabled = false;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.shadowMap.autoUpdate = false;
     container.appendChild(renderer.domElement);
@@ -573,7 +577,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     dirTarget.position.set(area.gridWidth / 2, 0, area.gridHeight / 2);
     scene.add(dirTarget);
     dir.target = dirTarget;
-    dir.castShadow = true;
+    dir.castShadow = false;
     const shadowExtent = Math.max(area.gridWidth, area.gridHeight);
     dir.shadow.mapSize.set(DIRECTIONAL_SHADOW_MAP_SIZE, DIRECTIONAL_SHADOW_MAP_SIZE);
     dir.shadow.camera.left = -shadowExtent;
@@ -801,7 +805,11 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     }
 
     const lightClusters = buildCandleLightClusters(candleLightSources);
-    for (const cluster of lightClusters) {
+    const selectedLightClusters = [...lightClusters]
+        .sort((a, b) => b.totalIntensity - a.totalIntensity)
+        .slice(0, MAX_FLAME_CLUSTER_LIGHTS);
+
+    for (const cluster of selectedLightClusters) {
         const firstMember = cluster.members[0];
         if (!firstMember) continue;
         const isSingle = cluster.members.length === 1;
@@ -835,21 +843,34 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
 
     // Editor-authored high lights.
     if (area.lights) {
-        for (const areaLight of area.lights) {
-            const tint = normalizeHexColor(areaLight.tint, DEFAULT_AREA_LIGHT_TINT);
-            const radius = clampFinite(areaLight.radius, 1, 60, DEFAULT_AREA_LIGHT_RADIUS);
-            const angleDeg = clampFinite(areaLight.angle, 5, 90, DEFAULT_AREA_LIGHT_ANGLE);
-            const brightness = clampFinite(areaLight.brightness, 0, 50, DEFAULT_AREA_LIGHT_BRIGHTNESS);
-            const height = clampFinite(areaLight.height, 1, 30, DEFAULT_AREA_LIGHT_HEIGHT);
-            const diffusion = clampFinite(areaLight.diffusion, 0, 1, DEFAULT_AREA_LIGHT_DIFFUSION);
-            const decay = clampFinite(areaLight.decay, 0, 3, DEFAULT_AREA_LIGHT_DECAY);
-            const angleRad = THREE.MathUtils.degToRad(angleDeg);
+        const selectedAreaLights = area.lights
+            .map(rawLight => ({
+                x: rawLight.x,
+                z: rawLight.z,
+                tint: normalizeHexColor(rawLight.tint, DEFAULT_AREA_LIGHT_TINT),
+                radius: clampFinite(rawLight.radius, 1, 60, DEFAULT_AREA_LIGHT_RADIUS),
+                angleRad: THREE.MathUtils.degToRad(clampFinite(rawLight.angle, 5, 90, DEFAULT_AREA_LIGHT_ANGLE)),
+                brightness: clampFinite(rawLight.brightness, 0, 50, DEFAULT_AREA_LIGHT_BRIGHTNESS),
+                height: clampFinite(rawLight.height, 1, 30, DEFAULT_AREA_LIGHT_HEIGHT),
+                diffusion: clampFinite(rawLight.diffusion, 0, 1, DEFAULT_AREA_LIGHT_DIFFUSION),
+                decay: clampFinite(rawLight.decay, 0, 3, DEFAULT_AREA_LIGHT_DECAY),
+            }))
+            .sort((a, b) => b.brightness - a.brightness)
+            .slice(0, MAX_AREA_LIGHTS);
 
-            const spot = new THREE.SpotLight(tint, brightness, radius, angleRad, diffusion, decay);
-            spot.position.set(areaLight.x, height, areaLight.z);
+        for (const areaLight of selectedAreaLights) {
+            const spot = new THREE.SpotLight(
+                areaLight.tint,
+                areaLight.brightness,
+                areaLight.radius,
+                areaLight.angleRad,
+                areaLight.diffusion,
+                areaLight.decay
+            );
+            spot.position.set(areaLight.x, areaLight.height, areaLight.z);
             spot.target.position.set(areaLight.x, 0, areaLight.z);
             spot.castShadow = false;
-            spot.userData.baseIntensity = brightness;
+            spot.userData.baseIntensity = areaLight.brightness;
             spot.userData.flickerStrength = 0;
             spot.userData.lightRole = "area";
             scene.add(spot);
@@ -1722,17 +1743,19 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         doorMeshes.push(doorMesh as unknown as DoorMesh);
 
         // Inner glow light - subtle point light inside the portal
-        const doorLight = new THREE.PointLight("#7ab0e0", 1.2, 6, 2);
-        doorLight.position.set(
-            transition.x + transition.w / 2,
-            1.0,
-            transition.z + transition.h / 2
-        );
-        doorLight.userData.baseIntensity = 1.2;
-        doorLight.userData.flickerStrength = 0;
-        doorLight.userData.lightRole = "area";
-        scene.add(doorLight);
-        candleLights.push(doorLight);
+        if (ENABLE_DOOR_POINT_LIGHTS) {
+            const doorLight = new THREE.PointLight("#7ab0e0", 1.2, 6, 2);
+            doorLight.position.set(
+                transition.x + transition.w / 2,
+                1.0,
+                transition.z + transition.h / 2
+            );
+            doorLight.userData.baseIntensity = 1.2;
+            doorLight.userData.flickerStrength = 0;
+            doorLight.userData.lightRole = "area";
+            scene.add(doorLight);
+            candleLights.push(doorLight);
+        }
     });
 
     // Secret doors - wall segment with cracks that gets removed when clicked
@@ -1868,7 +1891,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
 
     // AOE indicator
     const aoeIndicator = new THREE.Mesh(
-        new THREE.RingGeometry(0.1, 2.5, 32),
+        new THREE.RingGeometry(0.1, 2.5, 64),
         new THREE.MeshBasicMaterial({ color: "#ff4400", side: THREE.DoubleSide, transparent: true, opacity: 0.4 })
     );
     aoeIndicator.rotation.x = -Math.PI / 2;
@@ -1910,7 +1933,9 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     });
 
     applyShadowDefaults(scene);
-    renderer.shadowMap.needsUpdate = true;
+    if (renderer.shadowMap.enabled) {
+        renderer.shadowMap.needsUpdate = true;
+    }
 
     return {
         scene,

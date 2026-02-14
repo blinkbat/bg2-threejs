@@ -191,6 +191,8 @@ interface UnitCreationResult {
     billboard?: THREE.Mesh;
 }
 
+const UNIT_RING_SEGMENTS = 64;
+
 /**
  * Build a complete unit group with mesh, shadow, light, rings, and shield indicator.
  * Single source of truth for unit visual creation — used by both initial scene setup
@@ -295,23 +297,27 @@ function buildUnitGroup(
     shadow.position.y = 0.004 - flyHeight;
     group.add(shadow);
 
-    // Keep per-unit dynamic lights on player-controlled units only.
-    // Enemy swarms with individual lights are a large GPU cost multipler.
-    if (isPlayer) {
-        const unitLight = new THREE.PointLight(data.color, 0.15, 2, 2);
-        unitLight.position.y = boxH / 2;
-        group.add(unitLight);
-    }
+    // Per-unit point lights are disabled to keep light count stable and low.
 
     // Selection ring
     const selInner = 0.5 * size;
-    const selOuter = 0.55 * size;
+    const selOuter = 0.54 * size;
     const selectRing = new THREE.Mesh(
-        new THREE.RingGeometry(selInner, selOuter, 32),
-        new THREE.MeshBasicMaterial({ color: "#00ff00", side: THREE.DoubleSide })
+        new THREE.RingGeometry(selInner, selOuter, UNIT_RING_SEGMENTS),
+        new THREE.MeshBasicMaterial({
+            color: "#00ff00",
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.95,
+            depthWrite: false,
+            toneMapped: false,
+            polygonOffset: true,
+            polygonOffsetFactor: -2,
+            polygonOffsetUnits: -2
+        })
     );
     selectRing.rotation.x = -Math.PI / 2;
-    selectRing.position.y = 0.03;
+    selectRing.position.y = 0.05;
     selectRing.visible = false;
     group.add(selectRing);
 
@@ -321,11 +327,21 @@ function buildUnitGroup(
 
     if (!isPlayer) {
         targetRing = new THREE.Mesh(
-            new THREE.RingGeometry(selInner, selOuter, 32),
-            new THREE.MeshBasicMaterial({ color: "#ff0000", side: THREE.DoubleSide, transparent: true, opacity: 1 })
+            new THREE.RingGeometry(selInner, selOuter, UNIT_RING_SEGMENTS),
+            new THREE.MeshBasicMaterial({
+                color: "#ff0000",
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.95,
+                depthWrite: false,
+                toneMapped: false,
+                polygonOffset: true,
+                polygonOffsetFactor: -2,
+                polygonOffsetUnits: -2
+            })
         );
         targetRing.rotation.x = -Math.PI / 2;
-        targetRing.position.y = 0.03;
+        targetRing.position.y = 0.05;
         targetRing.visible = false;
         group.add(targetRing);
 

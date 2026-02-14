@@ -171,7 +171,7 @@ interface LightingTuningSettings {
 }
 
 const DEFAULT_LIGHTING_TUNING: LightingTuningSettings = {
-    shadowsEnabled: true,
+    shadowsEnabled: false,
     exposureScale: 0.88,
     ambientScale: 1.5,
     hemisphereScale: 0,
