@@ -517,3 +517,11 @@ spawn: 25,25
 46,48:small_seaweed
 4,49:mushroom
 42,49:small_seaweed
+
+=== LIGHTS ===
+24.5,10.5:radius=12,angle=45,tint=#ffd28a,brightness=46,height=8,diffusion=0.35,decay=1.2
+19.5,36.5:radius=12,angle=45,tint=#ffd28a,brightness=46,height=8,diffusion=0.35,decay=1.2
+40.5,21.5:radius=12,angle=45,tint=#ffd28a,brightness=36,height=8,diffusion=0.35,decay=1.2
+26.5,44.5:radius=12,angle=45,tint=#ffd28a,brightness=46,height=8,diffusion=0.35,decay=1.2
+10.5,13.5:radius=12,angle=45,tint=#ffd28a,brightness=46,height=8,diffusion=0.35,decay=1.2
+23.5,28.5:radius=12,angle=45,tint=#ffd28a,brightness=26,height=8,diffusion=0.35,decay=1.2
