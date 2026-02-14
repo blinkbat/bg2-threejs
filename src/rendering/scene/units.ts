@@ -309,6 +309,7 @@ function buildUnitGroup(
             side: THREE.DoubleSide,
             transparent: true,
             opacity: 0.95,
+            depthTest: true,
             depthWrite: false,
             toneMapped: false,
             polygonOffset: true,
@@ -318,6 +319,7 @@ function buildUnitGroup(
     );
     selectRing.rotation.x = -Math.PI / 2;
     selectRing.position.y = 0.05;
+    selectRing.renderOrder = 200;
     selectRing.visible = false;
     group.add(selectRing);
 
@@ -333,6 +335,7 @@ function buildUnitGroup(
                 side: THREE.DoubleSide,
                 transparent: true,
                 opacity: 0.95,
+                depthTest: true,
                 depthWrite: false,
                 toneMapped: false,
                 polygonOffset: true,
@@ -342,6 +345,7 @@ function buildUnitGroup(
         );
         targetRing.rotation.x = -Math.PI / 2;
         targetRing.position.y = 0.05;
+        targetRing.renderOrder = 200;
         targetRing.visible = false;
         group.add(targetRing);
 
