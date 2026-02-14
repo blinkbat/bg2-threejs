@@ -167,7 +167,7 @@ spawn: 46,25
 
 === ENEMIES ===
 15.5,8.5:magma_imp
-19.5,17.5:magma_imp
+17.5,16.5:magma_imp
 5.5,24.5:bat
 12.5,24.5:magma_imp
 14.5,28.5:bat
