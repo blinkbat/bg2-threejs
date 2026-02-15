@@ -3,10 +3,10 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitGroup, DamageText, Projectile, EnemyStats, MagicMissileProjectile, TrapProjectile, FireballProjectile, PiercingProjectile, StatusEffect, DamageType, UnitData } from "../core/types";
+import type { Unit, UnitGroup, DamageText, Projectile, EnemyStats, MagicMissileProjectile, TrapProjectile, FireballProjectile, PiercingProjectile, StatusEffect, DamageType, UnitData, SkillOnHitEffect } from "../core/types";
 import { HIT_DETECTION_RADIUS, COLORS, BUFF_TICK_INTERVAL, SUN_STANCE_BONUS_DAMAGE, GLACIAL_WHORL_HIT_RADIUS } from "../core/constants";
 import { getUnitStats } from "../game/units";
-import { calculateDamageWithCrit, getDirectionAndDistance, rollHit, rollDamage, shouldApplyPoison, getEffectiveArmor, logHit, logLifestealHit, logMiss, logPoisoned, logAoeHit, logAoeMiss, getDamageColor, logTrapTriggered, calculateStatBonus, applyStatusEffect, checkEnemyDefenses, hasStatusEffect, rollChance, applyChilled } from "../combat/combatMath";
+import { calculateDamageWithCrit, calculateDamageWithOptionalCritChance, getDirectionAndDistance, rollHit, rollDamage, shouldApplyPoison, getEffectiveArmor, logHit, logLifestealHit, logMiss, logPoisoned, logAoeHit, logAoeMiss, getDamageColor, logTrapTriggered, calculateStatBonus, applyStatusEffect, checkEnemyDefenses, hasStatusEffect, rollChance, applyChilled, logStunned, logWeakened, logHamstrung } from "../combat/combatMath";
 import { distance } from "../game/geometry";
 import { accumulateDelta } from "../core/gameClock";
 import { isBlocked } from "../ai/pathfinding";
@@ -42,16 +42,64 @@ interface VolleyStats {
 }
 const magicWaveVolleys: Map<number, VolleyStats> = new Map();
 
+function getOrCreateMagicWaveVolley(
+    volleyId: number,
+    totalMissiles: number,
+    attackerName: string
+): VolleyStats {
+    const existing = magicWaveVolleys.get(volleyId);
+    if (existing) return existing;
+
+    const next: VolleyStats = {
+        hits: 0,
+        totalDamage: 0,
+        missilesResolved: 0,
+        totalMissiles,
+        attackerName
+    };
+    magicWaveVolleys.set(volleyId, next);
+    return next;
+}
+
+function resolveMagicWaveMissile(
+    mmProj: MagicMissileProjectile,
+    attackerName: string,
+    damageDealt: number,
+    addLog: (text: string, color?: string) => void
+): void {
+    const volley = getOrCreateMagicWaveVolley(mmProj.volleyId, mmProj.totalMissiles, attackerName);
+    volley.missilesResolved++;
+    if (damageDealt > 0) {
+        volley.hits++;
+        volley.totalDamage += damageDealt;
+    }
+
+    if (volley.missilesResolved >= volley.totalMissiles) {
+        if (volley.hits > 0) {
+            addLog(logAoeHit(volley.attackerName, "Magic Wave", volley.hits, volley.totalDamage), "#9966ff");
+        } else {
+            addLog(logAoeMiss(volley.attackerName, "Magic Wave"), COLORS.logNeutral);
+        }
+        magicWaveVolleys.delete(mmProj.volleyId);
+    }
+}
+
 /**
  * Match piercing hit radius to the projectile's widest horizontal visual axis.
  */
 function getPiercingHitRadius(proj: PiercingProjectile): number {
-    const baseRadius = (proj.mesh.geometry as THREE.SphereGeometry).parameters?.radius;
+    const geometryParams = Reflect.get(proj.mesh.geometry, "parameters");
+    const baseRadius = geometryParams && typeof geometryParams === "object"
+        ? Reflect.get(geometryParams, "radius")
+        : undefined;
     if (typeof baseRadius !== "number") {
         return GLACIAL_WHORL_HIT_RADIUS;
     }
 
-    const horizontalScale = Math.max(Math.abs(proj.mesh.scale.x), Math.abs(proj.mesh.scale.z));
+    const horizontalScale = Math.max(
+        Math.abs(proj.baseScaleX ?? proj.mesh.scale.x),
+        Math.abs(proj.baseScaleZ ?? proj.mesh.scale.z)
+    );
     return baseRadius * horizontalScale;
 }
 
@@ -61,8 +109,22 @@ function getPiercingHitRadius(proj: PiercingProjectile): number {
 
 function disposeProjectile(scene: THREE.Scene, proj: Projectile): void {
     scene.remove(proj.mesh);
-    // Geometry is shared - only dispose material
-    (proj.mesh.material as THREE.Material).dispose();
+    proj.mesh.traverse((object: THREE.Object3D) => {
+        if (!(object instanceof THREE.Mesh)) return;
+
+        if (object.userData.sharedGeometry !== true) {
+            object.geometry.dispose();
+        }
+
+        const material = object.material;
+        if (Array.isArray(material)) {
+            for (const mat of material) {
+                mat.dispose();
+            }
+        } else {
+            material.dispose();
+        }
+    });
 }
 
 function spawnProjectileImpact(
@@ -79,6 +141,140 @@ function spawnProjectileImpact(
         maxScale,
         duration
     });
+}
+
+function getVisualPhase(mesh: THREE.Mesh): number {
+    const raw = Reflect.get(mesh.userData, "visualPhase");
+    return typeof raw === "number" ? raw : 0;
+}
+
+function setVisualPhase(mesh: THREE.Mesh, phase: number): void {
+    mesh.userData.visualPhase = phase;
+}
+
+function getProjectileVisualType(mesh: THREE.Mesh): "aoe" | "ranged" | "enemy" | null {
+    const raw = Reflect.get(mesh.userData, "projectileVisualType");
+    if (raw === "aoe" || raw === "ranged" || raw === "enemy") {
+        return raw;
+    }
+    return null;
+}
+
+function updateSharedProjectileVisual(mesh: THREE.Mesh): void {
+    const visualType = getProjectileVisualType(mesh);
+    if (!visualType) return;
+
+    const nextPhase = getVisualPhase(mesh) + (visualType === "aoe" ? 0.22 : 0.16);
+    setVisualPhase(mesh, nextPhase);
+
+    const pulse = visualType === "aoe"
+        ? 1 + Math.sin(nextPhase) * 0.09
+        : 1 + Math.sin(nextPhase) * 0.05;
+    mesh.scale.set(pulse, pulse, pulse);
+    mesh.rotation.y += visualType === "aoe" ? 0.11 : 0.08;
+    mesh.rotation.x += visualType === "enemy" ? 0.07 : 0.03;
+
+    const mat = mesh.material;
+    if (mat instanceof THREE.MeshPhongMaterial) {
+        const base = visualType === "aoe" ? 0.46 : 0.24;
+        const amp = visualType === "aoe" ? 0.3 : 0.18;
+        mat.emissiveIntensity = base + Math.max(0, Math.sin(nextPhase * 1.7)) * amp;
+    }
+}
+
+function updateMagicMissileVisual(mesh: THREE.Mesh, missileIndex: number): void {
+    const nextPhase = getVisualPhase(mesh) + 0.2;
+    setVisualPhase(mesh, nextPhase);
+
+    const pulse = 1 + Math.sin(nextPhase + missileIndex * 0.25) * 0.11;
+    mesh.scale.set(pulse, pulse, pulse);
+    mesh.rotation.x += 0.16;
+    mesh.rotation.y += 0.24;
+    mesh.rotation.z += 0.11;
+
+    const mat = mesh.material;
+    if (mat instanceof THREE.MeshPhongMaterial) {
+        mat.emissiveIntensity = 0.4 + Math.max(0, Math.sin(nextPhase * 1.9)) * 0.35;
+    }
+}
+
+function updateFireballVisual(mesh: THREE.Mesh): void {
+    const nextPhase = getVisualPhase(mesh) + 0.18;
+    setVisualPhase(mesh, nextPhase);
+
+    const pulse = 1 + Math.sin(nextPhase) * 0.08;
+    mesh.scale.set(pulse, pulse, pulse);
+
+    const mat = mesh.material;
+    if (mat instanceof THREE.MeshPhongMaterial) {
+        mat.emissiveIntensity = 0.52 + Math.max(0, Math.sin(nextPhase * 1.6)) * 0.36;
+    }
+
+    const innerGlow = mesh.children[0];
+    if (innerGlow instanceof THREE.Mesh) {
+        const glowPulse = 0.9 + Math.max(0, Math.sin(nextPhase * 2.1)) * 0.35;
+        innerGlow.scale.set(glowPulse, glowPulse, glowPulse);
+        const glowMat = innerGlow.material;
+        if (glowMat instanceof THREE.MeshBasicMaterial) {
+            glowMat.opacity = 0.45 + Math.max(0, Math.sin(nextPhase * 2.4)) * 0.35;
+        }
+    }
+}
+
+function updateArmedTrapVisual(mesh: THREE.Mesh): void {
+    const nextPhase = getVisualPhase(mesh) + 0.11;
+    setVisualPhase(mesh, nextPhase);
+
+    const pulse = 1 + Math.sin(nextPhase) * 0.07;
+    mesh.scale.set(pulse, pulse, pulse);
+    mesh.rotation.y += 0.04;
+
+    const mat = mesh.material;
+    if (mat instanceof THREE.MeshPhongMaterial) {
+        mat.emissiveIntensity = 0.3 + Math.max(0, Math.sin(nextPhase * 2.0)) * 0.22;
+    }
+}
+
+function updatePiercingVisualEffects(
+    scene: THREE.Scene,
+    proj: PiercingProjectile,
+    now: number
+): void {
+    const baseScaleX = Math.abs(proj.baseScaleX ?? proj.mesh.scale.x);
+    const baseScaleY = Math.abs(proj.baseScaleY ?? proj.mesh.scale.y);
+    const baseScaleZ = Math.abs(proj.baseScaleZ ?? proj.mesh.scale.z);
+
+    const phase = (proj.visualPhase ?? 0) + 0.18;
+    proj.visualPhase = phase;
+
+    const pulseA = 1 + Math.sin(phase) * 0.08;
+    const pulseB = 1 + Math.cos(phase * 1.35) * 0.06;
+    const pulseC = 1 + Math.sin(phase + 1.2) * 0.05;
+    proj.mesh.scale.set(baseScaleX * pulseA, baseScaleY * pulseB, baseScaleZ * pulseC);
+
+    const spin = proj.spinSpeed ?? 0.08;
+    proj.mesh.rotation.x += spin;
+    proj.mesh.rotation.y += spin * 0.3;
+    proj.mesh.rotation.z += spin * 0.45;
+
+    const mat = proj.mesh.material;
+    if (mat instanceof THREE.MeshPhongMaterial) {
+        mat.emissiveIntensity = 0.42 + Math.max(0, Math.sin(phase * 1.6)) * 0.32;
+    }
+
+    const trailIntervalMs = proj.trailIntervalMs ?? 120;
+    const nextTrailAt = proj.nextTrailAt ?? now;
+    if (now >= nextTrailAt) {
+        createAnimatedRing(scene, proj.mesh.position.x, proj.mesh.position.z, COLORS.chilledText, {
+            innerRadius: 0.05,
+            outerRadius: 0.14,
+            maxScale: 0.95,
+            duration: 170,
+            initialOpacity: 0.42,
+            y: 0.08
+        });
+        proj.nextTrailAt = now + trailIntervalMs;
+    }
 }
 
 // =============================================================================
@@ -101,6 +297,66 @@ function aggroOnHit(
 
     // Alert the enemy - they'll find the nearest player on their next targeting phase
     targetG.userData.alerted = true;
+}
+
+function applySkillProjectileOnHitEffect(
+    effect: SkillOnHitEffect,
+    targetId: number,
+    targetName: string,
+    targetX: number,
+    targetZ: number,
+    attackerId: number,
+    now: number,
+    scene: THREE.Scene,
+    setUnits: React.Dispatch<React.SetStateAction<Unit[]>>,
+    addLog: (text: string, color?: string) => void
+): void {
+    const statusType = effect.type === "stun"
+        ? "stunned"
+        : effect.type === "attack_down"
+            ? "weakened"
+            : "hamstrung";
+
+    const statusEffect: StatusEffect = {
+        type: statusType,
+        duration: effect.duration,
+        tickInterval: BUFF_TICK_INTERVAL,
+        timeSinceTick: 0,
+        lastUpdateTime: now,
+        damagePerTick: 0,
+        sourceId: attackerId
+    };
+
+    setUnits(prev => prev.map(u => {
+        if (u.id !== targetId || u.hp <= 0) return u;
+        return { ...u, statusEffects: applyStatusEffect(u.statusEffects, statusEffect) };
+    }));
+
+    if (effect.type === "stun") {
+        addLog(logStunned(targetName), COLORS.stunnedText);
+        createAnimatedRing(scene, targetX, targetZ, COLORS.stunnedText, {
+            innerRadius: 0.16,
+            outerRadius: 0.34,
+            maxScale: 1.25,
+            duration: 240
+        });
+    } else if (effect.type === "attack_down") {
+        addLog(logWeakened(targetName), COLORS.weakenedText);
+        createAnimatedRing(scene, targetX, targetZ, COLORS.weakenedText, {
+            innerRadius: 0.16,
+            outerRadius: 0.34,
+            maxScale: 1.2,
+            duration: 220
+        });
+    } else {
+        addLog(logHamstrung(targetName), COLORS.hamstrungText);
+        createAnimatedRing(scene, targetX, targetZ, COLORS.hamstrungText, {
+            innerRadius: 0.16,
+            outerRadius: 0.34,
+            maxScale: 1.2,
+            duration: 220
+        });
+    }
 }
 
 // =============================================================================
@@ -127,6 +383,7 @@ export function updateProjectiles(
         if (proj.type === "aoe") {
             const { targetPos, aoeRadius, damage } = proj;
             const { dx, dz, dist } = getDirectionAndDistance(proj.mesh.position.x, proj.mesh.position.z, targetPos.x, targetPos.z);
+            updateSharedProjectileVisual(proj.mesh);
 
             // Reached target - explode
             if (dist < HIT_DETECTION_RADIUS) {
@@ -187,157 +444,120 @@ export function updateProjectiles(
             return true;
         }
 
-        // Magic Wave projectile - zig-zag homing (or position-targeted)
+        // Magic Wave projectile - forward-traveling wave lane
         if (proj.type === "magic_missile") {
             const mmProj = proj as MagicMissileProjectile;
             const attackerUnit = getUnitById(mmProj.attackerId);
+            updateMagicMissileVisual(proj.mesh, mmProj.missileIndex);
+            const attackerName = attackerUnit ? getUnitStats(attackerUnit).name : "Unknown";
+            const attackerG = unitsRef[mmProj.attackerId];
 
-            if (!attackerUnit) {
+            if (!attackerUnit || !attackerG) {
+                resolveMagicWaveMissile(mmProj, attackerName, 0, addLog);
                 disposeProjectile(scene, proj);
                 return false;
             }
 
-            // Determine target position - either enemy position or fixed target position
-            let targetX: number, targetZ: number;
-            let targetUnit: Unit | undefined;
-            let targetG: UnitGroup | undefined;
-
-            if (mmProj.targetId === -1 && mmProj.targetPos) {
-                // Position-based targeting (no enemy)
-                targetX = mmProj.targetPos.x;
-                targetZ = mmProj.targetPos.z;
-            } else {
-                // Enemy-based targeting
-                targetUnit = getUnitById(mmProj.targetId);
-                targetG = unitsRef[mmProj.targetId];
-
-                if (!targetUnit || !targetG || targetUnit.hp <= 0 || defeatedThisFrame.has(mmProj.targetId)) {
-                    // Target died or invalid - fizzle out, but still count toward volley
-                    const attackerName = attackerUnit ? getUnitStats(attackerUnit).name : "Unknown";
-                    if (!magicWaveVolleys.has(mmProj.volleyId)) {
-                        magicWaveVolleys.set(mmProj.volleyId, {
-                            hits: 0,
-                            totalDamage: 0,
-                            missilesResolved: 0,
-                            totalMissiles: mmProj.totalMissiles,
-                            attackerName
-                        });
-                    }
-                    const volley = magicWaveVolleys.get(mmProj.volleyId)!;
-                    volley.missilesResolved++;
-
-                    // Log when all missiles in volley have resolved
-                    if (volley.missilesResolved >= volley.totalMissiles) {
-                        if (volley.hits > 0) {
-                            addLog(logAoeHit(volley.attackerName, "Magic Wave", volley.hits, volley.totalDamage), "#9966ff");
-                        } else {
-                            addLog(logAoeMiss(volley.attackerName, "Magic Wave"), COLORS.logNeutral);
-                        }
-                        magicWaveVolleys.delete(mmProj.volleyId);
-                    }
-
-                    spawnProjectileImpact(scene, proj.mesh.position.x, proj.mesh.position.z, COLORS.logNeutral, 0.9, 140);
-                    disposeProjectile(scene, proj);
-                    return false;
-                }
-
-                targetX = targetG.position.x;
-                targetZ = targetG.position.z;
-            }
-
-            const { dx, dz, dist } = getDirectionAndDistance(proj.mesh.position.x, proj.mesh.position.z, targetX, targetZ);
-
-            // Hit detection
-            if (dist < HIT_DETECTION_RADIUS) {
-                let dmgDealt = 0;
-                let shieldBlocked = false;
-
-                if (targetUnit && targetG) {
-                    // Check for front-shield block (magic missiles have 50% chance to be blocked)
-                    if (attackerUnit.team === "player" && targetUnit.enemyType) {
-                        const enemyStats = ENEMY_STATS[targetUnit.enemyType];
-                        const attackerG = unitsRef[mmProj.attackerId];
-                        if (attackerG && checkEnemyDefenses(enemyStats, targetUnit.facing, attackerG.position.x, attackerG.position.z, targetG.position.x, targetG.position.z, undefined, 0.5) === "frontShield") {
-                            soundFns.playBlock();
-                            shieldBlocked = true;
-                            spawnProjectileImpact(scene, targetG.position.x, targetG.position.z, "#4488ff", 1.05, 170);
-                        }
-                    }
-
-                    if (!shieldBlocked && !defeatedThisFrame.has(targetUnit.id)) {
-                        const targetData = getUnitStats(targetUnit);
-                        const statBonus = calculateStatBonus(attackerUnit, mmProj.damageType);
-                        const result = calculateDamageWithCrit(mmProj.damage[0] + statBonus, mmProj.damage[1] + statBonus, getEffectiveArmor(targetUnit, targetData.armor), mmProj.damageType, attackerUnit);
-                        dmgDealt = result.damage;
-
-                        const mmAttackerG = unitsRef[mmProj.attackerId];
-                        applyDamageToUnit(dmgCtx, targetUnit.id, targetG, dmgDealt, targetData.name, {
-                            color: "#9966ff",
-                            attackerName: attackerUnit.team === "player" ? getUnitStats(attackerUnit).name : undefined,
-                            targetUnit: targetUnit,
-                            attackerPosition: mmAttackerG ? { x: mmAttackerG.position.x, z: mmAttackerG.position.z } : undefined,
-                            damageType: mmProj.damageType
-                        });
-                        spawnProjectileImpact(scene, targetG.position.x, targetG.position.z, "#9966ff", 1.2, 180);
-
-                        soundFns.playHit();
-                    }
-                }
-
-                // Track volley stats for aggregated logging (attackerUnit already validated above)
-                const attackerName = getUnitStats(attackerUnit).name;
-
-                if (!magicWaveVolleys.has(mmProj.volleyId)) {
-                    magicWaveVolleys.set(mmProj.volleyId, {
-                        hits: 0,
-                        totalDamage: 0,
-                        missilesResolved: 0,
-                        totalMissiles: mmProj.totalMissiles,
-                        attackerName
-                    });
-                }
-                const volley = magicWaveVolleys.get(mmProj.volleyId)!;
-                volley.missilesResolved++;
-                if (dmgDealt > 0) {
-                    volley.hits++;
-                    volley.totalDamage += dmgDealt;
-                }
-
-                // Log when all missiles in volley have resolved
-                if (volley.missilesResolved >= volley.totalMissiles) {
-                    if (volley.hits > 0) {
-                        addLog(logAoeHit(volley.attackerName, "Magic Wave", volley.hits, volley.totalDamage), "#9966ff");
-                    } else {
-                        addLog(logAoeMiss(volley.attackerName, "Magic Wave"), COLORS.logNeutral);
-                    }
-                    magicWaveVolleys.delete(mmProj.volleyId);
-                }
-
-                disposeProjectile(scene, proj);
-                return false;
-            }
-
-            // Zig-zag movement - oscillate perpendicular to direction of travel
-            const time = now * 0.006 + mmProj.zigzagPhase * Math.PI;
-            const zigzagAmount = Math.sin(time * 4) * 0.6;
-
-            // Perpendicular direction (rotate 90 degrees)
-            const perpX = -dz;
-            const perpZ = dx;
-
-            // Fan-out drift: missiles spread apart more as they travel
-            // Calculate how far the missile has traveled from its start position
-            const travelDist = Math.hypot(
+            // Move forward as a stable lane with a slight wave oscillation.
+            const travelDistBefore = Math.hypot(
                 proj.mesh.position.x - mmProj.startX,
                 proj.mesh.position.z - mmProj.startZ
             );
-            // Lateral drift increases with travel distance (fanAngle is -0.5 to 0.5)
-            // Stronger multipliers = more dramatic fan-out
-            const fanDrift = mmProj.fanAngle * travelDist * 0.25;
+            const desiredLaneX = mmProj.startX + mmProj.waveDirX * travelDistBefore + mmProj.wavePerpX * mmProj.waveLaneOffset;
+            const desiredLaneZ = mmProj.startZ + mmProj.waveDirZ * travelDistBefore + mmProj.wavePerpZ * mmProj.waveLaneOffset;
+            const laneCorrectionX = (desiredLaneX - proj.mesh.position.x) * 0.18;
+            const laneCorrectionZ = (desiredLaneZ - proj.mesh.position.z) * 0.18;
+            const waveTime = now * 0.007 + mmProj.zigzagPhase * Math.PI;
+            const waveOffset = Math.sin(waveTime * 3.4 + mmProj.missileIndex * 0.4) * (0.2 + Math.abs(mmProj.fanAngle) * 0.08);
 
-            // Move forward + lateral zig-zag + fan-out drift
-            proj.mesh.position.x += dx * mmProj.speed + perpX * (zigzagAmount * 0.18 + fanDrift * 0.12);
-            proj.mesh.position.z += dz * mmProj.speed + perpZ * (zigzagAmount * 0.18 + fanDrift * 0.12);
+            proj.mesh.position.x += mmProj.waveDirX * mmProj.speed + laneCorrectionX + mmProj.wavePerpX * waveOffset * 0.16;
+            proj.mesh.position.z += mmProj.waveDirZ * mmProj.speed + laneCorrectionZ + mmProj.wavePerpZ * waveOffset * 0.16;
+
+            const travelDistAfter = Math.hypot(
+                proj.mesh.position.x - mmProj.startX,
+                proj.mesh.position.z - mmProj.startZ
+            );
+            if (travelDistAfter >= mmProj.waveMaxDistance) {
+                spawnProjectileImpact(scene, proj.mesh.position.x, proj.mesh.position.z, COLORS.logNeutral, 0.9, 140);
+                resolveMagicWaveMissile(mmProj, attackerName, 0, addLog);
+                disposeProjectile(scene, proj);
+                return false;
+            }
+
+            let damageDealt = 0;
+            let shieldBlocked = false;
+
+            for (const targetUnit of unitsState) {
+                if (targetUnit.team !== "enemy") continue;
+                if (targetUnit.hp <= 0 || defeatedThisFrame.has(targetUnit.id)) continue;
+                if (mmProj.hitUnits.has(targetUnit.id)) continue;
+
+                const targetG = unitsRef[targetUnit.id];
+                if (!targetG) continue;
+
+                const distToTarget = distance(
+                    proj.mesh.position.x,
+                    proj.mesh.position.z,
+                    targetG.position.x,
+                    targetG.position.z
+                );
+                if (distToTarget > HIT_DETECTION_RADIUS + 0.18) continue;
+
+                mmProj.hitUnits.add(targetUnit.id);
+
+                // Check for front-shield block (magic missiles have partial block chance)
+                if (attackerUnit.team === "player" && targetUnit.enemyType) {
+                    const enemyStats = ENEMY_STATS[targetUnit.enemyType];
+                    if (
+                        checkEnemyDefenses(
+                            enemyStats,
+                            targetUnit.facing,
+                            attackerG.position.x,
+                            attackerG.position.z,
+                            targetG.position.x,
+                            targetG.position.z,
+                            undefined,
+                            0.5
+                        ) === "frontShield"
+                    ) {
+                        soundFns.playBlock();
+                        shieldBlocked = true;
+                        spawnProjectileImpact(scene, targetG.position.x, targetG.position.z, "#4488ff", 1.05, 170);
+                    }
+                }
+
+                if (!shieldBlocked) {
+                    const targetData = getUnitStats(targetUnit);
+                    const statBonus = calculateStatBonus(attackerUnit, mmProj.damageType);
+                    const result = calculateDamageWithCrit(
+                        mmProj.damage[0] + statBonus,
+                        mmProj.damage[1] + statBonus,
+                        getEffectiveArmor(targetUnit, targetData.armor),
+                        mmProj.damageType,
+                        attackerUnit
+                    );
+                    damageDealt = result.damage;
+
+                    applyDamageToUnit(dmgCtx, targetUnit.id, targetG, damageDealt, targetData.name, {
+                        color: "#9966ff",
+                        attackerName: attackerUnit.team === "player" ? attackerName : undefined,
+                        targetUnit,
+                        attackerPosition: { x: attackerG.position.x, z: attackerG.position.z },
+                        damageType: mmProj.damageType
+                    });
+                    spawnProjectileImpact(scene, targetG.position.x, targetG.position.z, "#9966ff", 1.2, 180);
+                    soundFns.playHit();
+                    aggroOnHit(targetUnit, mmProj.attackerId, unitsRef);
+                }
+
+                break;
+            }
+
+            if (damageDealt > 0 || shieldBlocked) {
+                resolveMagicWaveMissile(mmProj, attackerName, damageDealt, addLog);
+                disposeProjectile(scene, proj);
+                return false;
+            }
 
             return true;
         }
@@ -375,10 +595,19 @@ export function updateProjectiles(
                     proj.mesh.rotation.x = 0;
                     proj.mesh.rotation.z = 0;
                     // Change color to indicate armed trap
-                    (proj.mesh.material as THREE.MeshBasicMaterial).color.set("#cc4444");
+                    const trapMat = proj.mesh.material;
+                    if (trapMat instanceof THREE.MeshBasicMaterial || trapMat instanceof THREE.MeshPhongMaterial) {
+                        trapMat.color.set("#cc4444");
+                        if (trapMat instanceof THREE.MeshPhongMaterial) {
+                            trapMat.emissive.set("#4a0a0a");
+                            trapMat.emissiveIntensity = 0.36;
+                        }
+                    }
                 }
                 return true;
             }
+
+            updateArmedTrapVisual(proj.mesh);
 
             // Trap is on the ground - check for enemy triggers
             const enemies = unitsState.filter(u =>
@@ -478,6 +707,7 @@ export function updateProjectiles(
             // Move in straight line
             proj.mesh.position.x += pProj.directionX * pProj.speed;
             proj.mesh.position.z += pProj.directionZ * pProj.speed;
+            updatePiercingVisualEffects(scene, pProj, now);
 
             // Wall collision — ice burst + dispose
             const cellX = Math.floor(proj.mesh.position.x);
@@ -485,11 +715,25 @@ export function updateProjectiles(
             if (isBlocked(cellX, cellZ)) {
                 const burst = new THREE.Mesh(
                     new THREE.SphereGeometry(0.3, 12, 8),
-                    new THREE.MeshBasicMaterial({ color: COLORS.chilled, transparent: true, opacity: 0.8 })
+                    new THREE.MeshBasicMaterial({
+                        color: COLORS.chilled,
+                        transparent: true,
+                        opacity: 0.82,
+                        blending: THREE.AdditiveBlending,
+                        depthWrite: false
+                    })
                 );
                 burst.position.copy(proj.mesh.position);
                 scene.add(burst);
                 animateExpandingMesh(scene, burst, { duration: 250, initialOpacity: 0.8, maxScale: 1.2, baseRadius: 0.3 });
+                createAnimatedRing(scene, proj.mesh.position.x, proj.mesh.position.z, COLORS.chilledText, {
+                    innerRadius: 0.12,
+                    outerRadius: 0.26,
+                    maxScale: 1.6,
+                    duration: 230,
+                    initialOpacity: 0.7,
+                    y: 0.12
+                });
                 spawnProjectileImpact(scene, proj.mesh.position.x, proj.mesh.position.z, COLORS.dmgCold, 1.25, 190);
                 disposeProjectile(scene, proj);
                 return false;
@@ -538,6 +782,14 @@ export function updateProjectiles(
                         damageType: pProj.damageType
                     });
                     spawnProjectileImpact(scene, targetG.position.x, targetG.position.z, COLORS.dmgCold, 1.15, 180);
+                    createAnimatedRing(scene, targetG.position.x, targetG.position.z, COLORS.chilledText, {
+                        innerRadius: 0.08,
+                        outerRadius: 0.2,
+                        maxScale: 1.1,
+                        duration: 160,
+                        initialOpacity: 0.55,
+                        y: 0.1
+                    });
 
                     // Roll for chill
                     if (rollChance(pProj.chillChance)) {
@@ -551,9 +803,6 @@ export function updateProjectiles(
                 }
             }
 
-            // Subtle spin
-            proj.mesh.rotation.y += 0.08;
-
             return true;
         }
 
@@ -561,6 +810,7 @@ export function updateProjectiles(
         if (proj.type === "fireball") {
             const fbProj = proj as FireballProjectile;
             const attackerUnit = getUnitById(fbProj.attackerId);
+            updateFireballVisual(proj.mesh);
 
             // Move fireball in straight line
             proj.mesh.position.x += fbProj.directionX * fbProj.speed;
@@ -656,6 +906,7 @@ export function updateProjectiles(
 
         // Regular projectile (single target) - validate target exists
         if (proj.type !== "basic") return true;
+        updateSharedProjectileVisual(proj.mesh);
         const targetUnit = getUnitById(proj.targetId);
         const targetG = unitsRef[proj.targetId];
         const attackerUnit = getUnitById(proj.attackerId);
@@ -673,6 +924,13 @@ export function updateProjectiles(
             const targetData = getUnitStats(targetUnit);
             const logColor = getDamageColor(targetUnit.team);
             const attackerG = unitsRef[attackerUnit.id];
+            const skillName = proj.skillName ?? "Attack";
+            const isSkillShot = proj.skillName !== undefined
+                && proj.skillDamage !== undefined
+                && proj.skillDamageType !== undefined;
+            const incomingDamageType: DamageType = isSkillShot
+                ? (proj.skillDamageType ?? "physical")
+                : getBasicAttackDamageType(attackerUnit, attackerData);
 
             // Aggro enemies targeted by player projectiles (even on miss - arrow flew by their head!)
             if (attackerUnit.team === "player") {
@@ -682,15 +940,15 @@ export function updateProjectiles(
             // Check for enemy defensive abilities (player attacking shielded enemy)
             if (attackerUnit.team === "player" && targetUnit.enemyType) {
                 const enemyStats = ENEMY_STATS[targetUnit.enemyType];
-                const dmgType = getBasicAttackDamageType(attackerUnit, attackerData);
                 const defense = attackerG
-                    ? checkEnemyDefenses(enemyStats, targetUnit.facing, attackerG.position.x, attackerG.position.z, targetG.position.x, targetG.position.z, dmgType)
+                    ? checkEnemyDefenses(enemyStats, targetUnit.facing, attackerG.position.x, attackerG.position.z, targetG.position.x, targetG.position.z, incomingDamageType)
                     : "none" as const;
                 if (defense !== "none") {
                     soundFns.playBlock();
+                    const blockedLabel = skillName === "Attack" ? "attack" : skillName;
                     addLog(defense === "frontShield"
-                        ? `${attackerData.name}'s attack is blocked by ${targetData.name}'s shield!`
-                        : `${targetData.name} blocks ${attackerData.name}'s attack!`,
+                        ? `${attackerData.name}'s ${blockedLabel} is blocked by ${targetData.name}'s shield!`
+                        : `${targetData.name} blocks ${attackerData.name}'s ${blockedLabel}!`,
                         defense === "frontShield" ? "#4488ff" : "#aaaaaa");
                     spawnProjectileImpact(scene, targetG.position.x, targetG.position.z, defense === "frontShield" ? "#4488ff" : "#aaaaaa", 1.05, 170);
                     disposeProjectile(scene, proj);
@@ -699,26 +957,44 @@ export function updateProjectiles(
             }
 
             if (rollHit(attackerData.accuracy)) {
-                const dmgType = getBasicAttackDamageType(attackerUnit, attackerData);
-                const auraBonus = attackerUnit.auraDamageBonus ?? 0;
-                const { damage: dmg, isCrit } = calculateDamageWithCrit(
-                    attackerData.damage[0] + auraBonus,
-                    attackerData.damage[1] + auraBonus,
-                    getEffectiveArmor(targetUnit, targetData.armor),
-                    dmgType,
-                    attackerUnit
-                );
-                const willPoison = attackerUnit.team === "enemy" && shouldApplyPoison(attackerData as EnemyStats);
+                const dmgType = incomingDamageType;
+                const armor = getEffectiveArmor(targetUnit, targetData.armor);
+                const skillDamage = proj.skillDamage;
+
+                const { damage: dmg, isCrit } = isSkillShot && skillDamage
+                    ? (() => {
+                        const statBonus = calculateStatBonus(attackerUnit, dmgType);
+                        return calculateDamageWithOptionalCritChance(
+                            skillDamage[0] + statBonus,
+                            skillDamage[1] + statBonus,
+                            armor,
+                            dmgType,
+                            attackerUnit,
+                            proj.skillCritChanceOverride
+                        );
+                    })()
+                    : (() => {
+                        const auraBonus = attackerUnit.auraDamageBonus ?? 0;
+                        return calculateDamageWithCrit(
+                            attackerData.damage[0] + auraBonus,
+                            attackerData.damage[1] + auraBonus,
+                            armor,
+                            dmgType,
+                            attackerUnit
+                        );
+                    })();
+
+                const willPoison = !isSkillShot && attackerUnit.team === "enemy" && shouldApplyPoison(attackerData as EnemyStats);
                 const poisonDmg = willPoison && 'poisonDamage' in attackerData ? (attackerData as EnemyStats).poisonDamage : undefined;
 
                 // Calculate lifesteal heal amount for log message
-                const lifesteal = attackerUnit.team === "enemy" ? (attackerData as EnemyStats).lifesteal : undefined;
+                const lifesteal = !isSkillShot && attackerUnit.team === "enemy" ? (attackerData as EnemyStats).lifesteal : undefined;
                 const healAmount = lifesteal && lifesteal > 0 ? Math.floor(dmg * lifesteal) : 0;
 
                 // Custom log for lifesteal attacks
-                const hitText = healAmount > 0
+                const hitText = healAmount > 0 && skillName === "Attack"
                     ? logLifestealHit(attackerData.name, targetData.name, dmg, healAmount)
-                    : logHit(attackerData.name, "Attack", targetData.name, dmg);
+                    : logHit(attackerData.name, skillName, targetData.name, dmg);
                 const damageColor = dmgType === "holy" ? COLORS.dmgHoly : logColor;
 
                 /* use shared dmgCtx */
@@ -733,6 +1009,21 @@ export function updateProjectiles(
                     isCrit
                 });
                 spawnProjectileImpact(scene, targetG.position.x, targetG.position.z, damageColor, isCrit ? 1.35 : 1.05, 180);
+
+                if (isSkillShot && proj.skillOnHitEffect && rollChance(proj.skillOnHitEffect.chance)) {
+                    applySkillProjectileOnHitEffect(
+                        proj.skillOnHitEffect,
+                        targetUnit.id,
+                        targetData.name,
+                        targetG.position.x,
+                        targetG.position.z,
+                        attackerUnit.id,
+                        now,
+                        scene,
+                        setUnits,
+                        addLog
+                    );
+                }
 
                 // Sun Stance: bonus fire damage on player ranged hit
                 if (attackerUnit.team === "player" && hasStatusEffect(attackerUnit, "sun_stance")) {
@@ -757,7 +1048,7 @@ export function updateProjectiles(
                 }
             } else {
                 soundFns.playMiss();
-                addLog(logMiss(attackerData.name, "Attack", targetData.name), COLORS.logNeutral);
+                addLog(logMiss(attackerData.name, skillName, targetData.name), COLORS.logNeutral);
                 spawnProjectileImpact(scene, targetG.position.x, targetG.position.z, COLORS.logNeutral, 0.9, 140);
             }
 

@@ -20,6 +20,12 @@ import acidSlugSpriteUrl from "../../assets/acid-slug.png";
 import amoebaLgSpriteUrl from "../../assets/amoeba-lg.png";
 import amoebaMdSpriteUrl from "../../assets/amoeba-md.png";
 import amoebaSmSpriteUrl from "../../assets/amoeba-sm.png";
+import broodlingSpriteUrl from "../../assets/broodling.png";
+import broodMotherSpriteUrl from "../../assets/brood_mother.png";
+import corruptedDruidSpriteUrl from "../../assets/corrupted_druid.png";
+import crablingSpriteUrl from "../../assets/crabling.png";
+import feralHoundSpriteUrl from "../../assets/feral_hound.png";
+import koboldWarriorSpriteUrl from "../../assets/kobold_warrior.png";
 import krakenTentacleSpriteUrl from "../../assets/kraken-tentacle.png";
 import krakenBodySpriteUrl from "../../assets/kraken-body.png";
 
@@ -55,6 +61,12 @@ let acidSlugTexture: THREE.Texture;
 let amoebaLgTexture: THREE.Texture;
 let amoebaMdTexture: THREE.Texture;
 let amoebaSmTexture: THREE.Texture;
+let broodlingTexture: THREE.Texture;
+let broodMotherTexture: THREE.Texture;
+let corruptedDruidTexture: THREE.Texture;
+let crablingTexture: THREE.Texture;
+let feralHoundTexture: THREE.Texture;
+let koboldWarriorTexture: THREE.Texture;
 let krakenTentacleTexture: THREE.Texture;
 let krakenBodyTexture: THREE.Texture;
 
@@ -80,6 +92,12 @@ export function ensureTexturesLoaded(): void {
     amoebaLgTexture = loadFilteredTexture(amoebaLgSpriteUrl);
     amoebaMdTexture = loadFilteredTexture(amoebaMdSpriteUrl);
     amoebaSmTexture = loadFilteredTexture(amoebaSmSpriteUrl);
+    broodlingTexture = loadFilteredTexture(broodlingSpriteUrl);
+    broodMotherTexture = loadFilteredTexture(broodMotherSpriteUrl);
+    corruptedDruidTexture = loadFilteredTexture(corruptedDruidSpriteUrl);
+    crablingTexture = loadFilteredTexture(crablingSpriteUrl);
+    feralHoundTexture = loadFilteredTexture(feralHoundSpriteUrl);
+    koboldWarriorTexture = loadFilteredTexture(koboldWarriorSpriteUrl);
     krakenTentacleTexture = loadFilteredTexture(krakenTentacleSpriteUrl);
     krakenBodyTexture = loadFilteredTexture(krakenBodySpriteUrl);
 
@@ -95,6 +113,7 @@ interface SpriteConfig {
     color?: number;
     spriteHeight?: number;  // Override default 1.8 sprite height
     brightness?: number;    // Emissive boost for dark textures (0-1)
+    emissiveIntensity?: number;  // Optional direct emissive intensity override
     shadowSize?: number;    // Override shadow radius
     opacity?: number;       // Transparency (0-1, default 1)
 }
@@ -146,9 +165,15 @@ function getEnemySpriteConfigs(): Record<string, SpriteConfig> {
     return {
         bat: { texture: vampireBatTexture, width: 128, height: 128, spriteHeight: 1.4, color: 0xd2b48c, brightness: 0.2 },
         acid_slug: { texture: acidSlugTexture, width: 160, height: 128, spriteHeight: 1.4, brightness: 0.15, offsetY: -0.3, shadowSize: 0.6 },
-        giant_amoeba_lg: { texture: amoebaLgTexture, width: 128, height: 128, spriteHeight: 2.4, opacity: 0.38 },
-        giant_amoeba_md: { texture: amoebaMdTexture, width: 128, height: 128, spriteHeight: 1.7, opacity: 0.38 },
-        giant_amoeba_sm: { texture: amoebaSmTexture, width: 128, height: 128, spriteHeight: 1.2, opacity: 0.38 },
+        brood_mother: { texture: broodMotherTexture, width: 164, height: 128, spriteHeight: 2.25, color: 0xd7b8ff, brightness: 0.14, shadowSize: 0.74 },
+        broodling: { texture: broodlingTexture, width: 128, height: 128, spriteHeight: 1.0, color: 0xdcc3ff, brightness: 0.12, shadowSize: 0.32 },
+        corrupt_druid: { texture: corruptedDruidTexture, width: 96, height: 128, spriteHeight: 2.35, color: 0xdbfbc6, brightness: 0.18, emissiveIntensity: 0.30 },
+        chittering_crabling: { texture: crablingTexture, width: 128, height: 128, spriteHeight: 1.15, color: 0xffa36a, brightness: 0.1, shadowSize: 0.45 },
+        feral_hound: { texture: feralHoundTexture, width: 188, height: 128, spriteHeight: 1.45, color: 0xffc9a8, brightness: 0.14, shadowSize: 0.55 },
+        giant_amoeba_lg: { texture: amoebaLgTexture, width: 128, height: 128, spriteHeight: 2.4, opacity: 0.58 },
+        giant_amoeba_md: { texture: amoebaMdTexture, width: 128, height: 128, spriteHeight: 1.7, opacity: 0.58, offsetY: -0.10 },
+        giant_amoeba_sm: { texture: amoebaSmTexture, width: 128, height: 128, spriteHeight: 1.2, opacity: 0.58, offsetY: -0.14 },
+        kobold: { texture: koboldWarriorTexture, width: 128, height: 128, spriteHeight: 1.61, color: 0xffc8a3, brightness: 0.1, shadowSize: 0.4 },
         kraken_tentacle: { texture: krakenTentacleTexture, width: 80, height: 128, spriteHeight: 2.0, color: 0xd8c0e8 },
         baby_kraken: { texture: krakenBodyTexture, width: 128, height: 128, spriteHeight: 2.5, color: 0xd8c0e8 },
     };
@@ -222,7 +247,7 @@ function buildUnitGroup(
         // Billboard plane that faces the camera and responds to lighting
         const spriteHeight = spriteConfig.spriteHeight ?? 1.8;
         const spriteWidth = spriteHeight * (spriteConfig.width / spriteConfig.height);
-        const emissiveBoost = Math.min(0.2, 0.09 + (spriteConfig.brightness ?? 0.06));
+        const emissiveBoost = spriteConfig.emissiveIntensity ?? Math.min(0.2, 0.09 + (spriteConfig.brightness ?? 0.06));
         const spriteLightingBase = {
             emissiveIntensity: emissiveBoost,
             metalness: 0.02,
@@ -271,7 +296,7 @@ function buildUnitGroup(
             metalness: isAmoeba ? 0.1 : 0.5,
             roughness: isAmoeba ? 0.2 : 0.4,
             transparent: isAmoeba,
-            opacity: isAmoeba ? 0.38 : 1.0
+            opacity: isAmoeba ? 0.58 : 1.0
         });
         const box = new THREE.Mesh(new THREE.BoxGeometry(boxW, boxH, boxW), boxMat);
         box.position.y = boxH / 2;

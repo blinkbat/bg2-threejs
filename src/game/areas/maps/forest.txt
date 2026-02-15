@@ -3,9 +3,9 @@ name: Whispering Woods
 flavor: Something skitters in the shadows between the trees.
 size: 50x50
 background: #49437a
-ground: #35652f
-ambient: 0.65
-directional: 0.95
+ground: #456241
+ambient: 0.45
+directional: 0.75
 fog: true
 spawn: 25,25
 
@@ -525,3 +525,7 @@ spawn: 25,25
 26.5,44.5:radius=12,angle=45,tint=#ffd28a,brightness=46,height=8,diffusion=0.35,decay=1.2
 10.5,13.5:radius=12,angle=45,tint=#ffd28a,brightness=46,height=8,diffusion=0.35,decay=1.2
 23.5,28.5:radius=12,angle=45,tint=#ffd28a,brightness=26,height=8,diffusion=0.35,decay=1.2
+23.5,5.5:radius=12,angle=45,tint=#ffd28a,brightness=36,height=8,diffusion=0.35,decay=1.2
+19.5,15.5:radius=12,angle=45,tint=#ffd28a,brightness=26,height=8,diffusion=0.35,decay=1.2
+15.5,18.5:radius=12,angle=45,tint=#ffd28a,brightness=36,height=8,diffusion=0.35,decay=1.2
+23.5,33.5:radius=12,angle=45,tint=#ffd28a,brightness=26,height=8,diffusion=0.35,decay=1.2

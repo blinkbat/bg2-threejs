@@ -68,6 +68,40 @@ function drawLayer(ctx: CanvasRenderingContext2D, layer: string[][], layerType: 
     }
 }
 
+const LAST_SAVED_AREA_ID_STORAGE_KEY = "bg2-editor-last-saved-area-id";
+
+type EditorClipboard =
+    | { kind: "entity"; entity: EntityDef }
+    | { kind: "tree"; tree: TreeDef }
+    | { kind: "decoration"; decoration: DecorationDef };
+
+interface EditorContextMenuState {
+    screenX: number;
+    screenY: number;
+    tileX: number;
+    tileZ: number;
+    entity: EntityDef | null;
+    tree: { value: TreeDef; index: number } | null;
+    decoration: { value: DecorationDef; index: number } | null;
+}
+
+function loadLastSavedAreaId(): string | null {
+    try {
+        const raw = localStorage.getItem(LAST_SAVED_AREA_ID_STORAGE_KEY);
+        return raw && raw.trim().length > 0 ? raw.trim() : null;
+    } catch {
+        return null;
+    }
+}
+
+function persistLastSavedAreaId(areaId: string): void {
+    try {
+        localStorage.setItem(LAST_SAVED_AREA_ID_STORAGE_KEY, areaId);
+    } catch {
+        // Ignore storage failures (private mode/quota).
+    }
+}
+
 // =============================================================================
 // COMPONENT
 // =============================================================================
@@ -140,6 +174,8 @@ export function MapEditor() {
     const [editingEntity, setEditingEntity] = useState<{ entity: EntityDef; screenX: number; screenY: number } | null>(null);
     const [editingTree, setEditingTree] = useState<{ tree: TreeDef; index: number; screenX: number; screenY: number } | null>(null);
     const [editingDecoration, setEditingDecoration] = useState<{ decoration: DecorationDef; index: number; screenX: number; screenY: number } | null>(null);
+    const [clipboard, setClipboard] = useState<EditorClipboard | null>(null);
+    const [contextMenu, setContextMenu] = useState<EditorContextMenuState | null>(null);
 
     // Undo/Redo history
     const historyRef = useRef<EditorSnapshot[]>([]);
@@ -403,9 +439,118 @@ export function MapEditor() {
         }
     }, [activeLayer]);
 
+    const getEntityFootprint = useCallback((entity: EntityDef): { x: number; z: number; w: number; h: number } => {
+        if (entity.type === "transition") {
+            return {
+                x: Math.floor(entity.x),
+                z: Math.floor(entity.z),
+                w: Math.max(1, Math.floor(entity.transitionW ?? 1)),
+                h: Math.max(1, Math.floor(entity.transitionH ?? 1)),
+            };
+        }
+        if (entity.type === "secret_door") {
+            return {
+                x: Math.floor(entity.secretBlockX ?? entity.x),
+                z: Math.floor(entity.secretBlockZ ?? entity.z),
+                w: Math.max(1, Math.floor(entity.secretBlockW ?? 1)),
+                h: Math.max(1, Math.floor(entity.secretBlockH ?? 1)),
+            };
+        }
+        return { x: Math.floor(entity.x), z: Math.floor(entity.z), w: 1, h: 1 };
+    }, []);
+
+    const entityOccupiesCell = useCallback((entity: EntityDef, x: number, z: number): boolean => {
+        const footprint = getEntityFootprint(entity);
+        return x >= footprint.x
+            && x < footprint.x + footprint.w
+            && z >= footprint.z
+            && z < footprint.z + footprint.h;
+    }, [getEntityFootprint]);
+
+    const footprintsOverlap = useCallback(
+        (a: { x: number; z: number; w: number; h: number }, b: { x: number; z: number; w: number; h: number }): boolean =>
+            a.x < b.x + b.w && a.x + a.w > b.x && a.z < b.z + b.h && a.z + a.h > b.z,
+        []
+    );
+
+    const buildEntitiesLayerFromDefs = useCallback((entityDefs: EntityDef[]): string[][] => {
+        const grid = createEmptyLayer(metadata.width, metadata.height, ".");
+        const spawnX = Math.floor(metadata.spawnX);
+        const spawnZ = Math.floor(metadata.spawnZ);
+        if (spawnX >= 0 && spawnX < metadata.width && spawnZ >= 0 && spawnZ < metadata.height) {
+            grid[spawnZ][spawnX] = "@";
+        }
+
+        for (const entity of entityDefs) {
+            const markCell = (x: number, z: number, char: string) => {
+                if (x < 0 || x >= metadata.width || z < 0 || z >= metadata.height) return;
+                grid[z][x] = char;
+            };
+
+            if (entity.type === "enemy") {
+                markCell(Math.floor(entity.x), Math.floor(entity.z), "E");
+                continue;
+            }
+            if (entity.type === "chest") {
+                markCell(Math.floor(entity.x), Math.floor(entity.z), "X");
+                continue;
+            }
+            if (entity.type === "candle") {
+                markCell(Math.floor(entity.x), Math.floor(entity.z), "L");
+                continue;
+            }
+            if (entity.type === "torch") {
+                markCell(Math.floor(entity.x), Math.floor(entity.z), "Y");
+                continue;
+            }
+            if (entity.type === "light") {
+                markCell(Math.floor(entity.x), Math.floor(entity.z), "H");
+                continue;
+            }
+            if (entity.type === "transition") {
+                const footprint = getEntityFootprint(entity);
+                for (let dz = 0; dz < footprint.h; dz++) {
+                    for (let dx = 0; dx < footprint.w; dx++) {
+                        markCell(footprint.x + dx, footprint.z + dz, "D");
+                    }
+                }
+                continue;
+            }
+            if (entity.type === "secret_door") {
+                const footprint = getEntityFootprint(entity);
+                for (let dz = 0; dz < footprint.h; dz++) {
+                    for (let dx = 0; dx < footprint.w; dx++) {
+                        markCell(footprint.x + dx, footprint.z + dz, "S");
+                    }
+                }
+            }
+        }
+        return grid;
+    }, [metadata.width, metadata.height, metadata.spawnX, metadata.spawnZ, getEntityFootprint]);
+
+    const setSpawnPoint = useCallback((x: number, z: number) => {
+        const clampedX = Math.max(0, Math.min(metadata.width - 1, Math.floor(x)));
+        const clampedZ = Math.max(0, Math.min(metadata.height - 1, Math.floor(z)));
+
+        setMetadata(prev => ({ ...prev, spawnX: clampedX, spawnZ: clampedZ }));
+        setEntitiesLayer(prev => {
+            const next = prev.map(row => row.map(cell => (cell === "@" ? "." : cell)));
+            if (clampedZ >= 0 && clampedZ < next.length && clampedX >= 0 && clampedX < next[clampedZ].length) {
+                next[clampedZ][clampedX] = "@";
+            }
+            return next;
+        });
+    }, [metadata.width, metadata.height]);
+
     const paintCell = useCallback((x: number, z: number) => {
         const layer = getActiveLayer();
         if (x < 0 || x >= metadata.width || z < 0 || z >= metadata.height) return;
+
+        if (activeLayer === "entities" && activeTool === "paint" && activeBrush === "@") {
+            setSpawnPoint(x, z);
+            return;
+        }
+
         if (
             activeLayer === "entities"
             && activeTool === "paint"
@@ -495,7 +640,7 @@ export function MapEditor() {
                 }
             }
         }
-    }, [getActiveLayer, setActiveLayerData, activeTool, activeBrush, brushSize, metadata.width, metadata.height, activeLayer, entities, propsLayer]);
+    }, [getActiveLayer, setActiveLayerData, activeTool, activeBrush, brushSize, metadata.width, metadata.height, activeLayer, entities, propsLayer, setSpawnPoint]);
 
     const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
         // Ignore right-click (handled by onContextMenu)
@@ -507,6 +652,7 @@ export function MapEditor() {
         if (!rect) return;
 
         const { x, z } = transformMouseCoords(e.clientX, e.clientY, rect);
+        if (x < 0 || z < 0 || x >= metadata.width || z >= metadata.height) return;
 
         // Push history before starting to paint
         pushHistory();
@@ -583,57 +729,212 @@ export function MapEditor() {
         setIsPainting(false);
     };
 
+    const openPropertiesPopup = useCallback((menu: EditorContextMenuState) => {
+        if (menu.entity) {
+            setEditingEntity({ entity: menu.entity, screenX: menu.screenX, screenY: menu.screenY });
+            setEditingTree(null);
+            setEditingDecoration(null);
+            return;
+        }
+        if (menu.tree) {
+            setEditingTree({
+                tree: menu.tree.value,
+                index: menu.tree.index,
+                screenX: menu.screenX,
+                screenY: menu.screenY
+            });
+            setEditingEntity(null);
+            setEditingDecoration(null);
+            return;
+        }
+        if (menu.decoration) {
+            setEditingDecoration({
+                decoration: menu.decoration.value,
+                index: menu.decoration.index,
+                screenX: menu.screenX,
+                screenY: menu.screenY
+            });
+            setEditingEntity(null);
+            setEditingTree(null);
+        }
+    }, []);
+
+    const copyFromContextMenu = useCallback((menu: EditorContextMenuState) => {
+        if (menu.entity) {
+            setClipboard({ kind: "entity", entity: { ...menu.entity } });
+            return;
+        }
+        if (menu.tree) {
+            setClipboard({ kind: "tree", tree: { ...menu.tree.value } });
+            return;
+        }
+        if (menu.decoration) {
+            setClipboard({ kind: "decoration", decoration: { ...menu.decoration.value } });
+        }
+    }, []);
+
+    const pasteClipboardAt = useCallback((x: number, z: number) => {
+        if (!clipboard) return;
+        if (x < 0 || x >= metadata.width || z < 0 || z >= metadata.height) return;
+
+        pushHistory();
+
+        if (clipboard.kind === "entity") {
+            const source = clipboard.entity;
+            const nextId = `e${Date.now()}-${x}-${z}`;
+            let pasted: EntityDef;
+
+            if (source.type === "light") {
+                pasted = { ...source, id: nextId, x: x + 0.5, z: z + 0.5 };
+            } else if (source.type === "transition") {
+                pasted = { ...source, id: nextId, x, z };
+            } else if (source.type === "secret_door") {
+                pasted = {
+                    ...source,
+                    id: nextId,
+                    x,
+                    z,
+                    secretBlockX: x,
+                    secretBlockZ: z,
+                };
+            } else {
+                pasted = { ...source, id: nextId, x, z };
+            }
+
+            const pasteFootprint = getEntityFootprint(pasted);
+            const cellInPasteFootprint = (cellX: number, cellZ: number): boolean =>
+                cellX >= pasteFootprint.x
+                && cellX < pasteFootprint.x + pasteFootprint.w
+                && cellZ >= pasteFootprint.z
+                && cellZ < pasteFootprint.z + pasteFootprint.h;
+
+            const nextEntities = entities
+                .filter(ent => !footprintsOverlap(getEntityFootprint(ent), pasteFootprint))
+                .concat(pasted);
+
+            setEntities(nextEntities);
+            setEntitiesLayer(buildEntitiesLayerFromDefs(nextEntities));
+            setTrees(prev => prev.filter(tree => !cellInPasteFootprint(Math.floor(tree.x), Math.floor(tree.z))));
+            setDecorations(prev => prev.filter(decoration => !cellInPasteFootprint(Math.floor(decoration.x), Math.floor(decoration.z))));
+            setPropsLayer(prev => {
+                const next = prev.map(row => [...row]);
+                for (let dz = 0; dz < pasteFootprint.h; dz++) {
+                    for (let dx = 0; dx < pasteFootprint.w; dx++) {
+                        const cellX = pasteFootprint.x + dx;
+                        const cellZ = pasteFootprint.z + dz;
+                        if (cellX < 0 || cellX >= metadata.width || cellZ < 0 || cellZ >= metadata.height) continue;
+                        next[cellZ][cellX] = ".";
+                    }
+                }
+                return next;
+            });
+            return;
+        }
+
+        const nextEntities = entities.filter(entity => !entityOccupiesCell(entity, x, z));
+        if (nextEntities.length !== entities.length) {
+            setEntities(nextEntities);
+            setEntitiesLayer(buildEntitiesLayerFromDefs(nextEntities));
+        }
+
+        if (clipboard.kind === "tree") {
+            const treeType = clipboard.tree.type ?? "pine";
+            const treeChar = PROP_TREE_TYPE_TO_CHAR.get(treeType) ?? "T";
+            setPropsLayer(prev => {
+                const next = prev.map(row => [...row]);
+                next[z][x] = treeChar;
+                return next;
+            });
+            setTrees(prev => [
+                ...prev.filter(tree => Math.floor(tree.x) !== x || Math.floor(tree.z) !== z),
+                { ...clipboard.tree, x, z, type: treeType }
+            ]);
+            setDecorations(prev => prev.filter(decoration => Math.floor(decoration.x) !== x || Math.floor(decoration.z) !== z));
+            return;
+        }
+
+        const decorationType = clipboard.decoration.type;
+        const decorationChar = PROP_TYPE_TO_CHAR.get(decorationType) ?? ".";
+        setPropsLayer(prev => {
+            const next = prev.map(row => [...row]);
+            next[z][x] = decorationChar;
+            return next;
+        });
+        setDecorations(prev => [
+            ...prev.filter(decoration => Math.floor(decoration.x) !== x || Math.floor(decoration.z) !== z),
+            { ...clipboard.decoration, x, z }
+        ]);
+        setTrees(prev => prev.filter(tree => Math.floor(tree.x) !== x || Math.floor(tree.z) !== z));
+    }, [
+        clipboard,
+        metadata.width,
+        metadata.height,
+        pushHistory,
+        getEntityFootprint,
+        entities,
+        footprintsOverlap,
+        buildEntitiesLayerFromDefs,
+        entityOccupiesCell
+    ]);
+
     const handleCanvasContextMenu = (e: React.MouseEvent<HTMLCanvasElement>) => {
         e.preventDefault();
         const rect = canvasRef.current?.getBoundingClientRect();
         if (!rect) return;
 
         const { x, z } = transformMouseCoords(e.clientX, e.clientY, rect);
-
-        // Check for entity at this position (including multi-tile entities like doors)
-        const entity = entities.find(ent => {
-            const ex = Math.floor(ent.x);
-            const ez = Math.floor(ent.z);
-            // For transitions with width/height, check if click is within bounds
-            if (ent.type === "transition") {
-                const w = ent.transitionW ?? 1;
-                const h = ent.transitionH ?? 1;
-                return x >= ex && x < ex + w && z >= ez && z < ez + h;
-            }
-            // For secret doors with blocking wall dimensions
-            if (ent.type === "secret_door") {
-                const w = ent.secretBlockW ?? 1;
-                const h = ent.secretBlockH ?? 1;
-                return x >= ex && x < ex + w && z >= ez && z < ez + h;
-            }
-            // Single-cell entities
-            return ex === x && ez === z;
-        });
-        if (entity) {
-            setEditingEntity({ entity, screenX: e.clientX, screenY: e.clientY });
-            setEditingTree(null);
-            setEditingDecoration(null);
+        if (x < 0 || x >= metadata.width || z < 0 || z >= metadata.height) {
+            setContextMenu(null);
             return;
         }
 
-        // Check for tree at this position
+        const entity = entities.find(ent => entityOccupiesCell(ent, x, z));
         const treeIndex = trees.findIndex(t => Math.floor(t.x) === x && Math.floor(t.z) === z);
-        if (treeIndex >= 0) {
-            setEditingTree({ tree: trees[treeIndex], index: treeIndex, screenX: e.clientX, screenY: e.clientY });
-            setEditingEntity(null);
-            setEditingDecoration(null);
+        const decIndex = decorations.findIndex(d => Math.floor(d.x) === x && Math.floor(d.z) === z);
+        const tree = treeIndex >= 0 ? { value: { ...trees[treeIndex] }, index: treeIndex } : null;
+        const decoration = decIndex >= 0 ? { value: { ...decorations[decIndex] }, index: decIndex } : null;
+
+        const menuWidth = 188;
+        const menuHeight = 132;
+        const screenX = Math.min(e.clientX, window.innerWidth - menuWidth);
+        const screenY = Math.min(e.clientY, window.innerHeight - menuHeight);
+        const menu: EditorContextMenuState = {
+            screenX,
+            screenY,
+            tileX: x,
+            tileZ: z,
+            entity: entity ? { ...entity } : null,
+            tree,
+            decoration
+        };
+
+        // Shift + right-click keeps the existing edit popup behavior.
+        if (e.shiftKey) {
+            openPropertiesPopup(menu);
+            setContextMenu(null);
             return;
         }
 
-        // Check for decoration at this position
-        const decIndex = decorations.findIndex(d => Math.floor(d.x) === x && Math.floor(d.z) === z);
-        if (decIndex >= 0) {
-            setEditingDecoration({ decoration: decorations[decIndex], index: decIndex, screenX: e.clientX, screenY: e.clientY });
-            setEditingEntity(null);
-            setEditingTree(null);
-            return;
-        }
+        setContextMenu(menu);
     };
+
+    useEffect(() => {
+        if (!contextMenu) return;
+
+        const handleGlobalPointerDown = () => setContextMenu(null);
+        const handleEscape = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                setContextMenu(null);
+            }
+        };
+
+        window.addEventListener("pointerdown", handleGlobalPointerDown);
+        window.addEventListener("keydown", handleEscape);
+        return () => {
+            window.removeEventListener("pointerdown", handleGlobalPointerDown);
+            window.removeEventListener("keydown", handleEscape);
+        };
+    }, [contextMenu]);
 
     const updateEntity = (updated: EntityDef) => {
         pushHistory();
@@ -769,6 +1070,12 @@ export function MapEditor() {
         const newId = `area_${Date.now()}`;
         const width = 30;
         const height = 20;
+        const spawnX = 3;
+        const spawnZ = 10;
+        const newEntities = createEmptyLayer(width, height, ".");
+        if (spawnZ >= 0 && spawnZ < height && spawnX >= 0 && spawnX < width) {
+            newEntities[spawnZ][spawnX] = "@";
+        }
 
         setMetadata({
             id: newId,
@@ -781,15 +1088,15 @@ export function MapEditor() {
             ambient: 0.4,
             directional: 0.5,
             fog: true,
-            spawnX: 3,
-            spawnZ: 10,
+            spawnX,
+            spawnZ,
         });
 
         setGeometryLayer(createEmptyLayer(width, height, "."));
         setTerrainLayer(createEmptyLayer(width, height, "."));
         setFloorLayer(createEmptyLayer(width, height, "."));
         setPropsLayer(createEmptyLayer(width, height, "."));
-        setEntitiesLayer(createEmptyLayer(width, height, "."));
+        setEntitiesLayer(newEntities);
         setEntities([]);
         setTrees([]);
         setDecorations([]);
@@ -800,8 +1107,13 @@ export function MapEditor() {
         pushHistory();
     };
 
-    // Load coast by default on mount
+    // Load last saved map on mount when available, otherwise fall back to coast.
     useEffect(() => {
+        const savedAreaId = loadLastSavedAreaId();
+        if (savedAreaId && AREAS[savedAreaId]) {
+            loadArea(savedAreaId as AreaId);
+            return;
+        }
         loadArea("coast");
     }, []);
 
@@ -822,6 +1134,7 @@ export function MapEditor() {
             if (data.success) {
                 // Register the area so it's immediately available for loading/transitions
                 registerAreaFromText(metadata.id, content);
+                persistLastSavedAreaId(metadata.id);
                 setSaveStatus("saved");
                 setTimeout(() => setSaveStatus("idle"), 2000);
             } else {
@@ -988,6 +1301,9 @@ export function MapEditor() {
         return LAYER_BRUSHES[activeLayer];
     };
 
+    const availableAreaIds = getAvailableAreaIds();
+    const selectedAreaId = availableAreaIds.includes(metadata.id) ? metadata.id : "";
+
     return (
         <div style={{ display: "flex", height: "100vh", background: "#1a1a2e", color: "#eee", fontFamily: "sans-serif" }}>
             <button
@@ -1023,6 +1339,7 @@ export function MapEditor() {
                 <div>
                     <h3 style={{ margin: "0 0 12px", fontSize: 16 }}>Load Area</h3>
                     <select
+                        value={selectedAreaId}
                         onChange={(e) => e.target.value && loadArea(e.target.value as AreaId)}
                         style={{
                             width: "100%",
@@ -1033,10 +1350,9 @@ export function MapEditor() {
                             border: "1px solid #555",
                             borderRadius: 4,
                         }}
-                        defaultValue=""
                     >
                         <option value="">-- Select area --</option>
-                        {getAvailableAreaIds().map((id: string) => (
+                        {availableAreaIds.map((id: string) => (
                             <option key={id} value={id}>{id}</option>
                         ))}
                     </select>
@@ -1229,6 +1545,89 @@ export function MapEditor() {
                     />
                 </div>
 
+                {contextMenu && (
+                    <div
+                        style={{
+                            position: "fixed",
+                            left: contextMenu.screenX,
+                            top: contextMenu.screenY,
+                            minWidth: 188,
+                            padding: 6,
+                            borderRadius: 8,
+                            background: "#1f2330",
+                            border: "1px solid #4a4f61",
+                            boxShadow: "0 8px 24px rgba(0, 0, 0, 0.45)",
+                            zIndex: 2200,
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 4,
+                        }}
+                        onPointerDown={event => event.stopPropagation()}
+                        onContextMenu={event => event.preventDefault()}
+                    >
+                        <button
+                            onClick={() => {
+                                openPropertiesPopup(contextMenu);
+                                setContextMenu(null);
+                            }}
+                            disabled={!contextMenu.entity && !contextMenu.tree && !contextMenu.decoration}
+                            style={{
+                                textAlign: "left",
+                                padding: "8px 10px",
+                                fontSize: 13,
+                                borderRadius: 6,
+                                border: "1px solid #414655",
+                                background: "#2a3040",
+                                color: "#fff",
+                                cursor: contextMenu.entity || contextMenu.tree || contextMenu.decoration ? "pointer" : "not-allowed",
+                                opacity: contextMenu.entity || contextMenu.tree || contextMenu.decoration ? 1 : 0.45,
+                            }}
+                        >
+                            Properties
+                        </button>
+                        <button
+                            onClick={() => {
+                                copyFromContextMenu(contextMenu);
+                                setContextMenu(null);
+                            }}
+                            disabled={!contextMenu.entity && !contextMenu.tree && !contextMenu.decoration}
+                            style={{
+                                textAlign: "left",
+                                padding: "8px 10px",
+                                fontSize: 13,
+                                borderRadius: 6,
+                                border: "1px solid #414655",
+                                background: "#2a3040",
+                                color: "#fff",
+                                cursor: contextMenu.entity || contextMenu.tree || contextMenu.decoration ? "pointer" : "not-allowed",
+                                opacity: contextMenu.entity || contextMenu.tree || contextMenu.decoration ? 1 : 0.45,
+                            }}
+                        >
+                            Copy
+                        </button>
+                        <button
+                            onClick={() => {
+                                pasteClipboardAt(contextMenu.tileX, contextMenu.tileZ);
+                                setContextMenu(null);
+                            }}
+                            disabled={!clipboard}
+                            style={{
+                                textAlign: "left",
+                                padding: "8px 10px",
+                                fontSize: 13,
+                                borderRadius: 6,
+                                border: "1px solid #414655",
+                                background: "#2a3040",
+                                color: "#fff",
+                                cursor: clipboard ? "pointer" : "not-allowed",
+                                opacity: clipboard ? 1 : 0.45,
+                            }}
+                        >
+                            Paste (overwrite)
+                        </button>
+                    </div>
+                )}
+
                 {/* Entity Edit Popup */}
                 {editingEntity && (
                     <EntityEditPopup
@@ -1384,7 +1783,7 @@ export function MapEditor() {
                         <input
                             type="number"
                             value={metadata.spawnX}
-                            onChange={e => setMetadata(prev => ({ ...prev, spawnX: parseInt(e.target.value) || 0 }))}
+                            onChange={e => setSpawnPoint(parseInt(e.target.value) || 0, metadata.spawnZ)}
                             style={{ padding: 8, fontSize: 14, background: "#333", border: "1px solid #555", borderRadius: 4, color: "#fff" }}
                         />
                     </label>
@@ -1393,7 +1792,7 @@ export function MapEditor() {
                         <input
                             type="number"
                             value={metadata.spawnZ}
-                            onChange={e => setMetadata(prev => ({ ...prev, spawnZ: parseInt(e.target.value) || 0 }))}
+                            onChange={e => setSpawnPoint(metadata.spawnX, parseInt(e.target.value) || 0)}
                             style={{ padding: 8, fontSize: 14, background: "#333", border: "1px solid #555", borderRadius: 4, color: "#fff" }}
                         />
                     </label>

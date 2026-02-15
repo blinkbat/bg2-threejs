@@ -67,7 +67,7 @@ import { executeDodgeSkill, executeBodySwapSkill } from "./movement";
 
 /**
  * Execute a skill based on its type
- * @param targetId Optional target unit ID for enemy-targeted skills (tracks moving targets)
+ * @param targetId Optional target unit ID for unit-targeted skills (tracks moving targets)
  */
 export function executeSkill(
     ctx: SkillExecutionContext,
@@ -107,8 +107,15 @@ export function executeSkill(
         executeAoeSkill(ctx, casterId, skill, targetX, targetZ);
         return true;
     } else if (skill.type === "heal" && skill.targetType === "ally") {
-        return executeHealSkill(ctx, casterId, skill, targetX, targetZ);
+        return executeHealSkill(ctx, casterId, skill, targetX, targetZ, targetId);
     } else if (skill.type === "damage" && skill.targetType === "enemy") {
+        if (skill.delivery === "ranged") {
+            return executeRangedSkill(ctx, casterId, skill, targetX, targetZ, targetId);
+        }
+        if (skill.delivery === "melee") {
+            return executeMeleeSkill(ctx, casterId, skill, targetX, targetZ, targetId);
+        }
+
         // Check if this is a ranged skill (basic attack for ranged units)
         // Melee range is typically <= 2, ranged is > 2
         // Use effective stats to get equipment-derived range
@@ -117,9 +124,9 @@ export function executeSkill(
 
         // For basic attacks (name === "Attack"), use ranged if unit has range
         if (skill.name === "Attack" && isRanged) {
-            return executeRangedSkill(ctx, casterId, skill, targetX, targetZ);
+            return executeRangedSkill(ctx, casterId, skill, targetX, targetZ, targetId);
         }
-        return executeMeleeSkill(ctx, casterId, skill, targetX, targetZ);
+        return executeMeleeSkill(ctx, casterId, skill, targetX, targetZ, targetId);
     } else if (skill.type === "taunt" && skill.targetType === "self") {
         return executeTauntSkill(ctx, casterId, skill);
     } else if (skill.type === "buff" && skill.targetType === "self") {
@@ -136,30 +143,32 @@ export function executeSkill(
     } else if (skill.type === "energy_shield" && skill.targetType === "self") {
         return executeEnergyShieldSkill(ctx, casterId, skill);
     } else if (skill.type === "buff" && skill.targetType === "ally") {
-        return executeCleanseSkill(ctx, casterId, skill, targetX, targetZ);
-    } else if (skill.type === "buff" && skill.targetType === "aoe") {
+        return executeCleanseSkill(ctx, casterId, skill, targetX, targetZ, targetId);
+    } else if (skill.type === "buff" && skill.targetType === "unit") {
         if (skill.name === "Divine Lattice") {
             return executeDivineLatticeSkill(ctx, casterId, skill, targetX, targetZ, targetId);
         }
         return false;
+    } else if (skill.type === "buff" && skill.targetType === "aoe") {
+        return false;
     } else if (skill.type === "flurry" && skill.targetType === "self") {
         return executeFlurrySkill(ctx, casterId, skill);
     } else if (skill.type === "debuff" && skill.targetType === "enemy") {
-        return executeDebuffSkill(ctx, casterId, skill, targetX, targetZ);
+        return executeDebuffSkill(ctx, casterId, skill, targetX, targetZ, targetId);
     } else if (skill.type === "trap" && skill.targetType === "aoe") {
         return executeTrapSkill(ctx, casterId, skill, targetX, targetZ);
     } else if (skill.type === "sanctuary" && skill.targetType === "aoe") {
         return executeSanctuarySkill(ctx, casterId, skill, targetX, targetZ);
     } else if (skill.type === "mana_transfer" && skill.targetType === "ally") {
-        return executeManaTransferSkill(ctx, casterId, skill, targetX, targetZ);
+        return executeManaTransferSkill(ctx, casterId, skill, targetX, targetZ, targetId);
     } else if (skill.type === "smite" && skill.targetType === "enemy") {
         return executeSmiteSkill(ctx, casterId, skill, targetX, targetZ, targetId);
     } else if (skill.type === "aoe_buff" && skill.targetType === "self") {
         return executeAoeBuffSkill(ctx, casterId, skill);
     } else if (skill.type === "restoration" && skill.targetType === "ally") {
-        return executeRestorationSkill(ctx, casterId, skill, targetX, targetZ);
+        return executeRestorationSkill(ctx, casterId, skill, targetX, targetZ, targetId);
     } else if (skill.type === "revive" && skill.targetType === "ally") {
-        return executeReviveSkill(ctx, casterId, skill, targetX, targetZ);
+        return executeReviveSkill(ctx, casterId, skill, targetX, targetZ, targetId);
     } else if (skill.type === "dodge") {
         if (skill.name === "Body Swap") {
             return executeBodySwapSkill(ctx, casterId, skill, targetX, targetZ, targetId);

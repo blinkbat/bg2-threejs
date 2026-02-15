@@ -31,12 +31,48 @@ import { trySubmergeKraken, isKrakenSubmerged } from "../gameLoop/enemyBehaviors
 // =============================================================================
 
 export type ProjectileType = "aoe" | "ranged" | "enemy";
+type ProjectileVisualType = ProjectileType;
 
 /**
  * Create a projectile mesh with standardized configuration
  */
 // Shared sphere geometries per projectile type (never disposed)
 const projectileGeos: Partial<Record<ProjectileType, THREE.SphereGeometry>> = {};
+const projectileBaseMaterials: Record<ProjectileType, THREE.MeshPhongMaterial> = {
+    aoe: new THREE.MeshPhongMaterial({
+        color: "#ff4400",
+        emissive: "#7a1800",
+        emissiveIntensity: 0.55,
+        shininess: 90,
+        transparent: true,
+        opacity: 0.94
+    }),
+    ranged: new THREE.MeshPhongMaterial({
+        color: "#a0522d",
+        emissive: "#2a1308",
+        emissiveIntensity: 0.28,
+        shininess: 70,
+        transparent: true,
+        opacity: 0.95
+    }),
+    enemy: new THREE.MeshPhongMaterial({
+        color: "#f08a5d",
+        emissive: "#4a1f10",
+        emissiveIntensity: 0.3,
+        shininess: 65,
+        transparent: true,
+        opacity: 0.95
+    })
+};
+
+function createProjectileMaterial(type: ProjectileType, colorHex: string): THREE.MeshPhongMaterial {
+    const material = projectileBaseMaterials[type].clone();
+    const color = new THREE.Color(colorHex);
+    material.color.copy(color);
+    const emissiveFactor = type === "aoe" ? 0.38 : 0.24;
+    material.emissive.copy(color).multiplyScalar(emissiveFactor);
+    return material;
+}
 
 function getProjectileGeo(type: ProjectileType): THREE.SphereGeometry {
     let geo = projectileGeos[type];
@@ -60,9 +96,15 @@ export function createProjectile(
 
     const projectile = new THREE.Mesh(
         getProjectileGeo(type),
-        new THREE.MeshBasicMaterial({ color: projectileColor })
+        createProjectileMaterial(type, projectileColor)
     );
     projectile.position.set(x, config.height, z);
+    if (type === "aoe") {
+        projectile.scale.set(1.18, 1.18, 1.18);
+    }
+    projectile.userData.sharedGeometry = true;
+    projectile.userData.projectileVisualType = type as ProjectileVisualType;
+    projectile.userData.visualPhase = Math.random() * Math.PI * 2;
     scene.add(projectile);
 
     return projectile;
@@ -81,12 +123,13 @@ export function getProjectileSpeed(type: ProjectileType): number {
 
 // Shared ring geometries keyed by "inner,outer"
 const ringGeoCache: Map<string, THREE.RingGeometry> = new Map();
+const RING_SEGMENTS = 48;
 
 function getRingGeo(inner: number, outer: number): THREE.RingGeometry {
     const key = `${inner},${outer}`;
     let geo = ringGeoCache.get(key);
     if (!geo) {
-        geo = new THREE.RingGeometry(inner, outer, 32);
+        geo = new THREE.RingGeometry(inner, outer, RING_SEGMENTS);
         ringGeoCache.set(key, geo);
     }
     return geo;
@@ -128,10 +171,22 @@ export function createAnimatedRing(
 
     const ring = new THREE.Mesh(
         getRingGeo(innerRadius, outerRadius),
-        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: initialOpacity, side: THREE.DoubleSide })
+        new THREE.MeshBasicMaterial({
+            color,
+            transparent: true,
+            opacity: initialOpacity,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+            polygonOffset: true,
+            polygonOffsetFactor: -1,
+            polygonOffsetUnits: -1,
+            toneMapped: false
+        })
     );
     ring.rotation.x = -Math.PI / 2;
     ring.position.set(x, y, z);
+    ring.renderOrder = 140;
+    ring.userData.sharedGeometry = true;
     scene.add(ring);
 
     animateExpandingMesh(scene, ring, {
@@ -171,7 +226,9 @@ export function animateExpandingMesh(
             animationId = null;
         }
         scene.remove(mesh);
-        mesh.geometry.dispose();
+        if (mesh.userData.sharedGeometry !== true) {
+            mesh.geometry.dispose();
+        }
         (mesh.material as THREE.MeshBasicMaterial).dispose();
     };
 
@@ -756,7 +813,7 @@ export function applyDamageToUnit(
                     return u;
                 }));
 
-                addLog(`Party gained ${expReward} XP!`, "#9b59b6");
+                addLog(`Party gained ${expReward} Experience!`, "#9b59b6");
 
                 // Level-up effects
                 if (leveledUpIds.length > 0) {

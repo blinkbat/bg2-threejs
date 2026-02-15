@@ -16,6 +16,12 @@ Adapted from `CLAUDE.md` for Codex usage.
 - Ask clarifying questions only when ambiguity blocks a safe implementation.
 - Prefer one-pass execution and practical completion over repeated confirmation loops.
 - Optimize for maintainability and correctness from a future-you perspective.
+- Unit visual policy: never add new custom per-unit mesh construction in `rendering/scene/units.ts`; for new enemies, use existing sprite config paths or the shared default unit geometry path.
+- Hard guardrail: do not introduce special-case unit mesh branches for individual enemy/unit IDs or types unless the user explicitly asks for that exact approach in the current thread.
+- Keep `EnemyType` and `ENEMY_STATS` strictly alphabetical when adding enemies.
+- If adding new fields to `EnemyStats`, wire them into runtime logic in the same change (or explicitly document why not).
+- For rendering changes (`units`, `trees`, `water`, `lights`), always run `npm run build` and include a short verification note.
+- Do not add or reintroduce flashy basic-attack visuals unless explicitly requested.
 
 ---
 # Codebase Cheatsheet
@@ -97,8 +103,9 @@ React + Three.js ARPG. State in React (`Unit[]` via `setUnits`), 3D positions on
 ### New Enemy
 1. `core/types/units.ts` -> `EnemyType` union
 2. `game/enemyStats.ts` -> `ENEMY_STATS` entry (alphabetical key order)
-3. `rendering/scene/units.ts` -> mesh case
-4. Place in map or editor. If special behavior, see below.
+3. `rendering/scene/units.ts` -> use existing sprite config and/or shared default unit geometry path (no new custom per-unit mesh branches)
+4. If no sprite exists yet, keep the default shared unit geometry path (do not create one-off custom meshes).
+5. Place in map or editor. If special behavior, see below.
 
 ### New Enemy Behavior
 1. Skill type on `EnemyStats` in `core/types/units.ts` (`mySkill?: EnemyMySkill`)

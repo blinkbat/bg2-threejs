@@ -47,21 +47,21 @@ export function CommandBar({
             <button
                 className="cmd-btn"
                 onClick={onSelectAll}
-                title="Select all players and summons"
+                title="Select All"
             >
                 <UsersRound size={16} />
             </button>
             <button
                 className="cmd-btn"
                 onClick={onDeselectAll}
-                title="Deselect all"
+                title="Deselect All"
             >
                 <X size={16} />
             </button>
             <button
                 className={`cmd-btn${partyAutoBattleActive ? " cmd-active" : ""}`}
                 onClick={onToggleAutoBattle}
-                title="Toggle party auto-battle"
+                title="Toggle Party Auto-Battle"
             >
                 <Brain size={16} />
             </button>

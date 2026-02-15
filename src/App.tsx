@@ -714,7 +714,7 @@ function Game({
                 }
             } else {
                 updateUnit(setUnits, unitId, { exp: newExp });
-                addLog(`${UNIT_DATA[unitId].name} reads ${item.name}, gaining ${item.value} XP.`, "#9b59b6");
+                addLog(`${UNIT_DATA[unitId].name} reads ${item.name}, gaining ${item.value} Experience.`, "#9b59b6");
             }
         } else if (item.effect === "revive") {
             // Revive a dead ally - targetId is required
@@ -1221,7 +1221,7 @@ function Game({
             return u;
         }));
 
-        addLog(`Debug: Party gained ${amount} XP!`, "#9b59b6");
+        addLog(`Debug: Party gained ${amount} Experience!`, "#9b59b6");
         if (leveledUpIds.length > 0) {
             addLog(`Level up! +${LEVEL_UP_STAT_POINTS} stat points available.`, "#ffd700");
             soundFns.playLevelUp();

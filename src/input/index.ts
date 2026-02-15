@@ -10,7 +10,6 @@ import { UNIT_DATA } from "../game/playerUnits";
 import { soundFns } from "../audio";
 import { pauseGameClock, resumeGameClock } from "../core/gameClock";
 import { executeSkill, clearTargetingMode, type SkillExecutionContext } from "../combat/skills";
-import { findClosestTargetByTeam } from "../combat/skills/helpers";
 import { hasStatusEffect } from "../combat/combatMath";
 import { getFormationPositions } from "../game/formation";
 import { sortUnitsByFormationOrder } from "../game/formationOrder";
@@ -305,6 +304,52 @@ export function getUnitsInBox(
 // ACTION QUEUE PROCESSING
 // =============================================================================
 
+function isSingleTargetSkill(skill: Skill): boolean {
+    if (skill.targetType === "enemy" || skill.targetType === "ally" || skill.targetType === "unit") return true;
+    return skill.name === "Body Swap" || skill.name === "Divine Lattice";
+}
+
+function getQueuedRangeBuffer(skill: Skill): number {
+    if (skill.name === "Body Swap") return 0.4;
+    if (skill.type === "mana_transfer" && skill.targetType === "ally") return 0.5;
+    if (
+        skill.targetType === "enemy"
+        && (skill.type === "damage" || skill.type === "debuff" || skill.type === "smite")
+    ) {
+        return 0.5;
+    }
+    return 0;
+}
+
+function isValidLockedTarget(
+    skill: Skill,
+    casterId: number,
+    target: Unit
+): boolean {
+    if (skill.type === "revive") {
+        return target.team === "player" && target.hp <= 0;
+    }
+    if (skill.targetType === "enemy") {
+        return target.team === "enemy" && target.hp > 0;
+    }
+    if (skill.targetType === "ally") {
+        return target.team === "player" && target.hp > 0;
+    }
+    if (skill.targetType === "unit") {
+        if (skill.name === "Body Swap") {
+            return target.id !== casterId && target.hp > 0;
+        }
+        return target.hp > 0;
+    }
+    if (skill.name === "Body Swap") {
+        return target.id !== casterId && target.hp > 0;
+    }
+    if (skill.name === "Divine Lattice") {
+        return target.hp > 0;
+    }
+    return target.hp > 0;
+}
+
 export function processActionQueue(
     actionQueueRef: React.MutableRefObject<ActionQueue>,
     actionCooldownRef: React.MutableRefObject<Record<number, number>>,
@@ -343,23 +388,50 @@ export function processActionQueue(
             if (!action.skill.isCantrip && now < cooldownEnd) {
                 continue; // Don't remove, will try again next frame
             }
-            // For enemy-targeted skills, validate target still exists before executing
-            // This prevents "No enemy at that location" spam when target dies between queue and execute
-            if (action.skill.targetType === "enemy") {
-                const hasTarget = findClosestTargetByTeam(
-                    skillCtx.unitsStateRef.current,
-                    skillCtx.unitsRef.current,
-                    "enemy",
-                    action.targetX,
-                    action.targetZ
-                );
-                if (!hasTarget) {
-                    // Target died - silently discard and let unit re-acquire target
+
+            let executeTargetX = action.targetX;
+            let executeTargetZ = action.targetZ;
+
+            // Locked single-target actions should never retarget to a different unit.
+            if (action.targetId !== undefined && isSingleTargetSkill(action.skill)) {
+                const casterG = unitsRef[unitId];
+                const target = skillCtx.unitsStateRef.current.find(u => u.id === action.targetId);
+
+                if (!casterG || !target || !isValidLockedTarget(action.skill, unitId, target)) {
                     executedUnits.push(unitId);
                     continue;
                 }
+
+                const targetG = unitsRef[action.targetId];
+                const targetX = targetG ? targetG.position.x : target.x;
+                const targetZ = targetG ? targetG.position.z : target.z;
+
+                // Revive targets can exist in state without a scene group after area transitions.
+                // Other locked single-target skills require a live scene target.
+                if (!targetG && action.skill.type !== "revive") {
+                    executedUnits.push(unitId);
+                    continue;
+                }
+
+                const targetRadius = getUnitRadius(target);
+                const rangeWithBuffer = action.skill.range + getQueuedRangeBuffer(action.skill);
+                if (!isInRange(
+                    casterG.position.x,
+                    casterG.position.z,
+                    targetX,
+                    targetZ,
+                    targetRadius,
+                    rangeWithBuffer
+                )) {
+                    executedUnits.push(unitId);
+                    continue;
+                }
+
+                executeTargetX = targetX;
+                executeTargetZ = targetZ;
             }
-            executeSkill(skillCtx, unitId, action.skill, action.targetX, action.targetZ, action.targetId);
+
+            executeSkill(skillCtx, unitId, action.skill, executeTargetX, executeTargetZ, action.targetId);
             executedUnits.push(unitId);
         } else if (action.type === "move") {
             // Respect row stagger delay for formation moves
@@ -479,6 +551,7 @@ export function buildMoveTargets(
 export function validateSkillTarget(
     skill: Skill,
     targetUnit: Unit,
+    casterId: number,
     casterName: string
 ): string | null {
     // Check target type (ally vs enemy)
@@ -487,6 +560,9 @@ export function validateSkillTarget(
     }
     if (skill.targetType === "enemy" && targetUnit.team !== "enemy") {
         return `${casterName}: Must target an enemy!`;
+    }
+    if (skill.targetType === "unit" && skill.name === "Body Swap" && targetUnit.id === casterId) {
+        return `${casterName}: Must target another unit!`;
     }
     // Check if target is alive (revive skills target dead allies)
     if (targetUnit.hp <= 0 && skill.type !== "revive") {
@@ -574,7 +650,7 @@ export function handleTargetingClick(
 
             if (targetUnit && targetG) {
                 // Validate target type and alive status
-                const validationError = validateSkillTarget(skill, targetUnit, UNIT_DATA[casterId].name);
+                const validationError = validateSkillTarget(skill, targetUnit, casterId, UNIT_DATA[casterId].name);
                 if (validationError) {
                     addLog(validationError, "#888");
                     return true;
@@ -607,6 +683,11 @@ export function handleTargetingClick(
         return true;
     }
 
+    if (skill.targetType === "unit") {
+        addLog(`${UNIT_DATA[casterId].name}: Must target a unit!`, "#888");
+        return true;
+    }
+
     return queueOrExecuteSkill(casterId, skill, targetX, targetZ, refs, state, setters, skillCtx, addLog);
 }
 
@@ -628,29 +709,29 @@ export function handleTargetingOnUnit(
     const caster = state.unitsStateRef.current.find(u => u.id === casterId);
     const casterG = unitsRef[casterId];
     const targetUnit = state.unitsStateRef.current.find(u => u.id === targetUnitId);
-    const targetG = unitsRef[targetUnitId];
 
     if (!caster || !casterG || caster.hp <= 0) {
         clearTargetingMode(setters.setTargetingMode, refs.rangeIndicatorRef, refs.aoeIndicatorRef);
         return false;
     }
 
-    if (!targetUnit || !targetG) {
+    if (!targetUnit) {
         addLog(`${UNIT_DATA[casterId].name}: Invalid target!`, "#888");
         clearTargetingMode(setters.setTargetingMode, refs.rangeIndicatorRef, refs.aoeIndicatorRef);
         return false;
     }
 
     // Validate target type and alive status
-    const validationError = validateSkillTarget(skill, targetUnit, UNIT_DATA[casterId].name);
+    const validationError = validateSkillTarget(skill, targetUnit, casterId, UNIT_DATA[casterId].name);
     if (validationError) {
         addLog(validationError, "#888");
         return false;
     }
 
-    // Use target unit's position
-    const targetX = targetG.position.x;
-    const targetZ = targetG.position.z;
+    // Revive targets may not have an active UnitGroup after area transitions.
+    const targetG = unitsRef[targetUnitId];
+    const targetX = targetG ? targetG.position.x : targetUnit.x;
+    const targetZ = targetG ? targetG.position.z : targetUnit.z;
 
     // Range check: if any part of target's hitbox is in range, allow targeting
     const targetRadius = getUnitRadius(targetUnit);

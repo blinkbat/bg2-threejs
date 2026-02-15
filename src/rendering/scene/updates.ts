@@ -563,7 +563,6 @@ const FOG_STATE_UNEXPLORED: FogRenderState = 0;
 const FOG_STATE_REVEALED_NOT_VISIBLE: FogRenderState = 1;
 const FOG_STATE_VISIBLE: FogRenderState = 2;
 
-const UNEXPLORED_TRUNK_STUMP_HEIGHT = 0.42;
 const FOG_TRANSITION_BASE_MS = 220;
 const FOG_TRANSITION_JITTER_MS = 40;
 const FOG_DITHER_OPACITY_VARIANCE = 0.04;
@@ -728,7 +727,7 @@ function applyFogOpacity(
 
 /**
  * Update trees with object-level FoW states:
- * - `unexplored`: short trunk stump, no canopy
+ * - `unexplored`: hidden via opacity fade
  * - `revealed_not_visible`: full tree
  * - `visible`: full tree
  */
@@ -747,23 +746,11 @@ export function updateTreeFogVisibility(
         if (mesh.userData.isTrunk) {
             const fullHeight = readFiniteNumber(Reflect.get(mesh.userData, "fullHeight"));
             if (fullHeight === null || fullHeight <= 0) continue;
+            const fullY = fullHeight / 2;
+            const targetOpacity = fogState === FOG_STATE_UNEXPLORED ? 0 : 1;
 
-            const stumpHeight = Math.min(fullHeight, UNEXPLORED_TRUNK_STUMP_HEIGHT);
-            const stumpScaleY = stumpHeight / fullHeight;
-            const stumpPosY = stumpHeight / 2;
-
-            let targetScaleY = 1;
-            let targetPosY = fullHeight / 2;
-            let targetOpacity = 1;
-
-            if (fogState === FOG_STATE_UNEXPLORED) {
-                targetScaleY = stumpScaleY;
-                targetPosY = stumpPosY;
-                targetOpacity = 1;
-            } else {
-                targetScaleY = 1;
-                targetPosY = fullHeight / 2;
-                targetOpacity = 1;
+            if (fogState !== FOG_STATE_UNEXPLORED) {
+                mesh.visible = true;
             }
 
             const transition = computeFogTransition(
@@ -774,15 +761,21 @@ export function updateTreeFogVisibility(
                 mesh.scale.y,
                 mesh.position.y,
                 targetOpacity,
-                targetScaleY,
-                targetPosY
+                1,
+                fullY
             );
 
-            mesh.visible = true;
-            mesh.scale.y = transition.scaleY;
-            mesh.position.y = transition.posY;
+            // Keep trees at full geometry; only opacity transitions are used.
+            mesh.scale.y = 1;
+            mesh.position.y = fullY;
             applyFogOpacity(mesh, mat, transition.opacity);
             mesh.userData.fogResolvedOpacity = mat.opacity;
+
+            if (fogState === FOG_STATE_UNEXPLORED && transition.progress >= 1 && mat.opacity <= 0.01) {
+                mesh.visible = false;
+            } else {
+                mesh.visible = true;
+            }
         } else if (mesh.userData.isFoliage) {
             const fullY = readFiniteNumber(Reflect.get(mesh.userData, "fullY"));
             if (fullY === null) continue;
@@ -808,8 +801,9 @@ export function updateTreeFogVisibility(
                 fullY
             );
 
-            mesh.scale.y = transition.scaleY;
-            mesh.position.y = transition.posY;
+            // Keep canopy geometry fixed; fade controls visibility.
+            mesh.scale.y = 1;
+            mesh.position.y = fullY;
             applyFogOpacity(mesh, mat, transition.opacity);
             mesh.userData.fogResolvedOpacity = mat.opacity;
 

@@ -373,7 +373,7 @@ const CANDLE_LIGHT_CLUSTER_RADIUS = 5.5;
 const CANDLE_LIGHT_CLUSTER_MAX_MEMBERS = 6;
 const DIRECTIONAL_SHADOW_MAP_SIZE = 512;
 const MAX_FLAME_CLUSTER_LIGHTS = 2;
-const MAX_AREA_LIGHTS = 2;
+const MAX_AREA_LIGHTS = 6;
 const ENABLE_DOOR_POINT_LIGHTS = false;
 const RENDERER_MAX_PIXEL_RATIO = 1.25;
 
@@ -616,6 +616,11 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
 
     // Shared geometry for all 1x1 floor/terrain tiles (hundreds of tiles, one geometry)
     const tileGeo = new THREE.PlaneGeometry(1, 1);
+    const WATER_METALNESS = 0.52;
+    const WATER_ROUGHNESS = 0.08;
+    const WATER_EMISSIVE_INTENSITY = 0.14;
+    const TERRAIN_WATER_COLOR_SHALLOW = "#275b72";
+    const TERRAIN_WATER_COLOR_DEEP = "#1f4a60";
 
     // Material pool: reuse materials for tiles with the same color (avoids ~1600 unique instances)
     const floorMatPool: Record<string, THREE.MeshStandardMaterial> = {};
@@ -628,7 +633,13 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     }
     function getWaterMat(color: string): THREE.MeshStandardMaterial {
         if (!waterMatPool[color]) {
-            waterMatPool[color] = new THREE.MeshStandardMaterial({ color, metalness: 0.0, roughness: 1.0 });
+            waterMatPool[color] = new THREE.MeshStandardMaterial({
+                color,
+                metalness: WATER_METALNESS,
+                roughness: WATER_ROUGHNESS,
+                emissive: color,
+                emissiveIntensity: WATER_EMISSIVE_INTENSITY
+            });
         }
         return waterMatPool[color];
     }
@@ -667,7 +678,16 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                     const corners = tileType ? getFloorCornerFlags(area.floor, x, z, tileType) : noRoundedCorners;
                     const hasInnerRounding = corners.some(c => c > 0);
                     if (hasInnerRounding) {
-                        const roundedWaterMat = createRoundedFloorMaterial(color, corners, 0.28, "outer", 0.0, 1.0);
+                        const roundedWaterMat = createRoundedFloorMaterial(
+                            color,
+                            corners,
+                            0.28,
+                            "outer",
+                            WATER_METALNESS,
+                            WATER_ROUGHNESS
+                        );
+                        roundedWaterMat.emissive.set(color);
+                        roundedWaterMat.emissiveIntensity = WATER_EMISSIVE_INTENSITY;
                         tile = new THREE.Mesh(tileGeo, roundedWaterMat);
                     } else {
                         tile = new THREE.Mesh(tileGeo, getWaterMat(color));
@@ -699,7 +719,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         }
     }
 
-    // Render lava and water from terrain layer (~ = lava, w = water)
+    // Render lava and water from terrain layer (~ = lava, w/W = water)
     if (area.terrain && area.terrain.length > 0) {
         const lavaMat = new THREE.MeshStandardMaterial({
             color: "#ff4400",
@@ -715,12 +735,19 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 if (char === "~") {
                     lavaPositions.push({ x, z });
                     hasLiquidTiles = true;
-                } else if (char === "w") {
+                } else if (char === "w" || char === "W") {
+                    const terrainWaterColor = char === "W"
+                        ? TERRAIN_WATER_COLOR_DEEP
+                        : TERRAIN_WATER_COLOR_SHALLOW;
                     const corners = getFloorCornerFlags(area.terrain, x, z, "w");
                     const hasInnerRounding = corners.some(c => c > 0);
                     const waterMat = hasInnerRounding
-                        ? createRoundedFloorMaterial("#1a3848", corners, 0.28, "outer", 0.0, 1.0)
-                        : getWaterMat("#1a3848");
+                        ? createRoundedFloorMaterial(terrainWaterColor, corners, 0.28, "outer", WATER_METALNESS, WATER_ROUGHNESS)
+                        : getWaterMat(terrainWaterColor);
+                    if (hasInnerRounding && waterMat instanceof THREE.MeshStandardMaterial) {
+                        waterMat.emissive.set(terrainWaterColor);
+                        waterMat.emissiveIntensity = WATER_EMISSIVE_INTENSITY;
+                    }
                     const tile = new THREE.Mesh(tileGeo, waterMat);
                     tile.rotation.x = -Math.PI / 2;
                     tile.position.set(x + 0.5, 0.002, z + 0.5);

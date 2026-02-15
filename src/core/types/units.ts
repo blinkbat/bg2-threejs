@@ -3,10 +3,10 @@
 // =============================================================================
 
 // Enemy type identifiers
-export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba" | "acid_slug" | "basilisk" | "bat" | "undead_knight" | "ancient_construct" | "feral_hound" | "corrupt_druid" | "skeleton_warrior" | "baby_kraken" | "kraken_tentacle" | "magma_imp" | "necromancer" | "skeleton_minion" | "chittering_crabling" | "spine_spitter" | "occultist_dreamwalker" | "occultist_firebreather" | "occultist_pygmy";
+export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba" | "acid_slug" | "armored_crab" | "basilisk" | "bat" | "undead_knight" | "ancient_construct" | "feral_hound" | "corrupt_druid" | "skeleton_warrior" | "baby_kraken" | "kraken_tentacle" | "magma_imp" | "necromancer" | "skeleton_minion" | "chittering_crabling" | "spine_spitter" | "occultist_dreamwalker" | "occultist_firebreather" | "occultist_pygmy";
 
 // Status effect types
-export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed" | "chilled" | "qi_drain" | "energyShield" | "defiance" | "doom" | "invul" | "sleep" | "sun_stance" | "thorns" | "highland_defense" | "divine_lattice";
+export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed" | "chilled" | "qi_drain" | "energyShield" | "defiance" | "doom" | "invul" | "sleep" | "sun_stance" | "thorns" | "highland_defense" | "divine_lattice" | "weakened" | "hamstrung";
 
 export interface StatusEffect {
     type: StatusEffectType;
@@ -224,6 +224,8 @@ export interface EnemyStats {
     poisonChance?: number;  // 0-100 percent chance to apply poison
     poisonDamage?: number;  // Custom poison damage per tick (default POISON_DAMAGE_PER_TICK)
     slowChance?: number;    // 0-100 percent chance to apply slow (1.5x cooldowns, 0.5x move speed)
+    stunChance?: number;    // 0-100 percent chance to apply stun on hit
+    stunDuration?: number;  // Stun duration in ms when stunChance procs
     // Optional special skill
     skill?: EnemySkill;
     // Optional heal skill for support enemies

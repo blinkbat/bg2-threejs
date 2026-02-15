@@ -3,20 +3,23 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, Skill, UnitGroup, MagicMissileProjectile, PiercingProjectile } from "../../core/types";
-import { COLORS, SUN_STANCE_BONUS_DAMAGE, MAGIC_WAVE_TARGETING_BUFFER, MAGIC_WAVE_FAN_SPREAD, MAGIC_MISSILE_START_OFFSET, MAGIC_MISSILE_SPEED, MAGIC_MISSILE_ZIGZAG_PHASE_STEP, GLACIAL_WHORL_SPEED, GLACIAL_WHORL_MAX_DISTANCE } from "../../core/constants";
+import type { Unit, Skill, UnitGroup, BasicProjectile, MagicMissileProjectile, PiercingProjectile } from "../../core/types";
+import { COLORS, SUN_STANCE_BONUS_DAMAGE, MAGIC_MISSILE_START_OFFSET, MAGIC_MISSILE_SPEED, MAGIC_MISSILE_ZIGZAG_PHASE_STEP, GLACIAL_WHORL_SPEED, GLACIAL_WHORL_MAX_DISTANCE } from "../../core/constants";
 import { UNIT_DATA, getEffectiveUnitData } from "../../game/playerUnits";
 import { getUnitStats } from "../../game/units";
 import { rollChance, rollDamage, calculateDamageWithCrit, rollHit, getEffectiveArmor, logHit, logMiss, logPoisoned, logCast, logAoeHit, logAoeMiss, calculateStatBonus, checkEnemyDefenses, hasStatusEffect } from "../combatMath";
 import { ENEMY_STATS } from "../../game/enemyStats";
 import { getUnitRadius, isInRange } from "../../rendering/range";
-import { distanceToPoint, isPointInRectangle } from "../../game/geometry";
+import { isPointInRectangle } from "../../game/geometry";
 import { getAliveUnits } from "../../game/unitQuery";
 import { soundFns } from "../../audio";
 import { createProjectile, getProjectileSpeed, applyDamageToUnit, createAnimatedRing, createLightningPillar, animateExpandingMesh, type DamageContext } from "../damageEffects";
 import { spawnSwingIndicator } from "../../gameLoop/swingAnimations";
 import type { SkillExecutionContext } from "./types";
 import { findAndValidateEnemyTarget, consumeSkill } from "./helpers";
+
+const GLACIAL_WHORL_GEOMETRY = new THREE.IcosahedronGeometry(0.26, 1);
+const MAGIC_MISSILE_GEOMETRY = new THREE.IcosahedronGeometry(0.11, 0);
 
 // =============================================================================
 // AOE DAMAGE SKILL (e.g. Fireball)
@@ -100,14 +103,12 @@ export function executeTargetedDamageSkill(
     let targetEnemy: Unit | undefined;
     let targetG: UnitGroup | undefined;
 
-    // Smite can track by unit ID (moving targets)
+    // Target lock by ID: never retarget to a different unit if an explicit target was provided.
     if (targetUnitId !== undefined) {
-        targetEnemy = unitsStateRef.current.find(u => u.id === targetUnitId && u.team === "enemy");
+        targetEnemy = unitsStateRef.current.find(u => u.id === targetUnitId && u.team === "enemy" && u.hp > 0);
         targetG = unitsRef.current[targetUnitId];
-    }
-
-    // Fall back to position-based search
-    if (!targetEnemy || !targetG) {
+        if (!targetEnemy || !targetG) return false;
+    } else {
         const closest = findAndValidateEnemyTarget(ctx, casterId, targetX, targetZ);
         if (!closest) return false;
         targetEnemy = closest.unit;
@@ -137,14 +138,31 @@ export function executeTargetedDamageSkill(
     // Ranged: spawn projectile and return (no hit roll here)
     if (delivery.mode === "ranged") {
         const effectiveData = getEffectiveUnitData(casterId);
-        const projectile = createProjectile(scene, "ranged", casterG.position.x, casterG.position.z, effectiveData.projectileColor);
-        projectilesRef.current.push({
+        const projectileColor = skill.projectileColor ?? effectiveData.projectileColor;
+        const projectile = createProjectile(scene, "ranged", casterG.position.x, casterG.position.z, projectileColor);
+
+        const basicProjectile: BasicProjectile = {
             type: "basic",
             mesh: projectile,
             attackerId: casterId,
             targetId: targetEnemy.id,
             speed: getProjectileSpeed("ranged")
-        });
+        };
+
+        // Preserve existing basic-attack projectile behavior unless this is a named skill shot.
+        if (skill.name !== "Attack" && skill.damageRange) {
+            basicProjectile.skillName = skill.name;
+            basicProjectile.skillDamage = skill.damageRange;
+            basicProjectile.skillDamageType = skill.damageType;
+            if (skill.critChanceOverride !== undefined) {
+                basicProjectile.skillCritChanceOverride = skill.critChanceOverride;
+            }
+            if (skill.onHitEffect) {
+                basicProjectile.skillOnHitEffect = skill.onHitEffect;
+            }
+        }
+
+        projectilesRef.current.push(basicProjectile);
         soundFns.playAttack();
         return true;
     }
@@ -270,8 +288,15 @@ export function executeTargetedDamageSkill(
 // =============================================================================
 
 /** Execute a melee single-target damage skill (like Poison Dagger) */
-export function executeMeleeSkill(ctx: SkillExecutionContext, casterId: number, skill: Skill, targetX: number, targetZ: number): boolean {
-    return executeTargetedDamageSkill(ctx, casterId, skill, targetX, targetZ, { mode: "melee" });
+export function executeMeleeSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill,
+    targetX: number,
+    targetZ: number,
+    targetUnitId?: number
+): boolean {
+    return executeTargetedDamageSkill(ctx, casterId, skill, targetX, targetZ, { mode: "melee" }, targetUnitId);
 }
 
 /** Execute a smite skill (like Thunder) - instant-hit ranged damage with lightning pillar */
@@ -280,8 +305,15 @@ export function executeSmiteSkill(ctx: SkillExecutionContext, casterId: number, 
 }
 
 /** Execute a ranged single-target damage skill (basic attack for ranged units) */
-export function executeRangedSkill(ctx: SkillExecutionContext, casterId: number, skill: Skill, targetX: number, targetZ: number): boolean {
-    return executeTargetedDamageSkill(ctx, casterId, skill, targetX, targetZ, { mode: "ranged" });
+export function executeRangedSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill,
+    targetX: number,
+    targetZ: number,
+    targetUnitId?: number
+): boolean {
+    return executeTargetedDamageSkill(ctx, casterId, skill, targetX, targetZ, { mode: "ranged" }, targetUnitId);
 }
 
 // =============================================================================
@@ -399,8 +431,8 @@ export function executeFlurrySkill(
 // =============================================================================
 
 /**
- * Execute Magic Wave skill - fires 8 zig-zagging projectiles that fan out towards a target area
- * Can be targeted arbitrarily like fireball - missiles seek enemies near the target position
+ * Execute Magic Wave skill - launches a coherent wave front of arcane bolts.
+ * Missiles travel forward in lanes and strike enemies they pass through.
  */
 export function executeMagicWaveSkill(
     ctx: SkillExecutionContext,
@@ -409,7 +441,7 @@ export function executeMagicWaveSkill(
     targetX: number,
     targetZ: number
 ): boolean {
-    const { scene, unitsStateRef, unitsRef, projectilesRef, addLog } = ctx;
+    const { scene, unitsRef, projectilesRef, addLog } = ctx;
 
     const casterG = unitsRef.current[casterId];
     if (!casterG) return false;
@@ -418,6 +450,7 @@ export function executeMagicWaveSkill(
     const casterData = UNIT_DATA[casterId];
     const missileCount = skill.hitCount ?? 8;
     const aoeRadius = skill.aoeRadius ?? 3;
+    const waveDistance = Math.max(1.5, skill.range);
 
     createAnimatedRing(scene, casterG.position.x, casterG.position.z, skill.projectileColor ?? COLORS.dmgChaos, {
         innerRadius: 0.2,
@@ -432,89 +465,82 @@ export function executeMagicWaveSkill(
         duration: 300
     });
 
-    // Find enemies near the target position (within aoe radius)
-    const enemies = getAliveUnits(unitsStateRef.current, "enemy");
-    const enemiesNearTarget: { unit: Unit; group: UnitGroup; dist: number }[] = [];
-
-    enemies.forEach(enemy => {
-        const enemyG = unitsRef.current[enemy.id];
-        if (!enemyG) return;
-
-        // Distance from target click position
-        const distToTarget = distanceToPoint(enemyG.position, targetX, targetZ);
-        if (distToTarget <= aoeRadius + MAGIC_WAVE_TARGETING_BUFFER) {  // Slight buffer for targeting
-            enemiesNearTarget.push({ unit: enemy, group: enemyG, dist: distToTarget });
-        }
-    });
-
-    // Sort by distance to target click
-    enemiesNearTarget.sort((a, b) => a.dist - b.dist);
-
-    // Calculate base direction towards target click for fan-out
-    const baseAngle = Math.atan2(targetZ - casterG.position.z, targetX - casterG.position.x);
-    const fanSpread = MAGIC_WAVE_FAN_SPREAD;  // 90 degree total spread
+    // Calculate wave direction from caster to clicked location.
+    const toTargetX = targetX - casterG.position.x;
+    const toTargetZ = targetZ - casterG.position.z;
+    const toTargetLen = Math.hypot(toTargetX, toTargetZ);
+    const waveDirX = toTargetLen > 0.01 ? toTargetX / toTargetLen : 1;
+    const waveDirZ = toTargetLen > 0.01 ? toTargetZ / toTargetLen : 0;
+    const wavePerpX = -waveDirZ;
+    const wavePerpZ = waveDirX;
+    const waveEndX = casterG.position.x + waveDirX * waveDistance;
+    const waveEndZ = casterG.position.z + waveDirZ * waveDistance;
+    const waveWidth = Math.max(1.8, aoeRadius * 1.8);
+    const laneScaleNearCaster = 0.42;
+    const baseFacing = Math.atan2(waveDirX, waveDirZ);
 
     // Generate unique volley ID for tracking hits across all missiles in this cast
     const volleyId = Date.now() + Math.random();
 
-    // Create missiles
+    // Create missiles in a lateral line; each one becomes a lane in the wave.
     for (let i = 0; i < missileCount; i++) {
-        // Calculate fan-out angle for this missile (handle single missile case to avoid divide-by-zero)
         const normalizedPos = missileCount > 1 ? i / (missileCount - 1) : 0.5;
-        const fanOffset = (normalizedPos - 0.5) * fanSpread;
-        const startAngle = baseAngle + fanOffset;
+        const laneOffset = (normalizedPos - 0.5) * waveWidth;
 
         // Create magic missile projectile mesh
         const missile = new THREE.Mesh(
-            new THREE.SphereGeometry(0.10, 8, 8),
-            new THREE.MeshBasicMaterial({ color: skill.projectileColor ?? "#9966ff" })
+            MAGIC_MISSILE_GEOMETRY,
+            new THREE.MeshPhongMaterial({
+                color: skill.projectileColor ?? "#9966ff",
+                emissive: "#6a3faf",
+                emissiveIntensity: 0.5,
+                specular: new THREE.Color("#e8d8ff"),
+                shininess: 85,
+                transparent: true,
+                opacity: 0.95
+            })
         );
-        // Start position offset slightly in the fan direction
+        missile.userData.visualPhase = i * 0.45 + Math.random() * 0.2;
+        missile.userData.sharedGeometry = true;
+        missile.rotation.y = baseFacing;
+        // Start slightly forward from caster with compressed lateral spread.
         const startOffset = MAGIC_MISSILE_START_OFFSET;
+        const startX = casterG.position.x + waveDirX * startOffset + wavePerpX * laneOffset * laneScaleNearCaster;
+        const startZ = casterG.position.z + waveDirZ * startOffset + wavePerpZ * laneOffset * laneScaleNearCaster;
         missile.position.set(
-            casterG.position.x + Math.cos(startAngle) * startOffset,
+            startX,
             0.6,
-            casterG.position.z + Math.sin(startAngle) * startOffset
+            startZ
         );
         scene.add(missile);
 
-        // Assign target: distribute among enemies if any, otherwise all go to click position
-        let targetId: number;
-        if (enemiesNearTarget.length > 0) {
-            const targetIdx = i % enemiesNearTarget.length;
-            targetId = enemiesNearTarget[targetIdx].unit.id;
-        } else {
-            // No enemies - missiles will fly towards target position and fizzle
-            // Use -1 as a sentinel for "no target, go to position"
-            targetId = -1;
-        }
-
-        // Create magic missile projectile with zig-zag and fan-out properties
+        // Create a wave-lane projectile (no per-missile homing target).
         const magicMissile: MagicMissileProjectile = {
             type: "magic_missile",
             mesh: missile,
             attackerId: casterId,
-            targetId: targetId,
+            targetId: -1,
+            targetPos: { x: waveEndX, z: waveEndZ },
             speed: MAGIC_MISSILE_SPEED,
             damage: skill.damageRange!,
             damageType: skill.damageType ?? "chaos",
             zigzagOffset: 0,
             zigzagDirection: i % 2 === 0 ? 1 : -1,
             zigzagPhase: i * MAGIC_MISSILE_ZIGZAG_PHASE_STEP + Math.random() * 0.2,
-            // Fan-out: store normalized angle offset (-0.5 to 0.5) for lateral drift
             fanAngle: normalizedPos - 0.5,
-            startX: missile.position.x,
-            startZ: missile.position.z,
-            // Volley tracking for aggregated damage logging
+            startX,
+            startZ,
+            waveDirX,
+            waveDirZ,
+            wavePerpX,
+            wavePerpZ,
+            waveLaneOffset: laneOffset,
+            waveMaxDistance: waveDistance + 0.6,
+            hitUnits: new Set<number>(),
             volleyId,
             missileIndex: i,
             totalMissiles: missileCount
         };
-
-        // Store target position for missiles without enemy target
-        if (targetId === -1) {
-            (magicMissile as MagicMissileProjectile & { targetPos?: { x: number; z: number } }).targetPos = { x: targetX, z: targetZ };
-        }
 
         projectilesRef.current.push(magicMissile);
     }
@@ -555,6 +581,8 @@ export function executeHolyStrikeSkill(
     const halfWidth = lineWidth / 2;
     const endX = casterG.position.x + Math.cos(facingAngle) * length;
     const endZ = casterG.position.z + Math.sin(facingAngle) * length;
+    const midX = (casterG.position.x + endX) * 0.5;
+    const midZ = (casterG.position.z + endZ) * 0.5;
 
     // Find all enemies in the rectangle
     const enemies = getAliveUnits(unitsStateRef.current, "enemy");
@@ -598,6 +626,18 @@ export function executeHolyStrikeSkill(
         maxScale: 1.7,
         duration: 320
     });
+    createLightningPillar(scene, midX, midZ, {
+        color: "#ffe8b8",
+        duration: 220,
+        radius: 0.12,
+        height: 5
+    });
+    createLightningPillar(scene, endX, endZ, {
+        color: "#fff4d1",
+        duration: 280,
+        radius: 0.16,
+        height: 6
+    });
 
     soundFns.playHolyStrike();
 
@@ -631,6 +671,12 @@ export function executeHolyStrikeSkill(
                 attackerPosition: { x: casterG.position.x, z: casterG.position.z },
                 damageType: skill.damageType,
                 isCrit
+            });
+            createLightningPillar(scene, tg.position.x, tg.position.z, {
+                color: isCrit ? "#fff9e8" : "#ffe7b0",
+                duration: isCrit ? 260 : 200,
+                radius: isCrit ? 0.14 : 0.1,
+                height: isCrit ? 5.5 : 4
             });
 
             hitCount++;
@@ -678,6 +724,14 @@ export function executeGlacialWhorlSkill(
         maxScale: 1.25,
         duration: 240
     });
+    createAnimatedRing(scene, casterG.position.x, casterG.position.z, COLORS.chilledText, {
+        innerRadius: 0.1,
+        outerRadius: 0.22,
+        maxScale: 1.5,
+        duration: 280,
+        initialOpacity: 0.55,
+        y: 0.12
+    });
 
     const casterData = UNIT_DATA[casterId];
 
@@ -689,13 +743,23 @@ export function executeGlacialWhorlSkill(
     const dirX = dx / len;
     const dirZ = dz / len;
 
-    // Create projectile mesh: larger and horizontally oblong on local X.
+    // Create projectile mesh: crystalline shard with a soft emissive glow.
     const mesh = new THREE.Mesh(
-        new THREE.SphereGeometry(0.3, 12, 10),
-        new THREE.MeshBasicMaterial({ color: skill.projectileColor ?? "#5dade2" })
+        GLACIAL_WHORL_GEOMETRY,
+        new THREE.MeshPhongMaterial({
+            color: skill.projectileColor ?? "#5dade2",
+            emissive: COLORS.chilledText,
+            emissiveIntensity: 0.5,
+            specular: new THREE.Color("#dff6ff"),
+            shininess: 95,
+            transparent: true,
+            opacity: 0.92
+        })
     );
-    mesh.scale.set(2.0, 0.9, 1.0);
+    mesh.scale.set(2.15, 0.74, 0.94);
+    mesh.rotation.y = Math.atan2(dirX, dirZ);
     mesh.position.set(casterG.position.x + dirX * 0.45, 0.5, casterG.position.z + dirZ * 0.45);
+    mesh.userData.sharedGeometry = true;
     scene.add(mesh);
 
     const piercingProj: PiercingProjectile = {
@@ -712,7 +776,14 @@ export function executeGlacialWhorlSkill(
         maxDistance: GLACIAL_WHORL_MAX_DISTANCE,
         hitUnits: new Set<number>(),
         chillChance: skill.chillChance ?? 60,
-        attackerTeam: "player"
+        attackerTeam: "player",
+        baseScaleX: 2.15,
+        baseScaleY: 0.74,
+        baseScaleZ: 0.94,
+        visualPhase: Math.random() * Math.PI * 2,
+        spinSpeed: 0.1,
+        trailIntervalMs: 120,
+        nextTrailAt: Date.now() + 40
     };
 
     projectilesRef.current.push(piercingProj);

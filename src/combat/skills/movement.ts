@@ -243,6 +243,7 @@ export function executeBodySwapSkill(
     let targetG = target ? unitsRef.current[target.id] : undefined;
 
     if (!target || !targetG) {
+        if (targetUnitId !== undefined) return false;
         const closest = findClosestUnit(otherLivingUnits, unitsRef.current, targetX, targetZ, 2.2);
         if (!closest) {
             ctx.addLog(`${UNIT_DATA[casterId].name}: No target at that location!`, COLORS.logNeutral);

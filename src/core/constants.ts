@@ -41,6 +41,10 @@ export const CHILLED_COOLDOWN_MULT = 2.0;   // 2x cooldowns when chilled
 export const CHILLED_MOVE_MULT = 0.5;       // 0.5x move speed when chilled
 export const CHILLED_TINT_STRENGTH = 0.4;   // Color lerp for chilled visual
 
+// Status Effects - Targeted shot debuffs
+export const WEAKENED_COOLDOWN_MULT = 1.35; // 35% longer attack/skill cooldowns
+export const HAMSTRUNG_MOVE_MULT = 0.6;     // 40% move speed reduction
+
 // Status Effects - Defiance
 export const DEFIANCE_COOLDOWN_MULT = 0.5; // 0.5x cooldowns when under defiance buff
 
@@ -237,6 +241,12 @@ export const COLORS = {
     divineLattice: "#d8e6ff",
     divineLatticeText: "#ffffff",
     divineLatticeBg: "#1a2333",
+    weakened: "#7f5f4a",
+    weakenedText: "#d9ad84",
+    weakenedBg: "#2a1f18",
+    hamstrung: "#355c7d",
+    hamstrungText: "#7fb3d5",
+    hamstrungBg: "#132230",
     chilled: "#5dade2",             // Ice blue
     chilledText: "#85c1e9",         // Lighter ice blue
     fireBreath: "#ff4400",       // Orange-red for fire breath cone

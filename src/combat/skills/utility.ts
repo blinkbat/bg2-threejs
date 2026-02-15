@@ -3,7 +3,7 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Skill, StatusEffect, TrapProjectile, Unit } from "../../core/types";
+import type { Skill, StatusEffect, TrapProjectile, Unit, UnitGroup } from "../../core/types";
 import { COLORS, BUFF_TICK_INTERVAL, TRAP_FLIGHT_DURATION, TRAP_ARC_HEIGHT, TRAP_MESH_SIZE, SANCTUARY_HEAL_PER_TICK, DEFAULT_TAUNT_CHANCE, DEFAULT_STUN_CHANCE } from "../../core/constants";
 import { UNIT_DATA, ANCESTOR_SUMMON_ID, getEffectiveMaxHp } from "../../game/playerUnits";
 import { getUnitStats } from "../../game/units";
@@ -89,15 +89,24 @@ export function executeDebuffSkill(
     casterId: number,
     skill: Skill,
     targetX: number,
-    targetZ: number
+    targetZ: number,
+    targetUnitId?: number
 ): boolean {
     const { scene, unitsRef, hitFlashRef, setUnits, addLog } = ctx;
 
-    // Find closest enemy to target position
-    const target = findAndValidateEnemyTarget(ctx, casterId, targetX, targetZ);
-    if (!target) return false;
-
-    const { unit: targetEnemy, group: targetG } = target;
+    let targetEnemy: Unit | undefined;
+    let targetG: UnitGroup | undefined;
+    if (targetUnitId !== undefined) {
+        targetEnemy = ctx.unitsStateRef.current.find(u => u.id === targetUnitId && u.team === "enemy" && u.hp > 0);
+        targetG = unitsRef.current[targetUnitId];
+        if (!targetEnemy || !targetG) return false;
+    } else {
+        // Find closest enemy to target position
+        const target = findAndValidateEnemyTarget(ctx, casterId, targetX, targetZ);
+        if (!target) return false;
+        targetEnemy = target.unit;
+        targetG = target.group;
+    }
     const casterG = unitsRef.current[casterId];
 
     if (!casterG) return false;
@@ -225,9 +234,17 @@ export function executeTrapSkill(
 
     // Create trap projectile mesh (spiky appearance)
     const trapGeometry = new THREE.OctahedronGeometry(TRAP_MESH_SIZE, 0);
-    const trapMaterial = new THREE.MeshBasicMaterial({ color: "#888888" });
+    const trapMaterial = new THREE.MeshPhongMaterial({
+        color: "#8f8f8f",
+        emissive: "#2c2c2c",
+        emissiveIntensity: 0.32,
+        shininess: 70,
+        transparent: true,
+        opacity: 0.95
+    });
     const trapMesh = new THREE.Mesh(trapGeometry, trapMaterial);
     trapMesh.position.set(casterG.position.x, 0.5, casterG.position.z);
+    trapMesh.rotation.z = Math.PI * 0.25;
     scene.add(trapMesh);
 
     // Create trap projectile with arc trajectory (pause-safe timing)

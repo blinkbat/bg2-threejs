@@ -200,6 +200,8 @@ const EFFECT_INFO: Record<string, { icon: string; color: string; description: st
     thorns: { icon: "✹", color: COLORS.thornsText, description: "Reflects melee damage to attackers" },
     highland_defense: { icon: "⛰", color: COLORS.highlandDefenseText, description: "Redirects nearby ally damage to the barbarian" },
     divine_lattice: { icon: "◈", color: COLORS.divineLatticeText, description: "Impervious to damage; cannot act; ignored by enemies" },
+    weakened: { icon: "A", color: COLORS.weakenedText, description: "Attack speed reduced" },
+    hamstrung: { icon: "L", color: COLORS.hamstrungText, description: "Move speed reduced" },
 };
 
 /** Renders active status effects as inline icons with tooltips */
@@ -302,7 +304,7 @@ function StatusTab({ unit, effectiveData, onToggleAI, unitId, onIncrementStat, d
                     <div className="exp-bar">
                         <div className="exp-fill" style={{ width: `${xpPct}%` }} />
                     </div>
-                    <div className="exp-text">{currentExp} / {xpForNextLevel} XP</div>
+                    <div className="exp-text">{currentExp} / {xpForNextLevel} Experience</div>
                 </div>
             </div>
 
@@ -532,6 +534,24 @@ function SkillTooltip({ skill, isShielded, cantripUses }: { skill: Skill; isShie
     // Poison chance
     if (skill.poisonChance) {
         lines.push({ label: "Poison chance", value: `${skill.poisonChance}%`, color: COLORS.poisonText });
+    }
+
+    if (skill.critChanceOverride !== undefined) {
+        lines.push({ label: "Crit chance", value: `${skill.critChanceOverride}%`, color: COLORS.damageCrit });
+    }
+
+    if (skill.onHitEffect) {
+        const effectDurationSec = Math.round((skill.onHitEffect.duration / 1000) * 10) / 10;
+        if (skill.onHitEffect.type === "stun") {
+            lines.push({ label: "On hit", value: `Stun (${skill.onHitEffect.chance}%)`, color: COLORS.stunnedText });
+            lines.push({ label: "Stun duration", value: `${effectDurationSec}s`, color: COLORS.stunnedText });
+        } else if (skill.onHitEffect.type === "attack_down") {
+            lines.push({ label: "On hit", value: `Weaken (${skill.onHitEffect.chance}%)`, color: COLORS.weakenedText });
+            lines.push({ label: "Debuff duration", value: `${effectDurationSec}s`, color: COLORS.weakenedText });
+        } else if (skill.onHitEffect.type === "move_slow") {
+            lines.push({ label: "On hit", value: `Hamstring (${skill.onHitEffect.chance}%)`, color: COLORS.hamstrungText });
+            lines.push({ label: "Debuff duration", value: `${effectDurationSec}s`, color: COLORS.hamstrungText });
+        }
     }
 
     // Mana cost
@@ -984,7 +1004,7 @@ function InventoryTab({
                 const canClick = unitAlive && !wouldBeWasted;
 
                 const effectColor = item.effect === "heal" ? COLORS.hpHigh : item.effect === "mana" ? COLORS.mana : isRevive ? "#ffd700" : "#9b59b6";
-                const effectLabel = item.effect === "heal" ? "HP" : item.effect === "mana" ? "Mana" : isRevive ? "" : "XP";
+                const effectLabel = item.effect === "heal" ? "HP" : item.effect === "mana" ? "Mana" : isRevive ? "" : "Experience";
                 const itemClass = `inventory-item-row ${!canClick && !isQueued ? "disabled" : ""} ${wouldBeWasted ? "wasted" : ""} ${isQueued ? "queued" : ""}`;
 
                 return (

@@ -12,6 +12,9 @@ import { getGameTime } from "../../core/gameClock";
 import { applyDamageToUnit, type DamageContext } from "../../combat/damageEffects";
 import type { VinesContext } from "./types";
 
+const VINES_LIGHT_COLOR = 0x7fcf5a;
+const VINES_LOG_COLOR = "#7fcf5a";
+
 // =============================================================================
 // VINES SKILL
 // =============================================================================
@@ -69,7 +72,7 @@ export function tryVinesSkill(ctx: VinesContext): boolean {
     const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now, defeatedThisFrame };
     applyDamageToUnit(dmgCtx, targetUnit.id, targetG, damage, targetData.name, {
         color: COLORS.damageEnemy,
-        hitMessage: { text: `${enemyStats.name} entangles ${targetUnit.team === "player" ? "a party member" : "its target"} in vines for ${damage} damage!`, color: "#2d4a1c" },
+        hitMessage: { text: `${enemyStats.name} entangles ${targetUnit.team === "player" ? "a party member" : "its target"} in vines for ${damage} damage!`, color: VINES_LOG_COLOR },
         targetUnit
     });
 
@@ -96,8 +99,7 @@ function createVinesEffect(scene: THREE.Scene, x: number, z: number, duration: n
     vinesGroup.position.set(x, 0, z);
 
     // Create several vine tendrils
-    const vineColor = 0x2d5a1c;
-    const vineMaterial = new THREE.MeshBasicMaterial({ color: vineColor });
+    const vineMaterial = new THREE.MeshBasicMaterial({ color: VINES_LIGHT_COLOR });
     const geometries: THREE.BufferGeometry[] = [];
 
     for (let i = 0; i < 6; i++) {

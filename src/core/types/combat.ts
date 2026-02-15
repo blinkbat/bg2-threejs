@@ -6,6 +6,14 @@ import * as THREE from "three";
 
 // Damage types - armor only reduces physical damage
 export type DamageType = "physical" | "fire" | "cold" | "lightning" | "chaos" | "holy";
+export type SkillDeliveryMode = "melee" | "ranged";
+export type SkillOnHitEffectType = "stun" | "attack_down" | "move_slow";
+
+export interface SkillOnHitEffect {
+    type: SkillOnHitEffectType;
+    chance: number;    // 0-100 percent chance to apply the effect on hit
+    duration: number;  // duration in ms
+}
 
 export interface Skill {
     name: string;
@@ -14,7 +22,7 @@ export interface Skill {
     manaCost: number;
     cooldown: number;  // ms
     type: "damage" | "heal" | "buff" | "taunt" | "flurry" | "debuff" | "trap" | "sanctuary" | "mana_transfer" | "smite" | "energy_shield" | "aoe_buff" | "restoration" | "revive" | "dodge" | "summon";
-    targetType: "enemy" | "ally" | "self" | "aoe";
+    targetType: "enemy" | "ally" | "self" | "aoe" | "unit";
     range: number;
     aoeRadius?: number;
     damageType: DamageType;  // Type of damage - armor only reduces physical
@@ -38,6 +46,9 @@ export interface Skill {
     trapDamage?: [number, number];    // Damage dealt when trap triggers
     lineWidth?: number;               // Width of line-shaped AOE (rectangle instead of circle)
     chillChance?: number;             // 0-100 percent chance to apply chilled on hit
+    delivery?: SkillDeliveryMode;     // Optional explicit delivery mode for single-target damage skills
+    critChanceOverride?: number;      // Optional crit chance override for this skill's hit resolution
+    onHitEffect?: SkillOnHitEffect;   // Optional status effect applied when this skill hits
 
     // Cantrip properties
     isCantrip?: boolean;              // Uses charges instead of cooldowns, bypasses action cooldown
@@ -76,6 +87,11 @@ export interface BaseProjectile {
 export interface BasicProjectile extends BaseProjectile {
     type: "basic";
     targetId: number;
+    skillName?: string;                  // Optional source skill name (defaults to "Attack")
+    skillDamage?: [number, number];      // Optional damage override for skill-based projectiles
+    skillDamageType?: DamageType;        // Optional damage type override for skill-based projectiles
+    skillCritChanceOverride?: number;    // Optional crit chance override for skill-based projectiles
+    skillOnHitEffect?: SkillOnHitEffect; // Optional on-hit effect for skill-based projectiles
 }
 
 export interface AoeProjectile extends BaseProjectile {
@@ -88,18 +104,24 @@ export interface AoeProjectile extends BaseProjectile {
 
 export interface MagicMissileProjectile extends BaseProjectile {
     type: "magic_missile";
-    targetId: number;          // -1 if no enemy target (position-based)
-    targetPos?: { x: number; z: number };  // Used when targetId is -1
+    targetId: number;          // Kept for compatibility; Magic Wave uses -1 (wave-travel mode)
+    targetPos?: { x: number; z: number };  // Optional wave endpoint hint
     damage: [number, number];
     damageType: DamageType;
-    // Zig-zag properties
+    // Wave motion properties
     zigzagOffset: number;      // Current lateral offset
     zigzagDirection: number;   // 1 or -1
     zigzagPhase: number;       // Phase offset for varied movement
-    // Fan-out properties
     fanAngle: number;          // Angle offset from center (-0.5 to 0.5 range, scaled)
     startX: number;            // Starting position for calculating travel distance
     startZ: number;
+    waveDirX: number;
+    waveDirZ: number;
+    wavePerpX: number;
+    wavePerpZ: number;
+    waveLaneOffset: number;
+    waveMaxDistance: number;
+    hitUnits: Set<number>;
     // Volley tracking
     volleyId: number;          // Unique ID to group missiles from same cast
     missileIndex: number;      // Index within the volley (0 to missileCount-1)
@@ -146,6 +168,13 @@ export interface PiercingProjectile extends BaseProjectile {
     hitUnits: Set<number>;
     chillChance: number;       // 0-100 percent chance to apply chilled on hit
     attackerTeam: "player" | "enemy";
+    baseScaleX?: number;
+    baseScaleY?: number;
+    baseScaleZ?: number;
+    visualPhase?: number;
+    spinSpeed?: number;
+    trailIntervalMs?: number;
+    nextTrailAt?: number;
 }
 
 export type Projectile = BasicProjectile | AoeProjectile | MagicMissileProjectile | TrapProjectile | FireballProjectile | PiercingProjectile;

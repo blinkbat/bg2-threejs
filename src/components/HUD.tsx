@@ -208,8 +208,8 @@ export function HUD({
                             <div className="hud-debug-buttons">
                                 {onAddXp && (
                                     <>
-                                        <button className="btn btn-tiny" onClick={() => onAddXp(50)}>+50 XP</button>
-                                        <button className="btn btn-tiny" onClick={() => onAddXp(500)}>+500 XP</button>
+                                        <button className="btn btn-tiny" onClick={() => onAddXp(50)}>+50 Experience</button>
+                                        <button className="btn btn-tiny" onClick={() => onAddXp(500)}>+500 Experience</button>
                                     </>
                                 )}
                                 {onStatBoost && (

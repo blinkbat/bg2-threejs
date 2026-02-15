@@ -3,7 +3,7 @@
 // =============================================================================
 
 import type { Unit, UnitData, EnemyStats, StatusEffect, StatusEffectType, DamageType } from "../core/types";
-import { POISON_DURATION, POISON_TICK_INTERVAL, POISON_DAMAGE_PER_TICK, SLOW_DURATION, BUFF_TICK_INTERVAL, COLORS, SLOW_COOLDOWN_MULT, SLOW_MOVE_MULT, DEFIANCE_COOLDOWN_MULT, SLEEP_MIN_DURATION, SLEEP_MAX_DURATION, CHILLED_DURATION, CHILLED_COOLDOWN_MULT, CHILLED_MOVE_MULT } from "../core/constants";
+import { POISON_DURATION, POISON_TICK_INTERVAL, POISON_DAMAGE_PER_TICK, SLOW_DURATION, BUFF_TICK_INTERVAL, COLORS, SLOW_COOLDOWN_MULT, SLOW_MOVE_MULT, DEFIANCE_COOLDOWN_MULT, SLEEP_MIN_DURATION, SLEEP_MAX_DURATION, CHILLED_DURATION, CHILLED_COOLDOWN_MULT, CHILLED_MOVE_MULT, WEAKENED_COOLDOWN_MULT, HAMSTRUNG_MOVE_MULT } from "../core/constants";
 import { getStrengthDamageBonus, getIntelligenceMagicDamageBonus, getFaithHolyDamageBonus, getDexterityCritChance, CRIT_MULTIPLIER } from "../game/statBonuses";
 import { normalizeAngle } from "../game/geometry";
 
@@ -124,6 +124,32 @@ export function calculateDamageWithCrit(
     const finalDamage = damageType === "physical"
         ? Math.max(1, rolledDamage - armor)
         : rolledDamage;
+    return { damage: finalDamage, isCrit };
+}
+
+/**
+ * Calculate final damage with optional explicit crit chance override.
+ * If no override is provided, falls back to normal attacker-derived crit logic.
+ */
+export function calculateDamageWithOptionalCritChance(
+    rawMin: number,
+    rawMax: number,
+    armor: number,
+    damageType: DamageType,
+    attacker: Unit | undefined,
+    critChanceOverride?: number
+): { damage: number; isCrit: boolean } {
+    if (critChanceOverride === undefined) {
+        return calculateDamageWithCrit(rawMin, rawMax, armor, damageType, attacker);
+    }
+
+    const rolledDamage = rollDamage(rawMin, rawMax);
+    const clampedCritChance = Math.max(0, Math.min(100, critChanceOverride));
+    const isCrit = rollChance(clampedCritChance);
+    const critDamage = isCrit ? Math.floor(rolledDamage * CRIT_MULTIPLIER) : rolledDamage;
+    const finalDamage = damageType === "physical"
+        ? Math.max(1, critDamage - armor)
+        : critDamage;
     return { damage: finalDamage, isCrit };
 }
 
@@ -346,6 +372,7 @@ export function getCooldownMultiplier(unit: Unit): number {
     let mult = 1;
     if (hasStatusEffect(unit, "slowed")) mult *= SLOW_COOLDOWN_MULT;
     if (hasStatusEffect(unit, "chilled")) mult *= CHILLED_COOLDOWN_MULT;
+    if (hasStatusEffect(unit, "weakened")) mult *= WEAKENED_COOLDOWN_MULT;
     if (hasStatusEffect(unit, "defiance")) mult *= DEFIANCE_COOLDOWN_MULT;
     return mult;
 }
@@ -399,7 +426,7 @@ export function getEffectiveDamage(unit: Unit, baseDamage: [number, number]): [n
 }
 
 /**
- * Get effective speed multiplier for a unit, accounting for pinned (0), base moveSpeed, and slow (0.5x).
+ * Get effective speed multiplier for a unit, accounting for pinned (0), base moveSpeed, and movement debuffs.
  * Consolidates the 3x duplicated speed calculation from the game loop.
  */
 export function getEffectiveSpeedMultiplier(unit: Unit, data: EnemyStats | UnitData): number {
@@ -407,7 +434,8 @@ export function getEffectiveSpeedMultiplier(unit: Unit, data: EnemyStats | UnitD
     const base = "moveSpeed" in data ? (data as EnemyStats).moveSpeed ?? 1 : 1;
     const slow = hasStatusEffect(unit, "slowed") ? SLOW_MOVE_MULT : 1;
     const chill = hasStatusEffect(unit, "chilled") ? CHILLED_MOVE_MULT : 1;
-    return base * slow * chill;
+    const hamstrung = hasStatusEffect(unit, "hamstrung") ? HAMSTRUNG_MOVE_MULT : 1;
+    return base * slow * chill * hamstrung;
 }
 
 /**
@@ -472,6 +500,16 @@ export function logPoisoned(targetName: string): string {
 /** "{target} is slowed!" */
 export function logSlowed(targetName: string): string {
     return `${targetName} is slowed!`;
+}
+
+/** "{target}'s attacks are weakened!" */
+export function logWeakened(targetName: string): string {
+    return `${targetName}'s attacks are weakened!`;
+}
+
+/** "{target} is hamstrung!" */
+export function logHamstrung(targetName: string): string {
+    return `${targetName} is hamstrung!`;
 }
 
 /** "{target} is defeated!" */

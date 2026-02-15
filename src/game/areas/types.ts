@@ -73,13 +73,13 @@ export interface SecretDoor {
     hint?: string;  // Optional hint text when inspected
 }
 
-export const DEFAULT_AREA_LIGHT_RADIUS = 12;
-export const DEFAULT_AREA_LIGHT_ANGLE = 45;
+export const DEFAULT_AREA_LIGHT_RADIUS = 18;
+export const DEFAULT_AREA_LIGHT_ANGLE = 65;
 export const DEFAULT_AREA_LIGHT_TINT = "#ffd28a";
-export const DEFAULT_AREA_LIGHT_BRIGHTNESS = 6;
-export const DEFAULT_AREA_LIGHT_HEIGHT = 8;
-export const DEFAULT_AREA_LIGHT_DIFFUSION = 0.35;
-export const DEFAULT_AREA_LIGHT_DECAY = 1.2;
+export const DEFAULT_AREA_LIGHT_BRIGHTNESS = 30;
+export const DEFAULT_AREA_LIGHT_HEIGHT = 10;
+export const DEFAULT_AREA_LIGHT_DIFFUSION = 0.55;
+export const DEFAULT_AREA_LIGHT_DECAY = 1.0;
 
 export interface AreaLight {
     x: number;

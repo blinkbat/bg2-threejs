@@ -4,9 +4,9 @@
 
 import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, Projectile, EnemyStats, SwingAnimation, FireballProjectile } from "../core/types";
-import { COLORS } from "../core/constants";
+import { BUFF_TICK_INTERVAL, COLORS } from "../core/constants";
 import { getUnitStats } from "../game/units";
-import { calculateDamageWithCrit, rollHit, rollChance, rollDamage, getEffectiveArmor, getEffectiveDamage, shouldApplyPoison, shouldApplySlow, logHit, logLifestealHit, logMiss, logPoisoned, logSlowed } from "../combat/combatMath";
+import { calculateDamageWithCrit, rollHit, rollChance, rollDamage, getEffectiveArmor, getEffectiveDamage, shouldApplyPoison, shouldApplySlow, logHit, logLifestealHit, logMiss, logPoisoned, logSlowed, applyStatusEffect, logStunned, hasStatusEffect } from "../combat/combatMath";
 import { createProjectile, getProjectileSpeed, applyDamageToUnit, applyLifesteal, type DamageContext } from "../combat/damageEffects";
 import { CRIT_MULTIPLIER } from "../game/statBonuses";
 import { soundFns } from "../audio";
@@ -72,19 +72,30 @@ export function executeEnemyRangedAttack(ctx: EnemyAttackContext): void {
  */
 function createFireballMesh(scene: THREE.Scene, x: number, z: number): THREE.Mesh {
     const geometry = new THREE.SphereGeometry(0.35, 12, 8);
-    const material = new THREE.MeshBasicMaterial({
+    const material = new THREE.MeshPhongMaterial({
         color: "#ff4500",
+        emissive: "#9a2400",
+        emissiveIntensity: 0.62,
+        specular: new THREE.Color("#ffd080"),
+        shininess: 70,
         transparent: true,
         opacity: 0.9
     });
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.set(x, 0.5, z);
+    mesh.userData.visualPhase = Math.random() * Math.PI * 2;
     scene.add(mesh);
 
     // Add inner glow
     const innerGlow = new THREE.Mesh(
         new THREE.SphereGeometry(0.25, 8, 6),
-        new THREE.MeshBasicMaterial({ color: "#ffcc00", transparent: true, opacity: 0.7 })
+        new THREE.MeshBasicMaterial({
+            color: "#ffcc00",
+            transparent: true,
+            opacity: 0.7,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        })
     );
     mesh.add(innerGlow);
 
@@ -166,6 +177,9 @@ export function executeEnemyMeleeAttack(ctx: EnemyAttackContext): void {
         const attackName = isBite ? "Bite" : "Attack";
         const willPoison = shouldApplyPoison(attackerStats);
         const willSlow = shouldApplySlow(attackerStats);
+        const targetSurvivesHit = target.hp - dmg > 0;
+        const canApplyStun = !hasStatusEffect(target, "stunned") && targetSurvivesHit;
+        const willStun = canApplyStun && !!attackerStats.stunChance && rollChance(attackerStats.stunChance);
         const poisonDmg = willPoison ? attackerStats.poisonDamage : undefined;
         const lifesteal = attackerStats.lifesteal;
 
@@ -195,6 +209,23 @@ export function executeEnemyMeleeAttack(ctx: EnemyAttackContext): void {
         }
         if (willSlow) {
             addLog(logSlowed(targetData.name), "#5599ff");
+        }
+        if (willStun) {
+            const stunDuration = attackerStats.stunDuration ?? 1800;
+            setUnits(prev => prev.map(u => {
+                if (u.id !== target.id || u.hp <= 0) return u;
+                const stunnedEffect = {
+                    type: "stunned" as const,
+                    duration: stunDuration,
+                    tickInterval: BUFF_TICK_INTERVAL,
+                    timeSinceTick: 0,
+                    lastUpdateTime: now,
+                    damagePerTick: 0,
+                    sourceId: attacker.id
+                };
+                return { ...u, statusEffects: applyStatusEffect(u.statusEffects, stunnedEffect) };
+            }));
+            addLog(logStunned(targetData.name), COLORS.stunnedText);
         }
 
         // Apply lifesteal heal using fresh state to avoid race condition

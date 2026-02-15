@@ -302,7 +302,8 @@ export function updateUnitAI(
                                     type: "skill",
                                     skill: basicAttack,
                                     targetX: targetG.position.x,
-                                    targetZ: targetG.position.z
+                                    targetZ: targetG.position.z,
+                                    targetId: targetU.id
                                 };
                                 setQueuedActions(prev => [
                                     ...prev.filter(q => q.unitId !== unit.id),

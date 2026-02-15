@@ -910,7 +910,7 @@ function handleEnemyClick(
                     { actionCooldownRef: mutableRefs.actionCooldownRef, actionQueueRef: mutableRefs.actionQueueRef, rangeIndicatorRef: { current: null }, aoeIndicatorRef: { current: null } },
                     { pausedRef: stateRefs.pausedRef },
                     { setTargetingMode: setters.setTargetingMode, setQueuedActions: setters.setQueuedActions },
-                    skillCtx, callbacks.addLog
+                    skillCtx, callbacks.addLog, targetId
                 );
             }
         }

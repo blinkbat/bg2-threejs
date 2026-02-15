@@ -63,6 +63,64 @@ export const SKILLS: Record<string, Skill> = {
         damageType: "physical",
         poisonChance: 85  // 85% chance to poison
     },
+    targetHead: {
+        name: "Target Head",
+        description: "Fire a precise arrow at the head. Critical strikes are far more likely, and the shot may stun.",
+        flavor: "One breath, one line, one strike.",
+        manaCost: 10,
+        cooldown: 5500,
+        type: "damage",
+        targetType: "enemy",
+        delivery: "ranged",
+        range: 9,
+        damageRange: [6, 10],
+        damageType: "physical",
+        projectileColor: "#d8b273",
+        critChanceOverride: 60,
+        onHitEffect: {
+            type: "stun",
+            chance: 45,
+            duration: 2500
+        }
+    },
+    targetArm: {
+        name: "Target Arm",
+        description: "Shoot for the arm, reducing the target's attack speed for 20 seconds on hit.",
+        flavor: "A severed rhythm is as good as a severed blade.",
+        manaCost: 8,
+        cooldown: 5000,
+        type: "damage",
+        targetType: "enemy",
+        delivery: "ranged",
+        range: 9,
+        damageRange: [5, 9],
+        damageType: "physical",
+        projectileColor: "#caa86a",
+        onHitEffect: {
+            type: "attack_down",
+            chance: 100,
+            duration: 20000
+        }
+    },
+    targetLegs: {
+        name: "Target Legs",
+        description: "Shoot low, reducing the target's move speed for 20 seconds on hit.",
+        flavor: "No need to kill what can no longer flee.",
+        manaCost: 8,
+        cooldown: 5000,
+        type: "damage",
+        targetType: "enemy",
+        delivery: "ranged",
+        range: 9,
+        damageRange: [5, 9],
+        damageType: "physical",
+        projectileColor: "#b8945c",
+        onHitEffect: {
+            type: "move_slow",
+            chance: 100,
+            duration: 20000
+        }
+    },
     warcry: {
         name: "Warcry",
         description: "Let out a mighty shout that forces nearby enemies to attack you.",
@@ -89,8 +147,8 @@ export const SKILLS: Record<string, Skill> = {
         damageType: "physical"
     },
     summonAncestor: {
-        name: "Summon Ancestor",
-        description: "Call forth an ancestral warrior spirit. Recasting replaces the current summon.",
+        name: "Summon Ancestral Warrior",
+        description: "Draw upon ancestral blood to call forth an ancient warrior spirit. Recasting replaces the current summon.",
         flavor: "The old blood answers, blade in hand.",
         manaCost: 14,
         cooldown: 12000,
@@ -132,7 +190,7 @@ export const SKILLS: Record<string, Skill> = {
         manaCost: 16,
         cooldown: 500,
         type: "buff",
-        targetType: "aoe",
+        targetType: "unit",
         range: 8,
         duration: 10000,
         damageType: "holy",
@@ -191,7 +249,7 @@ export const SKILLS: Record<string, Skill> = {
     },
     magicWave: {
         name: "Magic Wave",
-        description: "Launch 8 arcane missiles that fan out towards a target area.",
+        description: "Launch a sweeping front of arcane bolts that rolls forward like a wave.",
         flavor: "\"Running will only make it worse!\" - Archmage Konen",
         manaCost: 20,
         cooldown: 6000,
@@ -211,7 +269,7 @@ export const SKILLS: Record<string, Skill> = {
         manaCost: 10,
         cooldown: 500,
         type: "dodge",
-        targetType: "aoe",
+        targetType: "unit",
         range: 9,
         duration: 0,
         damageType: "chaos",
@@ -299,7 +357,7 @@ export const SKILLS: Record<string, Skill> = {
     sunStance: {
         name: "Sun Stance",
         description: "Channel inner fire, restoring health and wreathing your attacks in flame for 20 seconds.",
-        flavor: "\"The sun burns within. Let it out.\" - Master Shen",
+        flavor: "Daily prayer to the sun is the backbone of the Eastern tradition.",
         manaCost: 8,
         cooldown: 4000,
         type: "buff",
@@ -311,8 +369,8 @@ export const SKILLS: Record<string, Skill> = {
     },
     pangolinStance: {
         name: "Pangolin Stance",
-        description: "Brace in a scaled guard. Melee attackers take damage when they strike you.",
-        flavor: "\"Curl, endure, and let their force break upon you.\" - Master Shen",
+        description: "Assume a coiled defensive stance. Immediately retaliate against melee attackers.",
+        flavor: "\"Curl, endure, and let their weapons break upon you.\" - Master Shen",
         manaCost: 0,
         cooldown: 500,
         type: "buff",
@@ -327,7 +385,7 @@ export const SKILLS: Record<string, Skill> = {
     glacialWhorl: {
         name: "Glacial Whorl",
         description: "Launch a slow-moving shard of ice that pierces through all enemies, chilling those it touches.",
-        flavor: "The cold does not kill quickly — it simply never stops.",
+        flavor: "The cold does not kill quickly — it simply never relents.",
         manaCost: 12,
         cooldown: 6000,
         type: "damage",
@@ -341,9 +399,9 @@ export const SKILLS: Record<string, Skill> = {
     dodge: {
         name: "Dodge",
         description: "Dash to a nearby location, briefly becoming invulnerable.",
-        flavor: "\"Catch me if you can.\"",
+        flavor: "\"Catch me if you can.\" - Eliod the Swift",
         manaCost: 5,
-        cooldown: 500,     // Tiny lockout to prevent double-tap
+        cooldown: 1200,     
         type: "dodge",
         targetType: "aoe", // Ground-targeted
         range: 4,          // Max dash distance

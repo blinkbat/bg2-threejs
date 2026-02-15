@@ -24,6 +24,23 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         acidAuraRadius: 1.5,     // 1.5 grid cells around itself
         expReward: 30
     },
+    armored_crab: {
+        name: "Armored Crab",
+        hp: 95,
+        maxHp: 95,
+        damage: [7, 12],
+        accuracy: 65,
+        armor: 4,              // Heavy shell
+        color: "#6f7c8f",      // Steel-blue shell
+        aggroRange: 8,
+        attackCooldown: 2400,
+        size: 1.8,             // Large enemy
+        moveSpeed: 0.55,       // Slow scuttling
+        expReward: 90,
+        baseCrit: 15,          // Medium crit chance
+        stunChance: 35,        // Medium chance to stun on hit
+        stunDuration: 1800
+    },
     ancient_construct: {
         name: "Ancient Construct",
         hp: 300,

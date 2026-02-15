@@ -3,7 +3,7 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Skill, StatusEffect, StatusEffectType } from "../../core/types";
+import type { Skill, StatusEffect, StatusEffectType, Unit, UnitGroup } from "../../core/types";
 import {
     COLORS,
     BUFF_TICK_INTERVAL,
@@ -25,6 +25,67 @@ import type { SkillExecutionContext } from "./types";
 import { findAndValidateAllyTarget, findClosestUnit, consumeSkill } from "./helpers";
 
 const UP_AXIS = new THREE.Vector3(0, 1, 0);
+
+function resolveLivingAllyTarget(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    targetX: number,
+    targetZ: number,
+    targetUnitId?: number
+): { unit: Unit; group: UnitGroup } | null {
+    if (targetUnitId !== undefined) {
+        const lockedUnit = ctx.unitsStateRef.current.find(u => u.id === targetUnitId && u.team === "player" && u.hp > 0);
+        const lockedGroup = ctx.unitsRef.current[targetUnitId];
+        if (!lockedUnit || !lockedGroup) return null;
+        return { unit: lockedUnit, group: lockedGroup };
+    }
+    return findAndValidateAllyTarget(ctx, casterId, targetX, targetZ);
+}
+
+function resolveDeadAllyTarget(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    targetX: number,
+    targetZ: number,
+    targetUnitId?: number
+): { unit: Unit; group?: UnitGroup; x: number; z: number } | null {
+    const deadAllies = ctx.unitsStateRef.current.filter(u => u.team === "player" && u.hp <= 0);
+    if (deadAllies.length === 0) {
+        ctx.addLog(`${UNIT_DATA[casterId].name}: No fallen allies!`, COLORS.logNeutral);
+        return null;
+    }
+
+    if (targetUnitId !== undefined) {
+        const lockedUnit = deadAllies.find(u => u.id === targetUnitId);
+        if (!lockedUnit) return null;
+        const lockedGroup = ctx.unitsRef.current[lockedUnit.id];
+        return {
+            unit: lockedUnit,
+            group: lockedGroup,
+            x: lockedGroup ? lockedGroup.position.x : lockedUnit.x,
+            z: lockedGroup ? lockedGroup.position.z : lockedUnit.z
+        };
+    }
+
+    let closestDead: { unit: Unit; group?: UnitGroup; x: number; z: number; dist: number } | null = null;
+    for (const dead of deadAllies) {
+        const deadGroup = ctx.unitsRef.current[dead.id];
+        const deadX = deadGroup ? deadGroup.position.x : dead.x;
+        const deadZ = deadGroup ? deadGroup.position.z : dead.z;
+        const dx = deadX - targetX;
+        const dz = deadZ - targetZ;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+        if (!closestDead || dist < closestDead.dist) {
+            closestDead = { unit: dead, group: deadGroup, x: deadX, z: deadZ, dist };
+        }
+    }
+
+    if (!closestDead) {
+        ctx.addLog(`${UNIT_DATA[casterId].name}: No fallen ally at that location!`, COLORS.logNeutral);
+        return null;
+    }
+    return { unit: closestDead.unit, group: closestDead.group, x: closestDead.x, z: closestDead.z };
+}
 
 function createPulseBeam(
     scene: THREE.Scene,
@@ -85,22 +146,30 @@ export function executeHealSkill(
     casterId: number,
     skill: Skill,
     targetX: number,
-    targetZ: number
+    targetZ: number,
+    targetUnitId?: number
 ): boolean {
     const { scene, unitsStateRef, unitsRef, unitMeshRef, hitFlashRef, setUnits, addLog } = ctx;
 
-    const target = findAndValidateAllyTarget(ctx, casterId, targetX, targetZ);
+    const target = resolveLivingAllyTarget(ctx, casterId, targetX, targetZ, targetUnitId);
     if (!target) return false;
 
     const { unit: targetAlly, group: targetG } = target;
     const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
     const targetMaxHp = getEffectiveMaxHp(targetAlly.id, targetAlly);
     const casterG = unitsRef.current[casterId];
+    if (!casterG) return false;
+
+    const targetRadius = getUnitRadius(targetAlly);
+    if (!isInRange(casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, targetRadius, skill.range)) {
+        addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, COLORS.logNeutral);
+        return false;
+    }
+
     if (targetAlly.hp >= targetMaxHp) {
         addLog(`${UNIT_DATA[casterId].name}: ${UNIT_DATA[targetAlly.id].name} is at full health!`, COLORS.logNeutral);
         return false;
     }
-    if (!casterG) return false;
 
     consumeSkill(ctx, casterId, skill);
 
@@ -159,11 +228,12 @@ export function executeManaTransferSkill(
     casterId: number,
     skill: Skill,
     targetX: number,
-    targetZ: number
+    targetZ: number,
+    targetUnitId?: number
 ): boolean {
     const { scene, unitsStateRef, unitsRef, unitMeshRef, hitFlashRef, setUnits, addLog } = ctx;
 
-    const target = findAndValidateAllyTarget(ctx, casterId, targetX, targetZ);
+    const target = resolveLivingAllyTarget(ctx, casterId, targetX, targetZ, targetUnitId);
     if (!target) return false;
 
     const { unit: targetAlly, group: targetG } = target;
@@ -455,6 +525,7 @@ export function executeDivineLatticeSkill(
     let targetG = target ? unitsRef.current[target.id] : undefined;
 
     if (!target || !targetG) {
+        if (targetUnitId !== undefined) return false;
         const closest = findClosestUnit(livingUnits, unitsRef.current, targetX, targetZ, 2.2);
         if (!closest) {
             addLog(`${UNIT_DATA[casterId].name}: No target at that location!`, COLORS.logNeutral);
@@ -535,14 +606,24 @@ export function executeCleanseSkill(
     casterId: number,
     skill: Skill,
     targetX: number,
-    targetZ: number
+    targetZ: number,
+    targetUnitId?: number
 ): boolean {
-    const { scene, unitMeshRef, hitFlashRef, setUnits, addLog } = ctx;
+    const { scene, unitsRef, unitMeshRef, hitFlashRef, setUnits, addLog } = ctx;
 
-    const allyTarget = findAndValidateAllyTarget(ctx, casterId, targetX, targetZ);
+    const allyTarget = resolveLivingAllyTarget(ctx, casterId, targetX, targetZ, targetUnitId);
     if (!allyTarget) return false;
 
     const { unit: targetAlly, group: targetG } = allyTarget;
+    const casterG = unitsRef.current[casterId];
+    if (!casterG) return false;
+
+    const targetRadius = getUnitRadius(targetAlly);
+    if (!isInRange(casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, targetRadius, skill.range)) {
+        addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, COLORS.logNeutral);
+        return false;
+    }
+
     const targetData = UNIT_DATA[targetAlly.id];
     const targetId = targetAlly.id;
     const now = Date.now();
@@ -602,33 +683,45 @@ export function executeCleanseSkill(
 // =============================================================================
 
 /**
- * Execute Restoration skill - removes doom, poison, and slow, then applies regen HoT.
+ * Execute Restoration skill - removes doom, poison, movement/attack debuffs, and sleep, then applies regen HoT.
  */
 export function executeRestorationSkill(
     ctx: SkillExecutionContext,
     casterId: number,
     skill: Skill,
     targetX: number,
-    targetZ: number
+    targetZ: number,
+    targetUnitId?: number
 ): boolean {
-    const { scene, unitMeshRef, hitFlashRef, setUnits, addLog } = ctx;
+    const { scene, unitsRef, unitMeshRef, hitFlashRef, setUnits, addLog } = ctx;
 
-    const allyTarget = findAndValidateAllyTarget(ctx, casterId, targetX, targetZ);
+    const allyTarget = resolveLivingAllyTarget(ctx, casterId, targetX, targetZ, targetUnitId);
     if (!allyTarget) return false;
 
     const { unit: targetAlly, group: targetG } = allyTarget;
+    const casterG = unitsRef.current[casterId];
+    if (!casterG) return false;
+
+    const targetRadius = getUnitRadius(targetAlly);
+    if (!isInRange(casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, targetRadius, skill.range)) {
+        addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, COLORS.logNeutral);
+        return false;
+    }
+
     const targetData = UNIT_DATA[targetAlly.id];
     const targetId = targetAlly.id;
 
-    // Check if target actually needs restoration (has doom, poison, slow, or is not at full HP)
+    // Check if target actually needs restoration (has harmful effects or is not at full HP)
     const hasDoom = hasStatusEffect(targetAlly, "doom");
     const hasPoison = hasStatusEffect(targetAlly, "poison");
     const hasSlow = hasStatusEffect(targetAlly, "slowed");
+    const hasHamstrung = hasStatusEffect(targetAlly, "hamstrung");
+    const hasWeakened = hasStatusEffect(targetAlly, "weakened");
     const hasSleep = hasStatusEffect(targetAlly, "sleep");
     const targetMaxHp = getEffectiveMaxHp(targetAlly.id, targetAlly);
     const needsHealing = targetAlly.hp < targetMaxHp;
 
-    if (!hasDoom && !hasPoison && !hasSlow && !hasSleep && !needsHealing) {
+    if (!hasDoom && !hasPoison && !hasSlow && !hasHamstrung && !hasWeakened && !hasSleep && !needsHealing) {
         addLog(`${UNIT_DATA[casterId].name}: ${targetData.name} doesn't need restoration!`, COLORS.logNeutral);
         return false;
     }
@@ -640,7 +733,7 @@ export function executeRestorationSkill(
     const duration = skill.duration!;
     const healPerTick = skill.healPerTick!;
 
-    // Remove doom, poison, slow and apply regen
+    // Remove harmful effects and apply regen
     const regenEffect: StatusEffect = {
         type: "regen",
         duration,
@@ -654,9 +747,14 @@ export function executeRestorationSkill(
 
     setUnits(prev => prev.map(u => {
         if (u.id !== targetId) return u;
-        // Remove doom, poison, slow
+        // Remove doom, poison, movement/attack debuffs, and sleep
         const cleansedEffects = (u.statusEffects ?? []).filter(
-            e => e.type !== "doom" && e.type !== "poison" && e.type !== "slowed" && e.type !== "sleep"
+            e => e.type !== "doom"
+                && e.type !== "poison"
+                && e.type !== "slowed"
+                && e.type !== "hamstrung"
+                && e.type !== "weakened"
+                && e.type !== "sleep"
         );
         return { ...u, statusEffects: applyStatusEffect(cleansedEffects, regenEffect) };
     }));
@@ -666,6 +764,8 @@ export function executeRestorationSkill(
     if (hasDoom) removedEffects.push("Doom");
     if (hasPoison) removedEffects.push("Poison");
     if (hasSlow) removedEffects.push("Slow");
+    if (hasHamstrung) removedEffects.push("Hamstrung");
+    if (hasWeakened) removedEffects.push("Weakened");
     if (hasSleep) removedEffects.push("Sleep");
 
     soundFns.playHeal();
@@ -701,41 +801,28 @@ export function executeReviveSkill(
     casterId: number,
     skill: Skill,
     targetX: number,
-    targetZ: number
+    targetZ: number,
+    targetUnitId?: number
 ): boolean {
-    const { scene, unitsStateRef, unitsRef, unitMeshRef, hitFlashRef, setUnits, addLog } = ctx;
+    const { scene, unitsRef, unitMeshRef, hitFlashRef, setUnits, addLog } = ctx;
 
-    // Find closest DEAD ally to target position
-    const deadAllies = unitsStateRef.current.filter(u => u.team === "player" && u.hp <= 0);
-    if (deadAllies.length === 0) {
-        addLog(`${UNIT_DATA[casterId].name}: No fallen allies!`, COLORS.logNeutral);
-        return false;
-    }
+    const reviveTarget = resolveDeadAllyTarget(ctx, casterId, targetX, targetZ, targetUnitId);
+    if (!reviveTarget) return false;
+    const { unit: deadAlly, x: deadX, z: deadZ } = reviveTarget;
 
-    // Find the dead ally closest to the click position
-    let closestDead: { unit: typeof deadAllies[0]; dist: number } | null = null;
-    for (const dead of deadAllies) {
-        const dg = unitsRef.current[dead.id];
-        if (!dg) continue;
-        const dx = dg.position.x - targetX;
-        const dz = dg.position.z - targetZ;
-        const dist = Math.sqrt(dx * dx + dz * dz);
-        if (!closestDead || dist < closestDead.dist) {
-            closestDead = { unit: dead, dist };
-        }
-    }
-
-    if (!closestDead) {
-        addLog(`${UNIT_DATA[casterId].name}: No fallen ally at that location!`, COLORS.logNeutral);
+    const casterG = unitsRef.current[casterId];
+    if (!casterG) return false;
+    const targetRadius = getUnitRadius(deadAlly);
+    if (!isInRange(casterG.position.x, casterG.position.z, deadX, deadZ, targetRadius, skill.range)) {
+        addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, COLORS.logNeutral);
         return false;
     }
 
     consumeSkill(ctx, casterId, skill);
 
     const casterData = UNIT_DATA[casterId];
-    const targetData = UNIT_DATA[closestDead.unit.id];
-    const reviveId = closestDead.unit.id;
-    const casterG = unitsRef.current[casterId];
+    const targetData = UNIT_DATA[deadAlly.id];
+    const reviveId = deadAlly.id;
     const now = Date.now();
 
     // Place revived unit next to caster
