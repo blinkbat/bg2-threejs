@@ -5,10 +5,11 @@
 
 import { useEffect, useRef, useCallback } from "react";
 import * as THREE from "three";
-import { PAN_SPEED, ANCESTOR_AURA_DAMAGE_BONUS, ANCESTOR_AURA_RANGE } from "../core/constants";
+import { PAN_SPEED, ANCESTOR_AURA_DAMAGE_BONUS, ANCESTOR_AURA_RANGE, COLORS } from "../core/constants";
 import { updateGameClock } from "../core/gameClock";
 import { getCurrentArea } from "../game/areas";
 import type { Unit, UnitGroup } from "../core/types";
+import { ENEMY_STATS } from "../game/enemyStats";
 import { updateCamera, updateWallTransparency, updateTreeFogVisibility, updateFogOccluderVisibility, updateLightLOD, addUnitToScene, updateBillboards } from "../rendering/scene";
 import { updateDynamicObstacles } from "../ai/pathfinding";
 import { updateUnitCache } from "../game/unitQuery";
@@ -26,6 +27,7 @@ import {
     updateEnergyShieldVisuals,
     updateShieldFacing,
     processAcidTiles,
+    createAcidPool,
     processSanctuaryTiles,
     processChargeAttacks,
     processFireBreaths,
@@ -288,6 +290,55 @@ function updateAncestorAuraBonuses(
     }));
 }
 
+function processEnemyDeathAcidPools(
+    units: Unit[],
+    previousHpByIdRef: React.MutableRefObject<Map<number, number>>,
+    unitGroups: Record<number, UnitGroup>,
+    scene: THREE.Scene,
+    acidTiles: Map<string, import("../core/types").AcidTile>,
+    now: number,
+    addLog: (text: string, color?: string) => void
+): void {
+    const previousHpById = previousHpByIdRef.current;
+    const nextHpById = new Map<number, number>();
+
+    for (const unit of units) {
+        nextHpById.set(unit.id, unit.hp);
+
+        const previousHp = previousHpById.get(unit.id);
+        const diedThisFrame = previousHp !== undefined && previousHp > 0 && unit.hp <= 0;
+        if (!diedThisFrame || unit.team !== "enemy" || !unit.enemyType) {
+            continue;
+        }
+
+        const enemyStats = ENEMY_STATS[unit.enemyType];
+        const deathPool = enemyStats.deathAcidPool;
+        if (!deathPool) {
+            continue;
+        }
+
+        const unitGroup = unitGroups[unit.id];
+        const centerX = unitGroup?.position.x ?? unit.x;
+        const centerZ = unitGroup?.position.z ?? unit.z;
+
+        const touchedTiles = createAcidPool(
+            scene,
+            acidTiles,
+            centerX,
+            centerZ,
+            unit.id,
+            now,
+            deathPool.radius,
+            deathPool.duration
+        );
+        if (touchedTiles > 0) {
+            addLog(`${enemyStats.name} bursts into acid!`, COLORS.acidText);
+        }
+    }
+
+    previousHpByIdRef.current = nextHpById;
+}
+
 // =============================================================================
 // HOOK
 // =============================================================================
@@ -303,6 +354,7 @@ export function useGameLoop({
     const fpsFrameCount = useRef(0);
     const fpsLastTime = useRef(Date.now());
     const perfCaptureUntilRef = useRef(0);
+    const previousHpByIdRef = useRef<Map<number, number>>(new Map());
 
     const updateCam = useCallback(() => {
         if (sceneState?.camera) {
@@ -323,6 +375,7 @@ export function useGameLoop({
         let animId: number;
         let hpBarFrame = 0;
         let cachedRect = renderer.domElement.getBoundingClientRect();
+        previousHpByIdRef.current = new Map(stateRefs.unitsStateRef.current.map(unit => [unit.id, unit.hp]));
 
         const animate = () => {
             const frameStart = performance.now();
@@ -338,6 +391,16 @@ export function useGameLoop({
             updateUnitCache(currentUnits);
             clearUnitStatsCache();
             const cacheMs = performance.now() - sectionStart;
+
+            processEnemyDeathAcidPools(
+                currentUnits,
+                previousHpByIdRef,
+                unitGroups,
+                scene,
+                refs.acidTiles,
+                now,
+                callbacks.addLog
+            );
 
             // FPS counter
             fpsFrameCount.current++;

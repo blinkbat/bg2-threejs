@@ -102,6 +102,24 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         lifesteal: 0.5,    // Heals for 50% of damage dealt
         expReward: 18
     },
+    bloated_corpse: {
+        name: "Bloated Corpse",
+        hp: 110,
+        maxHp: 110,
+        damage: [5, 9],
+        accuracy: 55,
+        armor: 1,
+        color: "#7e9258",      // Sickly undead green
+        aggroRange: 8,
+        attackCooldown: 2400,
+        size: 1.35,            // Chunky, lumbering body
+        moveSpeed: 0.42,       // Slow zombie
+        expReward: 65,
+        deathAcidPool: {
+            radius: 2.2,
+            duration: 10000
+        }
+    },
     basilisk: {
         name: "Basilisk Youngling",
         hp: 180,

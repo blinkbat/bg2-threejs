@@ -3,7 +3,7 @@
 // =============================================================================
 
 // Enemy type identifiers
-export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba" | "acid_slug" | "armored_crab" | "basilisk" | "bat" | "undead_knight" | "ancient_construct" | "feral_hound" | "corrupt_druid" | "skeleton_warrior" | "baby_kraken" | "kraken_tentacle" | "magma_imp" | "necromancer" | "skeleton_minion" | "chittering_crabling" | "spine_spitter" | "occultist_dreamwalker" | "occultist_firebreather" | "occultist_pygmy";
+export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba" | "acid_slug" | "armored_crab" | "basilisk" | "bat" | "bloated_corpse" | "undead_knight" | "ancient_construct" | "feral_hound" | "corrupt_druid" | "skeleton_warrior" | "baby_kraken" | "kraken_tentacle" | "magma_imp" | "necromancer" | "skeleton_minion" | "chittering_crabling" | "spine_spitter" | "occultist_dreamwalker" | "occultist_firebreather" | "occultist_pygmy";
 
 // Status effect types
 export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed" | "chilled" | "qi_drain" | "energyShield" | "defiance" | "doom" | "invul" | "sleep" | "sun_stance" | "thorns" | "highland_defense" | "divine_lattice" | "weakened" | "hamstrung";
@@ -204,6 +204,11 @@ export interface EnemyBreathSkill {
     duration: number;        // ms channel duration
 }
 
+export interface EnemyDeathAcidPool {
+    radius: number;          // Pool radius in grid cells
+    duration: number;        // ms each acid tile persists
+}
+
 export interface EnemyStats {
     name: string;
     hp: number;
@@ -285,6 +290,8 @@ export interface EnemyStats {
     dreamEaterSkill?: EnemyDreamEaterSkill;
     // Optional breath skill - sustained channeled cone attack (locks in place)
     breathSkill?: EnemyBreathSkill;
+    // Optional death effect - spawn a temporary acid pool at death location
+    deathAcidPool?: EnemyDeathAcidPool;
 }
 
 // =============================================================================

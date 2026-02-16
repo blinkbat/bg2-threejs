@@ -164,6 +164,7 @@ function getEnemySpriteConfigs(): Record<string, SpriteConfig> {
     ensureTexturesLoaded();
     return {
         bat: { texture: vampireBatTexture, width: 128, height: 128, spriteHeight: 1.4, color: 0xd2b48c, brightness: 0.2 },
+        bloated_corpse: { texture: koboldWarriorTexture, width: 128, height: 128, spriteHeight: 2.05, color: 0xc8de8a, brightness: 0.12, shadowSize: 0.62 },
         acid_slug: { texture: acidSlugTexture, width: 160, height: 128, spriteHeight: 1.4, brightness: 0.15, offsetY: -0.3, shadowSize: 0.6 },
         brood_mother: { texture: broodMotherTexture, width: 164, height: 128, spriteHeight: 2.25, color: 0xd7b8ff, brightness: 0.14, shadowSize: 0.74 },
         broodling: { texture: broodlingTexture, width: 128, height: 128, spriteHeight: 1.0, color: 0xdcc3ff, brightness: 0.12, shadowSize: 0.32 },

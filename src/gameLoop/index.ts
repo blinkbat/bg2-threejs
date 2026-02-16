@@ -25,7 +25,7 @@ export { updateDamageTexts, updateHitFlash, updatePoisonVisuals, updateEnergyShi
 export { processStatusEffects } from "./statusEffects";
 export { updateProjectiles } from "./projectiles";
 export { spawnSwingIndicator, updateSwingAnimations } from "./swingAnimations";
-export { processAcidTiles, createAcidTile, clearAcidTiles } from "./acidTiles";
+export { processAcidTiles, createAcidTile, createAcidPool, clearAcidTiles } from "./acidTiles";
 export { processSanctuaryTiles, createSanctuaryTile, clearSanctuaryTiles } from "./sanctuaryTiles";
 export { processChargeAttacks, clearChargeAttacks, isUnitCharging } from "./constructCharge";
 export { processFireBreaths, clearFireBreaths, isUnitBreathing } from "./fireBreath";

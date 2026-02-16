@@ -41,7 +41,8 @@ export function createAcidTile(
     gridX: number,
     gridZ: number,
     sourceId: number,
-    now: number
+    now: number,
+    duration: number = ACID_TILE_DURATION
 ): AcidTile | null {
     const key = getTileKey(gridX, gridZ);
 
@@ -55,7 +56,7 @@ export function createAcidTile(
     if (existing) {
         existing.elapsedTime = 0;
         existing.lastUpdateTime = now;
-        existing.duration = ACID_TILE_DURATION;
+        existing.duration = duration;
         (existing.mesh.material as THREE.MeshBasicMaterial).opacity = ACID_MESH_CONFIG.opacity;
         return existing;
     }
@@ -70,13 +71,45 @@ export function createAcidTile(
         z: gridZ,
         elapsedTime: 0,
         lastUpdateTime: now,
-        duration: ACID_TILE_DURATION,
+        duration,
         timeSinceTick: 0,
         sourceId
     };
 
     acidTiles.set(key, tile);
     return tile;
+}
+
+/**
+ * Create or refresh an acid pool centered on a position.
+ * Returns the number of tiles touched (created or refreshed).
+ */
+export function createAcidPool(
+    scene: THREE.Scene,
+    acidTiles: Map<string, AcidTile>,
+    centerX: number,
+    centerZ: number,
+    sourceId: number,
+    now: number,
+    radius: number,
+    duration: number = ACID_TILE_DURATION
+): number {
+    const originX = Math.floor(centerX);
+    const originZ = Math.floor(centerZ);
+    const radiusCells = Math.ceil(radius);
+    let tilesTouched = 0;
+
+    for (let dx = -radiusCells; dx <= radiusCells; dx++) {
+        for (let dz = -radiusCells; dz <= radiusCells; dz++) {
+            const dist = Math.sqrt(dx * dx + dz * dz);
+            if (dist > radius) continue;
+            if (createAcidTile(scene, acidTiles, originX + dx, originZ + dz, sourceId, now, duration)) {
+                tilesTouched++;
+            }
+        }
+    }
+
+    return tilesTouched;
 }
 
 // =============================================================================
@@ -192,17 +225,7 @@ export function tryCreateAcidAura(stats: EnemyStats, ctx: AcidAuraContext): bool
 
     const auraCooldown = stats.acidAuraCooldown ?? ACID_AURA_COOLDOWN;
     const auraRadius = stats.acidAuraRadius ?? ACID_AURA_RADIUS;
-    const radiusCells = Math.ceil(auraRadius);
-
-    // Create acid tiles in radius
-    for (let dx = -radiusCells; dx <= radiusCells; dx++) {
-        for (let dz = -radiusCells; dz <= radiusCells; dz++) {
-            const dist = Math.sqrt(dx * dx + dz * dz);
-            if (dist <= auraRadius) {
-                createAcidTile(ctx.scene, ctx.acidTiles, ctx.centerX + dx, ctx.centerZ + dz, ctx.unitId, ctx.now);
-            }
-        }
-    }
+    createAcidPool(ctx.scene, ctx.acidTiles, ctx.centerX, ctx.centerZ, ctx.unitId, ctx.now, auraRadius);
 
     setSkillCooldown(ctx.setSkillCooldowns, auraCooldownKey, auraCooldown, ctx.now);
 
