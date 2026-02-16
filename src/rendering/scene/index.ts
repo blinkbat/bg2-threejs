@@ -1233,7 +1233,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     const columnMeshes: THREE.Mesh[] = [];
     const columnGroups: THREE.Mesh[][] = [];  // Groups of column parts that fade together
 
-    const addSeaweedCluster = (
+    const addWeedsCluster = (
         centerX: number,
         centerZ: number,
         size: number,
@@ -1607,12 +1607,12 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                     if (j === 0) cap.name = "decoration";
                     scene.add(cap);
                 }
-            } else if (dec.type === "seaweed") {
-                // Large seaweed - curved ribbon fronds with varied bend and width.
-                addSeaweedCluster(dec.x, dec.z, size, "large");
-            } else if (dec.type === "small_seaweed") {
-                // Small seaweed - compact variant of the same curved blade treatment.
-                addSeaweedCluster(dec.x, dec.z, size, "small");
+            } else if (dec.type === "weeds") {
+                // Large weeds - curved ribbon fronds with varied bend and width.
+                addWeedsCluster(dec.x, dec.z, size, "large");
+            } else if (dec.type === "small_weeds") {
+                // Small weeds - compact variant of the same curved blade treatment.
+                addWeedsCluster(dec.x, dec.z, size, "small");
             } else if (dec.type === "fern") {
                 // Large bush - cluster of spheres with variation
                 const colors = ["#2a6a3a", "#3a8a4e", "#4a9a5e", "#5aaa6e", "#6aba7e"];

@@ -286,7 +286,7 @@ export function AreaMinimap({ areaId, spawnX, spawnZ, onSpawnChange, width = 200
                         borderRadius: 3,
                         cursor: "pointer",
                         fontSize: 12,
-                        fontWeight: "bold",
+                        fontWeight: 600,
                     }}
                     title="Zoom in"
                 >+</button>
@@ -300,7 +300,7 @@ export function AreaMinimap({ areaId, spawnX, spawnZ, onSpawnChange, width = 200
                         borderRadius: 3,
                         cursor: "pointer",
                         fontSize: 12,
-                        fontWeight: "bold",
+                        fontWeight: 600,
                     }}
                     title="Zoom out"
                 >-</button>

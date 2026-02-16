@@ -60,7 +60,7 @@ export interface TreeLocation {
 export interface Decoration {
     x: number;
     z: number;
-    type: "column" | "broken_column" | "broken_wall" | "rock" | "small_rock" | "mushroom" | "small_mushroom" | "seaweed" | "small_seaweed" | "fern" | "small_fern";
+    type: "column" | "broken_column" | "broken_wall" | "rock" | "small_rock" | "mushroom" | "small_mushroom" | "weeds" | "small_weeds" | "fern" | "small_fern";
     rotation?: number;  // Rotation in radians (for broken walls)
     size?: number;      // Scale multiplier
 }

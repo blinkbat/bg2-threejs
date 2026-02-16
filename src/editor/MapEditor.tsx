@@ -410,7 +410,7 @@ export function MapEditor() {
                 ctx.fillStyle = "#000";
                 ctx.fillRect(x * CELL_SIZE, z * CELL_SIZE - 16, w * CELL_SIZE, 14);
                 ctx.fillStyle = "#4cf";
-                ctx.font = "bold 10px sans-serif";
+                ctx.font = "600 10px \"DM Mono\", monospace";
                 ctx.textAlign = "center";
                 ctx.textBaseline = "middle";
                 ctx.fillText(target, centerX, z * CELL_SIZE - 9);
@@ -1305,7 +1305,7 @@ export function MapEditor() {
     const selectedAreaId = availableAreaIds.includes(metadata.id) ? metadata.id : "";
 
     return (
-        <div style={{ display: "flex", height: "100vh", background: "#1a1a2e", color: "#eee", fontFamily: "sans-serif" }}>
+        <div style={{ display: "flex", height: "100vh", background: "#1a1a2e", color: "#eee" }}>
             <button
                 onClick={saveMap}
                 disabled={saveStatus === "saving"}
@@ -1488,7 +1488,6 @@ export function MapEditor() {
                                         border: activeBrush === opt.char ? "2px solid #fff" : "1px solid #555",
                                         borderRadius: 6,
                                         cursor: "pointer",
-                                        fontFamily: "monospace",
                                         fontSize: 20,
                                     }}
                                 >
@@ -1990,8 +1989,8 @@ const NON_BLOCKING_PROP_DECORATIONS = new Set<Decoration["type"]>([
     "small_mushroom",
     "fern",
     "small_fern",
-    "seaweed",
-    "small_seaweed",
+    "weeds",
+    "small_weeds",
 ]);
 
 function clampTreeSizeByType(size: number, treeType: TreeLocation["type"]): number {

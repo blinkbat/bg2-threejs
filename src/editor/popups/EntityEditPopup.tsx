@@ -518,7 +518,7 @@ function ChestItemsEditor({ gold, itemsString, locked, onGoldChange, onItemsChan
                                     onClick={() => updateQuantity(item.itemId, -1)}
                                     style={{
                                         width: 20, height: 20,
-                                        fontSize: 12, fontWeight: "bold",
+                                        fontSize: 12, fontWeight: 600,
                                         background: "#555", color: "#fff",
                                         border: "none", borderRadius: 3,
                                         cursor: "pointer",
@@ -533,7 +533,7 @@ function ChestItemsEditor({ gold, itemsString, locked, onGoldChange, onItemsChan
                                     onClick={() => updateQuantity(item.itemId, 1)}
                                     style={{
                                         width: 20, height: 20,
-                                        fontSize: 12, fontWeight: "bold",
+                                        fontSize: 12, fontWeight: 600,
                                         background: "#555", color: "#fff",
                                         border: "none", borderRadius: 3,
                                         cursor: "pointer",

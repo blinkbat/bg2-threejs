@@ -74,8 +74,8 @@ export const PROP_BRUSHES: PropBrushDef[] = [
     { char: "m", label: "Small Mush", color: "#c66", decorationType: "small_mushroom" },
     { char: "F", label: "Fern", color: "#4a5", decorationType: "fern" },
     { char: "f", label: "Small Fern", color: "#5b6", decorationType: "small_fern" },
-    { char: "S", label: "Seaweed", color: "#3a7", decorationType: "seaweed" },
-    { char: "s", label: "Sm Seaweed", color: "#4a8", decorationType: "small_seaweed" },
+    { char: "S", label: "Weeds", color: "#3a7", decorationType: "weeds" },
+    { char: "s", label: "Sm Weeds", color: "#4a8", decorationType: "small_weeds" },
 ];
 
 export const ENTITY_BRUSHES: BrushDef[] = [

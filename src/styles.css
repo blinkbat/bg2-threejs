@@ -1,3 +1,67 @@
+@font-face {
+    font-family: "DM Mono";
+    src: url("./assets/fonts/DM_Mono/DMMono-Regular.ttf") format("truetype");
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "DM Mono";
+    src: url("./assets/fonts/DM_Mono/DMMono-Medium.ttf") format("truetype");
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "DM Mono";
+    src: url("./assets/fonts/DM_Mono/DMMono-Medium.ttf") format("truetype");
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "DM Mono";
+    src: url("./assets/fonts/DM_Mono/DMMono-Medium.ttf") format("truetype");
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "DM Mono";
+    src: url("./assets/fonts/DM_Mono/DMMono-Italic.ttf") format("truetype");
+    font-style: italic;
+    font-weight: 400;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "DM Mono";
+    src: url("./assets/fonts/DM_Mono/DMMono-MediumItalic.ttf") format("truetype");
+    font-style: italic;
+    font-weight: 500;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "DM Mono";
+    src: url("./assets/fonts/DM_Mono/DMMono-MediumItalic.ttf") format("truetype");
+    font-style: italic;
+    font-weight: 600;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "DM Mono";
+    src: url("./assets/fonts/DM_Mono/DMMono-MediumItalic.ttf") format("truetype");
+    font-style: italic;
+    font-weight: 700;
+    font-display: swap;
+}
+
 /* =============================================================================
    GAME UI STYLES
    ============================================================================= */
@@ -15,6 +79,12 @@ html, body, #root {
     width: 100%;
     height: 100%;
     overflow: hidden;
+    font-family: "DM Mono", monospace;
+    font-synthesis: none;
+}
+
+strong, b {
+    font-weight: 600;
 }
 
 /* Dark mode scrollbars */
@@ -44,14 +114,6 @@ html, body, #root {
 /* -----------------------------------------------------------------------------
    COMMON UTILITIES
    ----------------------------------------------------------------------------- */
-.mono {
-    font-family: monospace;
-}
-
-.serif {
-    font-family: serif;
-}
-
 .text-muted {
     color: #888;
 }
@@ -77,7 +139,7 @@ html, body, #root {
 }
 
 .bold {
-    font-weight: bold;
+    font-weight: 600;
 }
 
 .pointer {
@@ -161,7 +223,6 @@ html, body, #root {
     -webkit-backdrop-filter: blur(10px);
     border: 2px solid rgba(61,61,92,0.5);
     border-radius: 8px;
-    font-family: monospace;
     color: #ddd;
 }
 
@@ -192,7 +253,6 @@ html, body, #root {
     border-radius: 8px;
     padding: 24px;
     max-width: 480px;
-    font-family: monospace;
     color: #ddd;
 }
 
@@ -250,7 +310,7 @@ html, body, #root {
 
 .level-badge {
     font-size: 14px;
-    font-weight: bold;
+    font-weight: 600;
     color: #f1c40f;
     min-width: 45px;
 }
@@ -346,7 +406,7 @@ html, body, #root {
 
 .inventory-cooldown {
     color: #f59e0b;
-    font-weight: bold;
+    font-weight: 600;
 }
 
 .inventory-items {
@@ -421,7 +481,7 @@ html, body, #root {
 }
 
 .consumable-tooltip-value {
-    font-weight: bold;
+    font-weight: 600;
 }
 
 .consumable-tooltip-target {
@@ -465,7 +525,7 @@ html, body, #root {
 }
 
 .equipment-tooltip-value {
-    font-weight: bold;
+    font-weight: 600;
     text-transform: capitalize;
 }
 
@@ -511,7 +571,7 @@ html, body, #root {
 }
 
 .inventory-item-row .inventory-item-name {
-    font-weight: bold;
+    font-weight: 600;
     color: #22c55e;
     font-size: 13px;
 }
@@ -541,7 +601,7 @@ html, body, #root {
 
 .inventory-item-row .inventory-item-effect {
     font-size: 12px;
-    font-weight: bold;
+    font-weight: 600;
 }
 
 .inventory-item-row .inventory-item-qty {
@@ -710,7 +770,7 @@ html, body, #root {
 .vial-label-value {
     font-size: 14px;
     color: #ccc;
-    font-weight: bold;
+    font-weight: 600;
 }
 
 /* -----------------------------------------------------------------------------
@@ -852,7 +912,7 @@ html, body, #root {
 
 .skill-learn-tag {
     font-size: 10px;
-    font-weight: bold;
+    font-weight: 600;
     color: #444;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -887,13 +947,13 @@ html, body, #root {
 
 .skill-uses-badge {
     font-size: 11px;
-    font-weight: bold;
+    font-weight: 600;
     color: #8e44ad;
 }
 
 .skills-section-label {
     font-size: 11px;
-    font-weight: bold;
+    font-weight: 600;
     color: #888;
     text-transform: uppercase;
     letter-spacing: 1px;
@@ -910,7 +970,7 @@ html, body, #root {
     padding: 2px 8px;
     border-radius: 8px;
     font-size: 10px;
-    font-weight: bold;
+    font-weight: 600;
     border: 1px solid rgba(255, 215, 0, 0.25);
     animation: skill-pulse 2s ease-in-out infinite;
 }
@@ -1044,7 +1104,6 @@ html, body, #root {
 .tippy-box {
     background: #000;
     border: 1px solid #333;
-    font-family: monospace;
     z-index: 99999 !important;
 }
 
@@ -1071,7 +1130,6 @@ html, body, #root {
     border: 1px solid #444;
     border-radius: 4px;
     padding: 6px 10px;
-    font-family: monospace;
     font-size: 12px;
     pointer-events: none;
     z-index: 1000;
@@ -1080,7 +1138,7 @@ html, body, #root {
 
 .enemy-tooltip-name {
     color: #fff;
-    font-weight: bold;
+    font-weight: 600;
     margin-bottom: 2px;
 }
 
@@ -1129,7 +1187,7 @@ html, body, #root {
 }
 
 .effect-tooltip-header {
-    font-weight: bold;
+    font-weight: 600;
     font-size: 13px;
     text-transform: capitalize;
     margin-bottom: 4px;
@@ -1178,7 +1236,7 @@ html, body, #root {
     padding: 3px 10px;
     border-radius: 10px;
     font-size: 11px;
-    font-weight: bold;
+    font-weight: 600;
     border: 1px solid #4ade8040;
     animation: stat-pulse 2s ease-in-out infinite;
 }
@@ -1221,14 +1279,14 @@ html, body, #root {
 }
 
 .stat-name {
-    font-weight: bold;
+    font-weight: 600;
     font-size: 11px;
     letter-spacing: 0.5px;
 }
 
 .stat-value {
     font-size: 16px;
-    font-weight: bold;
+    font-weight: 600;
     color: #fff;
 }
 
@@ -1240,7 +1298,7 @@ html, body, #root {
     color: #000;
     border-radius: 4px;
     cursor: pointer;
-    font-weight: bold;
+    font-weight: 600;
     font-size: 14px;
     line-height: 1;
     display: flex;
@@ -1266,7 +1324,7 @@ html, body, #root {
 }
 
 .stat-tooltip-header {
-    font-weight: bold;
+    font-weight: 600;
     font-size: 13px;
     margin-bottom: 8px;
     padding-bottom: 6px;
@@ -1304,7 +1362,6 @@ html, body, #root {
     color: #fff;
     border-radius: 4px;
     cursor: pointer;
-    font-family: monospace;
     font-size: 12px;
     transition: background 0.15s;
 }
@@ -1522,7 +1579,6 @@ html, body, #root {
 }
 
 .party-bar-summons-label {
-    font-family: monospace;
     font-size: 10px;
     color: #8f96a8;
     text-transform: uppercase;
@@ -1614,7 +1670,6 @@ html, body, #root {
     border-radius: 4px;
     color: #ccc;
     font-size: 11px;
-    font-family: monospace;
     padding: 3px 8px;
     cursor: pointer;
     transition: background 0.1s;
@@ -1638,10 +1693,9 @@ html, body, #root {
     align-items: center;
     justify-content: center;
     font-size: 26px;
-    font-weight: bold;
+    font-weight: 600;
     color: #fff;
     text-shadow: 1px 1px 2px #000;
-    font-family: serif;
     position: relative;
     background-size: cover;
     background-position: center;
@@ -1653,7 +1707,6 @@ html, body, #root {
     top: 1px;
     left: 3px;
     font-size: 11px;
-    font-family: monospace;
     color: white;
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9), 0 0 6px rgba(0, 0, 0, 0.7);
     line-height: 1;
@@ -1689,14 +1742,13 @@ html, body, #root {
     background: #22c55e;
     border-radius: 50%;
     font-size: 12px;
-    font-weight: bold;
+    font-weight: 600;
     color: #fff;
     display: flex;
     align-items: center;
     justify-content: center;
     text-shadow: none;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-    font-family: sans-serif;
 }
 .portrait-icon.hold-active {
     box-shadow: inset 0 0 0 2px rgba(74, 144, 217, 0.8);
@@ -1715,7 +1767,6 @@ html, body, #root {
     color: #aaa;
     text-align: center;
     margin-top: 2px;
-    font-family: monospace;
 }
 
 /* -----------------------------------------------------------------------------
@@ -1725,7 +1776,6 @@ html, body, #root {
     position: absolute;
     top: 12px;
     left: 12px;
-    font-family: monospace;
     padding: 12px 16px;
     pointer-events: none;  /* Allow drag-select through HUD background */
 }
@@ -1743,7 +1793,7 @@ html, body, #root {
 
 .hud-area-name {
     font-size: 16px;
-    font-weight: bold;
+    font-weight: 600;
     color: #fff;
     margin-bottom: 2px;
 }
@@ -1762,7 +1812,7 @@ html, body, #root {
     margin-top: 6px;
     font-size: 13px;
     color: #f1c40f;
-    font-weight: bold;
+    font-weight: 600;
 }
 
 .hud-buttons {
@@ -1825,7 +1875,6 @@ html, body, #root {
     text-transform: uppercase;
     letter-spacing: 1px;
     margin-bottom: 4px;
-    font-family: monospace;
 }
 
 .formation-grid {
@@ -1845,7 +1894,7 @@ html, body, #root {
     align-items: center;
     justify-content: center;
     font-size: 10px;
-    font-weight: bold;
+    font-weight: 600;
     color: #fff;
     text-shadow: 1px 1px 2px #000;
     border: 1px solid rgba(61, 61, 92, 0.5);
@@ -1866,7 +1915,6 @@ html, body, #root {
     width: 380px;
     height: 364px;
     padding: 12px;
-    font-family: monospace;
     font-size: 15px;
     color: #ccc;
     display: flex;
@@ -2010,7 +2058,7 @@ html, body, #root {
 }
 
 .save-slot-number {
-    font-weight: bold;
+    font-weight: 600;
     color: #fff;
 }
 
@@ -2363,9 +2411,8 @@ html, body, #root {
 
 .summon-chip-letter {
     color: #fff;
-    font-family: monospace;
     font-size: 16px;
-    font-weight: bold;
+    font-weight: 600;
     line-height: 1;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
     pointer-events: none;
@@ -2395,7 +2442,7 @@ html, body, #root {
 }
 
 .summon-chip-tooltip-name {
-    font-weight: bold;
+    font-weight: 600;
     color: #fff;
     margin-bottom: 2px;
 }
@@ -2472,7 +2519,6 @@ html, body, #root {
     min-height: 140px;
     padding: 6px 8px;
     font-size: 11px;
-    font-family: "Consolas", "Monaco", "Courier New", monospace;
     line-height: 1.35;
     color: #cdd6e0;
     background: rgba(12, 18, 28, 0.85);
@@ -2556,12 +2602,12 @@ html, body, #root {
     left: 5px;
     font-size: 10px;
     color: #555;
-    font-weight: bold;
+    font-weight: 600;
 }
 
 .hotbar-slot-abbrev {
     font-size: 13px;
-    font-weight: bold;
+    font-weight: 600;
     text-transform: uppercase;
 }
 
@@ -2581,7 +2627,7 @@ html, body, #root {
 .hotbar-cooldown-text {
     position: absolute;
     font-size: 14px;
-    font-weight: bold;
+    font-weight: 600;
     color: #999;
 }
 
@@ -2590,7 +2636,7 @@ html, body, #root {
     bottom: 2px;
     right: 2px;
     font-size: 10px;
-    font-weight: bold;
+    font-weight: 600;
     color: #fff;
     background: #8e44ad;
     border-radius: 50%;
@@ -2609,7 +2655,7 @@ html, body, #root {
 }
 
 .hotbar-tooltip-name {
-    font-weight: bold;
+    font-weight: 600;
     color: #fff;
     margin-bottom: 2px;
 }
@@ -2655,13 +2701,12 @@ html, body, #root {
     min-width: 220px;
     max-width: 280px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
-    font-family: monospace;
     color: #ddd;
 }
 
 .skill-selector-header {
     font-size: 13px;
-    font-weight: bold;
+    font-weight: 600;
     color: #aaa;
     margin-bottom: 10px;
     text-align: center;
@@ -2706,12 +2751,12 @@ html, body, #root {
 
 .skill-selector-name {
     font-size: 12px;
-    font-weight: bold;
+    font-weight: 600;
 }
 
 .skill-selector-tag {
     font-size: 9px;
-    font-weight: bold;
+    font-weight: 600;
     color: #8e44ad;
     background: rgba(142, 68, 173, 0.15);
     border: 1px solid rgba(142, 68, 173, 0.3);
@@ -2735,4 +2780,3 @@ html, body, #root {
     font-size: 11px;
     color: #5ebaff;
 }
-
