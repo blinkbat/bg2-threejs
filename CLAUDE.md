@@ -41,11 +41,14 @@ React + Three.js ARPG. State in React (`Unit[]` via `setUnits`), 3D positions on
 | `game/enemyState.ts` | Module-level enemy state: kite cooldowns, kiting status tracking |
 | `game/geometry.ts` | `distance()`, `distanceBetween()`, `distanceToPoint()`, `clampToGrid()`, `worldToCell()`, `cellToWorld()` |
 | `game/formation.ts` | `getFormationPositions()`, `getFormationPositionsForSpawn()` |
+| `game/formationOrder.ts` | `buildEffectiveFormationOrder()`, `getFormationRank()`, `sortUnitsByFormationOrder()` |
 | `game/unitQuery.ts` | `getAliveUnits()`, `findNearestUnit()`, `isPlayerVisible()` |
+| `game/fogMemory.ts` | Fog-of-war visibility persistence: `loadFogVisibility()`, `saveFogVisibility()`, `clearFogVisibilityMemory()` |
+| `game/dungeon.ts` | Backwards-compat re-exports from area system (`getBlocked`, `blocked`, etc.) |
 | `game/saveLoad.ts` | Save/load system: save slots, versioning, persistence |
 | `game/areas/` | Area/map defs. `textLoader.ts` parses text maps, `helpers.ts` for blocked/terrain, `maps/` has map files |
 | **Combat** | |
-| `combat/combatMath.ts` | Hit/damage/crit/armor calc, poison/slow helpers, cooldown math, log builders |
+| `combat/combatMath.ts` | Hit/damage/crit/armor calc, poison/slow/weakened/hamstrung helpers, cooldown math, log builders |
 | `combat/damageEffects.ts` | `applyDamageToUnit()` (shields, split, defeat, XP, tentacle), `DamageContext`, projectile/ring creation |
 | `combat/barks.ts` | Random voice-line barks on kill/heal/spell events |
 | `combat/skills/` | Player skill executors. Router `index.ts`, `damage.ts`, `support.ts`, `utility.ts`, `movement.ts` |
@@ -55,7 +58,7 @@ React + Three.js ARPG. State in React (`Unit[]` via `setUnits`), 3D positions on
 | `gameLoop/index.ts` | `updateUnitAI()`: targeting -> kiting -> behaviors -> attack -> movement |
 | `gameLoop/enemyAttack.ts` | `executeEnemyBasicAttack()` — melee/ranged/fireball (incl. bite) |
 | `gameLoop/enemySkills.ts` | `executeEnemySwipe()`, `executeEnemyHeal()` |
-| `gameLoop/enemyBehaviors/` | One file per ability, pattern: `try*()` returning boolean |
+| `gameLoop/enemyBehaviors/` | One file per ability, pattern: `try*()` returning boolean. `preAttack.ts` dispatches all pre-attack behaviors. |
 | `gameLoop/statusEffects.ts` | Per-tick processing: poison, buff expiry, doom, stun |
 | `gameLoop/projectiles.ts` | Projectile movement + impact per frame |
 | `gameLoop/acidTiles.ts` | Acid tile creation, damage ticks, aura |
@@ -64,6 +67,7 @@ React + Three.js ARPG. State in React (`Unit[]` via `setUnits`), 3D positions on
 | `gameLoop/constructCharge.ts` | Construct charge attack processing |
 | `gameLoop/lootBags.ts` | Loot bag spawning, bounce animation, pickup, cleanup |
 | `gameLoop/swingAnimations.ts` | Melee swing indicator visuals |
+| `gameLoop/fireBreath.ts` | Sustained channeled fire breath: cone mesh, per-frame damage, caster lockdown |
 | `gameLoop/visuals.ts` | Status effect tints, unit visual updates |
 | `gameLoop/tileUtils.ts` | Tile-related utility functions |
 | **Input / Hooks** | |
@@ -72,6 +76,8 @@ React + Three.js ARPG. State in React (`Unit[]` via `setUnits`), 3D positions on
 | `hooks/useThreeScene.ts` | Three.js scene setup/teardown, cleanup on area transitions |
 | `hooks/useInputHandlers.ts` | Mouse/keyboard input, click-to-move, skill targeting, selection |
 | `hooks/hotbarStorage.ts` | Hotbar layout persistence |
+| `hooks/formationStorage.ts` | Formation layout persistence |
+| `hooks/useDisplayTime.ts` | Display time hook |
 | `hooks/localStorage.ts` | Persistent UI state: hotbar assignments, formation order (NOT game save) |
 | **AI** | |
 | `ai/unitAI.ts` | `runTargetingPhase()`, `runPathFollowingPhase()`, `runMovementPhase()` |
@@ -86,7 +92,7 @@ React + Three.js ARPG. State in React (`Unit[]` via `setUnits`), 3D positions on
 | `rendering/scene/types.ts` | `DoorMesh`, `SecretDoorMesh`, `ChestMeshData`, `SceneRefs` |
 | **UI / Audio** | |
 | `components/` | React UI: `PartyBar`, `UnitPanel`, `SkillHotbar`, `HUD`, `CombatLog`, modals |
-| `audio/` | `soundFns.*` object. Modular: `core.ts`, `combat.ts`, `creatures.ts`, `spells.ts`, `ui.ts`, re-exported from `index.ts` |
+| `audio/` | `soundFns.*` object. Modular: `core.ts`, `combat.ts`, `creatures.ts`, `spells.ts`, `ui.ts`, `noise.ts`, re-exported from `index.ts` |
 | `editor/` | Map editor UI. `constants.ts` has `ENEMY_TYPES` from `Object.keys(ENEMY_STATS)` |
 
 ## How-To Recipes
@@ -111,7 +117,7 @@ React + Three.js ARPG. State in React (`Unit[]` via `setUnits`), 3D positions on
 1. Define in `game/skills.ts`, add to unit's skill list
 2. Executor: single-target -> `executeTargetedDamageSkill()` in `damage.ts` | AoE -> custom in `damage.ts` | heal/buff -> `support.ts` | taunt/debuff/trap -> `utility.ts`
 3. Wire router in `combat/skills/index.ts` matching `skill.type` + `skill.targetType`
-4. Helpers: `consumeSkill`, `findClosestTargetByTeam`, `applyDamageToUnit`, `createAnimatedRing`, `createLightningPillar`, `rollHit`, `calculateDamageWithCrit`, `getEffectiveArmor`, `calculateStatBonus`
+4. Helpers: `consumeSkill`, `findClosestTargetByTeam`, `applyDamageToUnit`, `createAnimatedRing`, `createLightningPillar`, `rollHit`, `calculateDamageWithCrit`, `calculateDamageWithOptionalCritChance`, `getEffectiveArmor`, `calculateStatBonus`
 
 ### New Status Effect
 1. `core/types/units.ts` -> `StatusEffectType` union
@@ -147,6 +153,9 @@ React + Three.js ARPG. State in React (`Unit[]` via `setUnits`), 3D positions on
 - **Cooldown key**: `` `${unitId}-${skillName}` `` via `setSkillCooldown()`
 - **Range checks**: always `isInRange()` from `rendering/range.ts` (hitbox-aware)
 - **`updateUnit()`/`updateUnitWith()`** — functional React state helpers in `core/stateUtils.ts`. Prefer over raw `setUnits(prev => prev.map(...))` for single-unit updates.
-- **Module-level state** — `game/equipmentState.ts`, `game/enemyState.ts`, `ai/movement.ts` store state outside React. Each has `initialize*()` / `reset*()` called from `useThreeScene` on area transitions.
+- **Module-level state** — `game/equipmentState.ts`, `game/enemyState.ts`, `game/fogMemory.ts`, `ai/movement.ts` store state outside React. Each has `initialize*()` / `reset*()` called from `useThreeScene` on area transitions.
 - **Unit ID generation** — `getNextUnitId()` from `core/unitIds.ts`. Use for all spawned units (broodlings, tentacles, split amoebas).
 - **Arc/Cone rotation**: For flat ground-plane arcs using `RingGeometry` + `rotation.x = -PI/2`, use `rotation.z = -facingAngle` where `facingAngle = atan2(dz, dx)`. Euler XYZ means Rz applies before Rx, so negation maps correctly to XZ plane. The shield mesh is a special case (`rotation.z = facing - PI/2`) due to its thetaStart.
+- **Projectile materials** — all projectiles use `MeshPhongMaterial` with emissive/specular. `createProjectileMaterial()` in `damageEffects.ts` clones from `projectileBaseMaterials`.
+- **Pre-attack dispatcher** — `runPreAttackBehaviors()` in `enemyBehaviors/preAttack.ts` runs all pre-attack behaviors (spawn, raise, tentacles, curses, glare, dream eater, sleep) before basic attack phase.
+- **Skill on-hit effects** — `onHitEffect` on `Skill` applies status (stun, attack_down, move_slow) via `SkillOnHitEffectType`. `delivery` field distinguishes melee vs ranged single-target skills. `isCantrip`/`maxUses` for charge-based skills.
