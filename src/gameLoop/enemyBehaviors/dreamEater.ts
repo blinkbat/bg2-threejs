@@ -102,7 +102,7 @@ export function tryDreamEater(ctx: DreamEaterContext): boolean {
     });
 
     // Roll hit
-    if (!rollHit(casterStats.accuracy)) {
+    if (!rollHit(casterStats.accuracy, unit)) {
         createAnimatedRing(scene, target.group.position.x, target.group.position.z, COLORS.logNeutral, {
             innerRadius: 0.1,
             outerRadius: 0.25,

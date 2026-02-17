@@ -250,8 +250,8 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     giant_amoeba: {
         name: "Giant Amoeba",
-        hp: 25,
-        maxHp: 25,
+        hp: 65,
+        maxHp: 65,
         damage: [3, 6],
         accuracy: 55,
         armor: 0,
@@ -260,7 +260,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         attackCooldown: 2200,
         size: 2.0,  // Large - decreases with each split
         moveSpeed: 0.7,  // Slightly slower, it's a blob
-        maxSplitCount: 3,  // Can split up to 3 times (4 generations total)
+        maxSplitCount: 3,
         slowChance: 30,  // 30% chance to slow on hit
         expReward: 12
     },

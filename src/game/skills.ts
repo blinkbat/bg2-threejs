@@ -25,6 +25,18 @@ export const SKILLS: Record<string, Skill> = {
         damageType: "fire",
         projectileColor: "#ff4400"
     },
+    chainLightning: {
+        name: "Chain Lightning",
+        description: "Blast an enemy with lightning, then arc to up to 3 additional nearby foes with diminishing power.",
+        flavor: "One bolt is a warning. The next three are judgment.",
+        manaCost: 20,
+        cooldown: 8500,
+        type: "smite",
+        targetType: "enemy",
+        range: 10,
+        damageRange: [14, 20],
+        damageType: "lightning"
+    },
     energyShield: {
         name: "Energy Shield",
         description: "Surround yourself with a protective barrier that absorbs up to 30 damage. Chaos damage penetrates twice as effectively.",
@@ -210,6 +222,22 @@ export const SKILLS: Record<string, Skill> = {
         damageType: "physical",
         hitCount: 5
     },
+    forcePush: {
+        name: "Force Push",
+        description: "Unleash a concussive wave that batters enemies backward and may leave them stunned.",
+        flavor: "\"Wind and will are one motion.\" - Master Shen",
+        manaCost: 10,
+        cooldown: 5500,
+        type: "damage",
+        targetType: "aoe",
+        range: 6.5,
+        lineWidth: 2.2,
+        damageRange: [6, 10],
+        damageType: "physical",
+        knockbackDistance: 2.2,
+        stunChance: 35,
+        duration: 1800
+    },
     stunningBlow: {
         name: "Stunning Blow",
         description: "A powerful strike that stuns the target, preventing them from acting for 5 seconds.",
@@ -224,7 +252,7 @@ export const SKILLS: Record<string, Skill> = {
         stunChance: 75  // 75% chance to stun
     },
     thunder: {
-        name: "Thunder",
+        name: "Heavenly Bolt",
         description: "Call down a bolt of lightning on a single enemy.",
         flavor: "The sky answers the faithful.",
         manaCost: 12,
@@ -234,6 +262,22 @@ export const SKILLS: Record<string, Skill> = {
         range: 9,
         damageRange: [10, 16],
         damageType: "lightning"
+    },
+    holyCross: {
+        name: "Holy Cross",
+        description: "Detonate a radiant cross that scorches foes and leaves smiting ground in its wake.",
+        flavor: "\"Where this sign is set, darkness kneels.\"",
+        manaCost: 16,
+        cooldown: 6500,
+        type: "damage",
+        targetType: "aoe",
+        range: 8,
+        aoeRadius: 4,
+        damageRange: [8, 13],
+        damageType: "holy",
+        damagePerTick: 3,
+        tickInterval: 1000,
+        duration: 12000
     },
     cleanse: {
         name: "Cleanse",
@@ -353,6 +397,22 @@ export const SKILLS: Record<string, Skill> = {
         damageRange: [10, 16],
         damageType: "holy",
         lineWidth: 0.8,
+    },
+    vanquishingLight: {
+        name: "Vanquishing Light",
+        description: "Wreathe yourself in holy radiance that repeatedly smites nearby foes and may blind them.",
+        flavor: "\"Stand within my light, and see your last dawn.\"",
+        manaCost: 12,
+        cooldown: 9000,
+        type: "buff",
+        targetType: "self",
+        range: 3.5,
+        duration: 12000,
+        damageType: "holy",
+        damagePerTick: 3,
+        tickInterval: 1000,
+        blindChance: 35,
+        blindDuration: 5000
     },
     sunStance: {
         name: "Sun Stance",

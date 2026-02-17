@@ -156,7 +156,7 @@ export function executeEnemyMeleeAttack(ctx: EnemyAttackContext): void {
     const targetData = getUnitStats(target);
     spawnSwingIndicator(scene, attackerG, targetG, false, swingAnimations, now);
 
-    if (rollHit(attackerStats.accuracy)) {
+    if (rollHit(attackerStats.accuracy, attacker)) {
         // Check for bite attack (random chance to bite instead of claw)
         const isBite = attackerStats.biteChance && attackerStats.biteDamage && rollChance(attackerStats.biteChance);
         const baseDamage = isBite ? attackerStats.biteDamage! : attackerStats.damage;

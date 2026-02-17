@@ -7,6 +7,7 @@ import type { Skill, StatusEffect, StatusEffectType, Unit, UnitGroup } from "../
 import {
     COLORS,
     BUFF_TICK_INTERVAL,
+    BLIND_DURATION,
     QI_DRAIN_DURATION,
     QI_DRAIN_TICK_INTERVAL,
     POISON_TICK_INTERVAL,
@@ -964,5 +965,40 @@ export function executeHighlandDefenseSkill(
         logMessage: (name, skillName) => `${name} channels ${skillName}!`,
         logColor: COLORS.highlandDefenseText,
         extraEffectFields: { interceptRemaining: HIGHLAND_DEFENSE_INTERCEPT_CAP, interceptCooldownEnd: 0 },
+    });
+}
+
+// =============================================================================
+// VANQUISHING LIGHT SKILL (holy damage aura + blind chance)
+// =============================================================================
+
+/**
+ * Execute Vanquishing Light - self aura that periodically damages nearby enemies and can blind.
+ */
+export function executeVanquishingLightSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill
+): boolean {
+    const tickInterval = skill.tickInterval ?? 1000;
+    const damagePerTick = skill.damagePerTick ?? 3;
+    const blindChance = skill.blindChance ?? 30;
+    const blindDuration = skill.blindDuration ?? BLIND_DURATION;
+
+    return applyBuffFromTemplate(ctx, casterId, skill, {
+        effectType: "vanquishing_light",
+        ringColor: COLORS.dmgHoly,
+        ringOpts: { innerRadius: 0.4, outerRadius: 0.7, maxScale: skill.range + 0.9, duration: 380 },
+        sound: soundFns.playHolyStrike,
+        logMessage: (name, skillName) => `${name} invokes ${skillName}!`,
+        logColor: COLORS.dmgHoly,
+        extraEffectFields: {
+            tickInterval,
+            damagePerTick,
+            auraRadius: skill.range,
+            blindChance,
+            blindDuration,
+            auraDamageType: "holy"
+        },
     });
 }

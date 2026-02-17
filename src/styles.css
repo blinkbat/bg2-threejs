@@ -1912,10 +1912,10 @@ strong, b {
     position: absolute;
     bottom: 12px;
     left: 12px;
-    width: 380px;
-    height: 364px;
+    width: 350px;
+    height: 400px;
     padding: 12px;
-    font-size: 15px;
+    font-size: 14px;
     color: #ccc;
     display: flex;
     flex-direction: column;
@@ -1925,11 +1925,17 @@ strong, b {
     -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0.125) 0%, rgba(0,0,0,1) 100%);
     mask-image: linear-gradient(to bottom, rgba(0,0,0,0.125) 0%, rgba(0,0,0,1) 100%);
     opacity: 1;
+    pointer-events: none;
+}
+
+.combat-log * {
+    pointer-events: none;
 }
 
 .combat-log-inner {
     overflow-y: auto;
     max-height: 100%;
+    padding-right: 12px;
 }
 
 .combat-log-inner::-webkit-scrollbar {

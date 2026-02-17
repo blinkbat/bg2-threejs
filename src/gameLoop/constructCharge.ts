@@ -257,7 +257,7 @@ function executeChargeAttack(
         if (inHorizontalArm || inVerticalArm) {
             const targetData = getUnitStats(target);
 
-            if (rollHit(enemyData.accuracy)) {
+            if (rollHit(enemyData.accuracy, unit)) {
                 const { damage: dmg } = calculateDamageWithCrit(charge.damage[0], charge.damage[1], getEffectiveArmor(target, targetData.armor), charge.damageType, unit);
                 applyDamageToUnit(dmgCtx, target.id, tg, dmg, targetData.name, {
                     color: COLORS.damageEnemy,

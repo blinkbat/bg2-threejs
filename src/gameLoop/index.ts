@@ -27,6 +27,7 @@ export { updateProjectiles } from "./projectiles";
 export { spawnSwingIndicator, updateSwingAnimations } from "./swingAnimations";
 export { processAcidTiles, createAcidTile, createAcidPool, clearAcidTiles } from "./acidTiles";
 export { processSanctuaryTiles, createSanctuaryTile, clearSanctuaryTiles } from "./sanctuaryTiles";
+export { processHolyTiles, createHolyTile, createHolyCross, clearHolyTiles } from "./holyTiles";
 export { processChargeAttacks, clearChargeAttacks, isUnitCharging } from "./constructCharge";
 export { processFireBreaths, clearFireBreaths, isUnitBreathing } from "./fireBreath";
 export { processCurses, clearCurses } from "./necromancerCurse";

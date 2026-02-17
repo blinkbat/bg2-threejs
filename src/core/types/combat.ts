@@ -37,6 +37,8 @@ export interface Skill {
     armorBonus?: number;              // Armor bonus for defiance
     tauntChance?: number;             // 0-100 percent chance to taunt each enemy
     healPerTick?: number;             // Heal per tick for sanctuary
+    damagePerTick?: number;           // Damage per tick for aura/ground effects
+    tickInterval?: number;            // Tick interval in ms for aura/ground effects
 
     // Additional optional properties
     poisonChance?: number;            // 0-100 percent chance to apply poison on hit
@@ -46,6 +48,10 @@ export interface Skill {
     trapDamage?: [number, number];    // Damage dealt when trap triggers
     lineWidth?: number;               // Width of line-shaped AOE (rectangle instead of circle)
     chillChance?: number;             // 0-100 percent chance to apply chilled on hit
+    knockbackDistance?: number;       // Push distance in world units
+    blindChance?: number;             // 0-100 percent chance to apply blind
+    blindDuration?: number;           // Blind duration in ms
+    hitChance?: number;               // Optional base hit chance override (0-100)
     delivery?: SkillDeliveryMode;     // Optional explicit delivery mode for single-target damage skills
     critChanceOverride?: number;      // Optional crit chance override for this skill's hit resolution
     onHitEffect?: SkillOnHitEffect;   // Optional status effect applied when this skill hits
@@ -90,6 +96,7 @@ export interface BasicProjectile extends BaseProjectile {
     skillName?: string;                  // Optional source skill name (defaults to "Attack")
     skillDamage?: [number, number];      // Optional damage override for skill-based projectiles
     skillDamageType?: DamageType;        // Optional damage type override for skill-based projectiles
+    skillHitChanceOverride?: number;     // Optional hit chance override for skill-based projectiles
     skillCritChanceOverride?: number;    // Optional crit chance override for skill-based projectiles
     skillOnHitEffect?: SkillOnHitEffect; // Optional on-hit effect for skill-based projectiles
 }

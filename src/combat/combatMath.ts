@@ -3,7 +3,7 @@
 // =============================================================================
 
 import type { Unit, UnitData, EnemyStats, StatusEffect, StatusEffectType, DamageType } from "../core/types";
-import { POISON_DURATION, POISON_TICK_INTERVAL, POISON_DAMAGE_PER_TICK, SLOW_DURATION, BUFF_TICK_INTERVAL, COLORS, SLOW_COOLDOWN_MULT, SLOW_MOVE_MULT, DEFIANCE_COOLDOWN_MULT, SLEEP_MIN_DURATION, SLEEP_MAX_DURATION, CHILLED_DURATION, CHILLED_COOLDOWN_MULT, CHILLED_MOVE_MULT, WEAKENED_COOLDOWN_MULT, HAMSTRUNG_MOVE_MULT } from "../core/constants";
+import { POISON_DURATION, POISON_TICK_INTERVAL, POISON_DAMAGE_PER_TICK, SLOW_DURATION, BUFF_TICK_INTERVAL, COLORS, SLOW_COOLDOWN_MULT, SLOW_MOVE_MULT, DEFIANCE_COOLDOWN_MULT, SLEEP_MIN_DURATION, SLEEP_MAX_DURATION, CHILLED_DURATION, CHILLED_COOLDOWN_MULT, CHILLED_MOVE_MULT, WEAKENED_COOLDOWN_MULT, HAMSTRUNG_MOVE_MULT, BLIND_ACCURACY_MULT } from "../core/constants";
 import { getStrengthDamageBonus, getIntelligenceMagicDamageBonus, getFaithHolyDamageBonus, getDexterityCritChance, CRIT_MULTIPLIER } from "../game/statBonuses";
 import { normalizeAngle } from "../game/geometry";
 
@@ -60,9 +60,37 @@ export const rollChance = (percent: number): boolean =>
 export const rollDamage = (min: number, max: number): number =>
     Math.floor(Math.random() * (max - min + 1)) + min;
 
-// Roll hit based on accuracy percentage
-export const rollHit = (accuracy: number): boolean =>
-    rollChance(accuracy);
+// Roll hit based on accuracy percentage, with blind penalty for affected attackers.
+export const rollHit = (accuracy: number, attacker?: Unit): boolean => {
+    const clampedAccuracy = Math.max(0, Math.min(100, accuracy));
+    if (!attacker || !hasStatusEffect(attacker, "blind")) {
+        return rollChance(clampedAccuracy);
+    }
+    const blindAdjustedAccuracy = clampedAccuracy * BLIND_ACCURACY_MULT;
+    return rollChance(blindAdjustedAccuracy);
+};
+
+interface SkillHitProfile {
+    name: string;
+    hitChance?: number;
+}
+
+/**
+ * Get base hit chance for a skill.
+ * Named skills default to 100% unless they explicitly set hitChance.
+ * "Attack" falls back to attacker accuracy.
+ */
+export function getSkillHitChance(skill: SkillHitProfile | undefined, attackerAccuracy: number): number {
+    if (!skill) return Math.max(0, Math.min(100, attackerAccuracy));
+    if (skill.hitChance !== undefined) return Math.max(0, Math.min(100, skill.hitChance));
+    if (skill.name !== "Attack") return 100;
+    return Math.max(0, Math.min(100, attackerAccuracy));
+}
+
+/** Roll hit for skill usage, applying blind penalty through rollHit. */
+export function rollSkillHit(skill: SkillHitProfile | undefined, attackerAccuracy: number, attacker?: Unit): boolean {
+    return rollHit(getSkillHitChance(skill, attackerAccuracy), attacker);
+}
 
 /**
  * Check if an attack is a critical hit based on unit's dexterity.

@@ -290,7 +290,7 @@ function executeGlare(
 
         const targetData = getUnitStats(target);
 
-        if (rollHit(casterStats.accuracy)) {
+        if (rollHit(casterStats.accuracy, caster)) {
             const { damage: dmg } = calculateDamageWithCrit(
                 glare.damage[0], glare.damage[1],
                 getEffectiveArmor(target, targetData.armor),

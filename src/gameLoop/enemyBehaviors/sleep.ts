@@ -43,7 +43,7 @@ export function trySleep(ctx: SleepContext): boolean {
         // Skip already-sleeping targets
         if (hasStatusEffect(target.unit, "sleep")) continue;
 
-        if (rollHit(adjustedAccuracy)) {
+        if (rollHit(adjustedAccuracy, unit)) {
             hitIds.push(target.unit.id);
             hitCount++;
         }

@@ -6,10 +6,11 @@ import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, Projectile, EnemyStats, MagicMissileProjectile, TrapProjectile, FireballProjectile, PiercingProjectile, StatusEffect, DamageType, UnitData, SkillOnHitEffect } from "../core/types";
 import { HIT_DETECTION_RADIUS, COLORS, BUFF_TICK_INTERVAL, SUN_STANCE_BONUS_DAMAGE, GLACIAL_WHORL_HIT_RADIUS } from "../core/constants";
 import { getUnitStats } from "../game/units";
-import { calculateDamageWithCrit, calculateDamageWithOptionalCritChance, getDirectionAndDistance, rollHit, rollDamage, shouldApplyPoison, getEffectiveArmor, logHit, logLifestealHit, logMiss, logPoisoned, logAoeHit, logAoeMiss, getDamageColor, logTrapTriggered, calculateStatBonus, applyStatusEffect, checkEnemyDefenses, hasStatusEffect, rollChance, applyChilled, logStunned, logWeakened, logHamstrung } from "../combat/combatMath";
+import { calculateDamageWithCrit, calculateDamageWithOptionalCritChance, getDirectionAndDistance, rollSkillHit, rollDamage, shouldApplyPoison, getEffectiveArmor, logHit, logLifestealHit, logMiss, logPoisoned, logAoeHit, logAoeMiss, getDamageColor, logTrapTriggered, calculateStatBonus, applyStatusEffect, checkEnemyDefenses, hasStatusEffect, rollChance, applyChilled, logStunned, logWeakened, logHamstrung } from "../combat/combatMath";
 import { distance } from "../game/geometry";
 import { accumulateDelta } from "../core/gameClock";
 import { isBlocked } from "../ai/pathfinding";
+import { isTreeBlocked } from "../game/areas";
 import { ENEMY_STATS } from "../game/enemyStats";
 import { applyDamageToUnit, animateExpandingMesh, buildDamageContext, applyLifesteal, createAnimatedRing } from "../combat/damageEffects";
 import { soundFns } from "../audio";
@@ -378,69 +379,86 @@ export function updateProjectiles(
     // Shared DamageContext for all projectile hit processing
     const dmgCtx = buildDamageContext(scene, damageTexts, hitFlashRef, unitsRef, unitsState, setUnits, addLog, now, defeatedThisFrame);
 
+    const explodeAoeProjectile = (proj: Projectile & { type: "aoe" }, explodeX: number, explodeZ: number): void => {
+        const attackerUnit = getUnitById(proj.attackerId);
+        const attackerData = attackerUnit ? getUnitStats(attackerUnit) : null;
+        const { aoeRadius, damage } = proj;
+
+        const explosion = new THREE.Mesh(
+            new THREE.RingGeometry(0.1, aoeRadius, 32),
+            new THREE.MeshBasicMaterial({ color: "#ff4400", transparent: true, opacity: 0.6, side: THREE.DoubleSide })
+        );
+        explosion.rotation.x = -Math.PI / 2;
+        explosion.position.set(explodeX, 0.1, explodeZ);
+        scene.add(explosion);
+        animateExpandingMesh(scene, explosion, { duration: 400, initialOpacity: 0.6, maxScale: aoeRadius * 1.2, baseRadius: aoeRadius });
+        soundFns.playExplosion();
+
+        let hitCount = 0;
+        let totalDamage = 0;
+        unitsState.filter(u => u.hp > 0 && !defeatedThisFrame.has(u.id)).forEach(target => {
+            const tg = unitsRef[target.id];
+            if (!tg) return;
+
+            const targetDist = distance(tg.position.x, tg.position.z, explodeX, explodeZ);
+            if (targetDist > aoeRadius) return;
+
+            const targetData = getUnitStats(target);
+            const statBonus = calculateStatBonus(attackerUnit, proj.damageType);
+            const { damage: dmg } = calculateDamageWithCrit(
+                damage[0] + statBonus,
+                damage[1] + statBonus,
+                getEffectiveArmor(target, targetData.armor),
+                proj.damageType,
+                attackerUnit
+            );
+
+            applyDamageToUnit(dmgCtx, target.id, tg, dmg, targetData.name, {
+                color: getDamageColor(target.team, true),
+                attackerName: attackerUnit?.team === "player" ? attackerData?.name : undefined,
+                targetUnit: target,
+                damageType: proj.damageType
+            });
+            hitCount++;
+            totalDamage += dmg;
+
+            if (attackerUnit?.team === "player") {
+                aggroOnHit(target, proj.attackerId, unitsRef);
+            }
+        });
+
+        if (hitCount > 0) {
+            soundFns.playHit();
+            addLog(logAoeHit(attackerData?.name ?? "Unknown", "Fireball", hitCount, totalDamage), COLORS.damageNeutral);
+        }
+    };
+
     return projectilesRef.filter(proj => {
         // AOE projectile (like Fireball)
         if (proj.type === "aoe") {
-            const { targetPos, aoeRadius, damage } = proj;
+            const { targetPos } = proj;
             const { dx, dz, dist } = getDirectionAndDistance(proj.mesh.position.x, proj.mesh.position.z, targetPos.x, targetPos.z);
             updateSharedProjectileVisual(proj.mesh);
 
             // Reached target - explode
             if (dist < HIT_DETECTION_RADIUS) {
-                const attackerUnit = getUnitById(proj.attackerId);
-                const attackerData = attackerUnit ? getUnitStats(attackerUnit) : null;
-
-                // Create explosion effect with fade out
-                const explosion = new THREE.Mesh(
-                    new THREE.RingGeometry(0.1, aoeRadius, 32),
-                    new THREE.MeshBasicMaterial({ color: "#ff4400", transparent: true, opacity: 0.6, side: THREE.DoubleSide })
-                );
-                explosion.rotation.x = -Math.PI / 2;
-                explosion.position.set(targetPos.x, 0.1, targetPos.z);
-                scene.add(explosion);
-                animateExpandingMesh(scene, explosion, { duration: 400, initialOpacity: 0.6, maxScale: aoeRadius * 1.2, baseRadius: aoeRadius });
-                soundFns.playExplosion();
-
-                // Deal damage to ALL units in radius (friendly fire!)
-                let hitCount = 0;
-                let totalDamage = 0;
-                unitsState.filter(u => u.hp > 0 && !defeatedThisFrame.has(u.id)).forEach(target => {
-                    const tg = unitsRef[target.id];
-                    if (!tg) return;
-                    const targetDist = distance(tg.position.x, tg.position.z, targetPos.x, targetPos.z);
-                    if (targetDist <= aoeRadius) {
-                        const targetData = getUnitStats(target);
-                        const statBonus = calculateStatBonus(attackerUnit, proj.damageType);
-                        const { damage: dmg } = calculateDamageWithCrit(damage[0] + statBonus, damage[1] + statBonus, getEffectiveArmor(target, targetData.armor), proj.damageType, attackerUnit);
-
-                        applyDamageToUnit(dmgCtx, target.id, tg, dmg, targetData.name, {
-                            color: getDamageColor(target.team, true),
-                            attackerName: attackerUnit?.team === "player" ? attackerData?.name : undefined,
-                            targetUnit: target,
-                            damageType: proj.damageType
-                        });
-                        hitCount++;
-                        totalDamage += dmg;
-
-                        // Aggro enemies hit by player AOE
-                        if (attackerUnit?.team === "player") {
-                            aggroOnHit(target, proj.attackerId, unitsRef);
-                        }
-                    }
-                });
-
-                if (hitCount > 0) {
-                    soundFns.playHit();
-                    addLog(logAoeHit(attackerData?.name ?? "Unknown", "Fireball", hitCount, totalDamage), COLORS.damageNeutral);
-                }
-
+                explodeAoeProjectile(proj, targetPos.x, targetPos.z);
                 disposeProjectile(scene, proj);
                 return false;
             }
 
             // Move projectile (dx/dz already normalized by getDirectionAndDistance)
-            proj.mesh.position.x += dx * proj.speed;
-            proj.mesh.position.z += dz * proj.speed;
+            const nextX = proj.mesh.position.x + dx * proj.speed;
+            const nextZ = proj.mesh.position.z + dz * proj.speed;
+            const nextCellX = Math.floor(nextX);
+            const nextCellZ = Math.floor(nextZ);
+            if (isBlocked(nextCellX, nextCellZ) || isTreeBlocked(nextCellX, nextCellZ)) {
+                explodeAoeProjectile(proj, nextX, nextZ);
+                disposeProjectile(scene, proj);
+                return false;
+            }
+            proj.mesh.position.x = nextX;
+            proj.mesh.position.z = nextZ;
             return true;
         }
 
@@ -956,7 +974,10 @@ export function updateProjectiles(
                 }
             }
 
-            if (rollHit(attackerData.accuracy)) {
+            const skillHitProfile = isSkillShot
+                ? { name: skillName, hitChance: proj.skillHitChanceOverride }
+                : undefined;
+            if (rollSkillHit(skillHitProfile, attackerData.accuracy, attackerUnit)) {
                 const dmgType = incomingDamageType;
                 const armor = getEffectiveArmor(targetUnit, targetData.armor);
                 const skillDamage = proj.skillDamage;

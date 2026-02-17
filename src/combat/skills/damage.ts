@@ -3,23 +3,42 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, Skill, UnitGroup, BasicProjectile, MagicMissileProjectile, PiercingProjectile } from "../../core/types";
-import { COLORS, SUN_STANCE_BONUS_DAMAGE, MAGIC_MISSILE_START_OFFSET, MAGIC_MISSILE_SPEED, MAGIC_MISSILE_ZIGZAG_PHASE_STEP, GLACIAL_WHORL_SPEED, GLACIAL_WHORL_MAX_DISTANCE } from "../../core/constants";
+import type { Unit, Skill, UnitGroup, BasicProjectile, MagicMissileProjectile, PiercingProjectile, StatusEffect } from "../../core/types";
+import { COLORS, BUFF_TICK_INTERVAL, SUN_STANCE_BONUS_DAMAGE, MAGIC_MISSILE_START_OFFSET, MAGIC_MISSILE_SPEED, MAGIC_MISSILE_ZIGZAG_PHASE_STEP, GLACIAL_WHORL_SPEED, GLACIAL_WHORL_MAX_DISTANCE, HOLY_DAMAGE_PER_TICK } from "../../core/constants";
 import { UNIT_DATA, getEffectiveUnitData } from "../../game/playerUnits";
 import { getUnitStats } from "../../game/units";
-import { rollChance, rollDamage, calculateDamageWithCrit, rollHit, getEffectiveArmor, logHit, logMiss, logPoisoned, logCast, logAoeHit, logAoeMiss, calculateStatBonus, checkEnemyDefenses, hasStatusEffect } from "../combatMath";
+import { rollChance, rollDamage, calculateDamageWithCrit, rollSkillHit, getEffectiveArmor, logHit, logMiss, logPoisoned, logCast, logAoeHit, logAoeMiss, calculateStatBonus, checkEnemyDefenses, hasStatusEffect, applyStatusEffect } from "../combatMath";
 import { ENEMY_STATS } from "../../game/enemyStats";
 import { getUnitRadius, isInRange } from "../../rendering/range";
 import { isPointInRectangle } from "../../game/geometry";
 import { getAliveUnits } from "../../game/unitQuery";
+import { findNearestPassable } from "../../ai/pathfinding";
 import { soundFns } from "../../audio";
 import { createProjectile, getProjectileSpeed, applyDamageToUnit, createAnimatedRing, createLightningPillar, animateExpandingMesh, type DamageContext } from "../damageEffects";
 import { spawnSwingIndicator } from "../../gameLoop/swingAnimations";
+import { createHolyCross } from "../../gameLoop/holyTiles";
 import type { SkillExecutionContext } from "./types";
 import { findAndValidateEnemyTarget, consumeSkill } from "./helpers";
 
 const GLACIAL_WHORL_GEOMETRY = new THREE.IcosahedronGeometry(0.26, 1);
 const MAGIC_MISSILE_GEOMETRY = new THREE.IcosahedronGeometry(0.11, 0);
+const CHAIN_LIGHTNING_CHAIN_COUNT = 3;
+const CHAIN_LIGHTNING_BOUNCE_RANGE = 5.5;
+
+function isPointInCross(
+    px: number,
+    pz: number,
+    centerX: number,
+    centerZ: number,
+    armLength: number,
+    halfWidth: number
+): boolean {
+    const dx = Math.abs(px - centerX);
+    const dz = Math.abs(pz - centerZ);
+    const onHorizontalArm = dx <= armLength && dz <= halfWidth;
+    const onVerticalArm = dz <= armLength && dx <= halfWidth;
+    return onHorizontalArm || onVerticalArm;
+}
 
 // =============================================================================
 // AOE DAMAGE SKILL (e.g. Fireball)
@@ -132,6 +151,7 @@ export function executeTargetedDamageSkill(
     const casterData = UNIT_DATA[casterId];
     const targetData = getUnitStats(targetEnemy);
     const targetId = targetEnemy.id;
+    const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
 
     // --- Phase 4: Delivery-specific effects ---
 
@@ -154,6 +174,9 @@ export function executeTargetedDamageSkill(
             basicProjectile.skillName = skill.name;
             basicProjectile.skillDamage = skill.damageRange;
             basicProjectile.skillDamageType = skill.damageType;
+            if (skill.hitChance !== undefined) {
+                basicProjectile.skillHitChanceOverride = skill.hitChance;
+            }
             if (skill.critChanceOverride !== undefined) {
                 basicProjectile.skillCritChanceOverride = skill.critChanceOverride;
             }
@@ -224,8 +247,7 @@ export function executeTargetedDamageSkill(
     }
 
     // --- Phase 6: Hit resolution ---
-    if (rollHit(casterData.accuracy)) {
-        const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
+    if (rollSkillHit(skill, casterData.accuracy, casterUnit)) {
         const statBonus = calculateStatBonus(casterUnit, skill.damageType);
         const { damage: dmg, isCrit } = calculateDamageWithCrit(
             skill.damageRange![0] + statBonus, skill.damageRange![1] + statBonus,
@@ -302,6 +324,172 @@ export function executeMeleeSkill(
 /** Execute a smite skill (like Thunder) - instant-hit ranged damage with lightning pillar */
 export function executeSmiteSkill(ctx: SkillExecutionContext, casterId: number, skill: Skill, targetX: number, targetZ: number, targetUnitId?: number): boolean {
     return executeTargetedDamageSkill(ctx, casterId, skill, targetX, targetZ, { mode: "smite" }, targetUnitId);
+}
+
+/**
+ * Execute Chain Lightning - heavy initial lightning hit that bounces to up to 3 additional nearby enemies.
+ */
+export function executeChainLightningSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill,
+    targetX: number,
+    targetZ: number,
+    targetUnitId?: number
+): boolean {
+    const { scene, unitsStateRef, unitsRef, setUnits, addLog, hitFlashRef, damageTexts, defeatedThisFrame } = ctx;
+
+    let primaryTarget: Unit | undefined;
+    let primaryGroup: UnitGroup | undefined;
+    if (targetUnitId !== undefined) {
+        primaryTarget = unitsStateRef.current.find(u => u.id === targetUnitId && u.team === "enemy" && u.hp > 0);
+        primaryGroup = unitsRef.current[targetUnitId];
+        if (!primaryTarget || !primaryGroup) return false;
+    } else {
+        const closest = findAndValidateEnemyTarget(ctx, casterId, targetX, targetZ);
+        if (!closest) return false;
+        primaryTarget = closest.unit;
+        primaryGroup = closest.group;
+    }
+
+    const casterG = unitsRef.current[casterId];
+    if (!casterG) return false;
+
+    const primaryRadius = getUnitRadius(primaryTarget);
+    if (!isInRange(casterG.position.x, casterG.position.z, primaryGroup.position.x, primaryGroup.position.z, primaryRadius, skill.range + 0.5)) {
+        addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, COLORS.logNeutral);
+        return false;
+    }
+
+    consumeSkill(ctx, casterId, skill);
+
+    const casterData = UNIT_DATA[casterId];
+    const now = Date.now();
+    const dmgCtx: DamageContext = {
+        scene, damageTexts: damageTexts.current, hitFlashRef: hitFlashRef.current,
+        unitsRef: unitsRef.current, unitsStateRef, setUnits, addLog, now, defeatedThisFrame
+    };
+
+    const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
+    const statBonus = calculateStatBonus(casterUnit, skill.damageType);
+    const struckIds = new Set<number>();
+
+    let sourceX = casterG.position.x;
+    let sourceZ = casterG.position.z;
+    let currentTarget: Unit | undefined = primaryTarget;
+    let currentGroup: UnitGroup | undefined = primaryGroup;
+    let currentDamage = 0;
+
+    let hitCount = 0;
+    let totalDamage = 0;
+    let crits = 0;
+
+    for (let chainIndex = 0; chainIndex <= CHAIN_LIGHTNING_CHAIN_COUNT; chainIndex++) {
+        if (!currentTarget || !currentGroup) break;
+        if (defeatedThisFrame.has(currentTarget.id)) break;
+
+        const targetData = getUnitStats(currentTarget);
+        createLightningPillar(scene, currentGroup.position.x, currentGroup.position.z, {
+            color: "#d9f2ff",
+            duration: chainIndex === 0 ? 300 : 240,
+            radius: chainIndex === 0 ? 0.2 : 0.14,
+            height: chainIndex === 0 ? 7 : 5.5
+        });
+        createAnimatedRing(scene, currentGroup.position.x, currentGroup.position.z, COLORS.dmgLightning, {
+            innerRadius: 0.16,
+            outerRadius: 0.38,
+            maxScale: 1.5,
+            duration: 260
+        });
+        if (chainIndex > 0) {
+            createAnimatedRing(scene, sourceX, sourceZ, COLORS.dmgLightning, {
+                innerRadius: 0.1,
+                outerRadius: 0.25,
+                maxScale: 1.2,
+                duration: 180
+            });
+        }
+
+        if (chainIndex === 0) {
+            if (!rollSkillHit(skill, casterData.accuracy, casterUnit)) {
+                addLog(logMiss(casterData.name, skill.name, targetData.name), COLORS.logNeutral);
+                return true;
+            }
+            const result = calculateDamageWithCrit(
+                skill.damageRange![0] + statBonus,
+                skill.damageRange![1] + statBonus,
+                getEffectiveArmor(currentTarget, targetData.armor),
+                skill.damageType,
+                casterUnit
+            );
+            currentDamage = result.damage;
+            if (result.isCrit) crits++;
+        } else {
+            currentDamage = Math.max(1, Math.floor(currentDamage * 0.5));
+        }
+
+        applyDamageToUnit(dmgCtx, currentTarget.id, currentGroup, currentDamage, targetData.name, {
+            color: COLORS.dmgLightning,
+            attackerName: casterData.name,
+            targetUnit: currentTarget,
+            attackerPosition: { x: sourceX, z: sourceZ },
+            damageType: skill.damageType
+        });
+        struckIds.add(currentTarget.id);
+        hitCount++;
+        totalDamage += currentDamage;
+
+        sourceX = currentGroup.position.x;
+        sourceZ = currentGroup.position.z;
+
+        if (chainIndex >= CHAIN_LIGHTNING_CHAIN_COUNT) break;
+        if (currentDamage <= 1) break;
+
+        let nextTarget: Unit | undefined;
+        let nextGroup: UnitGroup | undefined;
+        let bestDist = Infinity;
+
+        for (const candidate of unitsStateRef.current) {
+            if (candidate.team !== "enemy" || candidate.hp <= 0) continue;
+            if (struckIds.has(candidate.id) || defeatedThisFrame.has(candidate.id)) continue;
+
+            const candidateGroup = unitsRef.current[candidate.id];
+            if (!candidateGroup) continue;
+
+            const candidateRadius = getUnitRadius(candidate);
+            if (!isInRange(
+                sourceX,
+                sourceZ,
+                candidateGroup.position.x,
+                candidateGroup.position.z,
+                candidateRadius,
+                CHAIN_LIGHTNING_BOUNCE_RANGE
+            )) {
+                continue;
+            }
+
+            const dist = Math.hypot(candidateGroup.position.x - sourceX, candidateGroup.position.z - sourceZ);
+            if (dist < bestDist) {
+                bestDist = dist;
+                nextTarget = candidate;
+                nextGroup = candidateGroup;
+            }
+        }
+
+        currentTarget = nextTarget;
+        currentGroup = nextGroup;
+    }
+
+    soundFns.playThunder();
+
+    if (hitCount > 0) {
+        const critText = crits > 0 ? ` (${crits} critical!)` : "";
+        addLog(`${casterData.name}'s ${skill.name} chains through ${hitCount} foe${hitCount === 1 ? "" : "s"} for ${totalDamage} damage${critText}.`, COLORS.dmgLightning);
+    } else {
+        addLog(logCast(casterData.name, skill.name), COLORS.dmgLightning);
+    }
+
+    return true;
 }
 
 /** Execute a ranged single-target damage skill (basic attack for ranged units) */
@@ -390,7 +578,7 @@ export function executeFlurrySkill(
             }
         }
 
-        if (rollHit(casterData.accuracy)) {
+        if (rollSkillHit(skill, casterData.accuracy, casterUnit)) {
             const { damage: dmg, isCrit } = calculateDamageWithCrit(skill.damageRange![0] + statBonus, skill.damageRange![1] + statBonus, getEffectiveArmor(target, targetData.armor), skill.damageType, casterUnit);
 
             applyDamageToUnit(dmgCtx, target.id, targetG, dmg, targetData.name, {
@@ -552,6 +740,398 @@ export function executeMagicWaveSkill(
 }
 
 // =============================================================================
+// HOLY CROSS SKILL (cross-shaped detonation + holy ground)
+// =============================================================================
+
+/**
+ * Execute Holy Cross — instant cross-shaped holy detonation that leaves smiting ground.
+ */
+export function executeHolyCrossSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill,
+    targetX: number,
+    targetZ: number
+): boolean {
+    const { scene, unitsStateRef, unitsRef, setUnits, addLog, hitFlashRef, damageTexts, defeatedThisFrame, holyTilesRef } = ctx;
+    if (!holyTilesRef) {
+        addLog("Holy Cross cannot be cast right now.", COLORS.logWarning);
+        return false;
+    }
+
+    const casterG = unitsRef.current[casterId];
+    if (!casterG) return false;
+
+    consumeSkill(ctx, casterId, skill);
+
+    const casterData = UNIT_DATA[casterId];
+    const now = Date.now();
+    const armLengthTiles = Math.max(1, Math.round(skill.aoeRadius ?? 4));
+    const armWidthTiles = 2;
+    const armLength = armLengthTiles;
+    const crossWidth = armWidthTiles;
+    const halfWidth = crossWidth * 0.5;
+    const crossLength = armLengthTiles * 2 + armWidthTiles;
+    const snappedOriginX = Math.floor(targetX - (armWidthTiles - 1) * 0.5);
+    const snappedOriginZ = Math.floor(targetZ - (armWidthTiles - 1) * 0.5);
+    const crossCenterX = snappedOriginX + armWidthTiles * 0.5;
+    const crossCenterZ = snappedOriginZ + armWidthTiles * 0.5;
+
+    // Find enemies in cross
+    const enemies = getAliveUnits(unitsStateRef.current, "enemy");
+    const enemiesInCross: { unit: Unit; group: UnitGroup }[] = [];
+    for (const enemy of enemies) {
+        if (defeatedThisFrame.has(enemy.id)) continue;
+        const enemyG = unitsRef.current[enemy.id];
+        if (!enemyG) continue;
+        if (isPointInCross(enemyG.position.x, enemyG.position.z, crossCenterX, crossCenterZ, armLength, halfWidth)) {
+            enemiesInCross.push({ unit: enemy, group: enemyG });
+        }
+    }
+
+    // Visual: two crossing rectangles centered on the target
+    const horizontalMesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(crossLength, crossWidth),
+        new THREE.MeshBasicMaterial({ color: COLORS.dmgHoly, transparent: true, opacity: 0.62, side: THREE.DoubleSide })
+    );
+    horizontalMesh.rotation.x = -Math.PI / 2;
+    horizontalMesh.position.set(crossCenterX, 0.2, crossCenterZ);
+    scene.add(horizontalMesh);
+
+    const verticalMesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(crossWidth, crossLength),
+        new THREE.MeshBasicMaterial({ color: COLORS.dmgHoly, transparent: true, opacity: 0.62, side: THREE.DoubleSide })
+    );
+    verticalMesh.rotation.x = -Math.PI / 2;
+    verticalMesh.position.set(crossCenterX, 0.2, crossCenterZ);
+    scene.add(verticalMesh);
+
+    animateExpandingMesh(scene, horizontalMesh, {
+        duration: 320,
+        initialOpacity: 0.62,
+        maxScale: 1.2,
+        baseRadius: 1
+    });
+    animateExpandingMesh(scene, verticalMesh, {
+        duration: 320,
+        initialOpacity: 0.62,
+        maxScale: 1.2,
+        baseRadius: 1
+    });
+
+    createAnimatedRing(scene, casterG.position.x, casterG.position.z, COLORS.dmgHoly, {
+        innerRadius: 0.2,
+        outerRadius: 0.4,
+        maxScale: 1.2,
+        duration: 250
+    });
+    createAnimatedRing(scene, crossCenterX, crossCenterZ, COLORS.dmgHoly, {
+        innerRadius: 0.25,
+        outerRadius: 0.55,
+        maxScale: armLength + 0.5,
+        duration: 340
+    });
+    createLightningPillar(scene, crossCenterX, crossCenterZ, {
+        color: "#fff4cf",
+        duration: 260,
+        radius: 0.14,
+        height: 6
+    });
+    soundFns.playHolyStrike();
+
+    // Deal detonation damage
+    const dmgCtx: DamageContext = {
+        scene, damageTexts: damageTexts.current, hitFlashRef: hitFlashRef.current,
+        unitsRef: unitsRef.current, unitsStateRef, setUnits, addLog, now, defeatedThisFrame
+    };
+
+    let hitCount = 0;
+    let totalDamage = 0;
+    let totalCrits = 0;
+
+    const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
+    const statBonus = calculateStatBonus(casterUnit, skill.damageType);
+
+    for (const { unit: target, group: targetG } of enemiesInCross) {
+        if (defeatedThisFrame.has(target.id)) continue;
+        const targetData = getUnitStats(target);
+
+        if (!rollSkillHit(skill, casterData.accuracy, casterUnit)) continue;
+
+        const { damage: dmg, isCrit } = calculateDamageWithCrit(
+            skill.damageRange![0] + statBonus,
+            skill.damageRange![1] + statBonus,
+            getEffectiveArmor(target, targetData.armor),
+            skill.damageType,
+            casterUnit
+        );
+
+        applyDamageToUnit(dmgCtx, target.id, targetG, dmg, targetData.name, {
+            color: COLORS.dmgHoly,
+            attackerName: casterData.name,
+            targetUnit: target,
+            attackerPosition: { x: casterG.position.x, z: casterG.position.z },
+            damageType: skill.damageType,
+            isCrit
+        });
+
+        hitCount++;
+        totalDamage += dmg;
+        if (isCrit) totalCrits++;
+    }
+
+    // Leave smiting ground in a cross pattern
+    const armLengthCells = armLengthTiles;
+    const armWidthCells = armWidthTiles;
+    const tileDuration = skill.duration ?? 12000;
+    const tileDamage = Math.max(1, (skill.damagePerTick ?? HOLY_DAMAGE_PER_TICK) + statBonus);
+    const tilesTouched = createHolyCross(
+        scene,
+        holyTilesRef.current,
+        crossCenterX,
+        crossCenterZ,
+        casterId,
+        tileDamage,
+        now,
+        armLengthCells,
+        armWidthCells,
+        tileDuration
+    );
+
+    if (hitCount > 0) {
+        const critText = totalCrits > 0 ? ` (${totalCrits} critical!)` : "";
+        addLog(logAoeHit(casterData.name, skill.name, hitCount, totalDamage) + critText, COLORS.dmgHoly);
+    } else if (enemiesInCross.length > 0) {
+        addLog(logAoeMiss(casterData.name, skill.name), COLORS.logNeutral);
+    } else {
+        addLog(logCast(casterData.name, skill.name), COLORS.dmgHoly);
+    }
+
+    if (tilesTouched > 0) {
+        addLog(`${casterData.name}'s ${skill.name} leaves smiting ground.`, COLORS.holyGroundText);
+    }
+
+    return true;
+}
+
+// =============================================================================
+// FORCE PUSH SKILL (wave damage + knockback + stun chance)
+// =============================================================================
+
+/**
+ * Execute Force Push — line-wave physical damage that knocks enemies back and may stun.
+ */
+export function executeForcePushSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill,
+    targetX: number,
+    targetZ: number
+): boolean {
+    const { scene, unitsStateRef, unitsRef, setUnits, addLog, hitFlashRef, damageTexts, defeatedThisFrame } = ctx;
+
+    const casterG = unitsRef.current[casterId];
+    if (!casterG) return false;
+
+    consumeSkill(ctx, casterId, skill);
+
+    const casterData = UNIT_DATA[casterId];
+    const now = Date.now();
+    const facingAngle = Math.atan2(targetZ - casterG.position.z, targetX - casterG.position.x);
+    const length = skill.range;
+    const lineWidth = skill.lineWidth ?? 2;
+    const halfWidth = lineWidth * 0.5;
+    const endX = casterG.position.x + Math.cos(facingAngle) * length;
+    const endZ = casterG.position.z + Math.sin(facingAngle) * length;
+
+    const enemies = getAliveUnits(unitsStateRef.current, "enemy");
+    const enemiesInWave: { unit: Unit; group: UnitGroup }[] = [];
+
+    for (const enemy of enemies) {
+        if (defeatedThisFrame.has(enemy.id)) continue;
+        const enemyG = unitsRef.current[enemy.id];
+        if (!enemyG) continue;
+        if (isPointInRectangle(enemyG.position.x, enemyG.position.z, casterG.position.x, casterG.position.z, facingAngle, length, halfWidth)) {
+            enemiesInWave.push({ unit: enemy, group: enemyG });
+        }
+    }
+
+    // Visual wave
+    const waveGeo = new THREE.PlaneGeometry(length, lineWidth);
+    waveGeo.translate(length * 0.5, 0, 0);
+    const waveMesh = new THREE.Mesh(
+        waveGeo,
+        new THREE.MeshBasicMaterial({ color: "#cfe8dc", transparent: true, opacity: 0.58, side: THREE.DoubleSide })
+    );
+    waveMesh.rotation.x = -Math.PI / 2;
+    waveMesh.rotation.z = -facingAngle;
+    waveMesh.position.set(casterG.position.x, 0.2, casterG.position.z);
+    scene.add(waveMesh);
+
+    animateExpandingMesh(scene, waveMesh, {
+        duration: 280,
+        initialOpacity: 0.58,
+        maxScale: 1.2,
+        baseRadius: 1
+    });
+    createAnimatedRing(scene, casterG.position.x, casterG.position.z, "#cfe8dc", {
+        innerRadius: 0.2,
+        outerRadius: 0.4,
+        maxScale: 1.2,
+        duration: 220
+    });
+    createAnimatedRing(scene, endX, endZ, "#cfe8dc", {
+        innerRadius: 0.2,
+        outerRadius: 0.45,
+        maxScale: 1.6,
+        duration: 260
+    });
+    soundFns.playWarcry();
+
+    const dmgCtx: DamageContext = {
+        scene, damageTexts: damageTexts.current, hitFlashRef: hitFlashRef.current,
+        unitsRef: unitsRef.current, unitsStateRef, setUnits, addLog, now, defeatedThisFrame
+    };
+
+    const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
+    const statBonus = calculateStatBonus(casterUnit, skill.damageType);
+    const knockbackDistance = skill.knockbackDistance ?? 1.8;
+    const stunChance = skill.stunChance ?? 0;
+    const stunDuration = skill.duration ?? 1500;
+
+    const knockbackById = new Map<number, { x: number; z: number }>();
+    const stunnedIds = new Set<number>();
+
+    let hitCount = 0;
+    let totalDamage = 0;
+    let totalCrits = 0;
+    let pushedCount = 0;
+
+    for (const { unit: target, group: targetG } of enemiesInWave) {
+        if (defeatedThisFrame.has(target.id)) continue;
+        const targetData = getUnitStats(target);
+
+        if (target.enemyType) {
+            const enemyStats = ENEMY_STATS[target.enemyType];
+            if (checkEnemyDefenses(
+                enemyStats,
+                target.facing,
+                casterG.position.x,
+                casterG.position.z,
+                targetG.position.x,
+                targetG.position.z
+            ) === "frontShield") {
+                soundFns.playBlock();
+                continue;
+            }
+        }
+
+        if (!rollSkillHit(skill, casterData.accuracy, casterUnit)) continue;
+
+        const { damage: dmg, isCrit } = calculateDamageWithCrit(
+            skill.damageRange![0] + statBonus,
+            skill.damageRange![1] + statBonus,
+            getEffectiveArmor(target, targetData.armor),
+            skill.damageType,
+            casterUnit
+        );
+
+        applyDamageToUnit(dmgCtx, target.id, targetG, dmg, targetData.name, {
+            color: COLORS.damagePlayer,
+            attackerName: casterData.name,
+            targetUnit: target,
+            attackerPosition: { x: casterG.position.x, z: casterG.position.z },
+            damageType: skill.damageType,
+            isCrit,
+            attackerId: casterId,
+            isMeleeHit: true
+        });
+
+        hitCount++;
+        totalDamage += dmg;
+        if (isCrit) totalCrits++;
+
+        if (defeatedThisFrame.has(target.id)) continue;
+
+        const awayX = targetG.position.x - casterG.position.x;
+        const awayZ = targetG.position.z - casterG.position.z;
+        const awayLen = Math.hypot(awayX, awayZ);
+        if (awayLen > 0.001) {
+            const desiredX = targetG.position.x + (awayX / awayLen) * knockbackDistance;
+            const desiredZ = targetG.position.z + (awayZ / awayLen) * knockbackDistance;
+            const safePos = findNearestPassable(
+                desiredX,
+                desiredZ,
+                Math.max(1, Math.ceil(knockbackDistance))
+            );
+            if (safePos) {
+                knockbackById.set(target.id, safePos);
+                targetG.position.x = safePos.x;
+                targetG.position.z = safePos.z;
+                targetG.userData.targetX = safePos.x;
+                targetG.userData.targetZ = safePos.z;
+                pushedCount++;
+            }
+        }
+
+        if (stunChance > 0 && !hasStatusEffect(target, "stunned") && rollChance(stunChance)) {
+            stunnedIds.add(target.id);
+            createAnimatedRing(scene, targetG.position.x, targetG.position.z, COLORS.stunnedText, {
+                innerRadius: 0.14,
+                outerRadius: 0.34,
+                maxScale: 1.1,
+                duration: 240
+            });
+        }
+    }
+
+    if (knockbackById.size > 0 || stunnedIds.size > 0) {
+        setUnits(prev => prev.map(unit => {
+            let next = unit;
+            const knockback = knockbackById.get(unit.id);
+            if (knockback) {
+                next = { ...next, x: knockback.x, z: knockback.z };
+            }
+
+            if (stunnedIds.has(unit.id) && next.hp > 0) {
+                const stunnedEffect: StatusEffect = {
+                    type: "stunned",
+                    duration: stunDuration,
+                    tickInterval: BUFF_TICK_INTERVAL,
+                    timeSinceTick: 0,
+                    lastUpdateTime: now,
+                    damagePerTick: 0,
+                    sourceId: casterId
+                };
+                next = { ...next, statusEffects: applyStatusEffect(next.statusEffects, stunnedEffect) };
+            }
+
+            return next;
+        }));
+    }
+
+    const stunnedCount = stunnedIds.size;
+    if (stunnedCount > 0) {
+        addLog(`${stunnedCount} foe${stunnedCount === 1 ? "" : "s"} ${stunnedCount === 1 ? "is" : "are"} stunned!`, COLORS.stunnedText);
+    }
+
+    if (hitCount > 0) {
+        const critText = totalCrits > 0 ? ` (${totalCrits} critical!)` : "";
+        addLog(logAoeHit(casterData.name, skill.name, hitCount, totalDamage) + critText, COLORS.damagePlayer);
+    } else if (enemiesInWave.length > 0) {
+        addLog(logAoeMiss(casterData.name, skill.name), COLORS.logNeutral);
+    } else {
+        addLog(logCast(casterData.name, skill.name), COLORS.logNeutral);
+    }
+
+    if (pushedCount > 0) {
+        addLog(`${pushedCount} foe${pushedCount === 1 ? "" : "s"} hurled backward.`, "#cfe8dc");
+    }
+
+    return true;
+}
+
+// =============================================================================
 // HOLY STRIKE SKILL (line-shaped AOE)
 // =============================================================================
 
@@ -658,7 +1238,7 @@ export function executeHolyStrikeSkill(
         if (defeatedThisFrame.has(target.id)) continue;
         const targetData = getUnitStats(target);
 
-        if (rollHit(casterData.accuracy)) {
+        if (rollSkillHit(skill, casterData.accuracy, casterUnit)) {
             const { damage: dmg, isCrit } = calculateDamageWithCrit(
                 skill.damageRange![0] + statBonus, skill.damageRange![1] + statBonus,
                 getEffectiveArmor(target, targetData.armor), skill.damageType, casterUnit

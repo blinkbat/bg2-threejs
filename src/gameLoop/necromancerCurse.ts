@@ -219,7 +219,7 @@ function executeCurse(
         if (dist <= curse.radius) {
             const targetData = getUnitStats(target);
 
-            if (rollHit(accuracy)) {
+            if (rollHit(accuracy, caster ?? undefined)) {
                 const { damage: dmg } = calculateDamageWithCrit(
                     curse.damage[0], curse.damage[1],
                     getEffectiveArmor(target, targetData.armor),

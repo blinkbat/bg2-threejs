@@ -41,6 +41,10 @@ export const CHILLED_COOLDOWN_MULT = 2.0;   // 2x cooldowns when chilled
 export const CHILLED_MOVE_MULT = 0.5;       // 0.5x move speed when chilled
 export const CHILLED_TINT_STRENGTH = 0.4;   // Color lerp for chilled visual
 
+// Status Effects - Blind
+export const BLIND_DURATION = 5000;         // 5 seconds
+export const BLIND_ACCURACY_MULT = 0.45;    // 55% hit chance reduction while blinded
+
 // Status Effects - Targeted shot debuffs
 export const WEAKENED_COOLDOWN_MULT = 1.35; // 35% longer attack/skill cooldowns
 export const HAMSTRUNG_MOVE_MULT = 0.6;     // 40% move speed reduction
@@ -92,6 +96,12 @@ export const SANCTUARY_TILE_DURATION = 20000;  // 20 seconds per tile
 export const SANCTUARY_TICK_INTERVAL = 2000;   // Heal every 2 seconds
 export const SANCTUARY_HEAL_PER_TICK = 3;      // 3 HP per tick
 export const SANCTUARY_MAX_TILES = 25;         // Max tiles in world
+
+// Holy Tiles - Smiting ground created by Cleric
+export const HOLY_TILE_DURATION = 12000;       // 12 seconds per tile
+export const HOLY_TICK_INTERVAL = 1000;        // Damage every 1 second
+export const HOLY_DAMAGE_PER_TICK = 3;         // 3 holy damage per tick
+export const HOLY_MAX_TILES = 45;              // Max tiles in world
 
 // Trap Projectile
 export const TRAP_FLIGHT_DURATION = 600;   // ms for arc flight
@@ -247,11 +257,16 @@ export const COLORS = {
     hamstrung: "#355c7d",
     hamstrungText: "#7fb3d5",
     hamstrungBg: "#132230",
+    blind: "#7f8c8d",
+    blindText: "#c7d0d3",
+    blindBg: "#1f2629",
     chilled: "#5dade2",             // Ice blue
     chilledText: "#85c1e9",         // Lighter ice blue
     fireBreath: "#ff4400",       // Orange-red for fire breath cone
     acid: "#9acd32",            // Yellow-green for acid tiles
     acidText: "#b8e060",        // Brighter for damage text
+    holyGround: "#f0e6a8",      // Pale gold for holy ground tiles
+    holyGroundText: "#fff3c9",  // Bright holy text for smiting tiles
     sanctuary: "#ffd700",       // Golden for sanctuary tiles
     sanctuaryText: "#ffe44d",   // Brighter gold for heal text
 

@@ -6,7 +6,7 @@
 export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba" | "acid_slug" | "armored_crab" | "basilisk" | "bat" | "bloated_corpse" | "undead_knight" | "ancient_construct" | "feral_hound" | "corrupt_druid" | "skeleton_warrior" | "baby_kraken" | "kraken_tentacle" | "magma_imp" | "necromancer" | "skeleton_minion" | "chittering_crabling" | "spine_spitter" | "occultist_dreamwalker" | "occultist_firebreather" | "occultist_pygmy";
 
 // Status effect types
-export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed" | "chilled" | "qi_drain" | "energyShield" | "defiance" | "doom" | "invul" | "sleep" | "sun_stance" | "thorns" | "highland_defense" | "divine_lattice" | "weakened" | "hamstrung";
+export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed" | "chilled" | "qi_drain" | "energyShield" | "defiance" | "doom" | "invul" | "sleep" | "sun_stance" | "thorns" | "highland_defense" | "divine_lattice" | "weakened" | "hamstrung" | "blind" | "vanquishing_light";
 
 export interface StatusEffect {
     type: StatusEffectType;
@@ -20,6 +20,10 @@ export interface StatusEffect {
     thornsDamage?: number;    // for thorns: reflected melee damage
     interceptRemaining?: number;   // for highland_defense: remaining redirect pool
     interceptCooldownEnd?: number; // for highland_defense: next time redirect can trigger
+    auraRadius?: number;      // for aura effects: radius in world units
+    blindChance?: number;     // for vanquishing_light: blind proc chance per tick
+    blindDuration?: number;   // for vanquishing_light: blind duration in ms
+    auraDamageType?: "physical" | "fire" | "cold" | "lightning" | "chaos" | "holy"; // for aura effects
 }
 
 // =============================================================================

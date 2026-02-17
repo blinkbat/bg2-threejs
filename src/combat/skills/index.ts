@@ -22,6 +22,9 @@ export {
     executeRangedSkill,
     executeFlurrySkill,
     executeMagicWaveSkill,
+    executeChainLightningSkill,
+    executeForcePushSkill,
+    executeHolyCrossSkill,
     executeHolyStrikeSkill,
     executeGlacialWhorlSkill
 } from "./damage";
@@ -39,7 +42,8 @@ export {
     executeSunStanceSkill,
     executePangolinStanceSkill,
     executeHighlandDefenseSkill,
-    executeDivineLatticeSkill
+    executeDivineLatticeSkill,
+    executeVanquishingLightSkill
 } from "./support";
 
 // Re-export utility skills
@@ -56,8 +60,8 @@ export { executeDodgeSkill, executeBodySwapSkill } from "./movement";
 
 // Import for internal use
 import type { SkillExecutionContext } from "./types";
-import { executeAoeSkill, executeMeleeSkill, executeSmiteSkill, executeRangedSkill, executeFlurrySkill, executeMagicWaveSkill, executeHolyStrikeSkill, executeGlacialWhorlSkill } from "./damage";
-import { executeHealSkill, executeManaTransferSkill, executeBuffSkill, executeAoeBuffSkill, executeEnergyShieldSkill, executeCleanseSkill, executeRestorationSkill, executeReviveSkill, executeSunStanceSkill, executePangolinStanceSkill, executeHighlandDefenseSkill, executeDivineLatticeSkill } from "./support";
+import { executeAoeSkill, executeMeleeSkill, executeSmiteSkill, executeRangedSkill, executeFlurrySkill, executeMagicWaveSkill, executeChainLightningSkill, executeForcePushSkill, executeHolyCrossSkill, executeHolyStrikeSkill, executeGlacialWhorlSkill } from "./damage";
+import { executeHealSkill, executeManaTransferSkill, executeBuffSkill, executeAoeBuffSkill, executeEnergyShieldSkill, executeCleanseSkill, executeRestorationSkill, executeReviveSkill, executeSunStanceSkill, executePangolinStanceSkill, executeHighlandDefenseSkill, executeDivineLatticeSkill, executeVanquishingLightSkill } from "./support";
 import { executeTauntSkill, executeDebuffSkill, executeTrapSkill, executeSanctuarySkill, executeSummonSkill } from "./utility";
 import { executeDodgeSkill, executeBodySwapSkill } from "./movement";
 
@@ -94,6 +98,14 @@ export function executeSkill(
         // Magic Wave - multi-target zig-zag projectiles that fan out
         if (skill.name === "Magic Wave") {
             return executeMagicWaveSkill(ctx, casterId, skill, targetX, targetZ);
+        }
+        // Force Push - line-wave with knockback and stun
+        if (skill.name === "Force Push") {
+            return executeForcePushSkill(ctx, casterId, skill, targetX, targetZ);
+        }
+        // Holy Cross - cross-shaped detonation that leaves holy ground
+        if (skill.name === "Holy Cross") {
+            return executeHolyCrossSkill(ctx, casterId, skill, targetX, targetZ);
         }
         // Holy Strike - line-shaped cone AOE
         if (skill.name === "Holy Strike") {
@@ -139,6 +151,9 @@ export function executeSkill(
         if (skill.name === "Highland Defense") {
             return executeHighlandDefenseSkill(ctx, casterId, skill);
         }
+        if (skill.name === "Vanquishing Light") {
+            return executeVanquishingLightSkill(ctx, casterId, skill);
+        }
         return executeBuffSkill(ctx, casterId, skill);
     } else if (skill.type === "energy_shield" && skill.targetType === "self") {
         return executeEnergyShieldSkill(ctx, casterId, skill);
@@ -162,6 +177,9 @@ export function executeSkill(
     } else if (skill.type === "mana_transfer" && skill.targetType === "ally") {
         return executeManaTransferSkill(ctx, casterId, skill, targetX, targetZ, targetId);
     } else if (skill.type === "smite" && skill.targetType === "enemy") {
+        if (skill.name === "Chain Lightning") {
+            return executeChainLightningSkill(ctx, casterId, skill, targetX, targetZ, targetId);
+        }
         return executeSmiteSkill(ctx, casterId, skill, targetX, targetZ, targetId);
     } else if (skill.type === "aoe_buff" && skill.targetType === "self") {
         return executeAoeBuffSkill(ctx, casterId, skill);

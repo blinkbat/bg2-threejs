@@ -29,6 +29,7 @@ import {
     processAcidTiles,
     createAcidPool,
     processSanctuaryTiles,
+    processHolyTiles,
     processChargeAttacks,
     processFireBreaths,
     processCurses,
@@ -483,6 +484,20 @@ export function useGameLoop({
                     callbacks.setUnits,
                     callbacks.addLog,
                     now
+                );
+
+                // Process holy tiles
+                processHolyTiles(
+                    refs.holyTiles,
+                    currentUnits,
+                    unitGroups,
+                    scene,
+                    refs.damageTexts,
+                    refs.hitFlash,
+                    callbacks.setUnits,
+                    callbacks.addLog,
+                    now,
+                    defeatedThisFrame
                 );
 
                 // Process charge attacks

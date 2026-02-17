@@ -219,7 +219,7 @@ export function processFireBreaths(
                     breath.facingAngle, breath.skill.coneAngle, breath.skill.coneDistance
                 )) continue;
 
-                if (rollHit(casterStats.accuracy)) {
+                if (rollHit(casterStats.accuracy, unit)) {
                     const targetData = getUnitStats(target);
                     const { damage: dmg, isCrit } = calculateDamageWithCrit(
                         breath.skill.damage[0], breath.skill.damage[1],

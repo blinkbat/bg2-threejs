@@ -7,7 +7,7 @@ import type { Skill, StatusEffect, TrapProjectile, Unit, UnitGroup } from "../..
 import { COLORS, BUFF_TICK_INTERVAL, TRAP_FLIGHT_DURATION, TRAP_ARC_HEIGHT, TRAP_MESH_SIZE, SANCTUARY_HEAL_PER_TICK, DEFAULT_TAUNT_CHANCE, DEFAULT_STUN_CHANCE } from "../../core/constants";
 import { UNIT_DATA, ANCESTOR_SUMMON_ID, getEffectiveMaxHp } from "../../game/playerUnits";
 import { getUnitStats } from "../../game/units";
-import { rollChance, rollHit, hasStatusEffect, logTaunt, logTauntMiss, logStunned, logTrapThrown, applyStatusEffect, checkEnemyDefenses } from "../combatMath";
+import { rollChance, rollSkillHit, hasStatusEffect, logTaunt, logTauntMiss, logStunned, logTrapThrown, applyStatusEffect, checkEnemyDefenses } from "../combatMath";
 import { ENEMY_STATS } from "../../game/enemyStats";
 import { getUnitRadius, isInRange } from "../../rendering/range";
 import { getAliveUnits } from "../../game/unitQuery";
@@ -134,6 +134,7 @@ export function executeDebuffSkill(
     });
 
     const casterData = UNIT_DATA[casterId];
+    const casterUnit = ctx.unitsStateRef.current.find(u => u.id === casterId);
     const targetData = getUnitStats(targetEnemy);
     const targetId = targetEnemy.id;
 
@@ -154,7 +155,7 @@ export function executeDebuffSkill(
     }
 
     // Roll to hit
-    if (rollHit(casterData.accuracy)) {
+    if (rollSkillHit(skill, casterData.accuracy, casterUnit)) {
         // Roll for stun chance
         const stunChance = skill.stunChance ?? DEFAULT_STUN_CHANCE;
         if (rollChance(stunChance)) {

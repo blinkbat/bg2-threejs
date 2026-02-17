@@ -202,6 +202,8 @@ const EFFECT_INFO: Record<string, { icon: string; color: string; description: st
     divine_lattice: { icon: "◈", color: COLORS.divineLatticeText, description: "Impervious to damage; cannot act; ignored by enemies" },
     weakened: { icon: "A", color: COLORS.weakenedText, description: "Attack speed reduced" },
     hamstrung: { icon: "L", color: COLORS.hamstrungText, description: "Move speed reduced" },
+    blind: { icon: "B", color: COLORS.blindText, description: "Hit chance heavily reduced" },
+    vanquishing_light: { icon: "*", color: COLORS.dmgHoly, description: "Holy aura damages nearby foes and may blind" },
 };
 
 /** Renders active status effects as inline icons with tooltips */
@@ -451,6 +453,11 @@ function SkillTooltip({ skill, isShielded, cantripUses }: { skill: Skill; isShie
             lines.push({ label: "Redirect", value: "50% damage to barbarian", color: COLORS.highlandDefenseText });
             lines.push({ label: "Trigger", value: "Once every 5s", color: COLORS.highlandDefenseText });
             lines.push({ label: "Range", value: "4.5", color: COLORS.highlandDefenseText });
+        } else if (skill.name === "Vanquishing Light") {
+            lines.push({ label: "Duration", value: `${durationSec}s`, color: COLORS.dmgHoly });
+            lines.push({ label: "Aura radius", value: `${skill.range}`, color: COLORS.dmgHoly });
+            lines.push({ label: "Holy/tick", value: `${skill.damagePerTick ?? 0}`, color: COLORS.dmgHoly });
+            lines.push({ label: "Blind chance", value: `${skill.blindChance ?? 0}%`, color: COLORS.blindText });
         } else if (skill.name === "Cleanse") {
             lines.push({ label: "Duration", value: `${durationSec}s`, color: COLORS.cleansedText });
             lines.push({ label: "Effect", value: "Removes poison", color: COLORS.poisonText });
@@ -487,6 +494,10 @@ function SkillTooltip({ skill, isShielded, cantripUses }: { skill: Skill; isShie
         const dmgInfo = getDamageTypeInfo(skill.damageType);
         lines.push({ label: "Damage", value: `${skill.damageRange![0]}-${skill.damageRange![1]}`, color: dmgInfo.color });
         lines.push({ label: "Type", value: dmgInfo.name, color: dmgInfo.color });
+        if (skill.name === "Chain Lightning") {
+            lines.push({ label: "Chains", value: "3 bounces", color: COLORS.dmgLightning });
+            lines.push({ label: "Bounce dmg", value: "Each bounce deals 50% of prior hit", color: COLORS.dmgLightning });
+        }
     } else if (skill.type === "aoe_buff") {
         // AOE ally buff (e.g., Defiance)
         const durationSec = Math.round(skill.duration! / 1000);
@@ -534,6 +545,26 @@ function SkillTooltip({ skill, isShielded, cantripUses }: { skill: Skill; isShie
     // Poison chance
     if (skill.poisonChance) {
         lines.push({ label: "Poison chance", value: `${skill.poisonChance}%`, color: COLORS.poisonText });
+    }
+    if (skill.knockbackDistance) {
+        lines.push({ label: "Knockback", value: `${skill.knockbackDistance}`, color: "#cfe8dc" });
+    }
+    if (skill.stunChance && skill.type !== "debuff") {
+        lines.push({ label: "Stun chance", value: `${skill.stunChance}%`, color: COLORS.stunnedText });
+    }
+    if (skill.damagePerTick && skill.type !== "sanctuary") {
+        lines.push({ label: "Damage/tick", value: `${skill.damagePerTick}`, color: COLORS.dmgHoly });
+    }
+    if (skill.tickInterval && skill.tickInterval > 0) {
+        const tickSeconds = Math.round((skill.tickInterval / 1000) * 10) / 10;
+        lines.push({ label: "Tick", value: `${tickSeconds}s`, color: COLORS.logNeutral });
+    }
+    if (skill.blindChance) {
+        lines.push({ label: "Blind chance", value: `${skill.blindChance}%`, color: COLORS.blindText });
+    }
+    if (skill.blindDuration) {
+        const blindSeconds = Math.round((skill.blindDuration / 1000) * 10) / 10;
+        lines.push({ label: "Blind duration", value: `${blindSeconds}s`, color: COLORS.blindText });
     }
 
     if (skill.critChanceOverride !== undefined) {

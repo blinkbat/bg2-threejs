@@ -4,11 +4,12 @@
 
 import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, StatusEffect, StatusEffectType } from "../core/types";
-import { COLORS } from "../core/constants";
+import { COLORS, BUFF_TICK_INTERVAL, BLIND_DURATION } from "../core/constants";
 import { getUnitStats } from "../game/units";
 import { getEffectiveMaxHp } from "../game/playerUnits";
-import { handleUnitDefeat, showDamageVisual, spawnDamageNumber } from "../combat/damageEffects";
-import { hasStatusEffect, isUnitAlive } from "../combat/combatMath";
+import { getUnitRadius, isInRange } from "../rendering/range";
+import { applyDamageToUnit, buildDamageContext, handleUnitDefeat, showDamageVisual, spawnDamageNumber } from "../combat/damageEffects";
+import { hasStatusEffect, isUnitAlive, rollChance, applyStatusEffect } from "../combat/combatMath";
 
 // =============================================================================
 // DOT VISUAL CONFIG (for effects that deal damage)
@@ -68,6 +69,17 @@ export function processStatusEffects(
     const mutations = new Map<number, UnitMutation>();
     // Side effects to run after the single setUnits call
     const sideEffects: Array<() => void> = [];
+    const auraDamageCtx = buildDamageContext(
+        scene,
+        damageTexts,
+        hitFlashRef,
+        unitsRef,
+        unitsState,
+        setUnits,
+        addLog,
+        now,
+        defeatedThisFrame
+    );
 
     for (const unit of unitsState) {
         if (!isUnitAlive(unit, defeatedThisFrame)) continue;
@@ -94,7 +106,65 @@ export function processStatusEffects(
             const dealsDamage = effect.damagePerTick > 0;
 
             if (shouldTick) {
-                if (dealsDamage) {
+                if (effect.type === "vanquishing_light") {
+                    tickEffectInPlace(effect, now);
+
+                    const auraRadius = effect.auraRadius ?? 0;
+                    const auraDamage = effect.damagePerTick;
+                    const auraDamageType = effect.auraDamageType ?? "holy";
+                    const blindChance = effect.blindChance ?? 0;
+                    const blindDuration = effect.blindDuration ?? BLIND_DURATION;
+                    const sourceId = unit.id;
+                    const sourceName = data.name;
+
+                    if (auraRadius > 0 && auraDamage > 0) {
+                        for (const target of unitsState) {
+                            if (!isUnitAlive(target, defeatedThisFrame) || target.team !== "enemy") continue;
+                            if (target.id === unit.id) continue;
+
+                            const targetG = unitsRef[target.id];
+                            if (!targetG) continue;
+
+                            const targetRadius = getUnitRadius(target);
+                            if (!isInRange(unitG.position.x, unitG.position.z, targetG.position.x, targetG.position.z, targetRadius, auraRadius)) {
+                                continue;
+                            }
+
+                            const targetData = getUnitStats(target);
+                            const attackerPos = { x: unitG.position.x, z: unitG.position.z };
+                            const targetId = target.id;
+                            const targetName = targetData.name;
+
+                            sideEffects.push(() => {
+                                applyDamageToUnit(auraDamageCtx, targetId, targetG, auraDamage, targetName, {
+                                    color: COLORS.dmgHoly,
+                                    attackerName: sourceName,
+                                    targetUnit: target,
+                                    attackerPosition: attackerPos,
+                                    damageType: auraDamageType
+                                });
+
+                                if (defeatedThisFrame.has(targetId)) return;
+                                if (blindChance <= 0 || !rollChance(blindChance)) return;
+
+                                setUnits(prev => prev.map(u => {
+                                    if (u.id !== targetId || u.hp <= 0 || hasStatusEffect(u, "blind")) return u;
+                                    const blindEffect: StatusEffect = {
+                                        type: "blind",
+                                        duration: blindDuration,
+                                        tickInterval: BUFF_TICK_INTERVAL,
+                                        timeSinceTick: 0,
+                                        lastUpdateTime: now,
+                                        damagePerTick: 0,
+                                        sourceId
+                                    };
+                                    return { ...u, statusEffects: applyStatusEffect(u.statusEffects, blindEffect) };
+                                }));
+                                addLog(`${targetName} is blinded!`, COLORS.blindText);
+                            });
+                        }
+                    }
+                } else if (dealsDamage) {
                     tickEffectInPlace(effect, now);
 
                     if (!hasDivineLattice) {

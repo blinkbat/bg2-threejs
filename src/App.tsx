@@ -660,7 +660,8 @@ function Game({
         addLog,
         defeatedThisFrame: defeatedThisFrame ?? new Set<number>(),
         sanctuaryTilesRef: { current: gameRefs.current.sanctuaryTiles },
-        acidTilesRef: { current: gameRefs.current.acidTiles }
+        acidTilesRef: { current: gameRefs.current.acidTiles },
+        holyTilesRef: { current: gameRefs.current.holyTiles }
     }), [sceneState, gameRefs, addLog]);
 
     // Execute consumable
