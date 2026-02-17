@@ -15,7 +15,8 @@ import {
     DEFAULT_STUN_CHANCE,
     VISHAS_EYES_ORB_COUNT,
     VISHAS_EYES_ORB_DURATION,
-    VISHAS_EYES_ORB_FLY_HEIGHT
+    VISHAS_EYES_ORB_FLY_HEIGHT,
+    getSkillTextColor
 } from "../../core/constants";
 import { UNIT_DATA, ANCESTOR_SUMMON_ID, VISHAS_EYE_SUMMON_IDS, getEffectiveMaxHp } from "../../game/playerUnits";
 import { getUnitStats } from "../../game/units";
@@ -81,8 +82,9 @@ export function executeTauntSkill(
         innerRadius: 0.5, outerRadius: 0.7, maxScale: skill.range
     });
 
+    const skillLogColor = getSkillTextColor(skill.type, skill.damageType);
     if (tauntedCount > 0) {
-        addLog(logTaunt(casterData.name, skill.name, tauntedCount), "#c0392b");
+        addLog(logTaunt(casterData.name, skill.name, tauntedCount), skillLogColor);
     } else {
         addLog(logTauntMiss(casterData.name, skill.name), COLORS.logNeutral);
     }
@@ -147,6 +149,7 @@ export function executeDebuffSkill(
     });
 
     const casterData = UNIT_DATA[casterId];
+    const skillLogColor = getSkillTextColor(skill.type, skill.damageType);
     const casterUnit = ctx.unitsStateRef.current.find(u => u.id === casterId);
     const targetData = getUnitStats(targetEnemy);
     const targetId = targetEnemy.id;
@@ -156,7 +159,7 @@ export function executeDebuffSkill(
         const enemyStats = ENEMY_STATS[targetEnemy.enemyType];
         if (checkEnemyDefenses(enemyStats, targetEnemy.facing, casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z) === "frontShield") {
             soundFns.playBlock();
-            addLog(`${casterData.name}'s ${skill.name} is blocked by ${targetData.name}'s shield!`, "#4488ff");
+            addLog(`${casterData.name}'s ${skill.name} is blocked by ${targetData.name}'s shield!`, COLORS.mana);
             createAnimatedRing(scene, targetG.position.x, targetG.position.z, "#4488ff", {
                 innerRadius: 0.2,
                 outerRadius: 0.4,
@@ -189,8 +192,8 @@ export function executeDebuffSkill(
             ));
 
             soundFns.playHit();
-            addLog(`${casterData.name}'s ${skill.name} hits ${targetData.name}!`, COLORS.damagePlayer);
-            addLog(logStunned(targetData.name), "#9b59b6");
+            addLog(`${casterData.name}'s ${skill.name} hits ${targetData.name}!`, skillLogColor);
+            addLog(logStunned(targetData.name), COLORS.stunnedText);
             createAnimatedRing(scene, targetG.position.x, targetG.position.z, "#9b59b6", {
                 innerRadius: 0.2,
                 outerRadius: 0.45,
@@ -206,7 +209,7 @@ export function executeDebuffSkill(
             }
         } else {
             soundFns.playHit();
-            addLog(`${casterData.name}'s ${skill.name} hits ${targetData.name}, but they resist the stun!`, COLORS.logNeutral);
+            addLog(`${casterData.name}'s ${skill.name} hits ${targetData.name}, but they resist the stun!`, skillLogColor);
             createAnimatedRing(scene, targetG.position.x, targetG.position.z, "#bbbbbb", {
                 innerRadius: 0.12,
                 outerRadius: 0.3,
@@ -216,7 +219,7 @@ export function executeDebuffSkill(
         }
     } else {
         soundFns.playMiss();
-        addLog(`${casterData.name}'s ${skill.name} misses ${targetData.name}!`, COLORS.logNeutral);
+        addLog(`${casterData.name}'s ${skill.name} misses ${targetData.name}!`, skillLogColor);
     }
 
     return true;
@@ -296,7 +299,7 @@ export function executeTrapSkill(
         initialOpacity: 0.45
     });
 
-    addLog(logTrapThrown(casterData.name, skill.name), "#888888");
+    addLog(logTrapThrown(casterData.name, skill.name), getSkillTextColor(skill.type, skill.damageType));
     soundFns.playAttack();  // Throwing sound
 
     return true;
@@ -366,7 +369,7 @@ export function executeSanctuarySkill(
     });
     createAnimatedRing(scene, targetX, targetZ, COLORS.sanctuary, { maxScale: radius });
 
-    addLog(`${casterData.name} casts ${skill.name}, consecrating the ground!`, COLORS.sanctuaryText);
+    addLog(`${casterData.name} casts ${skill.name}, consecrating the ground!`, getSkillTextColor(skill.type, skill.damageType));
     soundFns.playHeal();  // Holy sound
 
     return true;
@@ -504,7 +507,7 @@ function executeVishasEyesSkill(
         existingOrbs.length > 0
             ? `${casterData.name} renews ${skill.name}.`
             : `${casterData.name} summons ${skill.name}.`,
-        COLORS.dmgHoly
+        getSkillTextColor(skill.type, skill.damageType)
     );
 
     return true;
@@ -592,7 +595,7 @@ export function executeSummonSkill(
         existingSummon && existingSummon.hp > 0
             ? `${casterData.name} recalls and resummons an Ancestor.`
             : `${casterData.name} summons an Ancestor.`,
-        "#d7c09a"
+        getSkillTextColor(skill.type, skill.damageType)
     );
     return true;
 }

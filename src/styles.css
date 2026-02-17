@@ -813,6 +813,13 @@ strong, b {
     flex-shrink: 0;
 }
 
+.unit-content.unit-content-skills {
+    max-height: min(50vh, 400px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-gutter: stable;
+}
+
 /* -----------------------------------------------------------------------------
    TOGGLE SWITCH
    ----------------------------------------------------------------------------- */
@@ -1017,7 +1024,7 @@ strong, b {
 }
 
 .skill-heal {
-    color: #22c55e;
+    color: #7fcf99;
 }
 
 .skill-taunt {

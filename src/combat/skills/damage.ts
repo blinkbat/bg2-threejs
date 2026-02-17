@@ -4,7 +4,7 @@
 
 import * as THREE from "three";
 import type { Unit, Skill, UnitGroup, BasicProjectile, MagicMissileProjectile, PiercingProjectile, StatusEffect } from "../../core/types";
-import { COLORS, BUFF_TICK_INTERVAL, SUN_STANCE_BONUS_DAMAGE, MAGIC_MISSILE_START_OFFSET, MAGIC_MISSILE_SPEED, MAGIC_MISSILE_ZIGZAG_PHASE_STEP, GLACIAL_WHORL_SPEED, GLACIAL_WHORL_MAX_DISTANCE, HOLY_DAMAGE_PER_TICK } from "../../core/constants";
+import { COLORS, BUFF_TICK_INTERVAL, SUN_STANCE_BONUS_DAMAGE, MAGIC_MISSILE_START_OFFSET, MAGIC_MISSILE_SPEED, MAGIC_MISSILE_ZIGZAG_PHASE_STEP, GLACIAL_WHORL_SPEED, GLACIAL_WHORL_MAX_DISTANCE, HOLY_DAMAGE_PER_TICK, getDamageTypeColor, getSkillTextColor } from "../../core/constants";
 import { UNIT_DATA, getEffectiveUnitData } from "../../game/playerUnits";
 import { getUnitStats } from "../../game/units";
 import { rollChance, rollDamage, calculateDamageWithCrit, rollSkillHit, getEffectiveArmor, logHit, logMiss, logPoisoned, logCast, logAoeHit, logAoeMiss, calculateStatBonus, checkEnemyDefenses, hasStatusEffect, applyStatusEffect } from "../combatMath";
@@ -81,7 +81,7 @@ export function executeAoeSkill(
         targetPos: { x: targetX, z: targetZ }
     });
 
-    addLog(logCast(UNIT_DATA[casterId].name, skill.name), COLORS.damageNeutral);
+    addLog(logCast(UNIT_DATA[casterId].name, skill.name), getSkillTextColor(skill.type, skill.damageType));
     soundFns.playFireball();
 }
 
@@ -232,7 +232,7 @@ export function executeTargetedDamageSkill(
                 addLog(defense === "frontShield"
                     ? `${casterData.name}'s ${skill.name} is blocked by ${targetData.name}'s shield!`
                     : `${targetData.name} blocks ${casterData.name}'s ${skill.name}!`,
-                    defense === "frontShield" ? "#4488ff" : "#aaaaaa");
+                    defense === "frontShield" ? COLORS.mana : COLORS.logNeutral);
                 return true;
             }
         } else {
@@ -240,7 +240,7 @@ export function executeTargetedDamageSkill(
             const defense = checkEnemyDefenses(enemyStats, targetEnemy.facing, casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z);
             if (defense === "frontShield") {
                 soundFns.playBlock();
-                addLog(`${casterData.name}'s ${skill.name} is blocked by ${targetData.name}'s shield!`, "#4488ff");
+                addLog(`${casterData.name}'s ${skill.name} is blocked by ${targetData.name}'s shield!`, COLORS.mana);
                 return true;
             }
         }
@@ -254,7 +254,7 @@ export function executeTargetedDamageSkill(
             getEffectiveArmor(targetEnemy, targetData.armor), skill.damageType, casterUnit
         );
         const willPoison = delivery.mode === "melee" && skill.poisonChance ? rollChance(skill.poisonChance) : false;
-        const damageColor = skill.damageType === "holy" ? COLORS.dmgHoly : COLORS.damagePlayer;
+        const damageColor = getDamageTypeColor(skill.damageType);
 
         const dmgCtx: DamageContext = {
             scene, damageTexts: damageTexts.current, hitFlashRef: hitFlashRef.current,
@@ -372,6 +372,7 @@ export function executeChainLightningSkill(
 
     const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
     const statBonus = calculateStatBonus(casterUnit, skill.damageType);
+    const skillLogColor = getSkillTextColor(skill.type, skill.damageType);
     const struckIds = new Set<number>();
 
     let sourceX = casterG.position.x;
@@ -484,9 +485,9 @@ export function executeChainLightningSkill(
 
     if (hitCount > 0) {
         const critText = crits > 0 ? ` (${crits} critical!)` : "";
-        addLog(`${casterData.name}'s ${skill.name} chains through ${hitCount} foe${hitCount === 1 ? "" : "s"} for ${totalDamage} damage${critText}.`, COLORS.dmgLightning);
+        addLog(`${casterData.name}'s ${skill.name} chains through ${hitCount} foe${hitCount === 1 ? "" : "s"} for ${totalDamage} damage${critText}.`, skillLogColor);
     } else {
-        addLog(logCast(casterData.name, skill.name), COLORS.dmgLightning);
+        addLog(logCast(casterData.name, skill.name), skillLogColor);
     }
 
     return true;
@@ -556,6 +557,7 @@ export function executeFlurrySkill(
     let totalHits = 0;
     let totalDamage = 0;
     let totalCrits = 0;
+    const skillLogColor = getSkillTextColor(skill.type, skill.damageType);
 
     const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
     const statBonus = calculateStatBonus(casterUnit, skill.damageType);
@@ -606,7 +608,7 @@ export function executeFlurrySkill(
 
     if (totalHits > 0) {
         const critText = totalCrits > 0 ? ` (${totalCrits} critical!)` : "";
-        addLog(`${casterData.name}'s ${skill.name} lands ${totalHits} hits for ${totalDamage} total damage!${critText}`, COLORS.damagePlayer);
+        addLog(`${casterData.name}'s ${skill.name} lands ${totalHits} hits for ${totalDamage} total damage!${critText}`, skillLogColor);
     } else {
         addLog(`${casterData.name}'s ${skill.name} misses all targets!`, COLORS.logNeutral);
     }
@@ -733,7 +735,7 @@ export function executeMagicWaveSkill(
         projectilesRef.current.push(magicMissile);
     }
 
-    addLog(logCast(casterData.name, skill.name), "#9966ff");
+    addLog(logCast(casterData.name, skill.name), getSkillTextColor(skill.type, skill.damageType));
     soundFns.playMagicWave();
 
     return true;
@@ -848,6 +850,7 @@ export function executeHolyCrossSkill(
     let hitCount = 0;
     let totalDamage = 0;
     let totalCrits = 0;
+    const skillLogColor = getSkillTextColor(skill.type, skill.damageType);
 
     const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
     const statBonus = calculateStatBonus(casterUnit, skill.damageType);
@@ -900,11 +903,11 @@ export function executeHolyCrossSkill(
 
     if (hitCount > 0) {
         const critText = totalCrits > 0 ? ` (${totalCrits} critical!)` : "";
-        addLog(logAoeHit(casterData.name, skill.name, hitCount, totalDamage) + critText, COLORS.dmgHoly);
+        addLog(logAoeHit(casterData.name, skill.name, hitCount, totalDamage) + critText, skillLogColor);
     } else if (enemiesInCross.length > 0) {
         addLog(logAoeMiss(casterData.name, skill.name), COLORS.logNeutral);
     } else {
-        addLog(logCast(casterData.name, skill.name), COLORS.dmgHoly);
+        addLog(logCast(casterData.name, skill.name), skillLogColor);
     }
 
     if (tilesTouched > 0) {
@@ -995,6 +998,7 @@ export function executeForcePushSkill(
 
     const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
     const statBonus = calculateStatBonus(casterUnit, skill.damageType);
+    const skillLogColor = getSkillTextColor(skill.type, skill.damageType);
     const knockbackDistance = skill.knockbackDistance ?? 1.8;
     const stunChance = skill.stunChance ?? 0;
     const stunDuration = skill.duration ?? 1500;
@@ -1117,15 +1121,15 @@ export function executeForcePushSkill(
 
     if (hitCount > 0) {
         const critText = totalCrits > 0 ? ` (${totalCrits} critical!)` : "";
-        addLog(logAoeHit(casterData.name, skill.name, hitCount, totalDamage) + critText, COLORS.damagePlayer);
+        addLog(logAoeHit(casterData.name, skill.name, hitCount, totalDamage) + critText, skillLogColor);
     } else if (enemiesInWave.length > 0) {
         addLog(logAoeMiss(casterData.name, skill.name), COLORS.logNeutral);
     } else {
-        addLog(logCast(casterData.name, skill.name), COLORS.logNeutral);
+        addLog(logCast(casterData.name, skill.name), skillLogColor);
     }
 
     if (pushedCount > 0) {
-        addLog(`${pushedCount} foe${pushedCount === 1 ? "" : "s"} hurled backward.`, "#cfe8dc");
+        addLog(`${pushedCount} foe${pushedCount === 1 ? "" : "s"} hurled backward.`, skillLogColor);
     }
 
     return true;
@@ -1230,6 +1234,7 @@ export function executeHolyStrikeSkill(
     let hitCount = 0;
     let totalDamage = 0;
     let totalCrits = 0;
+    const skillLogColor = getSkillTextColor(skill.type, skill.damageType);
 
     const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
     const statBonus = calculateStatBonus(casterUnit, skill.damageType);
@@ -1267,11 +1272,11 @@ export function executeHolyStrikeSkill(
 
     if (hitCount > 0) {
         const critText = totalCrits > 0 ? ` (${totalCrits} critical!)` : "";
-        addLog(logAoeHit(casterData.name, skill.name, hitCount, totalDamage) + critText, COLORS.dmgHoly);
+        addLog(logAoeHit(casterData.name, skill.name, hitCount, totalDamage) + critText, skillLogColor);
     } else if (enemiesInLine.length > 0) {
         addLog(logAoeMiss(casterData.name, skill.name), COLORS.logNeutral);
     } else {
-        addLog(logCast(casterData.name, skill.name), COLORS.dmgHoly);
+        addLog(logCast(casterData.name, skill.name), skillLogColor);
     }
 
     return true;
@@ -1368,7 +1373,7 @@ export function executeGlacialWhorlSkill(
 
     projectilesRef.current.push(piercingProj);
 
-    addLog(logCast(casterData.name, skill.name), COLORS.dmgCold);
+    addLog(logCast(casterData.name, skill.name), getSkillTextColor(skill.type, skill.damageType));
     soundFns.playAttack();
 
     return true;

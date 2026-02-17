@@ -5,7 +5,7 @@ import { isConsumable, isWeapon, isShield, isArmor, isAccessory } from "../core/
 import { UNIT_DATA, getAllSkills, getAvailableSkills, getEffectiveUnitData, getEffectiveMaxHp, getEffectiveMaxMana, getXpForLevel } from "../game/playerUnits";
 import { getHpPercentage, getHpColor, getMana, hasStatusEffect, getEffectiveArmor } from "../combat/combatMath";
 import { getDexterityCritChance } from "../game/statBonuses";
-import { COLORS, getSkillColorClass, getSkillBorderColor } from "../core/constants";
+import { COLORS, getDamageTypeColor, getSkillTextColor, getSkillBorderColor } from "../core/constants";
 import { getCharacterEquipment, getPartyInventory } from "../game/equipmentState";
 import { getItem } from "../game/items";
 import { isOffHandDisabled } from "../game/equipment";
@@ -110,7 +110,7 @@ export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, ski
                 })}
             </div>
 
-            <div className="unit-content">
+            <div className={`unit-content ${tab === "skills" ? "unit-content-skills" : ""}`}>
                 {tab === "status" && <StatusTab unit={unit} effectiveData={effectiveData} onToggleAI={onToggleAI} unitId={unitId} onIncrementStat={onIncrementStat} displayTime={displayTime} />}
                 {tab === "skills" && (
                     <SkillsTab
@@ -396,13 +396,13 @@ function StatusTab({ unit, effectiveData, onToggleAI, unitId, onIncrementStat, d
 /** Get color and display name for a damage type */
 function getDamageTypeInfo(type: DamageType | undefined): { color: string; name: string } {
     switch (type) {
-        case "fire": return { color: COLORS.dmgFire, name: "Fire" };
-        case "cold": return { color: COLORS.dmgCold, name: "Cold" };
-        case "lightning": return { color: COLORS.dmgLightning, name: "Lightning" };
-        case "chaos": return { color: COLORS.dmgChaos, name: "Chaos" };
-        case "holy": return { color: COLORS.dmgHoly, name: "Holy" };
+        case "fire": return { color: getDamageTypeColor("fire"), name: "Fire" };
+        case "cold": return { color: getDamageTypeColor("cold"), name: "Cold" };
+        case "lightning": return { color: getDamageTypeColor("lightning"), name: "Lightning" };
+        case "chaos": return { color: getDamageTypeColor("chaos"), name: "Chaos" };
+        case "holy": return { color: getDamageTypeColor("holy"), name: "Holy" };
         case "physical":
-        default: return { color: COLORS.dmgPhysical, name: "Physical" };
+        default: return { color: getDamageTypeColor("physical"), name: "Physical" };
     }
 }
 
@@ -666,8 +666,8 @@ function SkillCard({
     const noUsesLeft = skill.isCantrip && cantripUses !== undefined && cantripUses <= 0;
     const canCast = !unlearned && hasManaForSkill && !noUsesLeft && unit.hp > 0;
 
-    const skillColorClass = getSkillColorClass(skill.type);
-    const skillBorderColor = getSkillBorderColor(skill.type);
+    const skillTextColor = getSkillTextColor(skill.type, skill.damageType);
+    const skillBorderColor = getSkillBorderColor(skill.type, skill.damageType);
 
     const cardClass = [
         "skill-card",
@@ -704,7 +704,10 @@ function SkillCard({
                     />
                 )}
                 <div className="skill-header">
-                    <span className={`bold ${isQueued ? "skill-queued-color" : skillColorClass}`}>
+                    <span
+                        className={`bold ${isQueued ? "skill-queued-color" : ""}`}
+                        style={!isQueued ? { color: skillTextColor } : undefined}
+                    >
                         {skill.name}
                         {isBasicAttack && isRanged && <span className="skill-tag">RANGED</span>}
                         {isBasicAttack && !isRanged && <span className="skill-tag">MELEE</span>}

@@ -7,7 +7,7 @@ import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import * as THREE from "three";
 
 // Constants & Types
-import { setDebugSpeedMultiplier } from "./core/constants";
+import { getSkillTextColor, setDebugSpeedMultiplier } from "./core/constants";
 import type { Unit, UnitGroup, Skill, CombatLogEntry, SelectionBox, CharacterStats, SummonType } from "./core/types";
 
 // Game Logic
@@ -1043,7 +1043,7 @@ function Game({
         const caster = units.find(u => u.id === casterId);
         if (!caster || caster.hp <= 0 || (caster.mana ?? 0) < skill.manaCost) return;
         if (skill.isCantrip && (caster.cantripUses?.[skill.name] ?? 0) <= 0) {
-            addLog(`${UNIT_DATA[casterId].name}: No uses remaining!`, "#888");
+            addLog(`${UNIT_DATA[casterId].name}: No uses remaining!`, getSkillTextColor(skill.type, skill.damageType));
             return;
         }
         const casterG = sceneState.unitGroups[casterId];
@@ -1055,7 +1055,7 @@ function Game({
             if (paused || Date.now() < cooldownEnd) {
                 actionQueueRef.current[casterId] = { type: "skill", skill, targetX: casterG.position.x, targetZ: casterG.position.z };
                 setQueuedActions(prev => [...prev.filter(q => q.unitId !== casterId), { unitId: casterId, skillName: skill.name }]);
-                addLog(`${UNIT_DATA[casterId].name} queues ${skill.name} (${paused ? "queued" : "on cooldown"})`, "#888");
+                addLog(`${UNIT_DATA[casterId].name} queues ${skill.name} (${paused ? "queued" : "on cooldown"})`, getSkillTextColor(skill.type, skill.damageType));
             } else {
                 executeSkill(skillCtx, casterId, skill, casterG.position.x, casterG.position.z);
             }

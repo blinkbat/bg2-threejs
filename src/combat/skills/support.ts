@@ -11,7 +11,8 @@ import {
     QI_DRAIN_DURATION,
     QI_DRAIN_TICK_INTERVAL,
     POISON_TICK_INTERVAL,
-    HIGHLAND_DEFENSE_INTERCEPT_CAP
+    HIGHLAND_DEFENSE_INTERCEPT_CAP,
+    getSkillTextColor
 } from "../../core/constants";
 import { UNIT_DATA, getEffectiveMaxHp } from "../../game/playerUnits";
 import { getFaithHealingBonus } from "../../game/statBonuses";
@@ -181,7 +182,7 @@ export function executeHealSkill(
     const healTargetId = targetAlly.id;
     updateUnitWith(setUnits, healTargetId, u => ({ hp: Math.min(targetMaxHp, u.hp + healAmount) }));
 
-    addLog(logHeal(UNIT_DATA[casterId].name, skill.name, targetData.name, healAmount), COLORS.hpHigh);
+    addLog(logHeal(UNIT_DATA[casterId].name, skill.name, targetData.name, healAmount), getSkillTextColor(skill.type, skill.damageType));
     soundFns.playHeal();
     tryHealBark(targetData.name, addLog);
 
@@ -298,7 +299,7 @@ export function executeManaTransferSkill(
         return u;
     }));
 
-    addLog(`${casterData.name}'s ${skill.name} restores ${actualMana} mana to ${targetData.name}!`, COLORS.mana);
+    addLog(`${casterData.name}'s ${skill.name} restores ${actualMana} mana to ${targetData.name}!`, getSkillTextColor(skill.type, skill.damageType));
     soundFns.playHeal();
 
     // Visual effect - blue flash on target (mana color)
@@ -349,7 +350,7 @@ interface BuffTemplate {
     ringOpts: { innerRadius?: number; outerRadius?: number; maxScale: number; duration?: number };
     sound: () => void;
     logMessage: (casterName: string, skillName: string, allyCount?: number) => string;
-    logColor: string;
+    logColor?: string;
     extraEffectFields?: Partial<StatusEffect>;
     aoe?: boolean;
 }
@@ -373,6 +374,7 @@ function applyBuffFromTemplate(
 
     const casterData = UNIT_DATA[casterId];
     const now = Date.now();
+    const skillLogColor = template.logColor ?? getSkillTextColor(skill.type, skill.damageType);
 
     const effect: StatusEffect = {
         type: template.effectType,
@@ -413,14 +415,14 @@ function applyBuffFromTemplate(
         }
 
         template.sound();
-        addLog(template.logMessage(casterData.name, skill.name, alliesInRange.length), template.logColor);
+        addLog(template.logMessage(casterData.name, skill.name, alliesInRange.length), skillLogColor);
     } else {
         setUnits(prev => prev.map(u =>
             u.id === casterId ? { ...u, statusEffects: applyStatusEffect(u.statusEffects, effect) } : u
         ));
 
         template.sound();
-        addLog(template.logMessage(casterData.name, skill.name), template.logColor);
+        addLog(template.logMessage(casterData.name, skill.name), skillLogColor);
     }
 
     createAnimatedRing(scene, casterG.position.x, casterG.position.z, template.ringColor, template.ringOpts);
@@ -446,7 +448,7 @@ export function executeBuffSkill(
         ringOpts: { innerRadius: 0.3, outerRadius: 0.5, maxScale: 1.5, duration: 300 },
         sound: soundFns.playHeal,
         logMessage: (name, skillName) => logBuff(name, skillName),
-        logColor: "#f1c40f",
+        logColor: getSkillTextColor(skill.type, skill.damageType),
     });
 }
 
@@ -468,7 +470,7 @@ export function executeAoeBuffSkill(
         ringOpts: { innerRadius: 0.5, outerRadius: skill.range, maxScale: 2, duration: 400 },
         sound: soundFns.playWarcry,
         logMessage: (name, skillName, count) => `${name} rallies ${count} allies with ${skillName}!`,
-        logColor: "#c0392b",
+        logColor: getSkillTextColor(skill.type, skill.damageType),
         aoe: true,
     });
 }
@@ -491,7 +493,7 @@ export function executeEnergyShieldSkill(
         ringOpts: { innerRadius: 0.2, outerRadius: 0.6, maxScale: 1.8, duration: 350 },
         sound: soundFns.playEnergyShield,
         logMessage: (name) => `${name} conjures an Energy Shield!`,
-        logColor: "#9b59b6",
+        logColor: getSkillTextColor(skill.type, skill.damageType),
         extraEffectFields: { shieldAmount: skill.shieldAmount! },
     });
 }
@@ -591,7 +593,7 @@ export function executeDivineLatticeSkill(
         hitFlashRef.current[target.id] = now;
     }
 
-    addLog(`${UNIT_DATA[casterId].name} seals ${targetName} in Divine Lattice.`, COLORS.divineLatticeText);
+    addLog(`${UNIT_DATA[casterId].name} seals ${targetName} in Divine Lattice.`, getSkillTextColor(skill.type, skill.damageType));
     return true;
 }
 
@@ -662,7 +664,7 @@ export function executeCleanseSkill(
 
     // Play sound and log
     soundFns.playHeal();
-    addLog(logCleanse(casterData.name, targetData.name), "#ecf0f1");
+    addLog(logCleanse(casterData.name, targetData.name), getSkillTextColor(skill.type, skill.damageType));
 
     // Visual effect - white/silver glow ring
     createAnimatedRing(scene, targetG.position.x, targetG.position.z, "#ecf0f1", {
@@ -771,7 +773,7 @@ export function executeRestorationSkill(
 
     soundFns.playHeal();
     if (removedEffects.length > 0) {
-        addLog(`${casterData.name}'s ${skill.name} purges ${removedEffects.join(", ")} from ${targetData.name}!`, "#ecf0f1");
+        addLog(`${casterData.name}'s ${skill.name} purges ${removedEffects.join(", ")} from ${targetData.name}!`, getSkillTextColor(skill.type, skill.damageType));
     }
     addLog(`${targetData.name} is restored, healing over time.`, COLORS.logHeal);
 
@@ -847,7 +849,7 @@ export function executeReviveSkill(
     }
 
     soundFns.playHeal();
-    addLog(`${casterData.name}'s ${skill.name} revives ${targetData.name}!`, "#ffd700");
+    addLog(`${casterData.name}'s ${skill.name} revives ${targetData.name}!`, getSkillTextColor(skill.type, skill.damageType));
 
     if (casterG) {
         createAnimatedRing(scene, casterG.position.x, casterG.position.z, "#ffd700", {
@@ -898,7 +900,7 @@ export function executeSunStanceSkill(
         ringOpts: { innerRadius: 0.3, outerRadius: 0.5, maxScale: 1.5, duration: 300 },
         sound: soundFns.playHeal,
         logMessage: (name, skillName) => logBuff(name, skillName),
-        logColor: "#ff6b35",
+        logColor: getSkillTextColor(skill.type, skill.damageType),
     });
 
     if (success && skill.healRange) {
@@ -940,7 +942,7 @@ export function executePangolinStanceSkill(
         ringOpts: { innerRadius: 0.35, outerRadius: 0.55, maxScale: 1.6, duration: 320 },
         sound: soundFns.playHeal,
         logMessage: (name, skillName) => `${name} assumes ${skillName}!`,
-        logColor: COLORS.thornsText,
+        logColor: getSkillTextColor(skill.type, skill.damageType),
         extraEffectFields: { thornsDamage },
     });
 }

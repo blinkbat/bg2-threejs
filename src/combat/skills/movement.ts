@@ -4,7 +4,7 @@
 
 import * as THREE from "three";
 import type { Skill, StatusEffect } from "../../core/types";
-import { BUFF_TICK_INTERVAL, COLORS } from "../../core/constants";
+import { BUFF_TICK_INTERVAL, COLORS, getSkillTextColor } from "../../core/constants";
 import { UNIT_DATA } from "../../game/playerUnits";
 import { getUnitStats } from "../../game/units";
 import { getUnitRadius, isInRange } from "../../rendering/range";
@@ -200,7 +200,7 @@ export function executeDodgeSkill(
     });
 
     soundFns.playMiss(); // Reuse whoosh sound
-    ctx.addLog(`${casterData.name} dodges!`, "#8e44ad");
+    ctx.addLog(`${casterData.name} dodges!`, getSkillTextColor(skill.type, skill.damageType));
 
     return true;
 }
@@ -308,7 +308,7 @@ export function executeBodySwapSkill(
 
     const targetData = getUnitStats(target);
     soundFns.playMagicWave();
-    ctx.addLog(`${UNIT_DATA[casterId].name} swaps places with ${targetData.name}!`, "#8e44ad");
+    ctx.addLog(`${UNIT_DATA[casterId].name} swaps places with ${targetData.name}!`, getSkillTextColor(skill.type, skill.damageType));
 
     return true;
 }

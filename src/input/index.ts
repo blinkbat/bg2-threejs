@@ -13,7 +13,7 @@ import { executeSkill, clearTargetingMode, type SkillExecutionContext } from "..
 import { hasStatusEffect } from "../combat/combatMath";
 import { getFormationPositions } from "../game/formation";
 import { sortUnitsByFormationOrder } from "../game/formationOrder";
-import { MOVE_SPEED } from "../core/constants";
+import { MOVE_SPEED, getSkillTextColor } from "../core/constants";
 import { disposeGeometry } from "../rendering/disposal";
 import { distanceToPoint } from "../game/geometry";
 import { updateUnitsWhere } from "../core/stateUtils";
@@ -607,7 +607,7 @@ export function queueOrExecuteSkill(
             { unitId: casterId, skillName: skill.name }
         ]);
         const reason = state.pausedRef.current ? "queued" : "on cooldown";
-        addLog(`${UNIT_DATA[casterId].name} prepares ${skill.name}... (${reason})`, "#888");
+        addLog(`${UNIT_DATA[casterId].name} prepares ${skill.name}... (${reason})`, getSkillTextColor(skill.type, skill.damageType));
         clearTargetingMode(setters.setTargetingMode, refs.rangeIndicatorRef, refs.aoeIndicatorRef);
         return true;
     }

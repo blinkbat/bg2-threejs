@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import Tippy from "@tippyjs/react";
 import type { Unit, Skill } from "../core/types";
 import { getAllSkills, getAvailableSkills } from "../game/playerUnits";
-import { getSkillColorClass, getSkillBorderColor } from "../core/constants";
+import { getSkillBorderColor, getSkillTextColor } from "../core/constants";
 import type { HotbarAssignments } from "../hooks/hotbarStorage";
 import { useDisplayTime } from "../hooks/useDisplayTime";
 
@@ -47,8 +47,8 @@ function SkillSelector({ unit, slotIndex, currentSkill, onSelect, onClose }: Ski
                     </div>
                     {skills.map(skill => {
                         const isSelected = currentSkill === skill.name;
-                        const skillColorClass = getSkillColorClass(skill.type);
-                        const borderColor = getSkillBorderColor(skill.type);
+                        const skillColor = getSkillTextColor(skill.type, skill.damageType);
+                        const borderColor = getSkillBorderColor(skill.type, skill.damageType);
                         const cantripUses = skill.isCantrip ? (unit.cantripUses?.[skill.name] ?? 0) : undefined;
                         return (
                             <div
@@ -58,7 +58,7 @@ function SkillSelector({ unit, slotIndex, currentSkill, onSelect, onClose }: Ski
                                 onClick={() => { onSelect(skill.name); onClose(); }}
                             >
                                 <div className="skill-selector-info">
-                                    <span className={`skill-selector-name ${skillColorClass}`}>{skill.name}</span>
+                                    <span className="skill-selector-name" style={{ color: skillColor }}>{skill.name}</span>
                                     {skill.isCantrip && (
                                         <span className="skill-selector-tag">CANTRIP</span>
                                     )}
@@ -127,7 +127,7 @@ function HotbarSlot({
         }
     };
 
-    const skillColorClass = getSkillColorClass(skill?.type);
+    const skillColor = skill ? getSkillTextColor(skill.type, skill.damageType) : undefined;
 
     const slotClass = [
         "hotbar-slot",
@@ -143,13 +143,13 @@ function HotbarSlot({
         <Tippy
             content={locked && skill ? (
                 <div className="hotbar-tooltip">
-                    <div className="hotbar-tooltip-name">{skill.name}</div>
+                    <div className="hotbar-tooltip-name" style={{ color: getSkillTextColor(skill.type, skill.damageType) }}>{skill.name}</div>
                     <div className="hotbar-tooltip-hint" style={{ color: "#f59e0b" }}>Not yet learned</div>
                     <div className="hotbar-tooltip-hint">Right-click to change</div>
                 </div>
             ) : skill ? (
                 <div className="hotbar-tooltip">
-                    <div className="hotbar-tooltip-name">{skill.name}</div>
+                    <div className="hotbar-tooltip-name" style={{ color: getSkillTextColor(skill.type, skill.damageType) }}>{skill.name}</div>
                     {skill.manaCost > 0 && <div className="hotbar-tooltip-cost">{skill.manaCost} MP</div>}
                     {isCantrip && usesLeft !== undefined && (
                         <div className="hotbar-tooltip-cost">{usesLeft} uses remaining</div>
@@ -179,7 +179,7 @@ function HotbarSlot({
                 )}
                 <span className="hotbar-slot-key">{slotIndex + 1}</span>
                 {skill && (
-                    <span className={`hotbar-slot-abbrev ${skillColorClass}`}>{abbrev}</span>
+                    <span className="hotbar-slot-abbrev" style={{ color: skillColor }}>{abbrev}</span>
                 )}
                 {onCooldown && cooldownRemaining > 0 && (
                     <span className="hotbar-cooldown-text">{cooldownRemaining}</span>

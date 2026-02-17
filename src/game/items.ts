@@ -67,7 +67,7 @@ export const WEAPONS: Record<string, WeaponItem> = {
         category: "weapon",
         grip: "oneHand",
         damage: [3, 6],
-        damageType: "holy",
+        damageType: "physical",
     },
     battleaxe: {
         id: "battleaxe",

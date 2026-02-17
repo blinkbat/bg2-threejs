@@ -288,6 +288,7 @@ export const COLORS = {
     logSuccess: "#4ade80",
     logNeutral: "#888",
     logHeal: "#7cba7c",
+    skillHeal: "#7fcf99",
 
     // Damage types
     dmgPhysical: "#c0c0c0",    // Silver/grey - physical damage
@@ -299,12 +300,68 @@ export const COLORS = {
 };
 
 // =============================================================================
-// SKILL TYPE UI MAPPING - CSS class and border color by skill type
+// SKILL COLOR HELPERS - shared palette for UI + combat logs
 // =============================================================================
 
-type SkillTypeForColor = "damage" | "heal" | "buff" | "taunt" | "flurry" | "debuff" | "trap" | "sanctuary" | "mana_transfer" | "smite" | "energy_shield" | "aoe_buff" | "restoration" | "revive" | "dodge" | "summon";
+type DamageTypeForColor = "physical" | "fire" | "cold" | "lightning" | "chaos" | "holy";
+export type SkillTypeForColor = "damage" | "heal" | "buff" | "taunt" | "flurry" | "debuff" | "trap" | "sanctuary" | "mana_transfer" | "smite" | "energy_shield" | "aoe_buff" | "restoration" | "revive" | "dodge" | "summon";
 
-/** Map skill type to CSS class for styling */
+/** Canonical color for a raw damage type */
+export function getDamageTypeColor(damageType: DamageTypeForColor | undefined): string {
+    switch (damageType) {
+        case "fire":
+            return COLORS.dmgFire;
+        case "cold":
+            return COLORS.dmgCold;
+        case "lightning":
+            return COLORS.dmgLightning;
+        case "chaos":
+            return COLORS.dmgChaos;
+        case "holy":
+            return COLORS.dmgHoly;
+        case "physical":
+            return COLORS.dmgPhysical;
+        default:
+            return COLORS.dmgPhysical;
+    }
+}
+
+/** Shared accent color for a skill (used in skill UI text and skill-related log lines) */
+export function getSkillTextColor(
+    skillType: SkillTypeForColor | undefined,
+    damageType?: DamageTypeForColor
+): string {
+    switch (skillType) {
+        case "heal":
+        case "sanctuary":
+        case "restoration":
+        case "revive":
+            return COLORS.skillHeal;
+        case "mana_transfer":
+            return COLORS.mana;
+        case "taunt":
+            return COLORS.defianceText;
+        case "dodge":
+        case "energy_shield":
+            return COLORS.dmgChaos;
+        case "buff":
+        case "aoe_buff":
+        case "summon":
+            return damageType && damageType !== "physical"
+                ? getDamageTypeColor(damageType)
+                : COLORS.shieldedText;
+        case "damage":
+        case "smite":
+        case "flurry":
+        case "debuff":
+        case "trap":
+            return getDamageTypeColor(damageType);
+        default:
+            return COLORS.logNeutral;
+    }
+}
+
+/** Map skill type to CSS class for styling (kept for existing class hooks) */
 export function getSkillColorClass(skillType: SkillTypeForColor | undefined): string {
     switch (skillType) {
         case "damage":
@@ -330,28 +387,11 @@ export function getSkillColorClass(skillType: SkillTypeForColor | undefined): st
     }
 }
 
-/** Map skill type to border color for visual indication */
-export function getSkillBorderColor(skillType: SkillTypeForColor | undefined): string {
-    switch (skillType) {
-        case "damage":
-        case "smite":
-            return "#ef4444";  // Red
-        case "heal":
-        case "sanctuary":
-        case "restoration":
-        case "revive":
-            return "#22c55e";  // Green
-        case "taunt":
-        case "debuff":
-        case "trap":
-            return "#c0392b";  // Dark red
-        case "flurry":
-            return "#27ae60";  // Emerald
-        case "dodge":
-            return "#8e44ad";  // Purple (thief)
-        case "summon":
-            return "#f1c40f";  // Yellow (summon/buff)
-        default:
-            return "#f1c40f";  // Yellow (buff)
-    }
+/** Border color uses the same canonical skill accent color */
+export function getSkillBorderColor(
+    skillType: SkillTypeForColor | undefined,
+    damageType?: DamageTypeForColor
+): string {
+    const color = getSkillTextColor(skillType, damageType);
+    return color === COLORS.logNeutral ? "#555" : color;
 }
