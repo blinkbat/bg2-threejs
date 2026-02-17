@@ -177,6 +177,7 @@ function getEnemySpriteConfigs(): Record<string, SpriteConfig> {
         kobold: { texture: koboldWarriorTexture, width: 128, height: 128, spriteHeight: 1.61, color: 0xffc8a3, brightness: 0.1, shadowSize: 0.4 },
         kraken_tentacle: { texture: krakenTentacleTexture, width: 80, height: 128, spriteHeight: 2.0, color: 0xd8c0e8 },
         baby_kraken: { texture: krakenBodyTexture, width: 128, height: 128, spriteHeight: 2.5, color: 0xd8c0e8 },
+        wandering_shade: { texture: krakenBodyTexture, width: 128, height: 128, spriteHeight: 2.05, color: 0xc8d4ff, brightness: 0.2, opacity: 0.68, shadowSize: 0.44 },
     };
 }
 

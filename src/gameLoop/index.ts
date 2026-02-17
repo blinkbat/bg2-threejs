@@ -35,8 +35,8 @@ import { executeEnemySwipe, executeEnemyHeal } from "./enemySkills";
 import { executeEnemyBasicAttack } from "./enemyAttack";
 import { isUnitCharging } from "./constructCharge";
 import { isUnitBreathing, startFireBreath } from "./fireBreath";
-import { tryStartChargeAttack, tryLeapToTarget, isUnitLeaping, tryVinesSkill, tryAcidSlugPatrol, processAcidTrailAndAura, runPreAttackBehaviors } from "./enemyBehaviors";
-export { clearLeaps, updateLeaps, isUnitLeaping, updateTentacles, clearTentacles, trySubmergeKraken, isKrakenSubmerged, isKrakenFullySubmerged, updateSubmergedKrakens, processGlares, clearGlares } from "./enemyBehaviors";
+import { tryStartChargeAttack, tryLeapToTarget, isUnitLeaping, tryVinesSkill, tryAcidSlugPatrol, processAcidTrailAndAura, runPreAttackBehaviors, isShadePhased } from "./enemyBehaviors";
+export { clearLeaps, updateLeaps, isUnitLeaping, updateTentacles, clearTentacles, trySubmergeKraken, isKrakenSubmerged, isKrakenFullySubmerged, updateSubmergedKrakens, processGlares, clearGlares, processShadePhases, clearShadePhases, isShadePhased } from "./enemyBehaviors";
 export { spawnLootBag, removeLootBag, clearAllLootBags, resetLootBagIds } from "./lootBags";
 
 // Re-export unit ID utilities for backwards compatibility
@@ -121,6 +121,13 @@ export function updateUnitAI(
         return;
     }
 
+    // Wandering Shade phase state: invisible/untargetable and not taking actions.
+    if (!isPlayer && isShadePhased(unit.id)) {
+        g.userData.attackTarget = null;
+        pathsRef[unit.id] = [];
+        return;
+    }
+
     // Check if enemy is actively kiting - skip targeting and continue retreat
     if (!isPlayer && isEnemyKiting(unit.id, now)) {
         // Check if kite path is complete
@@ -197,6 +204,13 @@ export function updateUnitAI(
             scene, setUnits, skillCooldowns, setSkillCooldowns, addLog, now,
             damageTexts, hitFlashRef, unitsStateRef: { current: unitsState } as React.RefObject<Unit[]>, defeatedThisFrame
         });
+
+        // Shade might have just phase-shifted during pre-attack behavior dispatch.
+        if (isShadePhased(unit.id)) {
+            g.userData.attackTarget = null;
+            pathsRef[unit.id] = [];
+            return;
+        }
     }
 
     let targetX = g.position.x, targetZ = g.position.z;

@@ -17,6 +17,7 @@ import { MOVE_SPEED, getSkillTextColor } from "../core/constants";
 import { disposeGeometry } from "../rendering/disposal";
 import { distanceToPoint } from "../game/geometry";
 import { updateUnitsWhere } from "../core/stateUtils";
+import { isEnemyUntargetable } from "../gameLoop/enemyBehaviors";
 
 // =============================================================================
 // TYPES
@@ -326,6 +327,10 @@ function isValidLockedTarget(
     casterId: number,
     target: Unit
 ): boolean {
+    if (target.team === "enemy" && target.hp > 0 && isEnemyUntargetable(target.id)) {
+        return false;
+    }
+
     if (skill.type === "revive") {
         return target.team === "player" && target.hp <= 0;
     }
@@ -554,6 +559,10 @@ export function validateSkillTarget(
     casterId: number,
     casterName: string
 ): string | null {
+    if (targetUnit.team === "enemy" && targetUnit.hp > 0 && isEnemyUntargetable(targetUnit.id)) {
+        return `${casterName}: Target cannot be targeted right now!`;
+    }
+
     // Check target type (ally vs enemy)
     if (skill.targetType === "ally" && targetUnit.team !== "player") {
         return `${casterName}: Must target an ally!`;

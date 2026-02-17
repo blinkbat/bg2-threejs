@@ -160,10 +160,27 @@ export function computeAreaData(area: AreaData): ComputedAreaData {
     // Include manual candle placements only (no auto-generation)
     const candlePositions: CandlePosition[] = [...(area.candles ?? [])];
 
-    // Merge obstacles BEFORE blocking trees/lava (so they don't become walls)
-    // Note: Secret door areas remain blocked, so walls WILL render there
-    // The walls get removed when the secret door is opened
+    // Merge obstacles BEFORE dynamic blockers (trees, secret doors, etc.)
     const mergedObstacles = mergeObstacles(blocked, area.gridWidth, area.gridHeight);
+
+    // Secret doors: keep cells blocked for movement/LOS until opened.
+    // They render with dedicated secret-door meshes, so we do NOT include them in mergedObstacles.
+    area.secretDoors?.forEach(secretDoor => {
+        const wallX = Math.floor(secretDoor.blockingWall.x);
+        const wallZ = Math.floor(secretDoor.blockingWall.z);
+        const wallW = Math.max(1, Math.floor(secretDoor.blockingWall.w));
+        const wallH = Math.max(1, Math.floor(secretDoor.blockingWall.h));
+
+        for (let dz = 0; dz < wallH; dz++) {
+            for (let dx = 0; dx < wallW; dx++) {
+                const x = wallX + dx;
+                const z = wallZ + dz;
+                if (x >= 0 && x < area.gridWidth && z >= 0 && z < area.gridHeight) {
+                    blocked[x][z] = true;
+                }
+            }
+        }
+    });
 
     // Track terrain hazard zones for pathfinding (NOT in main blocked grid - doesn't block LOS)
     const terrainBlocked = new Set<string>();

@@ -9,7 +9,7 @@ import { getCurrentArea, getCurrentAreaId } from "../game/areas";
 import type { Unit, FogTexture, Projectile, SwingAnimation, DamageText, UnitGroup, SanctuaryTile, HolyTile } from "../core/types";
 import type { AcidTile, LootBag } from "../core/types";
 import { createScene, updateChestStates, updateCamera, type DoorMesh, type SecretDoorMesh, type ChestMeshData } from "../rendering/scene";
-import { resetFogCache, resetSpriteFacing, clearChargeAttacks, clearFireBreaths, clearCurses, clearGlares, clearLeaps, clearTentacles, resetLootBagIds } from "../gameLoop";
+import { resetFogCache, resetSpriteFacing, clearChargeAttacks, clearFireBreaths, clearCurses, clearGlares, clearLeaps, clearTentacles, clearShadePhases, resetLootBagIds } from "../gameLoop";
 import { resetAllBroodMotherScreeches, resetAllEnemyKiteCooldowns, resetAllEnemyKitingState } from "../game/enemyState";
 import { resetAllMovementState } from "../ai/movement";
 import { resetBarks } from "../combat/barks";
@@ -283,6 +283,7 @@ export function useThreeScene({
         clearGlares();
         clearLeaps();
         clearTentacles();
+        clearShadePhases();
         gameRefs.lootBags = [];
         resetLootBagIds();
         gameRefs.damageTexts = [];

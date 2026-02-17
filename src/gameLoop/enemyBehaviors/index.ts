@@ -3,7 +3,7 @@
 // =============================================================================
 
 // Types
-export type { BehaviorBaseContext, SpawnContext, ChargeContext, LeapContext, VinesContext, TentacleContext, RaiseContext, CurseContext, GlareContext, SleepContext, DreamEaterContext } from "./types";
+export type { BehaviorBaseContext, SpawnContext, ChargeContext, LeapContext, VinesContext, TentacleContext, RaiseContext, CurseContext, GlareContext, SleepContext, DreamEaterContext, PhaseShiftContext } from "./types";
 export type { PreAttackContext } from "./preAttack";
 
 // Pre-attack dispatch (fire-and-forget behaviors)
@@ -57,3 +57,9 @@ export {
     updateSubmergedKrakens,
     clearSubmergedKrakens
 } from "./submerge";
+
+// Wandering Shade Phase Shift
+export { tryShadePhase, isShadePhased, processShadePhases, clearShadePhases } from "./shadePhase";
+
+// Shared untargetable/hidden state helpers
+export { isEnemyUntargetable, isEnemyHiddenFromView } from "./untargetable";

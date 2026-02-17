@@ -85,6 +85,42 @@ interface EditorContextMenuState {
     decoration: { value: DecorationDef; index: number } | null;
 }
 
+type DragEntityBrush = "D" | "S";
+
+function getSecretDoorCenterTile(
+    blockX: number,
+    blockZ: number,
+    blockW: number,
+    blockH: number
+): { x: number; z: number } {
+    return {
+        x: blockX + Math.floor((blockW - 1) / 2),
+        z: blockZ + Math.floor((blockH - 1) / 2),
+    };
+}
+
+function normalizeSecretDoorEntity(entity: EntityDef): EntityDef {
+    if (entity.type !== "secret_door") {
+        return entity;
+    }
+
+    const blockX = Math.floor(entity.secretBlockX ?? entity.x);
+    const blockZ = Math.floor(entity.secretBlockZ ?? entity.z);
+    const blockW = Math.max(1, Math.floor(entity.secretBlockW ?? 1));
+    const blockH = Math.max(1, Math.floor(entity.secretBlockH ?? 1));
+    const center = getSecretDoorCenterTile(blockX, blockZ, blockW, blockH);
+
+    return {
+        ...entity,
+        x: center.x,
+        z: center.z,
+        secretBlockX: blockX,
+        secretBlockZ: blockZ,
+        secretBlockW: blockW,
+        secretBlockH: blockH,
+    };
+}
+
 function loadLastSavedAreaId(): string | null {
     try {
         const raw = localStorage.getItem(LAST_SAVED_AREA_ID_STORAGE_KEY);
@@ -167,8 +203,8 @@ export function MapEditor() {
     const [isometric, setIsometric] = useState(false);
     const ISO_ZOOM = 0.5;  // Fixed zoom for isometric view
 
-    // Door drag state for click-drag to create multi-tile doors
-    const [doorDrag, setDoorDrag] = useState<{ startX: number; startZ: number; endX: number; endZ: number } | null>(null);
+    // Door/secret-door drag state for click-drag placement
+    const [doorDrag, setDoorDrag] = useState<{ brush: DragEntityBrush; startX: number; startZ: number; endX: number; endZ: number } | null>(null);
 
     // Entity editor popup
     const [editingEntity, setEditingEntity] = useState<{ entity: EntityDef; screenX: number; screenY: number } | null>(null);
@@ -359,14 +395,16 @@ export function MapEditor() {
             const minZ = Math.min(doorDrag.startZ, doorDrag.endZ);
             const maxZ = Math.max(doorDrag.startZ, doorDrag.endZ);
 
-            ctx.fillStyle = "rgba(136, 68, 255, 0.4)";
+            const previewFill = doorDrag.brush === "S" ? "rgba(255, 171, 64, 0.35)" : "rgba(136, 68, 255, 0.4)";
+            const previewStroke = doorDrag.brush === "S" ? "#ffab40" : "#84f";
+            ctx.fillStyle = previewFill;
             ctx.fillRect(
                 minX * CELL_SIZE,
                 minZ * CELL_SIZE,
                 (maxX - minX + 1) * CELL_SIZE,
                 (maxZ - minZ + 1) * CELL_SIZE
             );
-            ctx.strokeStyle = "#84f";
+            ctx.strokeStyle = previewStroke;
             ctx.lineWidth = 2;
             ctx.strokeRect(
                 minX * CELL_SIZE,
@@ -625,10 +663,11 @@ export function MapEditor() {
                         lightDecay: DEFAULT_AREA_LIGHT_DECAY,
                     }]);
                 } else if (activeBrush === "S") {
-                    setEntities(prev => [...prev, {
+                    const secretDoor = normalizeSecretDoorEntity({
                         id: entityId, x, z, type: "secret_door",
                         secretBlockX: x, secretBlockZ: z, secretBlockW: 1, secretBlockH: 1
-                    }]);
+                    });
+                    setEntities(prev => [...prev, secretDoor]);
                 } else if (activeBrush === "E") {
                     setEntities(prev => [...prev, {
                         id: entityId, x, z, type: "enemy", enemyType: "skeleton_warrior"
@@ -657,9 +696,10 @@ export function MapEditor() {
         // Push history before starting to paint
         pushHistory();
 
-        // For door brush, use drag-to-size
-        if (activeLayer === "entities" && activeBrush === "D" && activeTool === "paint") {
-            setDoorDrag({ startX: x, startZ: z, endX: x, endZ: z });
+        // For door and secret-door brushes, use drag-to-size
+        if (activeLayer === "entities" && activeTool === "paint" && (activeBrush === "D" || activeBrush === "S")) {
+            const brush = activeBrush as DragEntityBrush;
+            setDoorDrag({ brush, startX: x, startZ: z, endX: x, endZ: z });
         } else {
             setIsPainting(true);
             paintCell(x, z);
@@ -696,31 +736,38 @@ export function MapEditor() {
                 const w = maxX - minX + 1;
                 const h = maxZ - minZ + 1;
 
-                // Paint door cells on the grid
-                const newLayer = entitiesLayer.map(row => [...row]);
-                for (let dz = minZ; dz <= maxZ; dz++) {
-                    for (let dx = minX; dx <= maxX; dx++) {
-                        if (dx >= 0 && dx < metadata.width && dz >= 0 && dz < metadata.height) {
-                            newLayer[dz][dx] = "D";
-                        }
-                    }
-                }
-                setEntitiesLayer(newLayer);
+                const draggedFootprint = { x: minX, z: minZ, w, h };
 
-                // Remove any existing entities in this area
-                setEntities(prev => prev.filter(e => {
-                    const ex = Math.floor(e.x);
-                    const ez = Math.floor(e.z);
-                    return !(ex >= minX && ex <= maxX && ez >= minZ && ez <= maxZ);
-                }));
+                // Remove existing entities whose footprints overlap with dragged footprint.
+                const filteredEntities = entities.filter(entity =>
+                    !footprintsOverlap(getEntityFootprint(entity), draggedFootprint)
+                );
 
-                // Create single door entity with w/h
                 const entityId = `e${Date.now()}-${minX}-${minZ}`;
-                setEntities(prev => [...prev, {
-                    id: entityId, x: minX, z: minZ, type: "transition",
-                    transitionTarget: getAvailableAreaIds()[0], transitionSpawnX: 5, transitionSpawnZ: 5,
-                    transitionDirection: "north", transitionW: w, transitionH: h
-                }]);
+                if (doorDrag.brush === "D") {
+                    const transitionDoor: EntityDef = {
+                        id: entityId, x: minX, z: minZ, type: "transition",
+                        transitionTarget: getAvailableAreaIds()[0], transitionSpawnX: 5, transitionSpawnZ: 5,
+                        transitionDirection: "north", transitionW: w, transitionH: h
+                    };
+                    const nextEntities: EntityDef[] = [...filteredEntities, transitionDoor];
+                    setEntities(nextEntities);
+                    setEntitiesLayer(buildEntitiesLayerFromDefs(nextEntities));
+                } else {
+                    const secretDoor = normalizeSecretDoorEntity({
+                        id: entityId,
+                        x: minX,
+                        z: minZ,
+                        type: "secret_door",
+                        secretBlockX: minX,
+                        secretBlockZ: minZ,
+                        secretBlockW: w,
+                        secretBlockH: h
+                    });
+                    const nextEntities: EntityDef[] = [...filteredEntities, secretDoor];
+                    setEntities(nextEntities);
+                    setEntitiesLayer(buildEntitiesLayerFromDefs(nextEntities));
+                }
             }
             setDoorDrag(null);
             return;
@@ -789,14 +836,14 @@ export function MapEditor() {
             } else if (source.type === "transition") {
                 pasted = { ...source, id: nextId, x, z };
             } else if (source.type === "secret_door") {
-                pasted = {
+                pasted = normalizeSecretDoorEntity({
                     ...source,
                     id: nextId,
                     x,
                     z,
                     secretBlockX: x,
                     secretBlockZ: z,
-                };
+                });
             } else {
                 pasted = { ...source, id: nextId, x, z };
             }
@@ -938,7 +985,10 @@ export function MapEditor() {
 
     const updateEntity = (updated: EntityDef) => {
         pushHistory();
-        setEntities(prev => prev.map(e => e.id === updated.id ? updated : e));
+        const normalized = normalizeSecretDoorEntity(updated);
+        const nextEntities = entities.map(entity => entity.id === normalized.id ? normalized : entity);
+        setEntities(nextEntities);
+        setEntitiesLayer(buildEntitiesLayerFromDefs(nextEntities));
         setEditingEntity(null);
     };
 
@@ -1057,11 +1107,12 @@ export function MapEditor() {
             });
         });
         (area.secretDoors ?? []).forEach(s => {
-            entityDefs.push({
+            const secretDoor = normalizeSecretDoorEntity({
                 id: `e${entityId++}`, x: s.x, z: s.z, type: "secret_door",
                 secretBlockX: s.blockingWall.x, secretBlockZ: s.blockingWall.z,
                 secretBlockW: s.blockingWall.w, secretBlockH: s.blockingWall.h
             });
+            entityDefs.push(secretDoor);
         });
         setEntities(entityDefs);
     };
@@ -1265,9 +1316,16 @@ export function MapEditor() {
         // Secret doors come from state
         const secretDoorList = entities
             .filter(e => e.type === "secret_door")
+            .map(e => normalizeSecretDoorEntity(e))
             .map(e => ({
-                x: e.x, z: e.z,
-                blockingWall: { x: e.secretBlockX ?? 0, z: e.secretBlockZ ?? 0, w: e.secretBlockW ?? 1, h: e.secretBlockH ?? 1 }
+                x: e.x,
+                z: e.z,
+                blockingWall: {
+                    x: e.secretBlockX ?? 0,
+                    z: e.secretBlockZ ?? 0,
+                    w: e.secretBlockW ?? 1,
+                    h: e.secretBlockH ?? 1
+                }
             }));
 
         return {
@@ -1938,9 +1996,17 @@ function computeEntitiesFromArea(area: AreaData, width: number, height: number):
     // Secret doors
     if (area.secretDoors) {
         for (const sd of area.secretDoors) {
-            const x = Math.floor(sd.x);
-            const z = Math.floor(sd.z);
-            if (x >= 0 && x < width && z >= 0 && z < height) grid[z][x] = "S";
+            const startX = Math.floor(sd.blockingWall.x);
+            const startZ = Math.floor(sd.blockingWall.z);
+            const wallW = Math.max(1, Math.floor(sd.blockingWall.w));
+            const wallH = Math.max(1, Math.floor(sd.blockingWall.h));
+            for (let dz = 0; dz < wallH; dz++) {
+                for (let dx = 0; dx < wallW; dx++) {
+                    const x = startX + dx;
+                    const z = startZ + dz;
+                    if (x >= 0 && x < width && z >= 0 && z < height) grid[z][x] = "S";
+                }
+            }
         }
     }
 

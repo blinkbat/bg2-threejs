@@ -17,6 +17,7 @@ import { isKey } from "../core/types";
 import { soundFns } from "../audio";
 import { clearPathCache } from "../ai/pathfinding";
 import { removeLootBag } from "../gameLoop";
+import { isEnemyUntargetable } from "../gameLoop/enemyBehaviors";
 import {
     togglePause,
     getUnitsInBox,
@@ -539,7 +540,13 @@ export function useInputHandlers({
                     if (o.userData.unitId !== undefined) {
                         const id = o.userData.unitId as number;
                         const clickedUnit = stateRefs.unitsStateRef.current.find(u => u.id === id);
-                        if (clickedUnit && clickedUnit.team === "enemy" && clickedUnit.hp > 0 && stateRefs.selectedRef.current.length > 0) {
+                        if (
+                            clickedUnit
+                            && clickedUnit.team === "enemy"
+                            && clickedUnit.hp > 0
+                            && !isEnemyUntargetable(clickedUnit.id)
+                            && stateRefs.selectedRef.current.length > 0
+                        ) {
                             handleEnemyClick(clickedUnit, unitGroups, targetRings, gameRefs, stateRefs, mutableRefs, setters, callbacks, skillCtx);
                             return;
                         } else if (clickedUnit && clickedUnit.team === "player") {
@@ -846,11 +853,15 @@ function handleSecretDoorClick(
     }
 
     const doorRange = 2.5;
+    const crackTileX = secretDoor.blockingWall.x + Math.floor((secretDoor.blockingWall.w - 1) / 2);
+    const crackTileZ = secretDoor.blockingWall.z + Math.floor((secretDoor.blockingWall.h - 1) / 2);
+    const crackCenterX = crackTileX + 0.5;
+    const crackCenterZ = crackTileZ + 0.5;
     const alivePlayers = stateRefs.unitsStateRef.current.filter(u => u.team === "player" && u.hp > 0);
     const playerNearby = alivePlayers.some(player => {
         const playerG = unitGroups[player.id];
         if (!playerG) return false;
-        return Math.sqrt((playerG.position.x - (secretDoor.x + 0.5)) ** 2 + (playerG.position.z - (secretDoor.z + 0.5)) ** 2) <= doorRange;
+        return Math.sqrt((playerG.position.x - crackCenterX) ** 2 + (playerG.position.z - crackCenterZ) ** 2) <= doorRange;
     });
 
     if (!playerNearby) {
@@ -863,10 +874,13 @@ function handleSecretDoorClick(
     setters.setOpenedSecretDoors(prev => new Set([...prev, secretDoorKey]));
     scene.remove(meshGroup);
 
-    const { blockingWall } = secretDoor;
+    const wallX = Math.floor(secretDoor.blockingWall.x);
+    const wallZ = Math.floor(secretDoor.blockingWall.z);
+    const wallW = Math.max(1, Math.floor(secretDoor.blockingWall.w));
+    const wallH = Math.max(1, Math.floor(secretDoor.blockingWall.h));
     const blockedGrid = getBlocked();
-    for (let x = blockingWall.x; x < blockingWall.x + blockingWall.w; x++) {
-        for (let z = blockingWall.z; z < blockingWall.z + blockingWall.h; z++) {
+    for (let x = wallX; x < wallX + wallW; x++) {
+        for (let z = wallZ; z < wallZ + wallH; z++) {
             if (x >= 0 && x < blockedGrid.length && z >= 0 && z < blockedGrid[0].length) {
                 blockedGrid[x][z] = false;
             }
@@ -888,6 +902,11 @@ function handleEnemyClick(
     callbacks: InputCallbacks,
     skillCtx: SkillExecutionContext
 ): void {
+    if (isEnemyUntargetable(clickedUnit.id)) {
+        callbacks.addLog("Target cannot be targeted right now.", "#888");
+        return;
+    }
+
     const targetId = clickedUnit.id;
     const targetG = unitGroups[targetId];
     const targetRing = targetRings[targetId];

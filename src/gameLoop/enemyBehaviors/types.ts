@@ -3,7 +3,23 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitGroup, EnemyStats, EnemySpawnSkill, EnemyChargeAttack, EnemyLeapSkill, EnemyVinesSkill, EnemyTentacleSkill, EnemyRaiseSkill, EnemyCurseSkill, EnemyGlareSkill, EnemySleepSkill, EnemyDreamEaterSkill, DamageText } from "../../core/types";
+import type {
+    Unit,
+    UnitGroup,
+    EnemyStats,
+    EnemySpawnSkill,
+    EnemyChargeAttack,
+    EnemyLeapSkill,
+    EnemyVinesSkill,
+    EnemyTentacleSkill,
+    EnemyRaiseSkill,
+    EnemyCurseSkill,
+    EnemyGlareSkill,
+    EnemySleepSkill,
+    EnemyDreamEaterSkill,
+    EnemyPhaseShiftSkill,
+    DamageText
+} from "../../core/types";
 
 // =============================================================================
 // BASE CONTEXT — shared fields across all enemy behaviors
@@ -107,4 +123,11 @@ export interface DreamEaterContext extends BehaviorBaseContext {
     hitFlashRef: Record<number, number>;
     unitsStateRef: React.RefObject<Unit[]>;
     defeatedThisFrame: Set<number>;
+}
+
+export interface PhaseShiftContext extends BehaviorBaseContext {
+    phaseShiftSkill: EnemyPhaseShiftSkill;
+    unitsState: Unit[];
+    unitsRef: Record<number, UnitGroup>;
+    setUnits: React.Dispatch<React.SetStateAction<Unit[]>>;
 }

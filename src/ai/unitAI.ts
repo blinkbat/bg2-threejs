@@ -22,7 +22,7 @@ import { clampToGrid, distanceBetween } from "../game/geometry";
 import { getAttackRange } from "../game/units";
 import { ENEMY_STATS } from "../game/enemyStats";
 import { hasStatusEffect, isUnitAlive } from "../combat/combatMath";
-import { isKrakenSubmerged } from "../gameLoop/enemyBehaviors";
+import { isEnemyUntargetable } from "../gameLoop/enemyBehaviors";
 import { getUnitById } from "../game/unitQuery";
 import type { Unit, UnitGroup } from "../core/types";
 
@@ -129,7 +129,7 @@ export interface TargetingContext {
 }
 
 /**
- * Check if the current attack target is still valid (alive, not defeated, not submerged).
+ * Check if the current attack target is still valid (alive, not defeated, not untargetable).
  */
 export function validateCurrentTarget(
     currentTarget: number | null | undefined,
@@ -139,10 +139,10 @@ export function validateCurrentTarget(
         return { valid: false, targetUnit: undefined };
     }
     const targetUnit = getUnitById(currentTarget);
-    // Invalid if dead, defeated this frame, or submerged (kraken)
+    // Invalid if dead, defeated this frame, or currently untargetable.
     const valid = targetUnit !== undefined &&
         isUnitAlive(targetUnit, defeatedThisFrame) &&
-        !isKrakenSubmerged(currentTarget);
+        !isEnemyUntargetable(currentTarget);
     return { valid, targetUnit };
 }
 
@@ -183,8 +183,8 @@ export function findNearestTarget(ctx: TargetingContext, alerted: boolean = fals
         if (hasStatusEffect(enemy, "divine_lattice")) continue;
         if (defeatedThisFrame.has(enemy.id)) continue;
         if (blockedTargets.includes(enemy.id)) continue;
-        // Skip submerged krakens - they're invulnerable underwater
-        if (isKrakenSubmerged(enemy.id)) continue;
+        // Skip untargetable enemies.
+        if (isEnemyUntargetable(enemy.id)) continue;
 
         const eg = unitsRef[enemy.id];
         if (!eg) continue;

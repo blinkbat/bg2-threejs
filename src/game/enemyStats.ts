@@ -552,4 +552,26 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         turnSpeed: 0.15,   // Turns very slowly (15% of normal)
         expReward: 120
     },
+    wandering_shade: {
+        name: "Wandering Shade",
+        hp: 42,
+        maxHp: 42,
+        damage: [6, 11],
+        accuracy: 74,
+        armor: 1,
+        color: "#8f9bb8",
+        aggroRange: 11,
+        attackCooldown: 1400,
+        size: 1.0,
+        moveSpeed: 1.7,
+        flying: true,
+        expReward: 42,
+        phaseShiftSkill: {
+            name: "Umbral Drift",
+            cooldown: 7000,
+            invisibleDuration: 1200,
+            repositionMinRange: 2.8,
+            repositionMaxRange: 5.8
+        }
+    },
 };

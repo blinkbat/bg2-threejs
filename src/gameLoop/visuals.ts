@@ -8,7 +8,7 @@ import { FOG_SCALE, FLASH_DURATION } from "../core/constants";
 import { hasStatusEffect } from "../combat/combatMath";
 import { updateVisibility } from "../ai/pathfinding";
 import { getCurrentArea } from "../game/areas";
-import { isKrakenFullySubmerged } from "./enemyBehaviors";
+import { isEnemyHiddenFromView } from "./enemyBehaviors";
 import { recycleDamageNumber } from "../combat/damageEffects";
 
 // =============================================================================
@@ -252,7 +252,7 @@ export function updateFogOfWar(
     // If area doesn't have fog of war, clear and hide it
     if (!area.hasFogOfWar) {
         fogMesh.visible = false;
-        // Make all enemies visible (except submerged krakens)
+        // Make all enemies visible (except hidden enemy states).
         unitsState.filter(u => u.team === "enemy").forEach(u => {
             const g = unitsRef[u.id];
             if (!g) return;
@@ -261,7 +261,7 @@ export function updateFogOfWar(
                 applyViewFadeToGroup(g, 0);
                 return;
             }
-            updateEnemyGroupFade(g, !isKrakenFullySubmerged(u.id));
+            updateEnemyGroupFade(g, !isEnemyHiddenFromView(u.id));
         });
         return;
     }
@@ -306,7 +306,7 @@ export function updateFogOfWar(
         texture.needsUpdate = true;
     }
 
-    // Hide enemies in fog (always check this) - also hide submerged krakens
+    // Hide enemies in fog (always check this) - also hide hidden enemy states.
     unitsState.filter(u => u.team === "enemy").forEach(u => {
         const g = unitsRef[u.id];
         if (!g) return;
@@ -317,7 +317,7 @@ export function updateFogOfWar(
         }
         const cx = Math.floor(g.position.x), cz = Math.floor(g.position.z);
         const vis = visibility[cx]?.[cz] ?? 0;
-        const shouldBeVisible = vis === 2 && !isKrakenFullySubmerged(u.id);
+        const shouldBeVisible = vis === 2 && !isEnemyHiddenFromView(u.id);
         updateEnemyGroupFade(g, shouldBeVisible);
     });
 }

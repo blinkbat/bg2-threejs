@@ -46,6 +46,7 @@ import {
     updateLeaps,
     updateTentacles,
     updateSubmergedKrakens,
+    processShadePhases,
     updateSpriteFacing,
     updateAncestorGhostVisuals
 } from "../gameLoop";
@@ -694,6 +695,9 @@ export function useGameLoop({
 
                 // Update submerged krakens
                 updateSubmergedKrakens(now, currentUnits, unitGroups, callbacks.addLog);
+
+                // Update Wandering Shade phase timing
+                processShadePhases(now, currentUnits, callbacks.addLog);
 
                 // Update energy shield visuals
                 updateEnergyShieldVisuals(currentUnits, unitGroups, now);

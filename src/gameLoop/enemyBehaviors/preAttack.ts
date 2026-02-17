@@ -11,6 +11,7 @@ import { tryCurse } from "./curse";
 import { tryBasiliskGlare } from "./basiliskGlare";
 import { tryDreamEater } from "./dreamEater";
 import { trySleep } from "./sleep";
+import { tryShadePhase } from "./shadePhase";
 
 // =============================================================================
 // CONTEXT — superset of fields needed by all pre-attack behaviors
@@ -42,7 +43,7 @@ export interface PreAttackContext {
 /**
  * Run all fire-and-forget pre-attack behaviors for an enemy.
  * These behaviors don't block normal attack flow — they check conditions and
- * fire independently (spawning, raising, tentacles, curses, glares).
+ * fire independently (spawning, raising, tentacles, curses, glares, phase shifts).
  *
  * To add a new fire-and-forget behavior:
  * 1. Create `tryMyBehavior(ctx)` in its own file
@@ -80,5 +81,9 @@ export function runPreAttackBehaviors(ctx: PreAttackContext): void {
 
     if (enemyStats.sleepSkill) {
         trySleep({ ...base, sleepSkill: enemyStats.sleepSkill, unitsState, unitsRef, scene, setUnits, defeatedThisFrame });
+    }
+
+    if (enemyStats.phaseShiftSkill) {
+        tryShadePhase({ ...base, phaseShiftSkill: enemyStats.phaseShiftSkill, unitsState, unitsRef, setUnits });
     }
 }

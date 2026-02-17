@@ -1807,38 +1807,66 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
             wallMesh.userData = secretDoorData;
             group.add(wallMesh);
 
-            // Create thick crack segments on the north face using thin boxes
+            // Create thick crack segments on an outer face of the hidden wall.
             const crackMat = new THREE.MeshBasicMaterial({ color: "#0a0a0a" });
-            const crackX = blockingWall.x + blockingWall.w / 2;
-            const crackZ = blockingWall.z + blockingWall.h + 0.02;
+            const crackOffsets = [
+                [0.0, 0.1, 0.15, 0.9, 0.08],
+                [0.15, 0.9, -0.1, 1.5, 0.08],
+                [-0.1, 1.5, 0.2, 2.2, 0.08],
+                [0.15, 0.9, 0.6, 1.1, 0.05],
+                [0.6, 1.1, 0.9, 1.0, 0.04],
+                [-0.1, 1.5, -0.5, 1.7, 0.05],
+                [-0.5, 1.7, -0.8, 1.6, 0.04],
+                [0.15, 0.9, -0.4, 0.6, 0.05],
+            ] as const;
 
-            // Helper to create a crack segment between two points
-            const makeCrack = (x1: number, y1: number, x2: number, y2: number, thickness = 0.06) => {
-                const dx = x2 - x1;
-                const dy = y2 - y1;
-                const length = Math.sqrt(dx * dx + dy * dy);
-                const angle = Math.atan2(dx, dy);
+            // Keep cracks on an outer face but anchor them to the center tile of the secret wall.
+            if (blockingWall.h > blockingWall.w) {
+                const crackTileZ = blockingWall.z + Math.floor((blockingWall.h - 1) / 2);
+                const crackZ = crackTileZ + 0.5;
+                const crackX = blockingWall.x + blockingWall.w + 0.02;
 
-                const crack = new THREE.Mesh(
-                    new THREE.BoxGeometry(thickness, length, 0.02),
-                    crackMat
-                );
-                crack.position.set((x1 + x2) / 2, (y1 + y2) / 2, crackZ);
-                crack.rotation.z = -angle;
-                return crack;
-            };
+                const makeCrack = (z1: number, y1: number, z2: number, y2: number, thickness = 0.06): THREE.Mesh => {
+                    const dz = z2 - z1;
+                    const dy = y2 - y1;
+                    const length = Math.sqrt(dz * dz + dy * dy);
+                    const angle = Math.atan2(dz, dy);
+                    const crack = new THREE.Mesh(
+                        new THREE.BoxGeometry(0.02, length, thickness),
+                        crackMat
+                    );
+                    crack.position.set(crackX, (y1 + y2) / 2, (z1 + z2) / 2);
+                    crack.rotation.x = angle;
+                    return crack;
+                };
 
-            // Main vertical crack (zigzag pattern)
-            group.add(makeCrack(crackX, 0.1, crackX + 0.15, 0.9, 0.08));
-            group.add(makeCrack(crackX + 0.15, 0.9, crackX - 0.1, 1.5, 0.08));
-            group.add(makeCrack(crackX - 0.1, 1.5, crackX + 0.2, 2.2, 0.08));
+                crackOffsets.forEach(([o1, y1, o2, y2, thickness]) => {
+                    group.add(makeCrack(crackZ + o1, y1, crackZ + o2, y2, thickness));
+                });
+            } else {
+                const crackTileX = blockingWall.x + Math.floor((blockingWall.w - 1) / 2);
+                const crackX = crackTileX + 0.5;
+                const crackZ = blockingWall.z + blockingWall.h + 0.02;
 
-            // Branch cracks
-            group.add(makeCrack(crackX + 0.15, 0.9, crackX + 0.6, 1.1, 0.05));
-            group.add(makeCrack(crackX + 0.6, 1.1, crackX + 0.9, 1.0, 0.04));
-            group.add(makeCrack(crackX - 0.1, 1.5, crackX - 0.5, 1.7, 0.05));
-            group.add(makeCrack(crackX - 0.5, 1.7, crackX - 0.8, 1.6, 0.04));
-            group.add(makeCrack(crackX + 0.15, 0.9, crackX - 0.4, 0.6, 0.05));
+                const makeCrack = (x1: number, y1: number, x2: number, y2: number, thickness = 0.06): THREE.Mesh => {
+                    const dx = x2 - x1;
+                    const dy = y2 - y1;
+                    const length = Math.sqrt(dx * dx + dy * dy);
+                    const angle = Math.atan2(dx, dy);
+
+                    const crack = new THREE.Mesh(
+                        new THREE.BoxGeometry(thickness, length, 0.02),
+                        crackMat
+                    );
+                    crack.position.set((x1 + x2) / 2, (y1 + y2) / 2, crackZ);
+                    crack.rotation.z = -angle;
+                    return crack;
+                };
+
+                crackOffsets.forEach(([o1, y1, o2, y2, thickness]) => {
+                    group.add(makeCrack(crackX + o1, y1, crackX + o2, y2, thickness));
+                });
+            }
 
             group.userData = secretDoorData;
             scene.add(group);

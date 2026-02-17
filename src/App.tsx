@@ -643,7 +643,6 @@ function Game({
     }, [flushPerfLogs]);
 
     // Skill execution context
-    // eslint-disable-next-line react-hooks/preserve-manual-memoization
     const getSkillContext = useCallback((defeatedThisFrame?: Set<number>): SkillExecutionContext => ({
         scene: sceneState.scene!,
         unitsStateRef: unitsStateRef as React.RefObject<Unit[]>,
@@ -756,7 +755,6 @@ function Game({
     }, [addLog, sceneState]);
 
     // Process action queue wrapper
-    // eslint-disable-next-line react-hooks/preserve-manual-memoization
     const doProcessQueue = useCallback((defeatedThisFrame: Set<number>) => {
         const skillCtx = getSkillContext(defeatedThisFrame);
         processActionQueue(
@@ -1069,7 +1067,6 @@ function Game({
         handleCastSkillRef.current = handleCastSkill;
     }, [handleCastSkill]);
 
-    // eslint-disable-next-line react-hooks/preserve-manual-memoization
     const handleStop = useCallback(() => {
         stopSelectedUnits({
             selectedIds: selectedRef.current,
@@ -1081,7 +1078,6 @@ function Game({
         });
     }, [sceneState.unitGroups, gameRefs]);
 
-    // eslint-disable-next-line react-hooks/preserve-manual-memoization
     const handleHold = useCallback(() => {
         toggleHoldPositionForSelectedUnits(
             {

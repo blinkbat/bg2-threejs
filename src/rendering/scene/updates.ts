@@ -149,9 +149,11 @@ export function updateBillboards(billboards: THREE.Mesh[], camera: THREE.Camera)
  * Keeping the active light count stable avoids shader variant churn and render hitches.
  */
 export function updateLightLOD(
-    _candleLights: THREE.Light[],
-    _cameraOffset: { x: number; z: number }
+    candleLights: THREE.Light[],
+    cameraOffset: { x: number; z: number }
 ): void {
+    void candleLights;
+    void cameraOffset;
     return;
 }
 

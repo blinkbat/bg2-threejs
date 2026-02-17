@@ -7,7 +7,7 @@ import type { Unit, UnitGroup, DamageText, AcidTile } from "../core/types";
 import { COLORS, ACID_TILE_DURATION, ACID_TICK_INTERVAL, ACID_DAMAGE_PER_TICK, ACID_MAX_TILES, ACID_AURA_COOLDOWN, ACID_AURA_RADIUS } from "../core/constants";
 import type { EnemyStats } from "../core/types";
 import { getUnitStats } from "../game/units";
-import { handleUnitDefeat, showDamageVisual } from "../combat/damageEffects";
+import { applyDamageToUnit, buildDamageContext } from "../combat/damageEffects";
 import { createTileMesh, updateTileFade, removeExpiredTiles, clearAllTiles, getTileKey, isUnitOnTile, type TileProcessConfig } from "./tileUtils";
 import { isUnitAlive, setSkillCooldown } from "../combat/combatMath";
 
@@ -133,6 +133,17 @@ export function processAcidTiles(
     defeatedThisFrame: Set<number>
 ): void {
     const tilesToRemove: string[] = [];
+    const damageCtx = buildDamageContext(
+        scene,
+        damageTexts,
+        hitFlashRef,
+        unitsRef,
+        unitsState,
+        setUnits,
+        addLog,
+        now,
+        defeatedThisFrame
+    );
 
     acidTiles.forEach((tile, key) => {
         // Accumulate time since last tick (pause-safe delta)
@@ -162,21 +173,12 @@ export function processAcidTiles(
                 if (isUnitOnTile(unitG.position.x, unitG.position.z, tile.x, tile.z)) {
                     const dmg = ACID_DAMAGE_PER_TICK;
                     const data = getUnitStats(unit);
-                    let wasDefeated = false;
-
-                    setUnits(prev => prev.map(u => {
-                        if (u.id !== unit.id) return u;
-                        const newHp = Math.max(0, u.hp - dmg);
-                        wasDefeated = newHp <= 0;
-                        return { ...u, hp: newHp };
-                    }));
-
-                    showDamageVisual(scene, unit.id, unitG.position.x, unitG.position.z, dmg, COLORS.acidText, hitFlashRef, damageTexts, addLog, `${data.name} takes ${dmg} acid damage.`, now);
-
-                    if (wasDefeated) {
-                        defeatedThisFrame.add(unit.id);
-                        handleUnitDefeat(unit.id, unitG, unitsRef, addLog, data.name);
-                    }
+                    applyDamageToUnit(damageCtx, unit.id, unitG, dmg, data.name, {
+                        color: COLORS.acidText,
+                        hitMessage: { text: `${data.name} takes ${dmg} acid damage.`, color: COLORS.acidText },
+                        targetUnit: unit,
+                        damageType: "physical"
+                    });
                 }
             });
         }

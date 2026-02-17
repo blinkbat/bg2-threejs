@@ -318,6 +318,11 @@ function applySkillProjectileOnHitEffect(
         : effect.type === "attack_down"
             ? "weakened"
             : "hamstrung";
+    const effectVisual = effect.type === "stun"
+        ? { logText: logStunned(targetName), color: COLORS.stunnedText, maxScale: 1.25, duration: 240 }
+        : effect.type === "attack_down"
+            ? { logText: logWeakened(targetName), color: COLORS.weakenedText, maxScale: 1.2, duration: 220 }
+            : { logText: logHamstrung(targetName), color: COLORS.hamstrungText, maxScale: 1.2, duration: 220 };
 
     const statusEffect: StatusEffect = {
         type: statusType,
@@ -334,31 +339,13 @@ function applySkillProjectileOnHitEffect(
         return { ...u, statusEffects: applyStatusEffect(u.statusEffects, statusEffect) };
     }));
 
-    if (effect.type === "stun") {
-        addLog(logStunned(targetName), COLORS.stunnedText);
-        createAnimatedRing(scene, targetX, targetZ, COLORS.stunnedText, {
-            innerRadius: 0.16,
-            outerRadius: 0.34,
-            maxScale: 1.25,
-            duration: 240
-        });
-    } else if (effect.type === "attack_down") {
-        addLog(logWeakened(targetName), COLORS.weakenedText);
-        createAnimatedRing(scene, targetX, targetZ, COLORS.weakenedText, {
-            innerRadius: 0.16,
-            outerRadius: 0.34,
-            maxScale: 1.2,
-            duration: 220
-        });
-    } else {
-        addLog(logHamstrung(targetName), COLORS.hamstrungText);
-        createAnimatedRing(scene, targetX, targetZ, COLORS.hamstrungText, {
-            innerRadius: 0.16,
-            outerRadius: 0.34,
-            maxScale: 1.2,
-            duration: 220
-        });
-    }
+    addLog(effectVisual.logText, effectVisual.color);
+    createAnimatedRing(scene, targetX, targetZ, effectVisual.color, {
+        innerRadius: 0.16,
+        outerRadius: 0.34,
+        maxScale: effectVisual.maxScale,
+        duration: effectVisual.duration
+    });
 }
 
 // =============================================================================
@@ -634,6 +621,9 @@ export function updateProjectiles(
                 u.hp > 0 &&
                 !defeatedThisFrame.has(u.id)
             );
+            const trapCaster = getUnitById(trapProj.attackerId);
+            const trapCasterGroup = unitsRef[trapProj.attackerId];
+            const trapCasterName = trapCaster ? getUnitStats(trapCaster).name : undefined;
 
             for (const enemy of enemies) {
                 const enemyG = unitsRef[enemy.id];
@@ -664,11 +654,15 @@ export function updateProjectiles(
                             if (trapProj.trapDamage) {
                                 damage = trapProj.trapDamage[0] + Math.floor(Math.random() * (trapProj.trapDamage[1] - trapProj.trapDamage[0] + 1));
                                 totalDamage += damage;
-
-                                // Hit flash
-                                if (hitFlashRef) {
-                                    hitFlashRef[target.id] = now;
-                                }
+                                const targetData = getUnitStats(target);
+                                applyDamageToUnit(dmgCtx, target.id, targetG, damage, targetData.name, {
+                                    color: COLORS.pinnedText,
+                                    targetUnit: target,
+                                    attackerName: trapCaster?.team === "player" ? trapCasterName : undefined,
+                                    attackerPosition: trapCasterGroup ? { x: trapCasterGroup.position.x, z: trapCasterGroup.position.z } : undefined,
+                                    damageType: "physical",
+                                    attackerId: trapProj.attackerId
+                                });
                             }
 
                             // Apply pinned effect
@@ -683,9 +677,8 @@ export function updateProjectiles(
                             };
 
                             setUnits(prev => prev.map(u => {
-                                if (u.id !== target.id) return u;
-                                const newHp = damage > 0 ? Math.max(0, u.hp - damage) : u.hp;
-                                return { ...u, hp: newHp, statusEffects: applyStatusEffect(u.statusEffects, pinnedEffect) };
+                                if (u.id !== target.id || u.hp <= 0) return u;
+                                return { ...u, statusEffects: applyStatusEffect(u.statusEffects, pinnedEffect) };
                             }));
 
                             pinnedCount++;

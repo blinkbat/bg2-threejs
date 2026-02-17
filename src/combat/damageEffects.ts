@@ -24,7 +24,7 @@ import { getNextUnitId } from "../core/unitIds";
 import { ENEMY_STATS } from "../game/enemyStats";
 import { UNIT_DATA, getXpForLevel, getEffectiveMaxHp, getEffectiveMaxMana } from "../game/playerUnits";
 import { LEVEL_UP_HP, LEVEL_UP_MANA, LEVEL_UP_STAT_POINTS, LEVEL_UP_SKILL_POINTS } from "../game/statBonuses";
-import { trySubmergeKraken, isKrakenSubmerged } from "../gameLoop/enemyBehaviors";
+import { trySubmergeKraken, isEnemyUntargetable } from "../gameLoop/enemyBehaviors";
 
 // =============================================================================
 // PROJECTILE CREATION
@@ -470,8 +470,8 @@ export function applyDamageToUnit(
     // Skip already-defeated targets this frame
     if (defeatedThisFrame?.has(targetId)) return;
 
-    // Submerged krakens are invulnerable
-    if (isKrakenSubmerged(targetId)) return;
+    // Untargetable enemy states are invulnerable.
+    if (isEnemyUntargetable(targetId)) return;
 
     // Read current state from ref
     const refUnit = targetUnit ?? unitsStateRef.current?.find(u => u.id === targetId);
