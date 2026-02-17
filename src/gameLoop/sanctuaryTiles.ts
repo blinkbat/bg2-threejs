@@ -108,6 +108,8 @@ export function processSanctuaryTiles(
     now: number
 ): void {
     const tilesToRemove: string[] = [];
+    const requestedHealById = new Map<number, number>();
+    const unitNameById = new Map<number, string>();
 
     sanctuaryTiles.forEach((tile, key) => {
         // Accumulate time since last tick (pause-safe delta)
@@ -127,36 +129,52 @@ export function processSanctuaryTiles(
             tile.timeSinceTick = 0;
 
             // Find player units standing on this tile
-            unitsState.forEach(unit => {
-                if (unit.hp <= 0 || unit.team !== "player") return;
+            for (const unit of unitsState) {
+                if (unit.hp <= 0 || unit.team !== "player") continue;
 
                 const unitG = unitsRef[unit.id];
-                if (!unitG) return;
+                if (!unitG) continue;
 
                 if (isUnitOnTile(unitG.position.x, unitG.position.z, tile.x, tile.z)) {
-                    const data = getUnitStats(unit);
-                    const maxHp = data.maxHp;
-                    const healPerTick = tile.healPerTick;
-
-                    // Calculate actual heal inside setUnits to use fresh HP state
-                    // This ensures proper ordering with poison/other damage in same frame
-                    setUnits(prev => prev.map(u => {
-                        if (u.id !== unit.id) return u;
-                        if (u.hp >= maxHp || u.hp <= 0) return u; // Already at max or dead
-                        const actualHeal = Math.min(healPerTick, maxHp - u.hp);
-                        return { ...u, hp: u.hp + actualHeal };
-                    }));
-
-                    // Show visual based on snapshot check (may slightly mismatch actual heal)
-                    if (unit.hp < maxHp && unit.hp > 0) {
-                        const estimatedHeal = Math.min(healPerTick, maxHp - unit.hp);
-                        spawnDamageNumber(scene, unitG.position.x, unitG.position.z, estimatedHeal, COLORS.sanctuaryText, damageTexts, true);
-                        addLog(`${data.name} is healed for ${estimatedHeal} by Sanctuary.`, COLORS.sanctuaryText);
+                    const existing = requestedHealById.get(unit.id) ?? 0;
+                    requestedHealById.set(unit.id, existing + tile.healPerTick);
+                    if (!unitNameById.has(unit.id)) {
+                        unitNameById.set(unit.id, getUnitStats(unit).name);
                     }
                 }
-            });
+            }
         }
     });
+
+    if (requestedHealById.size > 0) {
+        let actualHealById = new Map<number, number>();
+        setUnits(prev => {
+            const frameHeals = new Map<number, number>();
+            const nextUnits = prev.map(u => {
+                const requestedHeal = requestedHealById.get(u.id);
+                if (!requestedHeal || u.hp <= 0) return u;
+
+                const maxHp = getUnitStats(u).maxHp;
+                if (u.hp >= maxHp) return u;
+
+                const actualHeal = Math.min(requestedHeal, maxHp - u.hp);
+                if (actualHeal <= 0) return u;
+
+                frameHeals.set(u.id, actualHeal);
+                return { ...u, hp: u.hp + actualHeal };
+            });
+            actualHealById = frameHeals;
+            return nextUnits;
+        });
+
+        for (const [unitId, healAmount] of actualHealById.entries()) {
+            const unitG = unitsRef[unitId];
+            if (!unitG) continue;
+            const unitName = unitNameById.get(unitId) ?? "Ally";
+            spawnDamageNumber(scene, unitG.position.x, unitG.position.z, healAmount, COLORS.sanctuaryText, damageTexts, true);
+            addLog(`${unitName} is healed for ${healAmount} by Sanctuary.`, COLORS.sanctuaryText);
+        }
+    }
 
     removeExpiredTiles(sanctuaryTiles, tilesToRemove, scene);
 }

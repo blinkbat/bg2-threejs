@@ -18,6 +18,7 @@ import { soundFns } from "../audio";
 import { cleanupUnitState } from "../ai/movement";
 import { cleanupEnemyKiteCooldown } from "../game/enemyState";
 import { getGameTime } from "../core/gameClock";
+import { applySyncedUnitsUpdate } from "../core/stateUtils";
 import { logDefeated, applyPoison, applySlowed, hasStatusEffect, isUnitAlive } from "./combatMath";
 import { tryKillBark } from "./barks";
 import { getNextUnitId } from "../core/unitIds";
@@ -474,7 +475,8 @@ export function applyDamageToUnit(
     if (isEnemyUntargetable(targetId)) return;
 
     // Read current state from ref
-    const refUnit = targetUnit ?? unitsStateRef.current?.find(u => u.id === targetId);
+    const refUnit = unitsStateRef.current?.find(u => u.id === targetId) ?? targetUnit;
+    const targetState = refUnit ?? targetUnit;
 
     // Full damage immunity (e.g. Dodge or Divine Lattice)
     if (refUnit && (hasStatusEffect(refUnit, "invul") || hasStatusEffect(refUnit, "divine_lattice"))) {
@@ -557,7 +559,7 @@ export function applyDamageToUnit(
                 effectiveDamage -= preventedDamage;
                 const defenderId = chosenDefender.unit.id;
 
-                setUnits(prev => prev.map(u => {
+                applySyncedUnitsUpdate(unitsStateRef, setUnits, prev => prev.map(u => {
                     if (u.id !== defenderId) return u;
                     const effects = (u.statusEffects ?? [])
                         .map(e => e.type === "highland_defense"
@@ -588,20 +590,20 @@ export function applyDamageToUnit(
         }
     }
 
-    const newHp = Math.max(0, currentHp - effectiveDamage);
+    const projectedHp = Math.max(0, currentHp - effectiveDamage);
 
     // Check for amoeba split mechanic
-    const shouldSplit = targetUnit?.enemyType === "giant_amoeba" &&
-        newHp > 0 &&  // Survived the hit
-        (targetUnit.splitCount ?? 0) < (ENEMY_STATS.giant_amoeba.maxSplitCount ?? 3);
+    const shouldSplit = targetState?.enemyType === "giant_amoeba" &&
+        projectedHp > 0 &&  // Survived the hit
+        (targetState.splitCount ?? 0) < (ENEMY_STATS.giant_amoeba.maxSplitCount ?? 3);
 
-    if (shouldSplit && targetUnit) {
+    if (shouldSplit && targetState) {
         // Amoeba splits! Original dies, two smaller ones spawn
-        const currentSplitCount = targetUnit.splitCount ?? 0;
+        const currentSplitCount = targetState.splitCount ?? 0;
         const newSplitCount = currentSplitCount + 1;
 
         // Calculate HP for split offspring (divide remaining HP, minimum 1)
-        const splitHp = Math.max(1, Math.floor(newHp / 2));
+        const splitHp = Math.max(1, Math.floor(projectedHp / 2));
 
         // Spawn positions - offset from original position
         const offsetDist = 0.8;
@@ -633,7 +635,7 @@ export function applyDamageToUnit(
         };
 
         // Update state: kill original, spawn two new ones
-        setUnits(prev => [
+        applySyncedUnitsUpdate(unitsStateRef, setUnits, prev => [
             ...prev.map(u => {
                 if (u.id !== targetId) return u;
                 return { ...u, hp: 0, statusEffects: undefined };  // Kill the original
@@ -663,7 +665,7 @@ export function applyDamageToUnit(
     }
 
     // Normal damage handling (non-amoeba or can't split)
-    setUnits(prev => prev.map(u => {
+    const nextUnits = applySyncedUnitsUpdate(unitsStateRef, setUnits, prev => prev.map(u => {
         if (u.id !== targetId) return u;
         let updated = { ...u, hp: Math.max(0, u.hp - effectiveDamage) };
         if (updated.hp <= 0) {
@@ -708,6 +710,8 @@ export function applyDamageToUnit(
         }
         return updated;
     }));
+    const updatedTarget = nextUnits.find(u => u.id === targetId);
+    const newHp = updatedTarget?.hp ?? 0;
 
     // Log energy shield effects
     if (shieldAbsorbed > 0) {
@@ -768,8 +772,8 @@ export function applyDamageToUnit(
             tryKillBark(attackerName, addLog);
         }
         // Award XP to all living player units when an enemy dies
-        if (targetUnit && targetUnit.team === "enemy" && targetUnit.enemyType) {
-            const expReward = ENEMY_STATS[targetUnit.enemyType].expReward;
+        if (targetState && targetState.team === "enemy" && targetState.enemyType) {
+            const expReward = ENEMY_STATS[targetState.enemyType].expReward;
             if (expReward > 0) {
                 // Compute level ups BEFORE state update using ref
                 const currentUnits = unitsStateRef.current ?? [];
@@ -786,7 +790,7 @@ export function applyDamageToUnit(
                 }
 
                 // Update state
-                setUnits(prev => prev.map(u => {
+                applySyncedUnitsUpdate(unitsStateRef, setUnits, prev => prev.map(u => {
                     if (u.team === "player" && u.hp > 0) {
                         const newExp = (u.exp ?? 0) + expReward;
                         const currentLevel = u.level ?? 1;
@@ -837,8 +841,8 @@ export function applyDamageToUnit(
             }
 
             // Handle kraken tentacle death - damage parent kraken
-            if (targetUnit.enemyType === "kraken_tentacle" && targetUnit.spawnedBy !== undefined) {
-                const parentKraken = unitsStateRef.current.find(u => u.id === targetUnit.spawnedBy && u.hp > 0);
+            if (targetState.enemyType === "kraken_tentacle" && targetState.spawnedBy !== undefined) {
+                const parentKraken = unitsStateRef.current.find(u => u.id === targetState.spawnedBy && u.hp > 0);
                 if (parentKraken) {
                     const krakenG = unitsRef[parentKraken.id];
                     if (krakenG) {
@@ -861,8 +865,8 @@ export function applyDamageToUnit(
     }
 
     // Check if kraken should submerge after taking damage
-    if (newHp > 0 && targetUnit?.enemyType === "baby_kraken") {
-        trySubmergeKraken({ ...targetUnit, hp: newHp }, unitsRef, addLog, now);
+    if (newHp > 0 && targetState?.enemyType === "baby_kraken") {
+        trySubmergeKraken({ ...targetState, hp: newHp }, unitsRef, addLog, now);
     }
 
 }

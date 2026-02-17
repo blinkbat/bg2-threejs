@@ -869,8 +869,7 @@ export function MapEditor() {
         activeLayer,
         entities,
         propsLayer,
-        setSpawnPoint,
-        isBlockingPropCell
+        setSpawnPoint
     ]);
 
     const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {

@@ -18,8 +18,10 @@ import { getCurrentArea } from "../game/areas";
 import type { Unit, UnitGroup } from "../core/types";
 import { ENEMY_STATS } from "../game/enemyStats";
 import { getEffectiveMaxHp } from "../game/playerUnits";
+import { createLiveUnitsDispatch } from "../core/stateUtils";
 import { updateCamera, updateWallTransparency, updateTreeFogVisibility, updateFogOccluderVisibility, updateLightLOD, addUnitToScene, updateBillboards } from "../rendering/scene";
 import { updateDynamicObstacles } from "../ai/pathfinding";
+import { updateAvoidanceCache } from "../ai/unitAI";
 import { updateUnitCache } from "../game/unitQuery";
 import { clearUnitStatsCache } from "../game/units";
 import { getUnitRadius, isInRange } from "../rendering/range";
@@ -488,6 +490,7 @@ export function useGameLoop({
         let hpBarFrame = 0;
         let cachedRect = renderer.domElement.getBoundingClientRect();
         previousHpByIdRef.current = new Map(stateRefs.unitsStateRef.current.map(unit => [unit.id, unit.hp]));
+        const setUnitsLive = createLiveUnitsDispatch(callbacks.setUnits, stateRefs.unitsStateRef);
 
         const animate = () => {
             const frameStart = performance.now();
@@ -499,7 +502,7 @@ export function useGameLoop({
             const isPaused = stateRefs.pausedRef.current;
 
             // Snapshot units and populate O(1) lookup caches for all systems this frame
-            const currentUnits = stateRefs.unitsStateRef.current;
+            let currentUnits = stateRefs.unitsStateRef.current;
             let sectionStart = performance.now();
             updateUnitCache(currentUnits);
             clearUnitStatsCache();
@@ -509,7 +512,7 @@ export function useGameLoop({
                 expireVishasEyeSummons(
                     currentUnits,
                     unitGroups,
-                    callbacks.setUnits,
+                    setUnitsLive,
                     callbacks.addLog,
                     gameNow
                 );
@@ -522,7 +525,7 @@ export function useGameLoop({
                 scene,
                 refs.acidTiles,
                 refs.damageTexts,
-                callbacks.setUnits,
+                setUnitsLive,
                 now,
                 gameNow,
                 callbacks.addLog
@@ -552,7 +555,7 @@ export function useGameLoop({
             // Game logic updates (only when not paused)
             if (!isPaused) {
                 const combatStart = performance.now();
-                updateAncestorAuraBonuses(currentUnits, unitGroups, callbacks.setUnits);
+                updateAncestorAuraBonuses(currentUnits, unitGroups, setUnitsLive);
 
                 // Update projectiles
                 sectionStart = performance.now();
@@ -563,7 +566,7 @@ export function useGameLoop({
                     scene,
                     refs.damageTexts,
                     refs.hitFlash,
-                    callbacks.setUnits,
+                    setUnitsLive,
                     callbacks.addLog,
                     now,
                     defeatedThisFrame
@@ -578,7 +581,7 @@ export function useGameLoop({
                     scene,
                     refs.damageTexts,
                     refs.hitFlash,
-                    callbacks.setUnits,
+                    setUnitsLive,
                     callbacks.addLog,
                     now,
                     defeatedThisFrame
@@ -593,7 +596,7 @@ export function useGameLoop({
                     scene,
                     refs.damageTexts,
                     refs.hitFlash,
-                    callbacks.setUnits,
+                    setUnitsLive,
                     callbacks.addLog,
                     now,
                     defeatedThisFrame
@@ -606,7 +609,7 @@ export function useGameLoop({
                     unitGroups,
                     scene,
                     refs.damageTexts,
-                    callbacks.setUnits,
+                    setUnitsLive,
                     callbacks.addLog,
                     now
                 );
@@ -619,7 +622,7 @@ export function useGameLoop({
                     scene,
                     refs.damageTexts,
                     refs.hitFlash,
-                    callbacks.setUnits,
+                    setUnitsLive,
                     callbacks.addLog,
                     now,
                     defeatedThisFrame
@@ -632,7 +635,7 @@ export function useGameLoop({
                     unitGroups,
                     refs.damageTexts,
                     refs.hitFlash,
-                    callbacks.setUnits,
+                    setUnitsLive,
                     callbacks.addLog,
                     now,
                     defeatedThisFrame
@@ -645,7 +648,7 @@ export function useGameLoop({
                     unitGroups,
                     refs.damageTexts,
                     refs.hitFlash,
-                    callbacks.setUnits,
+                    setUnitsLive,
                     callbacks.addLog,
                     now,
                     defeatedThisFrame
@@ -658,7 +661,7 @@ export function useGameLoop({
                     unitGroups,
                     refs.damageTexts,
                     refs.hitFlash,
-                    callbacks.setUnits,
+                    setUnitsLive,
                     callbacks.addLog,
                     now,
                     defeatedThisFrame
@@ -671,7 +674,7 @@ export function useGameLoop({
                     unitGroups,
                     refs.damageTexts,
                     refs.hitFlash,
-                    callbacks.setUnits,
+                    setUnitsLive,
                     callbacks.addLog,
                     now,
                     defeatedThisFrame
@@ -682,7 +685,7 @@ export function useGameLoop({
                     now,
                     unitGroups,
                     stateRefs.unitsStateRef as React.MutableRefObject<Unit[]>,
-                    callbacks.setUnits,
+                    setUnitsLive,
                     { current: refs.hitFlash } as React.MutableRefObject<Record<number, number>>,
                     callbacks.addLog,
                     scene,
@@ -691,7 +694,7 @@ export function useGameLoop({
                 );
 
                 // Update tentacles
-                updateTentacles(now, currentUnits, unitGroups, callbacks.setUnits, callbacks.addLog);
+                updateTentacles(now, currentUnits, unitGroups, setUnitsLive, callbacks.addLog);
 
                 // Update submerged krakens
                 updateSubmergedKrakens(now, currentUnits, unitGroups, callbacks.addLog);
@@ -703,9 +706,14 @@ export function useGameLoop({
                 updateEnergyShieldVisuals(currentUnits, unitGroups, now);
 
                 // Update shield facing
-                updateShieldFacing(currentUnits, unitGroups, shieldIndicators, callbacks.setUnits);
+                updateShieldFacing(currentUnits, unitGroups, shieldIndicators, setUnitsLive);
                 combatMs = performance.now() - combatStart;
             }
+
+            // Re-snapshot after combat mutations so FoW/AI consume fresh unit state.
+            currentUnits = stateRefs.unitsStateRef.current;
+            updateUnitCache(currentUnits);
+            clearUnitStatsCache();
 
             // Visual updates (run even when paused)
             sectionStart = performance.now();
@@ -755,6 +763,7 @@ export function useGameLoop({
 
                 // Update pathfinding obstacles
                 updateDynamicObstacles(currentUnits, unitGroups);
+                updateAvoidanceCache(currentUnits, unitGroups);
 
                 // Update each unit's AI
                 sectionStart = performance.now();
@@ -765,7 +774,7 @@ export function useGameLoop({
                         unit, g, unitGroups, currentUnits, refs.visibility,
                         refs.paths, refs.actionCooldown, refs.hitFlash,
                         refs.projectiles, refs.damageTexts, refs.swingAnimations,
-                        refs.moveStart, scene, callbacks.setUnits, callbacks.addLog, now,
+                        refs.moveStart, scene, setUnitsLive, callbacks.addLog, now,
                         defeatedThisFrame,
                         stateRefs.skillCooldownsRef.current, callbacks.setSkillCooldowns,
                         stateRefs.actionQueueRef.current, callbacks.setQueuedActions,
@@ -785,7 +794,7 @@ export function useGameLoop({
             updateRangeIndicator(stateRefs.targetingModeRef.current, rangeIndicator, unitGroups);
             visualMs += performance.now() - sectionStart;
 
-            // HP bar positions (rect measurement cached — only re-measured every 60 frames)
+            // HP bar positions (rect measurement cached; only re-measured every 60 frames)
             sectionStart = performance.now();
             hpBarFrame++;
             if (hpBarFrame % 60 === 0) {

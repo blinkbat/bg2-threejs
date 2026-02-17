@@ -47,8 +47,16 @@ export function getComputedAreaData(): ComputedAreaData {
 }
 
 export function setCurrentArea(areaId: AreaId): ComputedAreaData {
+    const nextArea = AREAS[areaId];
+    if (!nextArea) {
+        if (import.meta.env.DEV) {
+            console.warn(`[areas] Invalid area id "${areaId}". Keeping current area "${currentAreaId}".`);
+        }
+        return getComputedAreaData();
+    }
+
     currentAreaId = areaId;
-    currentAreaComputed = computeAreaData(AREAS[areaId]);
+    currentAreaComputed = computeAreaData(nextArea);
     // Invalidate pathfinding caches when changing areas
     clearPathCache();
     invalidateDynamicObstacles();

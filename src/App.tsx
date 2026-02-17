@@ -793,9 +793,13 @@ function Game({
 
     // Area transition handler
     const handleAreaTransition = useCallback((transition: AreaTransition) => {
+        if (!AREAS[transition.targetArea]) {
+            addLog(`The way forward is blocked (unknown area: ${transition.targetArea}).`, "#ef4444");
+            return;
+        }
         const persistedState = buildPersistedPlayers(unitsStateRef.current);
         onAreaTransition(persistedState, transition.targetArea, transition.targetSpawn, transition.direction);
-    }, [buildPersistedPlayers, onAreaTransition]);
+    }, [addLog, buildPersistedPlayers, onAreaTransition]);
 
     // =============================================================================
     // INPUT HANDLERS HOOK
@@ -1537,6 +1541,12 @@ export default function App() {
     };
 
     const handleAreaTransition = (players: PersistedPlayer[], targetArea: AreaId, spawn: { x: number; z: number }, direction?: "north" | "south" | "east" | "west") => {
+        if (!AREAS[targetArea]) {
+            if (import.meta.env.DEV) {
+                console.warn(`[app] Ignoring transition to unknown area "${targetArea}".`);
+            }
+            return;
+        }
         // Store pending transition and start fade to black
         pendingTransition.current = { players, targetArea, spawn, direction };
         setTransitionOpacity(1);

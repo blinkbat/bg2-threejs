@@ -11,6 +11,7 @@ import type { LootBag } from "../core/types";
 import { updateCamera } from "../rendering/scene";
 import { blocked } from "../game/dungeon";
 import { getCurrentArea, getBlocked, isTerrainBlocked, type AreaTransition } from "../game/areas";
+import { getUnitById } from "../game/unitQuery";
 import { getBasicAttackSkill, getAllSkills, isCorePlayerId } from "../game/playerUnits";
 import { getItem } from "../game/items";
 import { isKey } from "../core/types";
@@ -180,6 +181,8 @@ export function useInputHandlers({
 }: UseInputHandlersOptions): void {
     const raycasterRef = useRef(new THREE.Raycaster());
     const mouseRef = useRef(new THREE.Vector2());
+    const lastHoverUpdateRef = useRef(0);
+    const staticHoverRaycastRootsRef = useRef<THREE.Object3D[]>([]);
 
     useEffect(() => {
         if (!sceneRefs || !containerRef.current) return;
@@ -187,6 +190,14 @@ export function useInputHandlers({
         const { scene, camera, renderer, unitGroups, targetRings, moveMarker, rangeIndicator, aoeIndicator, secretDoorMeshes } = sceneRefs;
         const raycaster = raycasterRef.current;
         const mouse = mouseRef.current;
+        const staticHoverNames = new Set(["ground", "chest", "door", "secretDoor"]);
+        const staticHoverRaycastRoots: THREE.Object3D[] = [];
+        scene.traverse(obj => {
+            if (staticHoverNames.has(obj.name)) {
+                staticHoverRaycastRoots.push(obj);
+            }
+        });
+        staticHoverRaycastRootsRef.current = staticHoverRaycastRoots;
 
         const updateCam = () => updateCamera(camera, gameRefs.current.cameraOffset);
 
@@ -246,11 +257,31 @@ export function useInputHandlers({
                 });
             }
 
+            if (mutableRefs.isDragging.current || mutableRefs.isBoxSel.current) {
+                return;
+            }
+
+            const hoverNow = performance.now();
+            if (hoverNow - lastHoverUpdateRef.current < 16) {
+                return;
+            }
+            lastHoverUpdateRef.current = hoverNow;
+
             const rect = renderer.domElement.getBoundingClientRect();
             mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
             mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
             raycaster.setFromCamera(mouse, camera);
-            const hits = raycaster.intersectObjects(scene.children, true);
+            const hoverRoots: THREE.Object3D[] = [
+                ...Object.values(unitGroups),
+                ...secretDoorMeshes,
+                ...staticHoverRaycastRootsRef.current
+            ];
+            for (const child of scene.children) {
+                if (child.name === "lootBag") {
+                    hoverRoots.push(child);
+                }
+            }
+            const hits = raycaster.intersectObjects(hoverRoots, true);
 
             // Update AOE indicator position
             if (stateRefs.targetingModeRef.current && aoeIndicator) {
@@ -286,7 +317,7 @@ export function useInputHandlers({
             for (const hit of hits) {
                 const unitId = hit.object.userData?.unitId;
                 if (unitId !== undefined) {
-                    const unit = stateRefs.unitsStateRef.current.find(u => u.id === unitId);
+                    const unit = getUnitById(unitId) ?? stateRefs.unitsStateRef.current.find(u => u.id === unitId);
                     if (unit && unit.hp > 0) {
                         if (unit.team === "enemy") {
                             const g = unitGroups[unitId];

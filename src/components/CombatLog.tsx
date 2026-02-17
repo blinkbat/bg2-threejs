@@ -15,10 +15,12 @@ export function CombatLog({ log }: CombatLogProps) {
     useEffect(() => {
         const el = innerRef.current;
         if (!el) return;
-        const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-        if (distanceFromBottom <= 24) {
-            el.scrollTop = el.scrollHeight;
-        }
+        el.scrollTop = el.scrollHeight;
+        const frameId = requestAnimationFrame(() => {
+            if (!innerRef.current) return;
+            innerRef.current.scrollTop = innerRef.current.scrollHeight;
+        });
+        return () => cancelAnimationFrame(frameId);
     }, [log]);
 
     useEffect(() => {

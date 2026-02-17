@@ -19,6 +19,11 @@ for (const content of Object.values(textFiles)) {
 // Export as a Record for backwards compatibility
 export const TEXT_AREAS: Record<string, AreaData> = Object.fromEntries(areaMap);
 
+function upsertArea(areaData: AreaData): void {
+    areaMap.set(areaData.id, areaData);
+    TEXT_AREAS[areaData.id] = areaData;
+}
+
 // Get all available area IDs (dynamically determined from loaded files)
 export function getAllAreaIds(): string[] {
     return Array.from(areaMap.keys());
@@ -36,12 +41,19 @@ export function hasArea(areaId: string): boolean {
 
 // Register a new area at runtime (for editor use)
 export function registerArea(areaId: string, areaData: AreaData): void {
-    areaMap.set(areaId, areaData);
+    if (areaData.id !== areaId) {
+        upsertArea({ ...areaData, id: areaId as AreaId });
+        return;
+    }
+    upsertArea(areaData);
 }
 
 // Register area from text content (for editor save)
 export function registerAreaFromText(areaId: string, textContent: string): AreaData {
-    const areaData = textToAreaData(textContent);
-    areaMap.set(areaId, areaData);
+    const parsedArea = textToAreaData(textContent);
+    const areaData = parsedArea.id === areaId
+        ? parsedArea
+        : { ...parsedArea, id: areaId as AreaId };
+    upsertArea(areaData);
     return areaData;
 }

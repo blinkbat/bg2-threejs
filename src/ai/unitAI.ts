@@ -8,7 +8,8 @@ import {
     AVOIDANCE_RANGE_MULTIPLIER, AVOIDANCE_OVERLAP_STRENGTH,
     AVOIDANCE_STEER_THRESHOLD, AVOIDANCE_STEER_STRENGTH,
     MOVEMENT_MIN_DIST, MOVEMENT_MIN_MAGNITUDE,
-    PLAYER_MOVE_TIMEOUT_MS
+    PLAYER_MOVE_TIMEOUT_MS,
+    DEFAULT_UNIT_RADIUS
 } from "../core/constants";
 import { findPath, isPassable } from "./pathfinding";
 import {
@@ -665,12 +666,80 @@ export interface MovementContext {
     speedMultiplier?: number;  // Optional movement speed multiplier (default 1.0)
 }
 
+interface AvoidanceBucketEntry {
+    unit: Unit;
+    group: UnitGroup;
+}
+
+const AVOIDANCE_CELL_SIZE = 2;
+const avoidanceBuckets = new Map<string, AvoidanceBucketEntry[]>();
+let maxAvoidanceRadius = DEFAULT_UNIT_RADIUS;
+
+function getAvoidanceBucketKey(cellX: number, cellZ: number): string {
+    return `${cellX},${cellZ}`;
+}
+
+function getAvoidanceCell(coord: number): number {
+    return Math.floor(coord / AVOIDANCE_CELL_SIZE);
+}
+
+/**
+ * Build a lightweight spatial hash once per frame so local avoidance
+ * checks don't scan every unit for every mover.
+ */
+export function updateAvoidanceCache(
+    unitsState: Unit[],
+    unitsRef: Record<number, UnitGroup>
+): void {
+    avoidanceBuckets.clear();
+    maxAvoidanceRadius = DEFAULT_UNIT_RADIUS;
+
+    for (const unit of unitsState) {
+        if (unit.hp <= 0) continue;
+        const group = unitsRef[unit.id];
+        if (!group) continue;
+
+        const unitRadius = getUnitRadius(unit);
+        if (unitRadius > maxAvoidanceRadius) {
+            maxAvoidanceRadius = unitRadius;
+        }
+
+        const cellX = getAvoidanceCell(group.position.x);
+        const cellZ = getAvoidanceCell(group.position.z);
+        const key = getAvoidanceBucketKey(cellX, cellZ);
+        const bucket = avoidanceBuckets.get(key);
+        if (bucket) {
+            bucket.push({ unit, group });
+        } else {
+            avoidanceBuckets.set(key, [{ unit, group }]);
+        }
+    }
+}
+
+function getNearbyAvoidanceEntries(group: UnitGroup, myRadius: number): AvoidanceBucketEntry[] {
+    const entries: AvoidanceBucketEntry[] = [];
+    const centerX = getAvoidanceCell(group.position.x);
+    const centerZ = getAvoidanceCell(group.position.z);
+    const maxInteractionDist = (myRadius + maxAvoidanceRadius) * AVOIDANCE_RANGE_MULTIPLIER;
+    const neighborRadius = Math.max(1, Math.ceil(maxInteractionDist / AVOIDANCE_CELL_SIZE));
+
+    for (let dx = -neighborRadius; dx <= neighborRadius; dx++) {
+        for (let dz = -neighborRadius; dz <= neighborRadius; dz++) {
+            const bucket = avoidanceBuckets.get(getAvoidanceBucketKey(centerX + dx, centerZ + dz));
+            if (!bucket) continue;
+            entries.push(...bucket);
+        }
+    }
+
+    return entries;
+}
+
 /**
  * Calculate avoidance vector from nearby units.
  * Player formation moves keep steering at reduced strength for cohesion.
  */
 export function calculateAvoidance(ctx: MovementContext, desiredX: number, desiredZ: number): { avoidX: number; avoidZ: number } {
-    const { unit, g, unitsRef } = ctx;
+    const { unit, g } = ctx;
 
     // Player formation movement keeps steering mild instead of fully disabled.
     const formationMove = unit.team === "player" && g.userData.attackTarget === null;
@@ -679,12 +748,10 @@ export function calculateAvoidance(ctx: MovementContext, desiredX: number, desir
     const myRadius = getUnitRadius(unit);
     let avoidX = 0, avoidZ = 0;
 
-    for (const [otherId, otherG] of Object.entries(unitsRef)) {
-        if (String(unit.id) === otherId) continue;
-
-        // O(1) lookup instead of O(n) .find()
-        const otherU = getUnitById(Number(otherId));
-        if (!otherU || otherU.hp <= 0) continue;
+    for (const entry of getNearbyAvoidanceEntries(g, myRadius)) {
+        const otherU = entry.unit;
+        if (otherU.id === unit.id || otherU.hp <= 0) continue;
+        const otherG = entry.group;
 
         const otherRadius = getUnitRadius(otherU);
         const combinedRadius = myRadius + otherRadius;
@@ -705,7 +772,7 @@ export function calculateAvoidance(ctx: MovementContext, desiredX: number, desir
                 if (dot > AVOIDANCE_STEER_THRESHOLD) {
                     const steerStrength = (combinedRadius * AVOIDANCE_RANGE_MULTIPLIER - oDist) / (combinedRadius * AVOIDANCE_STEER_STRENGTH);
                     // Use XOR of unit IDs to determine which unit steers which way
-                    const steerRight = (unit.id ^ Number(otherId)) % 2 === 0;
+                    const steerRight = (unit.id ^ otherU.id) % 2 === 0;
                     const perpX = steerRight ? -desiredZ : desiredZ;
                     const perpZ = steerRight ? desiredX : -desiredX;
                     avoidX += perpX * steerStrength * AVOIDANCE_STEER_STRENGTH * steeringScale;

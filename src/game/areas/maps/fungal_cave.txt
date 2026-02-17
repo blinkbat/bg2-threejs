@@ -3,7 +3,7 @@ name: Fungal Cave
 flavor: A mysterious place.
 size: 25x50
 background: #1e1e10
-ground: #80a88c
+ground: #969985
 ambient: 0.4
 directional: 0.5
 fog: true

@@ -156,7 +156,7 @@ function createRoundedFloorMaterial(
 function getFloorType(char: string | undefined): string | null {
     if (!char || char === " " || char === ".") return null;
     const normalized = char.toLowerCase();
-    if (normalized === "s" || normalized === "d" || normalized === "g" || normalized === "w" || normalized === "t") {
+    if (normalized === "s" || normalized === "d" || normalized === "g" || normalized === "w" || normalized === "t" || normalized === "~") {
         return normalized;
     }
     return null;
@@ -809,7 +809,21 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
 
                 if (char === "~") {
                     const lavaColor = applyTileTintColor("#ff4400", tintLayer[z]?.[x] ?? 0);
-                    const lavaMat = getLavaMat(lavaColor);
+                    const rounding = getNaturalTileCornerRounding(layer, x, z, "~");
+                    const hasRounding = rounding.outer.some(value => value > 0) || rounding.inner.some(value => value > 0);
+                    const lavaMat = hasRounding
+                        ? createRoundedFloorMaterial(
+                            lavaColor,
+                            rounding.outer,
+                            [0, 0, 0, 0],
+                            0.21,
+                            0.4,
+                            0.3
+                        )
+                        : getLavaMat(lavaColor);
+                    // Keep rounded and non-rounded lava visually consistent.
+                    lavaMat.emissive.set("#ff2200");
+                    lavaMat.emissiveIntensity = 0.8;
                     const lavaTile = new THREE.Mesh(tileGeo, lavaMat);
                     lavaTile.rotation.x = -Math.PI / 2;
                     lavaTile.position.set(x + 0.5, TERRAIN_BASE_Y + layerIndex * TERRAIN_LAYER_HEIGHT_STEP, z + 0.5);
