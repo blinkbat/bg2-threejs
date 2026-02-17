@@ -218,6 +218,9 @@ export function processStatusEffects(
         if (!mut) return u;
         if (mut.doom) return { ...u, hp: 0, statusEffects: undefined };
         const newHp = Math.max(0, Math.min(mut.maxHp, u.hp + mut.hpDelta));
+        if (newHp <= 0) {
+            return { ...u, hp: 0, statusEffects: undefined };
+        }
         const effects = mut.newEffects.length > 0 ? mut.newEffects : undefined;
         return { ...u, hp: newHp, statusEffects: effects };
     }));

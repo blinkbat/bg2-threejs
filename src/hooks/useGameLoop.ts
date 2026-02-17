@@ -442,7 +442,7 @@ function expireVishasEyeSummons(
     if (expiringOrbs.length === 0) return;
 
     const expiringIds = new Set<number>(expiringOrbs.map(unit => unit.id));
-    setUnits(prev => prev.map(unit => (expiringIds.has(unit.id) ? { ...unit, hp: 0 } : unit)));
+    setUnits(prev => prev.map(unit => (expiringIds.has(unit.id) ? { ...unit, hp: 0, statusEffects: undefined } : unit)));
 
     for (const orb of expiringOrbs) {
         const orbGroup = unitGroups[orb.id];

@@ -636,7 +636,7 @@ export function applyDamageToUnit(
         setUnits(prev => [
             ...prev.map(u => {
                 if (u.id !== targetId) return u;
-                return { ...u, hp: 0 };  // Kill the original
+                return { ...u, hp: 0, statusEffects: undefined };  // Kill the original
             }),
             spawn1,
             spawn2
@@ -666,6 +666,9 @@ export function applyDamageToUnit(
     setUnits(prev => prev.map(u => {
         if (u.id !== targetId) return u;
         let updated = { ...u, hp: Math.max(0, u.hp - effectiveDamage) };
+        if (updated.hp <= 0) {
+            return { ...updated, statusEffects: undefined };
+        }
 
         // Update energy shield status effect
         if (shieldAbsorbed > 0 && updated.statusEffects) {
@@ -873,22 +876,39 @@ const critPlaneGeo = new THREE.PlaneGeometry(1.2, 0.6);
 const normalDmgPool: THREE.Mesh[] = [];
 const critDmgPool: THREE.Mesh[] = [];
 const DMG_POOL_MAX = 20;
+const DAMAGE_TEXT_RENDER_ORDER = 900;
 
 function acquireDmgMesh(isCrit: boolean): THREE.Mesh {
     const pool = isCrit ? critDmgPool : normalDmgPool;
     if (pool.length > 0) {
         const mesh = pool.pop()!;
-        (mesh.material as THREE.MeshBasicMaterial).opacity = 1;
+        const material = mesh.material as THREE.MeshBasicMaterial;
+        material.opacity = 1;
+        mesh.renderOrder = DAMAGE_TEXT_RENDER_ORDER;
         return mesh;
     }
     const canvas = document.createElement("canvas");
     canvas.width = isCrit ? 96 : 64;
     canvas.height = isCrit ? 48 : 32;
     const texture = new THREE.CanvasTexture(canvas);
-    return new THREE.Mesh(
+    texture.generateMipmaps = false;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.colorSpace = THREE.SRGBColorSpace;
+
+    const mesh = new THREE.Mesh(
         isCrit ? critPlaneGeo : normalPlaneGeo,
-        new THREE.MeshBasicMaterial({ map: texture, transparent: true })
+        new THREE.MeshBasicMaterial({
+            map: texture,
+            transparent: true,
+            depthWrite: false,
+            depthTest: true,
+            alphaTest: 0.02,
+            toneMapped: false
+        })
     );
+    mesh.renderOrder = DAMAGE_TEXT_RENDER_ORDER;
+    return mesh;
 }
 
 /** Return a damage number mesh to the pool for reuse. */
@@ -929,9 +949,13 @@ export function spawnDamageNumber(
     ctx.font = isCrit ? "600 28px \"DM Mono\", monospace" : "600 24px \"DM Mono\", monospace";
     ctx.fillStyle = isCrit ? COLORS.damageCrit : color;
     ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
     const prefix = isHeal ? "+" : "-";
     const text = isCrit ? `${prefix}${damage}!` : `${prefix}${damage}`;
-    ctx.fillText(text, canvas.width / 2, isCrit ? 36 : 24);
+    ctx.lineWidth = isCrit ? 3 : 2;
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.7)";
+    ctx.strokeText(text, canvas.width / 2, canvas.height / 2);
+    ctx.fillText(text, canvas.width / 2, canvas.height / 2);
     texture.needsUpdate = true;
 
     mesh.position.set(x, 1.5, z);
