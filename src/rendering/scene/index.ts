@@ -17,6 +17,12 @@ import {
     MAX_TREE_SIZE,
     MIN_TREE_SIZE,
 } from "../../game/areas/types";
+import {
+    clampTileTintPercent,
+    normalizeTileLayerStack,
+    normalizeTintLayerStack,
+    TILE_EMPTY,
+} from "../../game/areas/tileLayers";
 import { getUnitStats } from "../../game/units";
 import type { Unit, UnitGroup, FogTexture } from "../../core/types";
 
@@ -46,13 +52,13 @@ import { createUnitSceneGroup, ensureTexturesLoaded } from "./units";
 
 /**
  * Create a MeshStandardMaterial with rounded tile corner clipping using onBeforeCompile.
- * Supports convex (outer) and concave (inner) corner cuts.
+ * Supports convex (outer) and concave (inner) corner cuts at once.
  */
 function createRoundedFloorMaterial(
     color: string,
-    corners: [number, number, number, number],
+    outerCorners: [number, number, number, number],
+    innerCorners: [number, number, number, number] = [0, 0, 0, 0],
     radius: number = 0.15,
-    roundingStyle: "outer" | "inner" = "outer",
     metalness: number = 0.2,
     roughness: number = 0.9
 ): THREE.MeshStandardMaterial {
@@ -60,13 +66,12 @@ function createRoundedFloorMaterial(
         color,
         metalness,
         roughness,
-        transparent: true,
     });
-    const discardComparison = roundingStyle === "inner" ? "<" : ">";
 
     mat.onBeforeCompile = (shader) => {
         // Add uniforms for corners and radius
-        shader.uniforms.uCorners = { value: new THREE.Vector4(corners[0], corners[1], corners[2], corners[3]) };
+        shader.uniforms.uOuterCorners = { value: new THREE.Vector4(outerCorners[0], outerCorners[1], outerCorners[2], outerCorners[3]) };
+        shader.uniforms.uInnerCorners = { value: new THREE.Vector4(innerCorners[0], innerCorners[1], innerCorners[2], innerCorners[3]) };
         shader.uniforms.uRadius = { value: radius };
 
         // Add varying for UV in vertex shader
@@ -85,7 +90,8 @@ function createRoundedFloorMaterial(
         shader.fragmentShader = shader.fragmentShader.replace(
             "#include <common>",
             `#include <common>
-            uniform vec4 uCorners;
+            uniform vec4 uOuterCorners;
+            uniform vec4 uInnerCorners;
             uniform float uRadius;
             varying vec2 vRoundUv;`
         );
@@ -100,27 +106,43 @@ function createRoundedFloorMaterial(
             float r = uRadius;
 
             // Top-left corner (UV: 0,1)
-            if (uCorners.x > 0.5 && p.x < r && p.y > 1.0 - r) {
+            if (uOuterCorners.x > 0.5 && p.x < r && p.y > 1.0 - r) {
                 vec2 corner = vec2(r, 1.0 - r);
-                if (length(p - corner) ${discardComparison} r) discard;
+                if (length(p - corner) > r) discard;
+            }
+            if (uInnerCorners.x > 0.5 && p.x < r && p.y > 1.0 - r) {
+                vec2 corner = vec2(0.0, 1.0);
+                if (length(p - corner) < r) discard;
             }
 
             // Top-right corner (UV: 1,1)
-            if (uCorners.y > 0.5 && p.x > 1.0 - r && p.y > 1.0 - r) {
+            if (uOuterCorners.y > 0.5 && p.x > 1.0 - r && p.y > 1.0 - r) {
                 vec2 corner = vec2(1.0 - r, 1.0 - r);
-                if (length(p - corner) ${discardComparison} r) discard;
+                if (length(p - corner) > r) discard;
+            }
+            if (uInnerCorners.y > 0.5 && p.x > 1.0 - r && p.y > 1.0 - r) {
+                vec2 corner = vec2(1.0, 1.0);
+                if (length(p - corner) < r) discard;
             }
 
             // Bottom-right corner (UV: 1,0)
-            if (uCorners.z > 0.5 && p.x > 1.0 - r && p.y < r) {
+            if (uOuterCorners.z > 0.5 && p.x > 1.0 - r && p.y < r) {
                 vec2 corner = vec2(1.0 - r, r);
-                if (length(p - corner) ${discardComparison} r) discard;
+                if (length(p - corner) > r) discard;
+            }
+            if (uInnerCorners.z > 0.5 && p.x > 1.0 - r && p.y < r) {
+                vec2 corner = vec2(1.0, 0.0);
+                if (length(p - corner) < r) discard;
             }
 
             // Bottom-left corner (UV: 0,0)
-            if (uCorners.w > 0.5 && p.x < r && p.y < r) {
+            if (uOuterCorners.w > 0.5 && p.x < r && p.y < r) {
                 vec2 corner = vec2(r, r);
-                if (length(p - corner) ${discardComparison} r) discard;
+                if (length(p - corner) > r) discard;
+            }
+            if (uInnerCorners.w > 0.5 && p.x < r && p.y < r) {
+                vec2 corner = vec2(0.0, 0.0);
+                if (length(p - corner) < r) discard;
             }`
         );
     };
@@ -153,39 +175,45 @@ function isConnectedFloorType(currentType: string, neighborType: string | null):
     return neighborType === currentType;
 }
 
+interface TileCornerRounding {
+    outer: [number, number, number, number];
+    inner: [number, number, number, number];
+}
+
 /**
- * Determine which corners of a floor tile should be rounded based on neighbors
- * A corner is rounded if both adjacent edges are disconnected from this tile's type.
- * Returns [topLeft, topRight, bottomRight, bottomLeft]
+ * Determine natural outer/inner rounded corners based on cardinal + diagonal neighbors.
  */
-function getFloorCornerFlags(
+function getNaturalTileCornerRounding(
     floor: string[] | string[][],
     x: number,
     z: number,
     currentType: string
-): [number, number, number, number] {
-    // In Three.js with rotated plane: +Z is "down" on screen, -Z is "up"
-    // UV coords: (0,0) = bottom-left, (1,1) = top-right
-    // After rotation, this maps to world coords
-
+): TileCornerRounding {
     const hasTop = isConnectedFloorType(currentType, getFloorTypeAt(floor, x, z - 1));      // -Z direction
     const hasBottom = isConnectedFloorType(currentType, getFloorTypeAt(floor, x, z + 1));   // +Z direction
     const hasLeft = isConnectedFloorType(currentType, getFloorTypeAt(floor, x - 1, z));     // -X direction
     const hasRight = isConnectedFloorType(currentType, getFloorTypeAt(floor, x + 1, z));    // +X direction
 
-    // Round an outer corner whenever both touching edges are open/disconnected.
-    // In UV space after plane rotation:
-    // - Top-left UV (0,1) = world (-X, -Z) corner
-    // - Top-right UV (1,1) = world (+X, -Z) corner
-    // - Bottom-right UV (1,0) = world (+X, +Z) corner
-    // - Bottom-left UV (0,0) = world (-X, +Z) corner
+    const hasTopLeft = isConnectedFloorType(currentType, getFloorTypeAt(floor, x - 1, z - 1));
+    const hasTopRight = isConnectedFloorType(currentType, getFloorTypeAt(floor, x + 1, z - 1));
+    const hasBottomRight = isConnectedFloorType(currentType, getFloorTypeAt(floor, x + 1, z + 1));
+    const hasBottomLeft = isConnectedFloorType(currentType, getFloorTypeAt(floor, x - 1, z + 1));
 
-    const roundTopLeft = (!hasTop && !hasLeft) ? 1 : 0;
-    const roundTopRight = (!hasTop && !hasRight) ? 1 : 0;
-    const roundBottomRight = (!hasBottom && !hasRight) ? 1 : 0;
-    const roundBottomLeft = (!hasBottom && !hasLeft) ? 1 : 0;
+    const outer: [number, number, number, number] = [
+        (!hasTop && !hasLeft && !hasTopLeft) ? 1 : 0,
+        (!hasTop && !hasRight && !hasTopRight) ? 1 : 0,
+        (!hasBottom && !hasRight && !hasBottomRight) ? 1 : 0,
+        (!hasBottom && !hasLeft && !hasBottomLeft) ? 1 : 0,
+    ];
 
-    return [roundTopLeft, roundTopRight, roundBottomRight, roundBottomLeft];
+    const inner: [number, number, number, number] = [
+        (hasTop && hasLeft && !hasTopLeft) ? 1 : 0,
+        (hasTop && hasRight && !hasTopRight) ? 1 : 0,
+        (hasBottom && hasRight && !hasBottomRight) ? 1 : 0,
+        (hasBottom && hasLeft && !hasBottomLeft) ? 1 : 0,
+    ];
+
+    return { outer, inner };
 }
 
 const FLOOR_VARIATION_BUCKET_COUNT = 7;
@@ -240,6 +268,18 @@ function getVariationAmplitude(type: string): number {
     return 0.0;
 }
 
+function applyTileTintColor(baseColor: string, tintPercent: number): string {
+    const clamped = clampTileTintPercent(tintPercent);
+    if (clamped === 0) return baseColor;
+
+    const color = new THREE.Color(baseColor);
+    const hsl = { h: 0, s: 0, l: 0 };
+    color.getHSL(hsl);
+    const delta = clamped * 0.0024;
+    color.setHSL(hsl.h, hsl.s, THREE.MathUtils.clamp(hsl.l + delta, 0, 1));
+    return `#${color.getHexString()}`;
+}
+
 function getFloorVariantColor(baseColor: string, x: number, z: number, char: string): string {
     const type = getFloorType(char);
     if (!type || type === "w") return baseColor;
@@ -262,16 +302,6 @@ function getFloorVariantColor(baseColor: string, x: number, z: number, char: str
     return varied;
 }
 
-interface SharedLavaAnimationData {
-    liquidType: "lava";
-    wavePhase: number;
-    waveSpeed: number;
-    baseColor: THREE.Color;
-    hotColor: THREE.Color;
-    baseEmissiveIntensity: number;
-    material: THREE.MeshStandardMaterial;
-}
-
 function hashAreaIdToUnitRange(areaId: string): number {
     let hash = 0;
     for (let i = 0; i < areaId.length; i++) {
@@ -280,24 +310,6 @@ function hashAreaIdToUnitRange(areaId: string): number {
     }
     const normalized = Math.abs(hash % 1000) / 1000;
     return normalized;
-}
-
-function createSharedLavaAnimationData(
-    areaId: string,
-    lavaTileCount: number,
-    material: THREE.MeshStandardMaterial
-): SharedLavaAnimationData {
-    const seed = hashAreaIdToUnitRange(areaId);
-    const densityFactor = Math.min(1, lavaTileCount / 180);
-    return {
-        liquidType: "lava",
-        wavePhase: seed * Math.PI * 2,
-        waveSpeed: 1.7 + densityFactor * 0.35,
-        baseColor: material.color.clone(),
-        hotColor: new THREE.Color("#ff8a00"),
-        baseEmissiveIntensity: material.emissiveIntensity,
-        material,
-    };
 }
 
 function hasLitMaterial(material: THREE.Material | THREE.Material[]): boolean {
@@ -322,7 +334,13 @@ function applyShadowDefaults(scene: THREE.Scene): void {
             return;
         }
 
-        if (object.name === "ground" || object.name === "lava") {
+        if (object.name === "ground") {
+            object.castShadow = false;
+            object.receiveShadow = true;
+            return;
+        }
+
+        if (object.name === "lava") {
             object.castShadow = false;
             object.receiveShadow = false;
             return;
@@ -376,6 +394,48 @@ const MAX_FLAME_CLUSTER_LIGHTS = 2;
 const MAX_AREA_LIGHTS = 6;
 const ENABLE_DOOR_POINT_LIGHTS = false;
 const RENDERER_MAX_PIXEL_RATIO = 1.25;
+const RENDER_ORDER_GROUND = 0;
+const RENDER_ORDER_FLOOR = 10;
+const RENDER_ORDER_GRID = 20;
+const RENDER_ORDER_PROP = 30;
+const RENDER_ORDER_FOG = 1100;
+
+type StaticRenderTier = "ground" | "floor" | "grid";
+
+function isSceneRenderable(object: THREE.Object3D): boolean {
+    return object instanceof THREE.Mesh || object instanceof THREE.Line || object instanceof THREE.Points || object instanceof THREE.Sprite;
+}
+
+function readStaticRenderTier(value: unknown): StaticRenderTier | null {
+    if (value === "ground" || value === "floor" || value === "grid") {
+        return value;
+    }
+    return null;
+}
+
+function setStaticRenderTier(object: THREE.Object3D, tier: StaticRenderTier): void {
+    object.userData.staticRenderTier = tier;
+}
+
+function applyStaticRenderOrder(scene: THREE.Scene): void {
+    scene.traverse((object: THREE.Object3D) => {
+        if (!isSceneRenderable(object)) return;
+        const tier = readStaticRenderTier(object.userData.staticRenderTier);
+        if (tier === "ground") {
+            object.renderOrder = RENDER_ORDER_GROUND;
+            return;
+        }
+        if (tier === "floor") {
+            object.renderOrder = RENDER_ORDER_FLOOR;
+            return;
+        }
+        if (tier === "grid") {
+            object.renderOrder = RENDER_ORDER_GRID;
+            return;
+        }
+        object.renderOrder = RENDER_ORDER_PROP;
+    });
+}
 
 function normalizeHexColor(color: string | undefined, fallback: string): string {
     if (typeof color === "string" && /^#[0-9a-fA-F]{6}$/.test(color)) {
@@ -602,12 +662,12 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         groundMat
     );
     ground.rotation.x = -Math.PI / 2;
-    ground.position.set(area.gridWidth / 2, 0, area.gridHeight / 2);
+    ground.position.set(area.gridWidth / 2, -0.05, area.gridHeight / 2);
     ground.name = "ground";
+    setStaticRenderTier(ground, "ground");
     scene.add(ground);
 
-    // Floor tiles - render based on floor grid
-    // Floor types: s=sand, d=dirt, g=grass, w=water, t=stone, .=default (gray)
+    // Floor and terrain tiles (layer-aware, with per-tile tint and natural rounding)
     let waterMesh: THREE.Object3D | null = null;
     let hasLiquidTiles = false;
     const liquidTiles = new THREE.Group();
@@ -621,13 +681,23 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     const WATER_EMISSIVE_INTENSITY = 0.14;
     const TERRAIN_WATER_COLOR_SHALLOW = "#275b72";
     const TERRAIN_WATER_COLOR_DEEP = "#1f4a60";
+    // Keep floor layers visually flat so they remain below prop/shadow layers.
+    const FLOOR_LAYER_HEIGHT_STEP = 0.00004;
+    const TERRAIN_LAYER_HEIGHT_STEP = 0.00005;
+    const FLOOR_BASE_Y = 0.0006;
+    const TERRAIN_BASE_Y = 0.0008;
 
     // Material pool: reuse materials for tiles with the same color (avoids ~1600 unique instances)
     const floorMatPool: Record<string, THREE.MeshStandardMaterial> = {};
     const waterMatPool: Record<string, THREE.MeshStandardMaterial> = {};
+    const lavaMatPool: Record<string, THREE.MeshStandardMaterial> = {};
     function getFloorMat(color: string): THREE.MeshStandardMaterial {
         if (!floorMatPool[color]) {
-            floorMatPool[color] = new THREE.MeshStandardMaterial({ color, metalness: 0.2, roughness: 0.9 });
+            floorMatPool[color] = new THREE.MeshStandardMaterial({
+                color,
+                metalness: 0.2,
+                roughness: 0.9
+            });
         }
         return floorMatPool[color];
     }
@@ -643,6 +713,18 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         }
         return waterMatPool[color];
     }
+    function getLavaMat(color: string): THREE.MeshStandardMaterial {
+        if (!lavaMatPool[color]) {
+            lavaMatPool[color] = new THREE.MeshStandardMaterial({
+                color,
+                emissive: "#ff2200",
+                emissiveIntensity: 0.8,
+                metalness: 0.4,
+                roughness: 0.3
+            });
+        }
+        return lavaMatPool[color];
+    }
 
     const floorColors: Record<string, string> = {
         "s": "#c2b280",  // Sand - tan
@@ -657,123 +739,120 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         "T": "#606060",  // Dark stone
         ".": "#555555",  // Default - gray
     };
+    const floorLayerStack = normalizeTileLayerStack(area.floorLayers ?? [area.floor], area.gridWidth, area.gridHeight, TILE_EMPTY);
+    const terrainLayerStack = normalizeTileLayerStack(area.terrainLayers ?? [area.terrain], area.gridWidth, area.gridHeight, TILE_EMPTY);
+    const floorTintLayerStack = normalizeTintLayerStack(area.floorTintLayers, floorLayerStack.length, area.gridWidth, area.gridHeight);
+    const terrainTintLayerStack = normalizeTintLayerStack(area.terrainTintLayers, terrainLayerStack.length, area.gridWidth, area.gridHeight);
 
-    // Render floor tiles with rounded corners
-    if (area.floor && area.floor.length > 0) {
-        const noRoundedCorners: [number, number, number, number] = [0, 0, 0, 0];
-        for (let z = 0; z < area.floor.length; z++) {
-            for (let x = 0; x < area.floor[z].length; x++) {
-                const char = area.floor[z][x];
-                if (char === " " || char === "." || char === undefined) continue;  // Skip empty/default tiles
+    for (let layerIndex = 0; layerIndex < floorLayerStack.length; layerIndex++) {
+        const layer = floorLayerStack[layerIndex];
+        const tintLayer = floorTintLayerStack[layerIndex];
+        for (let z = 0; z < layer.length; z++) {
+            for (let x = 0; x < layer[z].length; x++) {
+                const char = layer[z][x];
+                if (char === " " || char === TILE_EMPTY || char === undefined) continue;
 
                 const baseColor = floorColors[char] ?? "#555555";
-                const color = getFloorVariantColor(baseColor, x, z, char);
+                const tintedColor = applyTileTintColor(baseColor, tintLayer[z]?.[x] ?? 0);
+                const color = getFloorVariantColor(tintedColor, x, z, char);
+                const tileType = getFloorType(char);
+                const rounding = tileType ? getNaturalTileCornerRounding(layer, x, z, tileType) : { outer: [0, 0, 0, 0] as [number, number, number, number], inner: [0, 0, 0, 0] as [number, number, number, number] };
+                const hasRounding = rounding.outer.some(value => value > 0) || rounding.inner.some(value => value > 0);
                 const isWater = char === "w" || char === "W";
 
-                let tile: THREE.Mesh;
-
-                if (isWater) {
-                    // Water corners recede so adjacent ground appears to cut into them.
-                    const tileType = getFloorType(char);
-                    const corners = tileType ? getFloorCornerFlags(area.floor, x, z, tileType) : noRoundedCorners;
-                    const hasInnerRounding = corners.some(c => c > 0);
-                    if (hasInnerRounding) {
-                        const roundedWaterMat = createRoundedFloorMaterial(
-                            color,
-                            corners,
-                            0.28,
-                            "outer",
-                            WATER_METALNESS,
-                            WATER_ROUGHNESS
-                        );
-                        roundedWaterMat.emissive.set(color);
-                        roundedWaterMat.emissiveIntensity = WATER_EMISSIVE_INTENSITY;
-                        tile = new THREE.Mesh(tileGeo, roundedWaterMat);
-                    } else {
-                        tile = new THREE.Mesh(tileGeo, getWaterMat(color));
-                    }
+                let tileMaterial: THREE.MeshStandardMaterial;
+                if (hasRounding) {
+                    const innerCorners = [0, 0, 0, 0] as [number, number, number, number];
+                    tileMaterial = createRoundedFloorMaterial(
+                        color,
+                        rounding.outer,
+                        innerCorners,
+                        isWater ? 0.21 : 0.24,
+                        isWater ? WATER_METALNESS : 0.2,
+                        isWater ? WATER_ROUGHNESS : 0.9
+                    );
+                } else if (isWater) {
+                    tileMaterial = getWaterMat(color);
                 } else {
-                    // Land gets outer corner rounding at edges
-                    const tileType = getFloorType(char);
-                    const corners = tileType ? getFloorCornerFlags(area.floor, x, z, tileType) : noRoundedCorners;
-                    const hasRounding = corners.some(c => c > 0);
-
-                    if (hasRounding) {
-                        // Rounded tiles need unique materials (per-tile shader uniforms)
-                        const roundedMat = createRoundedFloorMaterial(color, corners, 0.3);
-                        tile = new THREE.Mesh(tileGeo, roundedMat);
-                    } else {
-                        tile = new THREE.Mesh(tileGeo, getFloorMat(color));
-                    }
+                    tileMaterial = getFloorMat(color);
                 }
 
+                if (isWater) {
+                    tileMaterial.emissive.set(color);
+                    tileMaterial.emissiveIntensity = WATER_EMISSIVE_INTENSITY;
+                }
+
+                const tile = new THREE.Mesh(tileGeo, tileMaterial);
                 tile.rotation.x = -Math.PI / 2;
-                tile.position.set(x + 0.5, 0.001, z + 0.5);
+                tile.position.set(x + 0.5, FLOOR_BASE_Y + layerIndex * FLOOR_LAYER_HEIGHT_STEP, z + 0.5);
                 tile.name = "ground";
-                if (isWater) {
-                    scene.add(tile);
-                } else {
-                    scene.add(tile);
-                }
+                setStaticRenderTier(tile, "floor");
+                scene.add(tile);
             }
         }
     }
 
-    // Render lava and water from terrain layer (~ = lava, w/W = water)
-    if (area.terrain && area.terrain.length > 0) {
-        const lavaMat = new THREE.MeshStandardMaterial({
-            color: "#ff4400",
-            emissive: "#ff2200",
-            emissiveIntensity: 0.8,
-            metalness: 0.4,
-            roughness: 0.3,
-        });
-        const lavaPositions: Array<{ x: number; z: number }> = [];
-        for (let z = 0; z < area.terrain.length; z++) {
-            for (let x = 0; x < (area.terrain[z]?.length ?? 0); x++) {
-                const char = area.terrain[z][x];
+    for (let layerIndex = 0; layerIndex < terrainLayerStack.length; layerIndex++) {
+        const layer = terrainLayerStack[layerIndex];
+        const tintLayer = terrainTintLayerStack[layerIndex];
+        for (let z = 0; z < layer.length; z++) {
+            for (let x = 0; x < (layer[z]?.length ?? 0); x++) {
+                const char = layer[z][x];
+                if (char === TILE_EMPTY || char === " " || char === undefined) continue;
+
                 if (char === "~") {
-                    lavaPositions.push({ x, z });
+                    const lavaColor = applyTileTintColor("#ff4400", tintLayer[z]?.[x] ?? 0);
+                    const lavaMat = getLavaMat(lavaColor);
+                    const lavaTile = new THREE.Mesh(tileGeo, lavaMat);
+                    lavaTile.rotation.x = -Math.PI / 2;
+                    lavaTile.position.set(x + 0.5, TERRAIN_BASE_Y + layerIndex * TERRAIN_LAYER_HEIGHT_STEP, z + 0.5);
+                    lavaTile.name = "lava";
+                    setStaticRenderTier(lavaTile, "floor");
+                    lavaTile.userData.liquid = {
+                        liquidType: "lava",
+                        wavePhase: hashNoise(x, z, hashAreaIdToUnitRange(area.id) * 1000) * Math.PI * 2,
+                        waveSpeed: 1.7,
+                        baseColor: lavaMat.color.clone(),
+                        hotColor: new THREE.Color("#ff8a00"),
+                        baseEmissiveIntensity: lavaMat.emissiveIntensity
+                    };
+                    liquidTiles.add(lavaTile);
                     hasLiquidTiles = true;
-                } else if (char === "w" || char === "W") {
-                    const terrainWaterColor = char === "W"
+                    continue;
+                }
+
+                if (char === "w" || char === "W") {
+                    const baseWaterColor = char === "W"
                         ? TERRAIN_WATER_COLOR_DEEP
                         : TERRAIN_WATER_COLOR_SHALLOW;
-                    const corners = getFloorCornerFlags(area.terrain, x, z, "w");
-                    const hasInnerRounding = corners.some(c => c > 0);
-                    const waterMat = hasInnerRounding
-                        ? createRoundedFloorMaterial(terrainWaterColor, corners, 0.28, "outer", WATER_METALNESS, WATER_ROUGHNESS)
+                    const terrainWaterColor = applyTileTintColor(baseWaterColor, tintLayer[z]?.[x] ?? 0);
+                    const rounding = getNaturalTileCornerRounding(layer, x, z, "w");
+                    const hasRounding = rounding.outer.some(value => value > 0) || rounding.inner.some(value => value > 0);
+                    const waterMat = hasRounding
+                        ? createRoundedFloorMaterial(
+                            terrainWaterColor,
+                            rounding.outer,
+                            [0, 0, 0, 0],
+                            0.21,
+                            WATER_METALNESS,
+                            WATER_ROUGHNESS
+                        )
                         : getWaterMat(terrainWaterColor);
-                    if (hasInnerRounding && waterMat instanceof THREE.MeshStandardMaterial) {
-                        waterMat.emissive.set(terrainWaterColor);
-                        waterMat.emissiveIntensity = WATER_EMISSIVE_INTENSITY;
-                    }
+                    waterMat.emissive.set(terrainWaterColor);
+                    waterMat.emissiveIntensity = WATER_EMISSIVE_INTENSITY;
+
                     const tile = new THREE.Mesh(tileGeo, waterMat);
                     tile.rotation.x = -Math.PI / 2;
-                    tile.position.set(x + 0.5, 0.002, z + 0.5);
+                    tile.position.set(x + 0.5, TERRAIN_BASE_Y + layerIndex * TERRAIN_LAYER_HEIGHT_STEP, z + 0.5);
                     tile.name = "ground";
+                    setStaticRenderTier(tile, "floor");
                     scene.add(tile);
+                    hasLiquidTiles = true;
                 }
             }
         }
-
-        if (lavaPositions.length > 0) {
-            const lavaMesh = new THREE.InstancedMesh(tileGeo, lavaMat, lavaPositions.length);
-            lavaMesh.name = "lava";
-            lavaMesh.userData.liquid = true;
-            const transform = new THREE.Object3D();
-            transform.rotation.x = -Math.PI / 2;
-            for (let i = 0; i < lavaPositions.length; i++) {
-                const pos = lavaPositions[i];
-                transform.position.set(pos.x + 0.5, 0.002, pos.z + 0.5);
-                transform.updateMatrix();
-                lavaMesh.setMatrixAt(i, transform.matrix);
-            }
-            lavaMesh.instanceMatrix.needsUpdate = true;
-            liquidTiles.add(lavaMesh);
-            liquidTiles.userData.sharedLava = createSharedLavaAnimationData(area.id, lavaPositions.length, lavaMat);
-        }
     }
+
     if (hasLiquidTiles) {
         waterMesh = liquidTiles;
     } else {
@@ -1875,17 +1954,38 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     }
 
     // Grid lines - subtle, above room floors (darker for forest to show on green grass)
-    const gridColor = area.id === "forest" ? "#1a3a1a" : "#444444";
-    const gridOpacity = area.id === "forest" ? 0.35 : 0.25;
-    const gridMat = new THREE.LineBasicMaterial({ color: gridColor, transparent: true, opacity: gridOpacity });
+    const gridColor = area.id === "forest" ? "#2f4a2f" : "#3a414a";
+    const gridOpacity = area.id === "forest" ? 0.12 : 0.08;
+    const topFloorY = FLOOR_BASE_Y + Math.max(0, floorLayerStack.length - 1) * FLOOR_LAYER_HEIGHT_STEP;
+    const topTerrainY = TERRAIN_BASE_Y + Math.max(0, terrainLayerStack.length - 1) * TERRAIN_LAYER_HEIGHT_STEP;
+    const gridY = Math.max(topFloorY, topTerrainY) + 0.002;
+    const gridMat = new THREE.LineBasicMaterial({
+        color: gridColor,
+        transparent: true,
+        opacity: gridOpacity,
+        depthTest: true,
+        depthWrite: false
+    });
     // Horizontal lines (along X axis, varying Z)
     for (let z = 0; z <= area.gridHeight; z++) {
-        scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.002, z), new THREE.Vector3(area.gridWidth, 0.002, z)]), gridMat));
+        const line = new THREE.Line(
+            new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, gridY, z), new THREE.Vector3(area.gridWidth, gridY, z)]),
+            gridMat
+        );
+        setStaticRenderTier(line, "grid");
+        scene.add(line);
     }
     // Vertical lines (along Z axis, varying X)
     for (let x = 0; x <= area.gridWidth; x++) {
-        scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x, 0.002, 0), new THREE.Vector3(x, 0.002, area.gridHeight)]), gridMat));
+        const line = new THREE.Line(
+            new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x, gridY, 0), new THREE.Vector3(x, gridY, area.gridHeight)]),
+            gridMat
+        );
+        setStaticRenderTier(line, "grid");
+        scene.add(line);
     }
+
+    applyStaticRenderOrder(scene);
 
     // Fog of war (scaled resolution for smoother edges with linear filtering)
     const fogCanvas = document.createElement("canvas");
@@ -1920,7 +2020,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     );
     fogMesh.rotation.x = -Math.PI / 2;
     fogMesh.position.set(area.gridWidth / 2, 2.6, area.gridHeight / 2);
-    fogMesh.renderOrder = 1100;
+    fogMesh.renderOrder = RENDER_ORDER_FOG;
     fogMesh.frustumCulled = false;
     scene.add(fogMesh);
 

@@ -112,6 +112,10 @@ export interface AreaData {
     geometry: string[][];        // Raw geometry grid (# = wall, . = floor, ^v<> = doors)
     terrain: string[][];         // Terrain grid (~ = lava, . = empty)
     floor: string[][];           // Floor type grid (s = sand, d = dirt, g = grass, w = water, t = stone, . = default)
+    terrainLayers?: string[][][];      // Optional layered terrain stacks (bottom -> top)
+    floorLayers?: string[][][];        // Optional layered floor stacks (bottom -> top)
+    terrainTintLayers?: number[][][];  // Optional per-tile tint % per terrain layer (same dimensions as terrainLayers)
+    floorTintLayers?: number[][][];    // Optional per-tile tint % per floor layer (same dimensions as floorLayers)
     enemySpawns: EnemySpawn[];
     transitions: AreaTransition[];
     chests: ChestLocation[];

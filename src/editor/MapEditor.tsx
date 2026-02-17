@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import Tippy from "@tippyjs/react";
 import {
@@ -31,6 +31,18 @@ import { getAvailableAreaIds, BASE_CELL_SIZE, MAX_HISTORY, LAYER_COLORS, LAYER_B
 import { registerAreaFromText } from "../game/areas";
 import { EntityEditPopup, TreeEditPopup, DecorationEditPopup } from "./popups";
 import { ConnectionsPanel } from "./panels";
+import {
+    clampTileTintPercent,
+    cloneTileLayerStack,
+    cloneTintLayerStack,
+    composeTileLayers,
+    composeTintLayers,
+    createEmptyTintGrid,
+    hasTintData,
+    normalizeTileLayerStack,
+    normalizeTintLayerStack,
+    TILE_EMPTY,
+} from "../game/areas/tileLayers";
 
 function getCharColor(char: string, layer: Layer): string {
     return LAYER_COLORS[layer].get(char) ?? "#666";
@@ -46,13 +58,48 @@ function getLayerColor(layer: Layer): string {
     }
 }
 
-function drawLayer(ctx: CanvasRenderingContext2D, layer: string[][], layerType: Layer, cellSize: number): void {
+function tintColorForEditor(hexColor: string, tintPercent: number): string {
+    const clamped = clampTileTintPercent(tintPercent);
+    if (clamped === 0) return hexColor;
+    const parsed = hexColor.match(/^#?([0-9a-fA-F]{6})$/);
+    if (!parsed) return hexColor;
+    const raw = parsed[1];
+    const r = parseInt(raw.slice(0, 2), 16);
+    const g = parseInt(raw.slice(2, 4), 16);
+    const b = parseInt(raw.slice(4, 6), 16);
+    const factor = Math.min(1, Math.abs(clamped) / 35);
+
+    const blendChannel = (value: number): number => {
+        if (clamped > 0) {
+            return Math.round(value + (255 - value) * factor * 0.45);
+        }
+        return Math.round(value * (1 - factor * 0.45));
+    };
+
+    const tintedR = blendChannel(r);
+    const tintedG = blendChannel(g);
+    const tintedB = blendChannel(b);
+    const toHex = (value: number): string => value.toString(16).padStart(2, "0");
+    return `#${toHex(tintedR)}${toHex(tintedG)}${toHex(tintedB)}`;
+}
+
+function drawLayer(
+    ctx: CanvasRenderingContext2D,
+    layer: string[][],
+    layerType: Layer,
+    cellSize: number,
+    tintGrid?: number[][]
+): void {
     for (let z = 0; z < layer.length; z++) {
         for (let x = 0; x < layer[z].length; x++) {
             const char = layer[z][x];
             if (char === ".") continue;
 
-            const color = getCharColor(char, layerType);
+            const tintPercent = tintGrid?.[z]?.[x] ?? 0;
+            const baseColor = getCharColor(char, layerType);
+            const color = (layerType === "floor" || layerType === "terrain") && baseColor
+                ? tintColorForEditor(baseColor, tintPercent)
+                : baseColor;
             ctx.fillStyle = color;
             ctx.fillRect(x * cellSize + 1, z * cellSize + 1, cellSize - 2, cellSize - 2);
 
@@ -169,6 +216,21 @@ export function MapEditor() {
     const [floorLayer, setFloorLayer] = useState<string[][]>(() =>
         createEmptyLayer(metadata.width, metadata.height, ".")
     );
+    const [terrainLayers, setTerrainLayers] = useState<string[][][]>(() =>
+        [createEmptyLayer(metadata.width, metadata.height, TILE_EMPTY)]
+    );
+    const [floorLayers, setFloorLayers] = useState<string[][][]>(() =>
+        [createEmptyLayer(metadata.width, metadata.height, TILE_EMPTY)]
+    );
+    const [terrainTintLayers, setTerrainTintLayers] = useState<number[][][]>(() =>
+        [createEmptyTintGrid(metadata.width, metadata.height)]
+    );
+    const [floorTintLayers, setFloorTintLayers] = useState<number[][][]>(() =>
+        [createEmptyTintGrid(metadata.width, metadata.height)]
+    );
+    const [activeTerrainPaintLayer, setActiveTerrainPaintLayer] = useState(0);
+    const [activeFloorPaintLayer, setActiveFloorPaintLayer] = useState(0);
+    const [activeTileTint, setActiveTileTint] = useState(0);
     const [propsLayer, setPropsLayer] = useState<string[][]>(() =>
         createEmptyLayer(metadata.width, metadata.height, ".")
     );
@@ -206,6 +268,23 @@ export function MapEditor() {
     // Door/secret-door drag state for click-drag placement
     const [doorDrag, setDoorDrag] = useState<{ brush: DragEntityBrush; startX: number; startZ: number; endX: number; endZ: number } | null>(null);
 
+    const composedTerrainLayer = useMemo(
+        () => composeTileLayers(terrainLayers, metadata.width, metadata.height, TILE_EMPTY),
+        [terrainLayers, metadata.width, metadata.height]
+    );
+    const composedFloorLayer = useMemo(
+        () => composeTileLayers(floorLayers, metadata.width, metadata.height, TILE_EMPTY),
+        [floorLayers, metadata.width, metadata.height]
+    );
+    const composedTerrainTintLayer = useMemo(
+        () => composeTintLayers(terrainLayers, terrainTintLayers, metadata.width, metadata.height, TILE_EMPTY),
+        [terrainLayers, terrainTintLayers, metadata.width, metadata.height]
+    );
+    const composedFloorTintLayer = useMemo(
+        () => composeTintLayers(floorLayers, floorTintLayers, metadata.width, metadata.height, TILE_EMPTY),
+        [floorLayers, floorTintLayers, metadata.width, metadata.height]
+    );
+
     // Entity editor popup
     const [editingEntity, setEditingEntity] = useState<{ entity: EntityDef; screenX: number; screenY: number } | null>(null);
     const [editingTree, setEditingTree] = useState<{ tree: TreeDef; index: number; screenX: number; screenY: number } | null>(null);
@@ -219,14 +298,16 @@ export function MapEditor() {
 
     const createSnapshot = useCallback((): EditorSnapshot => ({
         geometryLayer: geometryLayer.map(row => [...row]),
-        terrainLayer: terrainLayer.map(row => [...row]),
-        floorLayer: floorLayer.map(row => [...row]),
+        terrainLayers: cloneTileLayerStack(terrainLayers),
+        floorLayers: cloneTileLayerStack(floorLayers),
+        terrainTintLayers: cloneTintLayerStack(terrainTintLayers),
+        floorTintLayers: cloneTintLayerStack(floorTintLayers),
         propsLayer: propsLayer.map(row => [...row]),
         entitiesLayer: entitiesLayer.map(row => [...row]),
         entities: entities.map(e => ({ ...e })),
         trees: trees.map(t => ({ ...t })),
         decorations: decorations.map(d => ({ ...d })),
-    }), [geometryLayer, terrainLayer, floorLayer, propsLayer, entitiesLayer, entities, trees, decorations]);
+    }), [geometryLayer, terrainLayers, floorLayers, terrainTintLayers, floorTintLayers, propsLayer, entitiesLayer, entities, trees, decorations]);
 
     const pushHistory = useCallback(() => {
         const snapshot = createSnapshot();
@@ -243,8 +324,10 @@ export function MapEditor() {
 
     const applySnapshot = useCallback((snapshot: EditorSnapshot) => {
         setGeometryLayer(snapshot.geometryLayer.map(row => [...row]));
-        setTerrainLayer(snapshot.terrainLayer.map(row => [...row]));
-        setFloorLayer(snapshot.floorLayer.map(row => [...row]));
+        setTerrainLayers(cloneTileLayerStack(snapshot.terrainLayers));
+        setFloorLayers(cloneTileLayerStack(snapshot.floorLayers));
+        setTerrainTintLayers(cloneTintLayerStack(snapshot.terrainTintLayers));
+        setFloorTintLayers(cloneTintLayerStack(snapshot.floorTintLayers));
         setPropsLayer(snapshot.propsLayer.map(row => [...row]));
         setEntitiesLayer(snapshot.entitiesLayer.map(row => [...row]));
         setEntities(snapshot.entities.map(e => ({ ...e })));
@@ -287,6 +370,22 @@ export function MapEditor() {
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
     }, [undo, redo]);
+
+    useEffect(() => {
+        setTerrainLayer(composedTerrainLayer);
+    }, [composedTerrainLayer]);
+
+    useEffect(() => {
+        setFloorLayer(composedFloorLayer);
+    }, [composedFloorLayer]);
+
+    useEffect(() => {
+        setActiveTerrainPaintLayer(prev => Math.max(0, Math.min(prev, terrainLayers.length - 1)));
+    }, [terrainLayers.length]);
+
+    useEffect(() => {
+        setActiveFloorPaintLayer(prev => Math.max(0, Math.min(prev, floorLayers.length - 1)));
+    }, [floorLayers.length]);
 
     // In isometric mode, lock zoom at 50%
     const effectiveZoom = isometric ? ISO_ZOOM : zoom;
@@ -337,11 +436,33 @@ export function MapEditor() {
     // Resize layers when dimensions change
     useEffect(() => {
         setGeometryLayer(prev => resizeLayer(prev, metadata.width, metadata.height, "."));
-        setTerrainLayer(prev => resizeLayer(prev, metadata.width, metadata.height, "."));
-        setFloorLayer(prev => resizeLayer(prev, metadata.width, metadata.height, "."));
+        setTerrainLayers(prev => normalizeTileLayerStack(
+            prev.map(layer => resizeLayer(layer, metadata.width, metadata.height, TILE_EMPTY)),
+            metadata.width,
+            metadata.height,
+            TILE_EMPTY
+        ));
+        setFloorLayers(prev => normalizeTileLayerStack(
+            prev.map(layer => resizeLayer(layer, metadata.width, metadata.height, TILE_EMPTY)),
+            metadata.width,
+            metadata.height,
+            TILE_EMPTY
+        ));
+        setTerrainTintLayers(prev => normalizeTintLayerStack(
+            prev.map(layer => resizeTintLayer(layer, metadata.width, metadata.height)),
+            Math.max(1, terrainLayers.length),
+            metadata.width,
+            metadata.height
+        ));
+        setFloorTintLayers(prev => normalizeTintLayerStack(
+            prev.map(layer => resizeTintLayer(layer, metadata.width, metadata.height)),
+            Math.max(1, floorLayers.length),
+            metadata.width,
+            metadata.height
+        ));
         setPropsLayer(prev => resizeLayer(prev, metadata.width, metadata.height, "."));
         setEntitiesLayer(prev => resizeLayer(prev, metadata.width, metadata.height, "."));
-    }, [metadata.width, metadata.height]);
+    }, [metadata.width, metadata.height, terrainLayers.length, floorLayers.length]);
 
     // Draw canvas
     useEffect(() => {
@@ -359,9 +480,9 @@ export function MapEditor() {
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         // Draw layers bottom to top (floor first as base, then everything on top)
-        if (layerVisibility.floor) drawLayer(ctx, floorLayer, "floor", CELL_SIZE);
+        if (layerVisibility.floor) drawLayer(ctx, floorLayer, "floor", CELL_SIZE, composedFloorTintLayer);
         if (layerVisibility.geometry) drawLayer(ctx, geometryLayer, "geometry", CELL_SIZE);
-        if (layerVisibility.terrain) drawLayer(ctx, terrainLayer, "terrain", CELL_SIZE);
+        if (layerVisibility.terrain) drawLayer(ctx, terrainLayer, "terrain", CELL_SIZE, composedTerrainTintLayer);
         if (layerVisibility.props) drawLayer(ctx, propsLayer, "props", CELL_SIZE);
         if (layerVisibility.entities) drawLayer(ctx, entitiesLayer, "entities", CELL_SIZE);
 
@@ -455,27 +576,70 @@ export function MapEditor() {
             }
         }
 
-    }, [geometryLayer, terrainLayer, floorLayer, propsLayer, entitiesLayer, metadata, showGrid, layerVisibility, activeLayer, CELL_SIZE, doorDrag, entities]);
+    }, [geometryLayer, terrainLayer, floorLayer, propsLayer, entitiesLayer, metadata, showGrid, layerVisibility, activeLayer, CELL_SIZE, doorDrag, entities, composedFloorTintLayer, composedTerrainTintLayer]);
 
     const getActiveLayer = useCallback((): string[][] => {
         switch (activeLayer) {
             case "geometry": return geometryLayer;
-            case "terrain": return terrainLayer;
-            case "floor": return floorLayer;
+            case "terrain": return terrainLayers[activeTerrainPaintLayer] ?? createEmptyLayer(metadata.width, metadata.height, TILE_EMPTY);
+            case "floor": return floorLayers[activeFloorPaintLayer] ?? createEmptyLayer(metadata.width, metadata.height, TILE_EMPTY);
             case "props": return propsLayer;
             case "entities": return entitiesLayer;
         }
-    }, [activeLayer, geometryLayer, terrainLayer, floorLayer, propsLayer, entitiesLayer]);
+    }, [
+        activeLayer,
+        geometryLayer,
+        terrainLayers,
+        floorLayers,
+        activeTerrainPaintLayer,
+        activeFloorPaintLayer,
+        propsLayer,
+        entitiesLayer,
+        metadata.width,
+        metadata.height
+    ]);
 
     const setActiveLayerData = useCallback((newLayer: string[][]) => {
         switch (activeLayer) {
             case "geometry": setGeometryLayer(newLayer); break;
-            case "terrain": setTerrainLayer(newLayer); break;
-            case "floor": setFloorLayer(newLayer); break;
+            case "terrain":
+                setTerrainLayers(prev => prev.map((layer, index) => index === activeTerrainPaintLayer ? newLayer : layer));
+                break;
+            case "floor":
+                setFloorLayers(prev => prev.map((layer, index) => index === activeFloorPaintLayer ? newLayer : layer));
+                break;
             case "props": setPropsLayer(newLayer); break;
             case "entities": setEntitiesLayer(newLayer); break;
         }
-    }, [activeLayer]);
+    }, [activeLayer, activeTerrainPaintLayer, activeFloorPaintLayer]);
+
+    const getActiveTintLayer = useCallback((): number[][] | null => {
+        if (activeLayer === "terrain") {
+            return terrainTintLayers[activeTerrainPaintLayer] ?? createEmptyTintGrid(metadata.width, metadata.height);
+        }
+        if (activeLayer === "floor") {
+            return floorTintLayers[activeFloorPaintLayer] ?? createEmptyTintGrid(metadata.width, metadata.height);
+        }
+        return null;
+    }, [
+        activeLayer,
+        terrainTintLayers,
+        floorTintLayers,
+        activeTerrainPaintLayer,
+        activeFloorPaintLayer,
+        metadata.width,
+        metadata.height
+    ]);
+
+    const setActiveTintLayerData = useCallback((newTintLayer: number[][]): void => {
+        if (activeLayer === "terrain") {
+            setTerrainTintLayers(prev => prev.map((layer, index) => index === activeTerrainPaintLayer ? newTintLayer : layer));
+            return;
+        }
+        if (activeLayer === "floor") {
+            setFloorTintLayers(prev => prev.map((layer, index) => index === activeFloorPaintLayer ? newTintLayer : layer));
+        }
+    }, [activeLayer, activeTerrainPaintLayer, activeFloorPaintLayer]);
 
     const getEntityFootprint = useCallback((entity: EntityDef): { x: number; z: number; w: number; h: number } => {
         if (entity.type === "transition") {
@@ -582,6 +746,8 @@ export function MapEditor() {
 
     const paintCell = useCallback((x: number, z: number) => {
         const layer = getActiveLayer();
+        const tintLayer = getActiveTintLayer();
+        const isTintableLayer = activeLayer === "terrain" || activeLayer === "floor";
         if (x < 0 || x >= metadata.width || z < 0 || z >= metadata.height) return;
 
         if (activeLayer === "entities" && activeTool === "paint" && activeBrush === "@") {
@@ -600,6 +766,7 @@ export function MapEditor() {
         }
 
         const newLayer = layer.map(row => [...row]);
+        const newTintLayer = tintLayer ? tintLayer.map(row => [...row]) : null;
         const halfSize = Math.floor(brushSize / 2);
 
         // Paint a square area based on brush size
@@ -610,13 +777,22 @@ export function MapEditor() {
                 if (px >= 0 && px < metadata.width && pz >= 0 && pz < metadata.height) {
                     if (activeTool === "paint") {
                         newLayer[pz][px] = activeBrush;
+                        if (isTintableLayer && newTintLayer) {
+                            newTintLayer[pz][px] = activeBrush === TILE_EMPTY ? 0 : clampTileTintPercent(activeTileTint);
+                        }
                     } else if (activeTool === "erase") {
-                        newLayer[pz][px] = ".";
+                        newLayer[pz][px] = TILE_EMPTY;
+                        if (isTintableLayer && newTintLayer) {
+                            newTintLayer[pz][px] = 0;
+                        }
                     }
                 }
             }
         }
         setActiveLayerData(newLayer);
+        if (isTintableLayer && newTintLayer) {
+            setActiveTintLayerData(newTintLayer);
+        }
 
         // For entities layer, sync the entities array for special types that need detailed config
         if (activeLayer === "entities") {
@@ -679,7 +855,23 @@ export function MapEditor() {
                 }
             }
         }
-    }, [getActiveLayer, setActiveLayerData, activeTool, activeBrush, brushSize, metadata.width, metadata.height, activeLayer, entities, propsLayer, setSpawnPoint]);
+    }, [
+        getActiveLayer,
+        getActiveTintLayer,
+        setActiveLayerData,
+        setActiveTintLayerData,
+        activeTool,
+        activeBrush,
+        activeTileTint,
+        brushSize,
+        metadata.width,
+        metadata.height,
+        activeLayer,
+        entities,
+        propsLayer,
+        setSpawnPoint,
+        isBlockingPropCell
+    ]);
 
     const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
         // Ignore right-click (handled by onContextMenu)
@@ -1032,13 +1224,19 @@ export function MapEditor() {
 
         // Use geometry, terrain, and floor directly from area data
         setGeometryLayer(area.geometry.map(row => [...row]));
-        setTerrainLayer(area.terrain.map(row => [...row]));
-        // Floor layer - use empty if not present in area data
-        if (area.floor && area.floor.length > 0) {
-            setFloorLayer(area.floor.map(row => [...row]));
-        } else {
-            setFloorLayer(createEmptyLayer(area.gridWidth, area.gridHeight, "."));
-        }
+        const loadedTerrainLayers = normalizeTileLayerStack(area.terrainLayers ?? [area.terrain], area.gridWidth, area.gridHeight, TILE_EMPTY);
+        const loadedFloorLayers = normalizeTileLayerStack(
+            area.floor && area.floor.length > 0 ? (area.floorLayers ?? [area.floor]) : [createEmptyLayer(area.gridWidth, area.gridHeight, TILE_EMPTY)],
+            area.gridWidth,
+            area.gridHeight,
+            TILE_EMPTY
+        );
+        setTerrainLayers(loadedTerrainLayers);
+        setFloorLayers(loadedFloorLayers);
+        setTerrainTintLayers(normalizeTintLayerStack(area.terrainTintLayers, loadedTerrainLayers.length, area.gridWidth, area.gridHeight));
+        setFloorTintLayers(normalizeTintLayerStack(area.floorTintLayers, loadedFloorLayers.length, area.gridWidth, area.gridHeight));
+        setActiveTerrainPaintLayer(Math.max(0, loadedTerrainLayers.length - 1));
+        setActiveFloorPaintLayer(Math.max(0, loadedFloorLayers.length - 1));
 
         // Compute props layer from trees and decorations
         const newProps = computePropsFromArea(area, area.gridWidth, area.gridHeight);
@@ -1144,8 +1342,13 @@ export function MapEditor() {
         });
 
         setGeometryLayer(createEmptyLayer(width, height, "."));
-        setTerrainLayer(createEmptyLayer(width, height, "."));
-        setFloorLayer(createEmptyLayer(width, height, "."));
+        setTerrainLayers([createEmptyLayer(width, height, TILE_EMPTY)]);
+        setFloorLayers([createEmptyLayer(width, height, TILE_EMPTY)]);
+        setTerrainTintLayers([createEmptyTintGrid(width, height)]);
+        setFloorTintLayers([createEmptyTintGrid(width, height)]);
+        setActiveTerrainPaintLayer(0);
+        setActiveFloorPaintLayer(0);
+        setActiveTileTint(0);
         setPropsLayer(createEmptyLayer(width, height, "."));
         setEntitiesLayer(newEntities);
         setEntities([]);
@@ -1219,6 +1422,13 @@ export function MapEditor() {
     }, []);
 
     const buildAreaDataFromEditor = (): AreaData => {
+        const normalizedTerrainLayers = normalizeTileLayerStack(terrainLayers, metadata.width, metadata.height, TILE_EMPTY);
+        const normalizedFloorLayers = normalizeTileLayerStack(floorLayers, metadata.width, metadata.height, TILE_EMPTY);
+        const normalizedTerrainTintLayers = normalizeTintLayerStack(terrainTintLayers, normalizedTerrainLayers.length, metadata.width, metadata.height);
+        const normalizedFloorTintLayers = normalizeTintLayerStack(floorTintLayers, normalizedFloorLayers.length, metadata.width, metadata.height);
+        const composedTerrain = composeTileLayers(normalizedTerrainLayers, metadata.width, metadata.height, TILE_EMPTY);
+        const composedFloor = composeTileLayers(normalizedFloorLayers, metadata.width, metadata.height, TILE_EMPTY);
+
         // Extract trees and decorations from props layer, merging with detailed state for metadata
         const gridProps = extractPropsFromLayer(propsLayer);
         const mergedTrees: TreeLocation[] = gridProps.trees.map(gt => {
@@ -1248,7 +1458,7 @@ export function MapEditor() {
         const enemySpawns = sanitizeEnemySpawns(
             rawEnemySpawns,
             geometryLayer,
-            terrainLayer,
+            composedTerrain,
             propsLayer,
             metadata.width,
             metadata.height
@@ -1342,8 +1552,12 @@ export function MapEditor() {
             hasFogOfWar: metadata.fog,
             defaultSpawn: { x: metadata.spawnX, z: metadata.spawnZ },
             geometry: geometryLayer,
-            terrain: terrainLayer,
-            floor: floorLayer,
+            terrain: composedTerrain,
+            floor: composedFloor,
+            terrainLayers: normalizedTerrainLayers.length > 1 || hasTintData(normalizedTerrainTintLayers) ? normalizedTerrainLayers : undefined,
+            floorLayers: normalizedFloorLayers.length > 1 || hasTintData(normalizedFloorTintLayers) ? normalizedFloorLayers : undefined,
+            terrainTintLayers: hasTintData(normalizedTerrainTintLayers) ? normalizedTerrainTintLayers : undefined,
+            floorTintLayers: hasTintData(normalizedFloorTintLayers) ? normalizedFloorTintLayers : undefined,
             enemySpawns,
             transitions: transitionList,
             chests: chestList,
@@ -1357,6 +1571,44 @@ export function MapEditor() {
 
     const getBrushOptions = (): { char: string; label: string }[] => {
         return LAYER_BRUSHES[activeLayer];
+    };
+
+    const isTileLayerEditable = activeLayer === "terrain" || activeLayer === "floor";
+    const activeTileLayerIndex = activeLayer === "terrain" ? activeTerrainPaintLayer : activeFloorPaintLayer;
+    const activeTileLayerCount = activeLayer === "terrain" ? terrainLayers.length : floorLayers.length;
+
+    const addActiveTileLayer = () => {
+        if (!isTileLayerEditable) return;
+        pushHistory();
+        if (activeLayer === "terrain") {
+            const newLayer = createEmptyLayer(metadata.width, metadata.height, TILE_EMPTY);
+            const newTint = createEmptyTintGrid(metadata.width, metadata.height);
+            setTerrainLayers(prev => [...prev, newLayer]);
+            setTerrainTintLayers(prev => [...prev, newTint]);
+            setActiveTerrainPaintLayer(terrainLayers.length);
+            return;
+        }
+
+        const newLayer = createEmptyLayer(metadata.width, metadata.height, TILE_EMPTY);
+        const newTint = createEmptyTintGrid(metadata.width, metadata.height);
+        setFloorLayers(prev => [...prev, newLayer]);
+        setFloorTintLayers(prev => [...prev, newTint]);
+        setActiveFloorPaintLayer(floorLayers.length);
+    };
+
+    const removeActiveTileLayer = () => {
+        if (!isTileLayerEditable || activeTileLayerCount <= 1) return;
+        pushHistory();
+        if (activeLayer === "terrain") {
+            setTerrainLayers(prev => prev.filter((_, index) => index !== activeTerrainPaintLayer));
+            setTerrainTintLayers(prev => prev.filter((_, index) => index !== activeTerrainPaintLayer));
+            setActiveTerrainPaintLayer(prev => Math.max(0, Math.min(prev - 1, terrainLayers.length - 2)));
+            return;
+        }
+
+        setFloorLayers(prev => prev.filter((_, index) => index !== activeFloorPaintLayer));
+        setFloorTintLayers(prev => prev.filter((_, index) => index !== activeFloorPaintLayer));
+        setActiveFloorPaintLayer(prev => Math.max(0, Math.min(prev - 1, floorLayers.length - 2)));
     };
 
     const availableAreaIds = getAvailableAreaIds();
@@ -1444,7 +1696,10 @@ export function MapEditor() {
                                 style={{ width: 18, height: 18 }}
                             />
                             <button
-                                onClick={() => { setActiveLayer(layer); setActiveBrush(getBrushOptions()[0]?.char ?? "."); }}
+                                onClick={() => {
+                                    setActiveLayer(layer);
+                                    setActiveBrush(LAYER_BRUSHES[layer][0]?.char ?? ".");
+                                }}
                                 style={{
                                     flex: 1,
                                     padding: "8px 12px",
@@ -1555,6 +1810,71 @@ export function MapEditor() {
                         ))}
                     </div>
                 </div>
+
+                {isTileLayerEditable && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                        <h3 style={{ margin: 0, fontSize: 16 }}>Tile Layers</h3>
+                        <div style={{ display: "flex", gap: 8 }}>
+                            {Array.from({ length: activeTileLayerCount }, (_, index) => (
+                                <button
+                                    key={`tile-layer-${index}`}
+                                    onClick={() => {
+                                        if (activeLayer === "terrain") setActiveTerrainPaintLayer(index);
+                                        else setActiveFloorPaintLayer(index);
+                                    }}
+                                    style={{
+                                        flex: 1,
+                                        padding: "6px 0",
+                                        fontSize: 12,
+                                        background: activeTileLayerIndex === index ? "#4a9" : "#333",
+                                        color: "#fff",
+                                        border: "none",
+                                        borderRadius: 4,
+                                        cursor: "pointer",
+                                    }}
+                                >
+                                    {index + 1}
+                                </button>
+                            ))}
+                        </div>
+                        <div style={{ display: "flex", gap: 8 }}>
+                            <button
+                                onClick={addActiveTileLayer}
+                                style={{ flex: 1, padding: "6px 0", fontSize: 12, background: "#2f5", color: "#111", border: "none", borderRadius: 4, cursor: "pointer" }}
+                            >
+                                + Layer
+                            </button>
+                            <button
+                                onClick={removeActiveTileLayer}
+                                disabled={activeTileLayerCount <= 1}
+                                style={{
+                                    flex: 1,
+                                    padding: "6px 0",
+                                    fontSize: 12,
+                                    background: activeTileLayerCount <= 1 ? "#555" : "#b44",
+                                    color: "#fff",
+                                    border: "none",
+                                    borderRadius: 4,
+                                    cursor: activeTileLayerCount <= 1 ? "not-allowed" : "pointer",
+                                    opacity: activeTileLayerCount <= 1 ? 0.6 : 1,
+                                }}
+                            >
+                                - Layer
+                            </button>
+                        </div>
+                        <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            <span style={{ fontSize: 13 }}>Tint: {activeTileTint}%</span>
+                            <input
+                                type="range"
+                                min={-35}
+                                max={35}
+                                step={1}
+                                value={activeTileTint}
+                                onChange={e => setActiveTileTint(clampTileTintPercent(parseInt(e.target.value, 10) || 0))}
+                            />
+                        </label>
+                    </div>
+                )}
 
                 {/* Grid Toggle */}
                 <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
@@ -1903,6 +2223,18 @@ function resizeLayer(layer: string[][], newWidth: number, newHeight: number, fil
             } else {
                 row.push(fill);
             }
+        }
+        result.push(row);
+    }
+    return result;
+}
+
+function resizeTintLayer(layer: number[][], newWidth: number, newHeight: number): number[][] {
+    const result: number[][] = [];
+    for (let z = 0; z < newHeight; z++) {
+        const row: number[] = [];
+        for (let x = 0; x < newWidth; x++) {
+            row.push(clampTileTintPercent(layer[z]?.[x] ?? 0));
         }
         result.push(row);
     }

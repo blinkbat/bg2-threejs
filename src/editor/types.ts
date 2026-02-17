@@ -70,8 +70,10 @@ export interface DecorationDef {
 
 export interface EditorSnapshot {
     geometryLayer: string[][];
-    terrainLayer: string[][];
-    floorLayer: string[][];
+    terrainLayers: string[][][];
+    floorLayers: string[][][];
+    terrainTintLayers: number[][][];
+    floorTintLayers: number[][][];
     propsLayer: string[][];
     entitiesLayer: string[][];
     entities: EntityDef[];

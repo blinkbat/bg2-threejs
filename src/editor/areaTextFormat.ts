@@ -23,6 +23,14 @@ import {
     type AreaLight,
 } from "../game/areas/types";
 import type { CandlePosition, EnemyType } from "../core/types";
+import {
+    clampTileTintPercent,
+    composeTileLayers,
+    hasTintData,
+    normalizeTileLayerStack,
+    normalizeTintLayerStack,
+    TILE_EMPTY,
+} from "../game/areas/tileLayers";
 
 // =============================================================================
 // TEXT FORMAT SPECIFICATION
@@ -46,6 +54,18 @@ import type { CandlePosition, EnemyType } from "../core/types";
 //
 // === FLOOR ===
 // (grid with s=sand, d=dirt, g=grass, w=water, t=stone, .=default)
+//
+// === TERRAIN_LAYER_N ===
+// (optional layered terrain stack, bottom -> top)
+//
+// === FLOOR_LAYER_N ===
+// (optional layered floor stack, bottom -> top)
+//
+// === TERRAIN_TINT_LAYER_N ===
+// x,z:tintPercent  (sparse per-tile tint map, -35..35)
+//
+// === FLOOR_TINT_LAYER_N ===
+// x,z:tintPercent  (sparse per-tile tint map, -35..35)
 //
 // === ENEMIES ===
 // x,z:enemy_type
@@ -91,6 +111,10 @@ interface ParsedArea {
     geometry: string[][];
     terrain: string[][];
     floor: string[][];
+    terrainLayersByIndex: Record<number, string[][]>;
+    floorLayersByIndex: Record<number, string[][]>;
+    terrainTintEntriesByIndex: Record<number, Array<{ x: number; z: number; tint: number }>>;
+    floorTintEntriesByIndex: Record<number, Array<{ x: number; z: number; tint: number }>>;
     enemies: EnemySpawn[];
     chests: ChestLocation[];
     transitions: AreaTransition[];
@@ -108,12 +132,45 @@ function normalizeHexColor(color: string | undefined, fallback: string): string 
     return fallback;
 }
 
+function writeSparseTintSections(
+    lines: string[],
+    sectionPrefix: string,
+    tintLayers: number[][][],
+    tileLayers: string[][][]
+): void {
+    if (!hasTintData(tintLayers)) return;
+
+    for (let layerIndex = 0; layerIndex < tintLayers.length; layerIndex++) {
+        const tintLayer = tintLayers[layerIndex];
+        const tileLayer = tileLayers[layerIndex];
+        const entries: Array<{ x: number; z: number; tint: number }> = [];
+
+        for (let z = 0; z < tintLayer.length; z++) {
+            for (let x = 0; x < tintLayer[z].length; x++) {
+                const tint = clampTileTintPercent(tintLayer[z][x]);
+                if (tint === 0) continue;
+                if ((tileLayer[z]?.[x] ?? TILE_EMPTY) === TILE_EMPTY) continue;
+                entries.push({ x, z, tint });
+            }
+        }
+
+        if (entries.length === 0) continue;
+        lines.push(`=== ${sectionPrefix}_${layerIndex} ===`);
+        entries.forEach(entry => lines.push(`${entry.x},${entry.z}:${entry.tint}`));
+        lines.push("");
+    }
+}
+
 // =============================================================================
 // SERIALIZATION - AreaData to Text
 // =============================================================================
 
 export function areaDataToText(area: AreaData): string {
     const lines: string[] = [];
+    const terrainLayers = normalizeTileLayerStack(area.terrainLayers ?? [area.terrain], area.gridWidth, area.gridHeight, TILE_EMPTY);
+    const floorLayers = normalizeTileLayerStack(area.floorLayers ?? [area.floor], area.gridWidth, area.gridHeight, TILE_EMPTY);
+    const terrainTintLayers = normalizeTintLayerStack(area.terrainTintLayers, terrainLayers.length, area.gridWidth, area.gridHeight);
+    const floorTintLayers = normalizeTintLayerStack(area.floorTintLayers, floorLayers.length, area.gridWidth, area.gridHeight);
 
     // Metadata
     lines.push(`=== AREA: ${area.id} ===`);
@@ -142,6 +199,26 @@ export function areaDataToText(area: AreaData): string {
     lines.push("=== FLOOR ===");
     area.floor.forEach(row => lines.push(row.join("")));
     lines.push("");
+
+    // Optional explicit layer stacks
+    if (terrainLayers.length > 1) {
+        terrainLayers.forEach((layer, index) => {
+            lines.push(`=== TERRAIN_LAYER_${index} ===`);
+            layer.forEach(row => lines.push(row.join("")));
+            lines.push("");
+        });
+    }
+    if (floorLayers.length > 1) {
+        floorLayers.forEach((layer, index) => {
+            lines.push(`=== FLOOR_LAYER_${index} ===`);
+            layer.forEach(row => lines.push(row.join("")));
+            lines.push("");
+        });
+    }
+
+    // Optional sparse tint maps
+    writeSparseTintSections(lines, "TERRAIN_TINT_LAYER", terrainTintLayers, terrainLayers);
+    writeSparseTintSections(lines, "FLOOR_TINT_LAYER", floorTintLayers, floorLayers);
 
     // Enemies
     if (area.enemySpawns.length > 0) {
@@ -271,6 +348,10 @@ function parseTextFormat(text: string): ParsedArea {
         geometry: [],
         terrain: [],
         floor: [],
+        terrainLayersByIndex: {},
+        floorLayersByIndex: {},
+        terrainTintEntriesByIndex: {},
+        floorTintEntriesByIndex: {},
         enemies: [],
         chests: [],
         transitions: [],
@@ -296,6 +377,30 @@ function parseTextFormat(text: string): ParsedArea {
         }
 
         if (line.startsWith("===")) {
+            const terrainLayerMatch = line.match(/^=== TERRAIN_LAYER_(\d+) ===$/i);
+            if (terrainLayerMatch) {
+                currentSection = `terrain_layer_${terrainLayerMatch[1]}`;
+                continue;
+            }
+
+            const floorLayerMatch = line.match(/^=== FLOOR_LAYER_(\d+) ===$/i);
+            if (floorLayerMatch) {
+                currentSection = `floor_layer_${floorLayerMatch[1]}`;
+                continue;
+            }
+
+            const terrainTintLayerMatch = line.match(/^=== TERRAIN_TINT_LAYER_(\d+) ===$/i);
+            if (terrainTintLayerMatch) {
+                currentSection = `terrain_tint_layer_${terrainTintLayerMatch[1]}`;
+                continue;
+            }
+
+            const floorTintLayerMatch = line.match(/^=== FLOOR_TINT_LAYER_(\d+) ===$/i);
+            if (floorTintLayerMatch) {
+                currentSection = `floor_tint_layer_${floorTintLayerMatch[1]}`;
+                continue;
+            }
+
             const sectionMatch = line.match(/=== (\w+) ===/);
             if (sectionMatch) {
                 currentSection = sectionMatch[1].toLowerCase();
@@ -340,6 +445,33 @@ function parseTextFormat(text: string): ParsedArea {
                 break;
             case "candles":
                 parseCandleLine(line, result.candles);
+                break;
+            default:
+                if (currentSection.startsWith("terrain_layer_")) {
+                    const index = parseInt(currentSection.slice("terrain_layer_".length), 10);
+                    if (Number.isFinite(index)) {
+                        if (!result.terrainLayersByIndex[index]) result.terrainLayersByIndex[index] = [];
+                        result.terrainLayersByIndex[index].push(line.split(""));
+                    }
+                } else if (currentSection.startsWith("floor_layer_")) {
+                    const index = parseInt(currentSection.slice("floor_layer_".length), 10);
+                    if (Number.isFinite(index)) {
+                        if (!result.floorLayersByIndex[index]) result.floorLayersByIndex[index] = [];
+                        result.floorLayersByIndex[index].push(line.split(""));
+                    }
+                } else if (currentSection.startsWith("terrain_tint_layer_")) {
+                    const index = parseInt(currentSection.slice("terrain_tint_layer_".length), 10);
+                    if (Number.isFinite(index)) {
+                        if (!result.terrainTintEntriesByIndex[index]) result.terrainTintEntriesByIndex[index] = [];
+                        parseTintEntryLine(line, result.terrainTintEntriesByIndex[index]);
+                    }
+                } else if (currentSection.startsWith("floor_tint_layer_")) {
+                    const index = parseInt(currentSection.slice("floor_tint_layer_".length), 10);
+                    if (Number.isFinite(index)) {
+                        if (!result.floorTintEntriesByIndex[index]) result.floorTintEntriesByIndex[index] = [];
+                        parseTintEntryLine(line, result.floorTintEntriesByIndex[index]);
+                    }
+                }
                 break;
         }
     }
@@ -553,13 +685,70 @@ function parseLightLine(line: string, lights: AreaLight[]) {
     });
 }
 
+function parseTintEntryLine(line: string, entries: Array<{ x: number; z: number; tint: number }>): void {
+    const [coords, tintRaw] = line.split(":");
+    if (!coords || tintRaw === undefined) return;
+    const [xStr, zStr] = coords.split(",");
+    const x = parseInt(xStr, 10);
+    const z = parseInt(zStr, 10);
+    const tint = clampTileTintPercent(parseInt(tintRaw, 10));
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+    entries.push({ x, z, tint });
+}
+
 function convertParsedToAreaData(parsed: ParsedArea): AreaData {
-    // Create default floor grid if not defined
-    const floor = parsed.floor.length > 0
+    const fallbackTerrain = parsed.terrain.length > 0
+        ? parsed.terrain
+        : Array.from({ length: parsed.metadata.height }, () =>
+            Array(parsed.metadata.width).fill(TILE_EMPTY)
+        );
+    const fallbackFloor = parsed.floor.length > 0
         ? parsed.floor
         : Array.from({ length: parsed.metadata.height }, () =>
-            Array(parsed.metadata.width).fill(".")
+            Array(parsed.metadata.width).fill(TILE_EMPTY)
         );
+
+    const explicitTerrainLayers = Object.entries(parsed.terrainLayersByIndex)
+        .map(([index, layer]) => ({ index: parseInt(index, 10), layer }))
+        .filter(entry => Number.isFinite(entry.index))
+        .sort((a, b) => a.index - b.index)
+        .map(entry => entry.layer);
+    const explicitFloorLayers = Object.entries(parsed.floorLayersByIndex)
+        .map(([index, layer]) => ({ index: parseInt(index, 10), layer }))
+        .filter(entry => Number.isFinite(entry.index))
+        .sort((a, b) => a.index - b.index)
+        .map(entry => entry.layer);
+
+    const terrainLayers = normalizeTileLayerStack(
+        explicitTerrainLayers.length > 0 ? explicitTerrainLayers : [fallbackTerrain],
+        parsed.metadata.width,
+        parsed.metadata.height,
+        TILE_EMPTY
+    );
+    const floorLayers = normalizeTileLayerStack(
+        explicitFloorLayers.length > 0 ? explicitFloorLayers : [fallbackFloor],
+        parsed.metadata.width,
+        parsed.metadata.height,
+        TILE_EMPTY
+    );
+
+    const terrainTintLayers = buildTintLayersFromEntries(
+        parsed.terrainTintEntriesByIndex,
+        terrainLayers.length,
+        parsed.metadata.width,
+        parsed.metadata.height
+    );
+    const floorTintLayers = buildTintLayersFromEntries(
+        parsed.floorTintEntriesByIndex,
+        floorLayers.length,
+        parsed.metadata.width,
+        parsed.metadata.height
+    );
+
+    const terrain = composeTileLayers(terrainLayers, parsed.metadata.width, parsed.metadata.height, TILE_EMPTY);
+    const floor = composeTileLayers(floorLayers, parsed.metadata.width, parsed.metadata.height, TILE_EMPTY);
+    const hasLayeredTerrain = terrainLayers.length > 1 || hasTintData(terrainTintLayers);
+    const hasLayeredFloor = floorLayers.length > 1 || hasTintData(floorTintLayers);
 
     return {
         id: parsed.metadata.id,
@@ -575,8 +764,12 @@ function convertParsedToAreaData(parsed: ParsedArea): AreaData {
         hasFogOfWar: parsed.metadata.fog,
         defaultSpawn: { x: parsed.metadata.spawnX, z: parsed.metadata.spawnZ },
         geometry: parsed.geometry,
-        terrain: parsed.terrain,
+        terrain,
         floor,
+        terrainLayers: hasLayeredTerrain ? terrainLayers : undefined,
+        floorLayers: hasLayeredFloor ? floorLayers : undefined,
+        terrainTintLayers: hasLayeredTerrain ? terrainTintLayers : undefined,
+        floorTintLayers: hasLayeredFloor ? floorTintLayers : undefined,
         enemySpawns: parsed.enemies,
         transitions: parsed.transitions,
         chests: parsed.chests,
@@ -586,4 +779,23 @@ function convertParsedToAreaData(parsed: ParsedArea): AreaData {
         lights: parsed.lights.length > 0 ? parsed.lights : undefined,
         candles: parsed.candles.length > 0 ? parsed.candles : undefined,
     };
+}
+
+function buildTintLayersFromEntries(
+    entriesByIndex: Record<number, Array<{ x: number; z: number; tint: number }>>,
+    layerCount: number,
+    width: number,
+    height: number
+): number[][][] {
+    const tintLayers = normalizeTintLayerStack(undefined, layerCount, width, height);
+    for (const [indexRaw, entries] of Object.entries(entriesByIndex)) {
+        const layerIndex = parseInt(indexRaw, 10);
+        if (!Number.isFinite(layerIndex) || layerIndex < 0 || layerIndex >= tintLayers.length) continue;
+        const layer = tintLayers[layerIndex];
+        entries.forEach(entry => {
+            if (entry.x < 0 || entry.x >= width || entry.z < 0 || entry.z >= height) return;
+            layer[entry.z][entry.x] = clampTileTintPercent(entry.tint);
+        });
+    }
+    return tintLayers;
 }
