@@ -68,6 +68,10 @@ export function isTerrainBlocked(x: number, z: number): boolean {
 }
 
 export function isWaterTerrain(x: number, z: number): boolean {
-    const terrainChar = getCurrentArea().terrain[z]?.[x];
-    return terrainChar === "w" || terrainChar === "W";
+    const area = getCurrentArea();
+    const terrainChar = area.terrain[z]?.[x];
+    if (terrainChar === "w" || terrainChar === "W") return true;
+
+    const floorChar = area.floor[z]?.[x];
+    return floorChar === "w" || floorChar === "W";
 }

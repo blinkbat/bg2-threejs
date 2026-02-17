@@ -678,9 +678,10 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     const tileGeo = new THREE.PlaneGeometry(1, 1);
     const WATER_METALNESS = 0.52;
     const WATER_ROUGHNESS = 0.08;
-    const WATER_EMISSIVE_INTENSITY = 0.14;
-    const TERRAIN_WATER_COLOR_SHALLOW = "#275b72";
-    const TERRAIN_WATER_COLOR_DEEP = "#1f4a60";
+    const WATER_EMISSIVE_INTENSITY = 0.18;
+    const WATER_TILE_OPACITY = 0.4;
+    const TERRAIN_WATER_COLOR_SHALLOW = "#32718a";
+    const TERRAIN_WATER_COLOR_DEEP = "#295f75";
     // Keep floor layers visually flat so they remain below prop/shadow layers.
     const FLOOR_LAYER_HEIGHT_STEP = 0.00004;
     const TERRAIN_LAYER_HEIGHT_STEP = 0.00005;
@@ -708,7 +709,10 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 metalness: WATER_METALNESS,
                 roughness: WATER_ROUGHNESS,
                 emissive: color,
-                emissiveIntensity: WATER_EMISSIVE_INTENSITY
+                emissiveIntensity: WATER_EMISSIVE_INTENSITY,
+                transparent: true,
+                opacity: WATER_TILE_OPACITY,
+                depthWrite: false,
             });
         }
         return waterMatPool[color];
@@ -733,8 +737,8 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         "D": "#6b5344",  // Dark dirt
         "g": "#5a8a4a",  // Grass - green
         "G": "#4a7a3a",  // Dark grass
-        "w": "#4a90a0",  // Water - light blue
-        "W": "#3a7080",  // Deep water
+        "w": "#5ba5b7",  // Water - light blue
+        "W": "#4a8797",  // Deep water
         "t": "#707070",  // Stone - gray
         "T": "#606060",  // Dark stone
         ".": "#555555",  // Default - gray
@@ -780,6 +784,9 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 if (isWater) {
                     tileMaterial.emissive.set(color);
                     tileMaterial.emissiveIntensity = WATER_EMISSIVE_INTENSITY;
+                    tileMaterial.transparent = true;
+                    tileMaterial.opacity = WATER_TILE_OPACITY;
+                    tileMaterial.depthWrite = false;
                 }
 
                 const tile = new THREE.Mesh(tileGeo, tileMaterial);
@@ -840,6 +847,9 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                         : getWaterMat(terrainWaterColor);
                     waterMat.emissive.set(terrainWaterColor);
                     waterMat.emissiveIntensity = WATER_EMISSIVE_INTENSITY;
+                    waterMat.transparent = true;
+                    waterMat.opacity = WATER_TILE_OPACITY;
+                    waterMat.depthWrite = false;
 
                     const tile = new THREE.Mesh(tileGeo, waterMat);
                     tile.rotation.x = -Math.PI / 2;
@@ -1954,8 +1964,11 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     }
 
     // Grid lines - subtle, above room floors (darker for forest to show on green grass)
+    const hasWaterTiles = [...floorLayerStack, ...terrainLayerStack]
+        .some(layer => layer.some(row => row.some(char => char === "w" || char === "W")));
     const gridColor = area.id === "forest" ? "#2f4a2f" : "#3a414a";
-    const gridOpacity = area.id === "forest" ? 0.12 : 0.08;
+    const baseGridOpacity = area.id === "forest" ? 0.12 : 0.08;
+    const gridOpacity = hasWaterTiles ? Math.min(baseGridOpacity + 0.03, 0.16) : baseGridOpacity;
     const topFloorY = FLOOR_BASE_Y + Math.max(0, floorLayerStack.length - 1) * FLOOR_LAYER_HEIGHT_STEP;
     const topTerrainY = TERRAIN_BASE_Y + Math.max(0, terrainLayerStack.length - 1) * TERRAIN_LAYER_HEIGHT_STEP;
     const gridY = Math.max(topFloorY, topTerrainY) + 0.002;
@@ -1964,7 +1977,8 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         transparent: true,
         opacity: gridOpacity,
         depthTest: true,
-        depthWrite: false
+        depthWrite: false,
+        toneMapped: false,
     });
     // Horizontal lines (along X axis, varying Z)
     for (let z = 0; z <= area.gridHeight; z++) {

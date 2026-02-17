@@ -138,7 +138,7 @@ export function isBlocked(x: number, z: number): boolean {
 /**
  * Check if a cell is passable (not blocked and within grid).
  * - Flying units ignore terrain hazards.
- * - Some units (e.g. kraken) may treat water terrain as passable.
+ * - Water-bound units (e.g. kraken) can move only on water cells.
  */
 export function isPassable(
     x: number,
@@ -147,11 +147,12 @@ export function isPassable(
     canTraverseWaterTerrain: boolean = false
 ): boolean {
     if (!isWithinGrid(x, z) || isBlocked(x, z)) return false;
+    // Kraken-like movement profile: constrained to water (terrain or floor water tiles).
+    if (canTraverseWaterTerrain) return isWaterTerrain(x, z);
     // Flying units ignore terrain hazards
     if (flying) return true;
     if (!isTerrainBlocked(x, z)) return true;
-    // Kraken-like movement profile: water is allowed, lava remains blocked
-    return canTraverseWaterTerrain && isWaterTerrain(x, z);
+    return false;
 }
 
 /**
