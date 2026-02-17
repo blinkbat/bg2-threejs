@@ -238,6 +238,7 @@ function buildUnitGroup(
     const boxH = isPlayer ? 1 : (size > 1 ? 1.8 : 0.6);
     const boxW = 0.6 * size;
     const isAmoeba = unit.enemyType === "giant_amoeba";
+    const fallbackShape = isPlayer && "shape" in data ? data.shape : "box";
 
     const spriteConfig = resolveSpriteConfig(unit);
 
@@ -291,26 +292,37 @@ function buildUnitGroup(
         group.add(cone);
         unitMesh = cone;
     } else {
-        // Other units use box meshes
-        const boxMat = new THREE.MeshStandardMaterial({
+        // Fallback meshes for units without sprites.
+        const fallbackMat = new THREE.MeshStandardMaterial({
             color: data.color,
+            emissive: fallbackShape === "sphere" ? new THREE.Color(data.color) : new THREE.Color(0x000000),
+            emissiveIntensity: fallbackShape === "sphere" ? 0.32 : 0,
             metalness: isAmoeba ? 0.1 : 0.5,
             roughness: isAmoeba ? 0.2 : 0.4,
             transparent: isAmoeba,
             opacity: isAmoeba ? 0.58 : 1.0
         });
-        const box = new THREE.Mesh(new THREE.BoxGeometry(boxW, boxH, boxW), boxMat);
-        box.position.y = boxH / 2;
-        box.userData.unitId = unit.id;
-        group.add(box);
-        unitMesh = box;
+        if (fallbackShape === "sphere") {
+            const radius = Math.max(0.16, size * 0.34);
+            const sphere = new THREE.Mesh(new THREE.SphereGeometry(radius, 16, 12), fallbackMat);
+            sphere.position.y = radius + 0.08;
+            sphere.userData.unitId = unit.id;
+            group.add(sphere);
+            unitMesh = sphere;
+        } else {
+            const box = new THREE.Mesh(new THREE.BoxGeometry(boxW, boxH, boxW), fallbackMat);
+            box.position.y = boxH / 2;
+            box.userData.unitId = unit.id;
+            group.add(box);
+            unitMesh = box;
+        }
     }
     unitMesh.castShadow = false;
     unitMesh.receiveShadow = false;
 
     // Determine fly height early (needed for shadow positioning)
     const isFlying = !isPlayer && "flying" in data && data.flying;
-    const flyHeight = isFlying ? 1.2 : 0;
+    const flyHeight = isFlying ? 1.2 : (unit.flyHeight ?? 0);
 
     // Unit shadow - simple dark circle under unit
     // For flying units, offset shadow down so it stays on the ground

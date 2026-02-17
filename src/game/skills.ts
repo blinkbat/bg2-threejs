@@ -3,7 +3,10 @@ import {
     THORNS_DURATION,
     THORNS_DAMAGE_MIN,
     THORNS_DAMAGE_MAX,
-    HIGHLAND_DEFENSE_DURATION
+    HIGHLAND_DEFENSE_DURATION,
+    VISHAS_EYES_ORB_DURATION,
+    VISHAS_EYES_ORB_HEAL_RADIUS,
+    VISHAS_EYES_ORB_HEAL_RANGE
 } from "../core/constants";
 
 // =============================================================================
@@ -278,6 +281,22 @@ export const SKILLS: Record<string, Skill> = {
         damagePerTick: 3,
         tickInterval: 1000,
         duration: 12000
+    },
+    vishasEyes: {
+        name: "Visha's Eyes",
+        description: "Summon three floating holy orbs that fire at foes, then heal nearby allies when they fade or are destroyed.",
+        flavor: "\"The saint sees all, and what she sees, she shields.\"",
+        manaCost: 12,
+        cooldown: 800,
+        type: "summon",
+        targetType: "self",
+        range: 0,
+        damageType: "holy",
+        duration: VISHAS_EYES_ORB_DURATION,
+        aoeRadius: VISHAS_EYES_ORB_HEAL_RADIUS,
+        healRange: VISHAS_EYES_ORB_HEAL_RANGE,
+        isCantrip: true,
+        maxUses: 1
     },
     cleanse: {
         name: "Cleanse",

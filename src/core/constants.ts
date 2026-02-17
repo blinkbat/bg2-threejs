@@ -71,6 +71,13 @@ export const HIGHLAND_DEFENSE_RANGE = 4.5;               // nearby ally radius
 export const ANCESTOR_AURA_RANGE = 4.5;
 export const ANCESTOR_AURA_DAMAGE_BONUS = 2;
 
+// Summons - Visha's Eyes (cleric cantrip)
+export const VISHAS_EYES_ORB_COUNT = 3;
+export const VISHAS_EYES_ORB_DURATION = 18000;  // 18 seconds
+export const VISHAS_EYES_ORB_FLY_HEIGHT = 0.75;
+export const VISHAS_EYES_ORB_HEAL_RADIUS = 3;
+export const VISHAS_EYES_ORB_HEAL_RANGE: [number, number] = [3, 5];
+
 // Status Effects - Doom (kills unit after duration expires, cured by Restoration)
 export const DOOM_DURATION = 10000;          // 10 seconds until death
 export const DOOM_TICK_INTERVAL = 1000;      // Tick every 1 second (for countdown)

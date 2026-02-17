@@ -1,7 +1,7 @@
 import { VISION_RADIUS, PATH_RECURSION_LIMIT, ASTAR_BLOCKED_TARGET_SEARCH, ASTAR_DIAGONAL_COST } from "../core/constants";
 import { getFormationPositionsForSpawn } from "../game/formation";
 import { blocked } from "../game/dungeon";
-import { isTreeBlocked, isTerrainBlocked } from "../game/areas";
+import { isTreeBlocked, isTerrainBlocked, isWaterTerrain } from "../game/areas";
 import { isWithinGrid } from "../game/geometry";
 import type { PathNode, Unit, UnitGroup } from "../core/types";
 
@@ -137,13 +137,21 @@ export function isBlocked(x: number, z: number): boolean {
 
 /**
  * Check if a cell is passable (not blocked and within grid).
- * Flying units can pass over lava.
+ * - Flying units ignore terrain hazards.
+ * - Some units (e.g. kraken) may treat water terrain as passable.
  */
-export function isPassable(x: number, z: number, flying: boolean = false): boolean {
+export function isPassable(
+    x: number,
+    z: number,
+    flying: boolean = false,
+    canTraverseWaterTerrain: boolean = false
+): boolean {
     if (!isWithinGrid(x, z) || isBlocked(x, z)) return false;
-    // Flying units can pass over lava
+    // Flying units ignore terrain hazards
     if (flying) return true;
-    return !isTerrainBlocked(x, z);
+    if (!isTerrainBlocked(x, z)) return true;
+    // Kraken-like movement profile: water is allowed, lava remains blocked
+    return canTraverseWaterTerrain && isWaterTerrain(x, z);
 }
 
 /**
@@ -337,15 +345,21 @@ const DIAGONALS = [
  * Get valid neighbors for A* pathfinding.
  * Handles diagonal movement with corner-cutting prevention.
  * Adds dynamic cost for cells near other units (for wider berth pathfinding).
- * Flying units can pass over lava.
+ * Flying units can pass over terrain hazards.
  */
-function getNeighbors(x: number, z: number, diagonalCost: number, flying: boolean = false): Neighbor[] {
+function getNeighbors(
+    x: number,
+    z: number,
+    diagonalCost: number,
+    flying: boolean = false,
+    canTraverseWaterTerrain: boolean = false
+): Neighbor[] {
     const neighbors: Neighbor[] = [];
 
     // Add cardinal neighbors
     for (const { dx, dz } of CARDINALS) {
         const nx = x + dx, nz = z + dz;
-        if (isPassable(nx, nz, flying)) {
+        if (isPassable(nx, nz, flying, canTraverseWaterTerrain)) {
             // Base cost + dynamic cost from nearby units
             const cost = 1 + getDynamicCost(nx, nz);
             neighbors.push({ x: nx, z: nz, cost });
@@ -355,7 +369,7 @@ function getNeighbors(x: number, z: number, diagonalCost: number, flying: boolea
     // Add diagonal neighbors (with corner-cutting prevention)
     for (const { dx, dz } of DIAGONALS) {
         const nx = x + dx, nz = z + dz;
-        if (!isPassable(nx, nz, flying)) continue;
+        if (!isPassable(nx, nz, flying, canTraverseWaterTerrain)) continue;
 
         // Block diagonal if either adjacent cardinal is blocked (no corner cutting)
         if (isBlocked(x, nz) || isBlocked(nx, z)) continue;
@@ -384,14 +398,29 @@ const PATH_CACHE_MAX_SIZE = 100;
 
 const pathCache: Map<number, CachedPath> = new Map();
 
-function getPathCacheKey(sx: number, sz: number, ex: number, ez: number, flying: boolean): number {
+function getPathCacheKey(
+    sx: number,
+    sz: number,
+    ex: number,
+    ez: number,
+    flying: boolean,
+    canTraverseWaterTerrain: boolean
+): number {
     // Pack 4 coordinates and movement mode into a single number.
     const packed = ((sx * KEY_STRIDE + sz) * KEY_STRIDE + ex) * KEY_STRIDE + ez;
-    return packed * 2 + (flying ? 1 : 0);
+    return packed * 4 + (flying ? 1 : 0) + (canTraverseWaterTerrain ? 2 : 0);
 }
 
-function getCachedPath(sx: number, sz: number, ex: number, ez: number, now: number, flying: boolean): { x: number; z: number }[] | null {
-    const key = getPathCacheKey(sx, sz, ex, ez, flying);
+function getCachedPath(
+    sx: number,
+    sz: number,
+    ex: number,
+    ez: number,
+    now: number,
+    flying: boolean,
+    canTraverseWaterTerrain: boolean
+): { x: number; z: number }[] | null {
+    const key = getPathCacheKey(sx, sz, ex, ez, flying, canTraverseWaterTerrain);
     const cached = pathCache.get(key);
     if (cached && now - cached.timestamp < PATH_CACHE_DURATION) {
         // Return a copy to prevent mutation issues
@@ -400,14 +429,23 @@ function getCachedPath(sx: number, sz: number, ex: number, ez: number, now: numb
     return null;
 }
 
-function setCachedPath(sx: number, sz: number, ex: number, ez: number, path: { x: number; z: number }[], now: number, flying: boolean): void {
+function setCachedPath(
+    sx: number,
+    sz: number,
+    ex: number,
+    ez: number,
+    path: { x: number; z: number }[],
+    now: number,
+    flying: boolean,
+    canTraverseWaterTerrain: boolean
+): void {
     // Prune old entries if cache is too large
     if (pathCache.size >= PATH_CACHE_MAX_SIZE) {
         const oldestKey = pathCache.keys().next().value;
         if (oldestKey) pathCache.delete(oldestKey);
     }
 
-    const key = getPathCacheKey(sx, sz, ex, ez, flying);
+    const key = getPathCacheKey(sx, sz, ex, ez, flying, canTraverseWaterTerrain);
     pathCache.set(key, { path: path.map(p => ({ x: p.x, z: p.z })), timestamp: now });
 }
 
@@ -517,7 +555,15 @@ class OpenList {
     }
 }
 
-export function findPath(startX: number, startZ: number, endX: number, endZ: number, depth: number = 0, flying: boolean = false): { x: number; z: number }[] | null {
+export function findPath(
+    startX: number,
+    startZ: number,
+    endX: number,
+    endZ: number,
+    depth: number = 0,
+    flying: boolean = false,
+    canTraverseWaterTerrain: boolean = false
+): { x: number; z: number }[] | null {
     // Prevent infinite recursion with depth limit
     if (depth > PATH_RECURSION_LIMIT) return null;
 
@@ -534,19 +580,19 @@ export function findPath(startX: number, startZ: number, endX: number, endZ: num
         for (let dx = -ASTAR_BLOCKED_TARGET_SEARCH; dx <= ASTAR_BLOCKED_TARGET_SEARCH; dx++) {
             for (let dz = -ASTAR_BLOCKED_TARGET_SEARCH; dz <= ASTAR_BLOCKED_TARGET_SEARCH; dz++) {
                 const nx = ex + dx, nz = ez + dz;
-                if (isPassable(nx, nz, flying)) {
+                if (isPassable(nx, nz, flying, canTraverseWaterTerrain)) {
                     const dSq = dx * dx + dz * dz;
                     if (dSq < bestDistSq) { bestDistSq = dSq; best = { x: nx, z: nz }; }
                 }
             }
         }
-        if (best) return findPath(startX, startZ, best.x + 0.5, best.z + 0.5, depth + 1, flying);
+        if (best) return findPath(startX, startZ, best.x + 0.5, best.z + 0.5, depth + 1, flying, canTraverseWaterTerrain);
         return null;
     }
 
     // Check cache first
     const now = Date.now();
-    const cached = getCachedPath(sx, sz, ex, ez, now, flying);
+    const cached = getCachedPath(sx, sz, ex, ez, now, flying, canTraverseWaterTerrain);
     if (cached) return cached;
 
     // Calculate heuristic using squared distance comparison but actual distance for h value
@@ -570,14 +616,14 @@ export function findPath(startX: number, startZ: number, endX: number, endZ: num
             path[path.length - 1] = { x: endX, z: endZ };
 
             // Cache the result
-            setCachedPath(sx, sz, ex, ez, path, now, flying);
+            setCachedPath(sx, sz, ex, ez, path, now, flying, canTraverseWaterTerrain);
             return path;
         }
 
         closed.add(cellKey(current.x, current.z));
 
         // Get valid neighbors (handles bounds, blocking, and corner-cutting)
-        const neighbors = getNeighbors(current.x, current.z, ASTAR_DIAGONAL_COST, flying);
+        const neighbors = getNeighbors(current.x, current.z, ASTAR_DIAGONAL_COST, flying, canTraverseWaterTerrain);
 
         for (const n of neighbors) {
             if (closed.has(cellKey(n.x, n.z))) continue;

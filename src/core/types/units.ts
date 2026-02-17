@@ -39,7 +39,7 @@ export interface CharacterStats {
     faith: number;        // +1 holy damage per 2 points, +1 healing power per 2 points
 }
 
-export type SummonType = "ancestor_warrior";
+export type SummonType = "ancestor_warrior" | "vishas_eye_orb";
 
 export interface Unit {
     id: number;
@@ -66,9 +66,11 @@ export interface Unit {
     summonType?: SummonType;  // For player-controlled summoned allies
     summonedBy?: number;  // Summoner unit ID (player team summons)
     auraDamageBonus?: number;  // Flat bonus damage from active auras (runtime)
+    summonExpireAt?: number;  // Expiration timestamp for temporary summons
+    flyHeight?: number;  // Optional vertical offset for floating units
 }
 
-import type { Skill } from "./combat";
+import type { Skill, DamageType } from "./combat";
 
 export interface UnitData {
     name: string;
@@ -88,13 +90,13 @@ export interface UnitData {
     attackCooldown: number;  // ms - cooldown for basic attack (also global cooldown)
     size?: number;  // hitbox size multiplier (default 1)
     baseCrit?: number;  // base crit chance percentage (added to dexterity bonus)
+    basicDamageType?: DamageType;  // Override damage type for basic attacks
+    shape?: "box" | "sphere";  // Optional fallback mesh shape
 }
 
 // =============================================================================
 // ENEMY DATA
 // =============================================================================
-
-import type { DamageType } from "./combat";
 
 export interface EnemySkill {
     name: string;

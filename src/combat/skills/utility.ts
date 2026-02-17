@@ -4,8 +4,20 @@
 
 import * as THREE from "three";
 import type { Skill, StatusEffect, TrapProjectile, Unit, UnitGroup } from "../../core/types";
-import { COLORS, BUFF_TICK_INTERVAL, TRAP_FLIGHT_DURATION, TRAP_ARC_HEIGHT, TRAP_MESH_SIZE, SANCTUARY_HEAL_PER_TICK, DEFAULT_TAUNT_CHANCE, DEFAULT_STUN_CHANCE } from "../../core/constants";
-import { UNIT_DATA, ANCESTOR_SUMMON_ID, getEffectiveMaxHp } from "../../game/playerUnits";
+import {
+    COLORS,
+    BUFF_TICK_INTERVAL,
+    TRAP_FLIGHT_DURATION,
+    TRAP_ARC_HEIGHT,
+    TRAP_MESH_SIZE,
+    SANCTUARY_HEAL_PER_TICK,
+    DEFAULT_TAUNT_CHANCE,
+    DEFAULT_STUN_CHANCE,
+    VISHAS_EYES_ORB_COUNT,
+    VISHAS_EYES_ORB_DURATION,
+    VISHAS_EYES_ORB_FLY_HEIGHT
+} from "../../core/constants";
+import { UNIT_DATA, ANCESTOR_SUMMON_ID, VISHAS_EYE_SUMMON_IDS, getEffectiveMaxHp } from "../../game/playerUnits";
 import { getUnitStats } from "../../game/units";
 import { rollChance, rollSkillHit, hasStatusEffect, logTaunt, logTauntMiss, logStunned, logTrapThrown, applyStatusEffect, checkEnemyDefenses } from "../combatMath";
 import { ENEMY_STATS } from "../../game/enemyStats";
@@ -15,6 +27,7 @@ import { soundFns } from "../../audio";
 import { createAnimatedRing } from "../damageEffects";
 import { createSanctuaryTile } from "../../gameLoop/sanctuaryTiles";
 import { findNearestPassable } from "../../ai/pathfinding";
+import { getGameTime } from "../../core/gameClock";
 import type { SkillExecutionContext } from "./types";
 import { findAndValidateEnemyTarget, consumeSkill } from "./helpers";
 
@@ -367,10 +380,134 @@ function findAncestorSummon(units: Unit[]): Unit | undefined {
     return units.find(u => u.team === "player" && u.summonType === "ancestor_warrior");
 }
 
+function findVishasEyeSummons(units: Unit[]): Unit[] {
+    return units.filter(u => u.team === "player" && u.summonType === "vishas_eye_orb");
+}
+
 function getAncestorSpawnPosition(casterX: number, casterZ: number): { x: number; z: number } {
     const desiredX = casterX + 1.25;
     const desiredZ = casterZ + 0.6;
     return findNearestPassable(desiredX, desiredZ, 4) ?? { x: casterX, z: casterZ };
+}
+
+function getVishasEyeSpawnPositions(casterX: number, casterZ: number): { x: number; z: number }[] {
+    const positions: { x: number; z: number }[] = [];
+    const baseRadius = 1.35;
+    const maxAttempts = 2;
+
+    for (let i = 0; i < VISHAS_EYES_ORB_COUNT; i++) {
+        const angle = (Math.PI * 2 * i) / VISHAS_EYES_ORB_COUNT;
+        let chosen = { x: casterX, z: casterZ };
+
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            const radius = baseRadius + attempt * 0.7;
+            const desiredX = casterX + Math.cos(angle) * radius;
+            const desiredZ = casterZ + Math.sin(angle) * radius;
+            const candidate = findNearestPassable(desiredX, desiredZ, 4);
+            if (candidate) {
+                chosen = candidate;
+                break;
+            }
+        }
+
+        positions.push(chosen);
+    }
+
+    return positions;
+}
+
+function executeVishasEyesSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill
+): boolean {
+    const { scene, unitsStateRef, unitsRef, setUnits, addLog } = ctx;
+    const caster = unitsStateRef.current.find(u => u.id === casterId);
+    const casterG = unitsRef.current[casterId];
+    if (!caster || !casterG) return false;
+
+    consumeSkill(ctx, casterId, skill);
+
+    const orbLifetime = skill.duration ?? VISHAS_EYES_ORB_DURATION;
+    const expireAt = getGameTime() + orbLifetime;
+    const spawnPositions = getVishasEyeSpawnPositions(casterG.position.x, casterG.position.z);
+    const existingOrbs = findVishasEyeSummons(unitsStateRef.current).filter(o => o.hp > 0);
+    const orbMaxHp = getEffectiveMaxHp(VISHAS_EYE_SUMMON_IDS[0]);
+    const summonIds = new Set<number>(VISHAS_EYE_SUMMON_IDS);
+
+    const summonedOrbs: Unit[] = VISHAS_EYE_SUMMON_IDS.map((orbId, index) => {
+        const spawnPos = spawnPositions[index] ?? { x: casterG.position.x, z: casterG.position.z };
+        return {
+            id: orbId,
+            x: spawnPos.x,
+            z: spawnPos.z,
+            hp: orbMaxHp,
+            mana: 0,
+            team: "player",
+            target: null,
+            aiEnabled: true,
+            statusEffects: undefined,
+            holdPosition: false,
+            summonType: "vishas_eye_orb",
+            summonedBy: casterId,
+            auraDamageBonus: 0,
+            summonExpireAt: expireAt,
+            flyHeight: VISHAS_EYES_ORB_FLY_HEIGHT
+        };
+    });
+
+    setUnits(prev => {
+        const withoutStaleOrbs = prev.filter(u => !(u.summonType === "vishas_eye_orb" && !summonIds.has(u.id)));
+        const next = [...withoutStaleOrbs];
+
+        for (const orb of summonedOrbs) {
+            const existingIndex = next.findIndex(u => u.id === orb.id);
+            if (existingIndex >= 0) {
+                next[existingIndex] = { ...next[existingIndex], ...orb, id: orb.id };
+            } else {
+                next.push(orb);
+            }
+        }
+
+        return next;
+    });
+
+    for (const orb of summonedOrbs) {
+        const orbGroup = unitsRef.current[orb.id];
+        if (!orbGroup) continue;
+        orbGroup.visible = true;
+        orbGroup.userData.flyHeight = orb.flyHeight ?? orbGroup.userData.flyHeight;
+        orbGroup.position.set(orb.x, orbGroup.userData.flyHeight, orb.z);
+        orbGroup.userData.targetX = orb.x;
+        orbGroup.userData.targetZ = orb.z;
+        orbGroup.userData.attackTarget = null;
+    }
+
+    createAnimatedRing(scene, casterG.position.x, casterG.position.z, COLORS.dmgHoly, {
+        innerRadius: 0.16,
+        outerRadius: 0.34,
+        maxScale: 1.2,
+        duration: 260
+    });
+    for (const orb of summonedOrbs) {
+        createAnimatedRing(scene, orb.x, orb.z, COLORS.dmgHoly, {
+            innerRadius: 0.12,
+            outerRadius: 0.28,
+            maxScale: 1.0,
+            duration: 220
+        });
+    }
+    soundFns.playHolyStrike();
+
+    const casterData = UNIT_DATA[casterId];
+    addLog(
+        existingOrbs.length > 0
+            ? `${casterData.name} renews ${skill.name}.`
+            : `${casterData.name} summons ${skill.name}.`,
+        COLORS.dmgHoly
+    );
+
+    return true;
 }
 
 /**
@@ -381,6 +518,10 @@ export function executeSummonSkill(
     casterId: number,
     skill: Skill
 ): boolean {
+    if (skill.name === "Visha's Eyes") {
+        return executeVishasEyesSkill(ctx, casterId, skill);
+    }
+
     const { scene, unitsStateRef, unitsRef, setUnits, addLog } = ctx;
     const caster = unitsStateRef.current.find(u => u.id === casterId);
     const casterG = unitsRef.current[casterId];

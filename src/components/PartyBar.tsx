@@ -1,7 +1,12 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import Tippy from "@tippyjs/react";
 import type { Unit, Skill, StatusEffectType } from "../core/types";
-import { COLORS, ANCESTOR_AURA_DAMAGE_BONUS, ANCESTOR_AURA_RANGE } from "../core/constants";
+import {
+    COLORS,
+    ANCESTOR_AURA_DAMAGE_BONUS,
+    ANCESTOR_AURA_RANGE,
+    VISHAS_EYES_ORB_HEAL_RADIUS
+} from "../core/constants";
 import { UNIT_DATA, getEffectiveMaxHp, getEffectiveMaxMana, isCorePlayerId } from "../game/playerUnits";
 import { getHpPercentage, getHpColor } from "../combat/combatMath";
 import { SkillHotbar } from "./SkillHotbar";
@@ -22,6 +27,7 @@ const CLASS_PORTRAITS: Record<string, string> = {
     Cleric: clericPortrait,
     Monk: monkPortrait,
     Ancestor: barbarianPortrait,
+    "Visha Orb": clericPortrait,
 };
 const getPortrait = (className: string) => CLASS_PORTRAITS[className] ?? monkPortrait;
 
@@ -367,6 +373,15 @@ export function PartyBar({
                     {summonUnits.map(unit => {
                         const data = UNIT_DATA[unit.id];
                         if (!data) return null;
+                        const summonInfo = unit.summonType === "vishas_eye_orb"
+                            ? {
+                                letter: "V",
+                                detail: `Burst: +HP nearby (${VISHAS_EYES_ORB_HEAL_RADIUS.toFixed(1)} range)`
+                            }
+                            : {
+                                letter: "A",
+                                detail: `Aura: +${ANCESTOR_AURA_DAMAGE_BONUS} dmg (${ANCESTOR_AURA_RANGE.toFixed(1)} range)`
+                            };
 
                         const isSelected = selectedIds.includes(unit.id);
                         const effectiveMaxHp = getEffectiveMaxHp(unit.id, unit);
@@ -413,7 +428,7 @@ export function PartyBar({
                                     <div className="summon-chip-tooltip">
                                         <div className="summon-chip-tooltip-name">{data.name}</div>
                                         <div className="summon-chip-tooltip-row">HP: {Math.max(0, unit.hp)} / {effectiveMaxHp}</div>
-                                        <div className="summon-chip-tooltip-row">Aura: +{ANCESTOR_AURA_DAMAGE_BONUS} dmg ({ANCESTOR_AURA_RANGE.toFixed(1)} range)</div>
+                                        <div className="summon-chip-tooltip-row">{summonInfo.detail}</div>
                                     </div>
                                 }
                                 placement="top"
@@ -424,7 +439,7 @@ export function PartyBar({
                                     onClick={handleClick}
                                     type="button"
                                 >
-                                    <span className="summon-chip-letter">A</span>
+                                    <span className="summon-chip-letter">{summonInfo.letter}</span>
                                     <span className="summon-chip-hp">
                                         <span className="summon-chip-hp-fill" style={{ width: `${Math.max(0, hpPct)}%`, backgroundColor: hpColor }} />
                                     </span>

@@ -66,3 +66,8 @@ export function isTreeBlocked(x: number, z: number): boolean {
 export function isTerrainBlocked(x: number, z: number): boolean {
     return getComputedAreaData().terrainBlocked.has(`${x},${z}`);
 }
+
+export function isWaterTerrain(x: number, z: number): boolean {
+    const terrainChar = getCurrentArea().terrain[z]?.[x];
+    return terrainChar === "w" || terrainChar === "W";
+}

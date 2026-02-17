@@ -26,6 +26,14 @@ import { isKrakenSubmerged } from "../gameLoop/enemyBehaviors";
 import { getUnitById } from "../game/unitQuery";
 import type { Unit, UnitGroup } from "../core/types";
 
+function getMovementFlags(unit: Unit): { isFlying: boolean; canTraverseWaterTerrain: boolean } {
+    const enemyType = unit.team === "enemy" ? unit.enemyType : undefined;
+    return {
+        isFlying: !!(enemyType && ENEMY_STATS[enemyType]?.flying === true),
+        canTraverseWaterTerrain: enemyType === "baby_kraken"
+    };
+}
+
 /**
  * Check if a broodling's mother can see any player.
  * Returns the nearest player to the broodling if mother can see ANY player.
@@ -233,9 +241,16 @@ export function acquireTarget(ctx: TargetingContext, targetId: number): boolean 
         return true;
     }
 
-    // Flying enemies can pass over lava
-    const isFlying = !isPlayer && unit.enemyType && ENEMY_STATS[unit.enemyType]?.flying === true;
-    const path = findPath(g.position.x, g.position.z, targetG.position.x, targetG.position.z, 0, isFlying);
+    const { isFlying, canTraverseWaterTerrain } = getMovementFlags(unit);
+    const path = findPath(
+        g.position.x,
+        g.position.z,
+        targetG.position.x,
+        targetG.position.z,
+        0,
+        isFlying,
+        canTraverseWaterTerrain
+    );
     if (path && path.length > 0) {
         pathsRef[unit.id] = path.slice(1);
         moveStartRef[unit.id] = { time: now, x: g.position.x, z: g.position.z };
@@ -453,7 +468,8 @@ function hasPassableSegment(
     startZ: number,
     endX: number,
     endZ: number,
-    flying: boolean
+    flying: boolean,
+    canTraverseWaterTerrain: boolean
 ): boolean {
     const dx = endX - startX;
     const dz = endZ - startZ;
@@ -463,7 +479,7 @@ function hasPassableSegment(
         const t = i / steps;
         const sampleX = startX + dx * t;
         const sampleZ = startZ + dz * t;
-        if (!isPassable(Math.floor(sampleX), Math.floor(sampleZ), flying)) {
+        if (!isPassable(Math.floor(sampleX), Math.floor(sampleZ), flying, canTraverseWaterTerrain)) {
             return false;
         }
     }
@@ -477,7 +493,8 @@ function tryBuildLocalDetourPath(
     towardZ: number,
     finalGoalX: number,
     finalGoalZ: number,
-    flying: boolean
+    flying: boolean,
+    canTraverseWaterTerrain: boolean
 ): { x: number; z: number }[] | null {
     const baseAngle = Math.atan2(towardZ - currentZ, towardX - currentX);
 
@@ -486,16 +503,30 @@ function tryBuildLocalDetourPath(
         const detourX = currentX + Math.cos(angle) * LOCAL_DETOUR_DISTANCE;
         const detourZ = currentZ + Math.sin(angle) * LOCAL_DETOUR_DISTANCE;
 
-        if (!isPassable(Math.floor(detourX), Math.floor(detourZ), flying)) {
+        if (!isPassable(Math.floor(detourX), Math.floor(detourZ), flying, canTraverseWaterTerrain)) {
             continue;
         }
 
-        const toDetour = createPathToTarget(currentX, currentZ, detourX, detourZ, flying);
+        const toDetour = createPathToTarget(
+            currentX,
+            currentZ,
+            detourX,
+            detourZ,
+            flying,
+            canTraverseWaterTerrain
+        );
         if (!toDetour.success || toDetour.path.length === 0) {
             continue;
         }
 
-        const toGoal = createPathToTarget(detourX, detourZ, finalGoalX, finalGoalZ, flying);
+        const toGoal = createPathToTarget(
+            detourX,
+            detourZ,
+            finalGoalX,
+            finalGoalZ,
+            flying,
+            canTraverseWaterTerrain
+        );
         if (toGoal.success && toGoal.path.length > 0) {
             return [...toDetour.path, ...toGoal.path];
         }
@@ -521,14 +552,21 @@ export function runPathFollowingPhase(ctx: PathContext): { targetX: number; targ
     if (path && path.length > 0) {
         targetX = path[0].x;
         targetZ = path[0].z;
-        const isFlying = unit.team === "enemy" && !!(unit.enemyType && ENEMY_STATS[unit.enemyType]?.flying === true);
+        const { isFlying, canTraverseWaterTerrain } = getMovementFlags(unit);
 
         // Try to skip near-term waypoints when a direct segment is clear.
         if (path.length > 1) {
             const maxLookahead = Math.min(PATH_SHORTCUT_MAX_LOOKAHEAD, path.length - 1);
             for (let i = maxLookahead; i >= 1; i--) {
                 const candidate = path[i];
-                if (hasPassableSegment(g.position.x, g.position.z, candidate.x, candidate.z, isFlying)) {
+                if (hasPassableSegment(
+                    g.position.x,
+                    g.position.z,
+                    candidate.x,
+                    candidate.z,
+                    isFlying,
+                    canTraverseWaterTerrain
+                )) {
                     path.splice(0, i);
                     targetX = path[0].x;
                     targetZ = path[0].z;
@@ -584,7 +622,8 @@ export function runPathFollowingPhase(ctx: PathContext): { targetX: number; targ
                 targetZ,
                 finalGoal.x,
                 finalGoal.z,
-                isFlying
+                isFlying,
+                canTraverseWaterTerrain
             );
             if (detourPath && detourPath.length > 0) {
                 pathsRef[unit.id] = detourPath;
@@ -682,13 +721,19 @@ export function calculateAvoidance(ctx: MovementContext, desiredX: number, desir
 /**
  * Try to move with wall sliding - if direct movement blocked, try sliding along walls.
  */
-export function applyWallSliding(g: UnitGroup, moveX: number, moveZ: number, flying: boolean = false): void {
+export function applyWallSliding(
+    g: UnitGroup,
+    moveX: number,
+    moveZ: number,
+    flying: boolean = false,
+    canTraverseWaterTerrain: boolean = false
+): void {
     const newX = g.position.x + moveX;
     const newZ = g.position.z + moveZ;
     const cellX = Math.floor(newX);
     const cellZ = Math.floor(newZ);
 
-    if (isPassable(cellX, cellZ, flying)) {
+    if (isPassable(cellX, cellZ, flying, canTraverseWaterTerrain)) {
         // Direct movement is valid
         g.position.x = clampToGrid(newX, 0.5, "x");
         g.position.z = clampToGrid(newZ, 0.5, "z");
@@ -697,12 +742,12 @@ export function applyWallSliding(g: UnitGroup, moveX: number, moveZ: number, fly
         const xOnlyX = g.position.x + moveX;
         const xOnlyCellX = Math.floor(xOnlyX);
         const xOnlyCellZ = Math.floor(g.position.z);
-        const canMoveX = isPassable(xOnlyCellX, xOnlyCellZ, flying);
+        const canMoveX = isPassable(xOnlyCellX, xOnlyCellZ, flying, canTraverseWaterTerrain);
 
         const zOnlyZ = g.position.z + moveZ;
         const zOnlyCellX = Math.floor(g.position.x);
         const zOnlyCellZ = Math.floor(zOnlyZ);
-        const canMoveZ = isPassable(zOnlyCellX, zOnlyCellZ, flying);
+        const canMoveZ = isPassable(zOnlyCellX, zOnlyCellZ, flying, canTraverseWaterTerrain);
 
         if (canMoveX && Math.abs(moveX) > Math.abs(moveZ)) {
             g.position.x = clampToGrid(xOnlyX, 0.5, "x");
@@ -745,9 +790,9 @@ export function runMovementPhase(ctx: MovementContext): void {
         moveX = (moveX / moveMag) * speed;
         moveZ = (moveZ / moveMag) * speed;
 
-        const isFlying = unit.team === "enemy" && !!(unit.enemyType && ENEMY_STATS[unit.enemyType]?.flying === true);
+        const { isFlying, canTraverseWaterTerrain } = getMovementFlags(unit);
         // Apply movement with wall sliding
-        applyWallSliding(g, moveX, moveZ, isFlying);
+        applyWallSliding(g, moveX, moveZ, isFlying, canTraverseWaterTerrain);
     }
 }
 
@@ -780,9 +825,15 @@ export function recalculatePathIfNeeded(
     if (!needsNewPath) return;
     if (!canRecalculatePath(unit.id, now)) return;
 
-    // Flying enemies can pass over lava
-    const isFlying = unit.team === "enemy" && unit.enemyType && ENEMY_STATS[unit.enemyType]?.flying === true;
-    const result = createPathToTarget(g.position.x, g.position.z, targetX, targetZ, isFlying);
+    const { isFlying, canTraverseWaterTerrain } = getMovementFlags(unit);
+    const result = createPathToTarget(
+        g.position.x,
+        g.position.z,
+        targetX,
+        targetZ,
+        isFlying,
+        canTraverseWaterTerrain
+    );
     recordPathRecalculation(unit.id, reason, now);
     pathsRef[unit.id] = result.path;
     if (result.success) {

@@ -57,7 +57,7 @@ export interface UnitGroup extends THREE.Group {
         targetX: number;
         targetZ: number;
         attackTarget: number | null;
-        flyHeight: number;  // Y offset for flying units (0 for ground units)
+        flyHeight: number;  // Y offset for airborne/floating units (0 for ground units)
         alerted?: boolean;  // Set when enemy is hit - makes them seek nearest player
         lastHitTime?: number;  // Timestamp when unit last took damage (for kiting AI)
         lastDamageSource?: { x: number; z: number; time: number };  // Position of last attacker (for shield facing)

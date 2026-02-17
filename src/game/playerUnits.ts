@@ -30,6 +30,7 @@ export function getXpForLevel(level: number): number {
 
 export const CORE_PLAYER_IDS = [1, 2, 3, 4, 5, 6] as const;
 export const ANCESTOR_SUMMON_ID = 7;
+export const VISHAS_EYE_SUMMON_IDS = [8, 9, 10] as const;
 
 const CORE_PLAYER_ID_SET = new Set<number>(CORE_PLAYER_IDS);
 
@@ -54,8 +55,11 @@ export const UNIT_DATA: Record<number, UnitData> = {
     3: { name: "Thief", class: "Thief", hp: 22, maxHp: 22, mana: 18, maxMana: 18, damage: [1, 4], accuracy: 75, armor: 0, color: "#8e44ad", skills: [SKILLS.poisonDagger, SKILLS.targetHead, SKILLS.targetArm, SKILLS.targetLegs, SKILLS.caltrops, SKILLS.dodge], items: [], attackCooldown: 1500, baseCrit: 5 },
     4: { name: "Wizard", class: "Wizard", hp: 18, maxHp: 18, mana: 50, maxMana: 50, damage: [1, 4], accuracy: 60, armor: 0, color: "#3498db", skills: [SKILLS.fireball, SKILLS.chainLightning, SKILLS.magicWave, SKILLS.glacialWhorl, SKILLS.energyShield, SKILLS.bodySwap], items: [], attackCooldown: 3000, baseCrit: 2 },
     5: { name: "Monk", class: "Monk", hp: 28, maxHp: 28, mana: 18, maxMana: 18, damage: [1, 4], accuracy: 70, armor: 0, color: "#27ae60", skills: [SKILLS.flurryOfFists, SKILLS.forcePush, SKILLS.qiFocus, SKILLS.sunStance, SKILLS.pangolinStance], items: [], attackCooldown: 1800 },
-    6: { name: "Cleric", class: "Cleric", hp: 26, maxHp: 26, mana: 40, maxMana: 40, damage: [1, 4], accuracy: 60, armor: 0, color: "#c0c8d0", skills: [SKILLS.heal, SKILLS.cleanse, SKILLS.thunder, SKILLS.holyCross, SKILLS.restoration, SKILLS.ankh], items: [], attackCooldown: 2500 },
+    6: { name: "Cleric", class: "Cleric", hp: 26, maxHp: 26, mana: 40, maxMana: 40, damage: [1, 4], accuracy: 60, armor: 0, color: "#c0c8d0", skills: [SKILLS.heal, SKILLS.cleanse, SKILLS.thunder, SKILLS.holyCross, SKILLS.vishasEyes, SKILLS.restoration, SKILLS.ankh], items: [], attackCooldown: 2500 },
     7: { name: "Ancestor", class: "Ancestor", hp: 54, maxHp: 54, mana: 0, maxMana: 0, damage: [4, 8], accuracy: 74, armor: 2, color: "#d7c09a", skills: [], items: [], range: 1.8, attackCooldown: 2100, size: 1.08, baseCrit: 4 },
+    8: { name: "Visha's Eye", class: "Visha Orb", hp: 16, maxHp: 16, mana: 0, maxMana: 0, damage: [4, 7], accuracy: 100, armor: 0, color: "#f6edc2", skills: [], items: [], range: 8, projectileColor: "#fff4bf", attackCooldown: 1700, size: 0.55, baseCrit: 0, basicDamageType: "holy", shape: "sphere" },
+    9: { name: "Visha's Eye", class: "Visha Orb", hp: 16, maxHp: 16, mana: 0, maxMana: 0, damage: [4, 7], accuracy: 100, armor: 0, color: "#f6edc2", skills: [], items: [], range: 8, projectileColor: "#fff4bf", attackCooldown: 1700, size: 0.55, baseCrit: 0, basicDamageType: "holy", shape: "sphere" },
+    10: { name: "Visha's Eye", class: "Visha Orb", hp: 16, maxHp: 16, mana: 0, maxMana: 0, damage: [4, 7], accuracy: 100, armor: 0, color: "#f6edc2", skills: [], items: [], range: 8, projectileColor: "#fff4bf", attackCooldown: 1700, size: 0.55, baseCrit: 0, basicDamageType: "holy", shape: "sphere" },
 };
 
 // =============================================================================
@@ -68,7 +72,7 @@ export function getBasicAttackSkill(unitId: number, unit?: Unit): Skill {
 
     const usesEquipment = usesEquipmentForUnit(unitId);
     const baseDamage = usesEquipment ? getEffectivePlayerDamage(unitId) : data.damage;
-    const damageType = usesEquipment ? getEffectivePlayerDamageType(unitId) : "physical";
+    const damageType = usesEquipment ? getEffectivePlayerDamageType(unitId) : (data.basicDamageType ?? "physical");
     const range = usesEquipment ? getEffectivePlayerRange(unitId) : data.range;
     const projectileColor = usesEquipment ? getEffectivePlayerProjectileColor(unitId) : data.projectileColor;
 

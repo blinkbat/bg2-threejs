@@ -20,9 +20,10 @@ import { getUnitById } from "../game/unitQuery";
 // DAMAGE TYPE HELPERS
 // =============================================================================
 
-/** Get the damage type for a unit's basic attack based on class */
+/** Get the damage type for a unit's basic attack. */
 function getBasicAttackDamageType(unit: Unit, unitData: UnitData | EnemyStats): DamageType {
     if (unit.team === "player" && "class" in unitData) {
+        if (unitData.basicDamageType) return unitData.basicDamageType;
         if (unitData.class === "Wizard") return "chaos";
         if (unitData.class === "Cleric") return "holy";
     }

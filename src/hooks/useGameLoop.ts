@@ -5,15 +5,24 @@
 
 import { useEffect, useRef, useCallback } from "react";
 import * as THREE from "three";
-import { PAN_SPEED, ANCESTOR_AURA_DAMAGE_BONUS, ANCESTOR_AURA_RANGE, COLORS } from "../core/constants";
-import { updateGameClock } from "../core/gameClock";
+import {
+    PAN_SPEED,
+    ANCESTOR_AURA_DAMAGE_BONUS,
+    ANCESTOR_AURA_RANGE,
+    COLORS,
+    VISHAS_EYES_ORB_HEAL_RADIUS,
+    VISHAS_EYES_ORB_HEAL_RANGE
+} from "../core/constants";
+import { getGameTime, updateGameClock } from "../core/gameClock";
 import { getCurrentArea } from "../game/areas";
 import type { Unit, UnitGroup } from "../core/types";
 import { ENEMY_STATS } from "../game/enemyStats";
+import { getEffectiveMaxHp } from "../game/playerUnits";
 import { updateCamera, updateWallTransparency, updateTreeFogVisibility, updateFogOccluderVisibility, updateLightLOD, addUnitToScene, updateBillboards } from "../rendering/scene";
 import { updateDynamicObstacles } from "../ai/pathfinding";
 import { updateUnitCache } from "../game/unitQuery";
 import { clearUnitStatsCache } from "../game/units";
+import { getUnitRadius, isInRange } from "../rendering/range";
 import {
     updateDamageTexts,
     updateHitFlash,
@@ -40,6 +49,7 @@ import {
     updateSpriteFacing,
     updateAncestorGhostVisuals
 } from "../gameLoop";
+import { createAnimatedRing, handleUnitDefeat, spawnDamageNumber } from "../combat/damageEffects";
 import type { ActionQueue } from "../input";
 import type { ThreeSceneState, GameRefs } from "./useThreeScene";
 
@@ -297,9 +307,72 @@ function processEnemyDeathAcidPools(
     unitGroups: Record<number, UnitGroup>,
     scene: THREE.Scene,
     acidTiles: Map<string, import("../core/types").AcidTile>,
+    damageTexts: import("../core/types").DamageText[],
+    setUnits: React.Dispatch<React.SetStateAction<Unit[]>>,
     now: number,
+    gameNow: number,
     addLog: (text: string, color?: string) => void
 ): void {
+    const rollHeal = (): number => {
+        const [minHeal, maxHeal] = VISHAS_EYES_ORB_HEAL_RANGE;
+        return Math.floor(Math.random() * (maxHeal - minHeal + 1)) + minHeal;
+    };
+
+    const triggerVishasEyeBurst = (orbUnit: Unit, centerX: number, centerZ: number, expired: boolean): void => {
+        const healById = new Map<number, number>();
+
+        for (const target of units) {
+            if (target.team !== "player" || target.hp <= 0 || target.id === orbUnit.id) continue;
+            const maxHp = getEffectiveMaxHp(target.id, target);
+            if (target.hp >= maxHp) continue;
+            const targetGroup = unitGroups[target.id];
+            const targetX = targetGroup?.position.x ?? target.x;
+            const targetZ = targetGroup?.position.z ?? target.z;
+            const targetRadius = getUnitRadius(target);
+            if (!isInRange(centerX, centerZ, targetX, targetZ, targetRadius, VISHAS_EYES_ORB_HEAL_RADIUS)) {
+                continue;
+            }
+            healById.set(target.id, rollHeal());
+        }
+
+        if (healById.size === 0) return;
+
+        setUnits(prev => prev.map(unit => {
+            const healAmount = healById.get(unit.id);
+            if (!healAmount || unit.hp <= 0) return unit;
+            const maxHp = getEffectiveMaxHp(unit.id, unit);
+            return { ...unit, hp: Math.min(maxHp, unit.hp + healAmount) };
+        }));
+
+        for (const [unitId, healAmount] of healById.entries()) {
+            const targetGroup = unitGroups[unitId];
+            if (!targetGroup) continue;
+            spawnDamageNumber(
+                scene,
+                targetGroup.position.x,
+                targetGroup.position.z,
+                healAmount,
+                COLORS.logHeal,
+                damageTexts,
+                true
+            );
+        }
+
+        createAnimatedRing(scene, centerX, centerZ, COLORS.dmgHoly, {
+            innerRadius: 0.2,
+            outerRadius: 0.44,
+            maxScale: VISHAS_EYES_ORB_HEAL_RADIUS + 0.6,
+            duration: 320
+        });
+
+        addLog(
+            expired
+                ? `A Visha's Eye fades and restores nearby allies.`
+                : `A Visha's Eye shatters, restoring nearby allies.`,
+            COLORS.logHeal
+        );
+    };
+
     const previousHpById = previousHpByIdRef.current;
     const nextHpById = new Map<number, number>();
 
@@ -308,7 +381,17 @@ function processEnemyDeathAcidPools(
 
         const previousHp = previousHpById.get(unit.id);
         const diedThisFrame = previousHp !== undefined && previousHp > 0 && unit.hp <= 0;
-        if (!diedThisFrame || unit.team !== "enemy" || !unit.enemyType) {
+        if (!diedThisFrame) continue;
+
+        if (unit.team === "player" && unit.summonType === "vishas_eye_orb") {
+            const unitGroup = unitGroups[unit.id];
+            const centerX = unitGroup?.position.x ?? unit.x;
+            const centerZ = unitGroup?.position.z ?? unit.z;
+            const expired = unit.summonExpireAt !== undefined && gameNow >= unit.summonExpireAt;
+            triggerVishasEyeBurst(unit, centerX, centerZ, expired);
+        }
+
+        if (unit.team !== "enemy" || !unit.enemyType) {
             continue;
         }
 
@@ -338,6 +421,33 @@ function processEnemyDeathAcidPools(
     }
 
     previousHpByIdRef.current = nextHpById;
+}
+
+function expireVishasEyeSummons(
+    units: Unit[],
+    unitGroups: Record<number, UnitGroup>,
+    setUnits: React.Dispatch<React.SetStateAction<Unit[]>>,
+    addLog: (text: string, color?: string) => void,
+    gameNow: number
+): void {
+    const expiringOrbs = units.filter(unit =>
+        unit.team === "player"
+        && unit.summonType === "vishas_eye_orb"
+        && unit.hp > 0
+        && unit.summonExpireAt !== undefined
+        && gameNow >= unit.summonExpireAt
+    );
+
+    if (expiringOrbs.length === 0) return;
+
+    const expiringIds = new Set<number>(expiringOrbs.map(unit => unit.id));
+    setUnits(prev => prev.map(unit => (expiringIds.has(unit.id) ? { ...unit, hp: 0 } : unit)));
+
+    for (const orb of expiringOrbs) {
+        const orbGroup = unitGroups[orb.id];
+        if (!orbGroup) continue;
+        handleUnitDefeat(orb.id, orbGroup, unitGroups, addLog, "Visha's Eye", true);
+    }
 }
 
 // =============================================================================
@@ -383,6 +493,7 @@ export function useGameLoop({
             animId = requestAnimationFrame(animate);
             const now = Date.now();
             updateGameClock();
+            const gameNow = getGameTime();
             const refs = gameRefs.current;
             const isPaused = stateRefs.pausedRef.current;
 
@@ -393,13 +504,26 @@ export function useGameLoop({
             clearUnitStatsCache();
             const cacheMs = performance.now() - sectionStart;
 
+            if (!isPaused) {
+                expireVishasEyeSummons(
+                    currentUnits,
+                    unitGroups,
+                    callbacks.setUnits,
+                    callbacks.addLog,
+                    gameNow
+                );
+            }
+
             processEnemyDeathAcidPools(
                 currentUnits,
                 previousHpByIdRef,
                 unitGroups,
                 scene,
                 refs.acidTiles,
+                refs.damageTexts,
+                callbacks.setUnits,
                 now,
+                gameNow,
                 callbacks.addLog
             );
 

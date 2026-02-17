@@ -25,6 +25,7 @@ const CLASS_PORTRAITS: Record<string, string> = {
     Cleric: clericPortrait,
     Monk: monkPortrait,
     Ancestor: barbarianPortrait,
+    "Visha Orb": clericPortrait,
 };
 const getPortrait = (className: string) => CLASS_PORTRAITS[className] ?? monkPortrait;
 
@@ -523,8 +524,17 @@ function SkillTooltip({ skill, isShielded, cantripUses }: { skill: Skill; isShie
             lines.push({ label: "Dash range", value: `${skill.range}`, color: "#8e44ad" });
         }
     } else if (skill.type === "summon") {
-        lines.push({ label: "Effect", value: "Summons Ancestor warrior", color: "#d7c09a" });
-        lines.push({ label: "Limit", value: "1 active summon", color: "#d7c09a" });
+        if (skill.name === "Visha's Eyes") {
+            const durationSec = Math.round((skill.duration ?? 0) / 1000);
+            lines.push({ label: "Effect", value: "Summons 3 floating holy orbs", color: COLORS.dmgHoly });
+            lines.push({ label: "Duration", value: `${durationSec}s`, color: COLORS.dmgHoly });
+            if (skill.aoeRadius) {
+                lines.push({ label: "Death burst", value: `Heals allies in ${skill.aoeRadius} range`, color: COLORS.logHeal });
+            }
+        } else {
+            lines.push({ label: "Effect", value: "Summons Ancestor warrior", color: "#d7c09a" });
+            lines.push({ label: "Limit", value: "1 active summon", color: "#d7c09a" });
+        }
     }
 
     // Range (skip for self-targeted AOE skills that use range as radius, and dodge which shows it inline)
