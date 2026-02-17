@@ -53,7 +53,7 @@ const EFFECT_ICONS: Record<StatusEffectType, { icon: string; color: string }> = 
     weakened: { icon: "A", color: COLORS.weakenedText },
     hamstrung: { icon: "L", color: COLORS.hamstrungText },
     blind: { icon: "B", color: COLORS.blindText },
-    vanquishing_light: { icon: "HL", color: COLORS.holyGroundText },
+    vanquishing_light: { icon: "⊕", color: COLORS.holyGroundText },
 };
 
 interface PartyBarProps {
