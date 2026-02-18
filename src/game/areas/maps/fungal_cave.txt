@@ -3,7 +3,7 @@ name: Fungal Cave
 flavor: A mysterious place.
 size: 25x50
 background: #1e1e10
-ground: #969985
+ground: #535f5c
 ambient: 0.4
 directional: 0.5
 fog: true
@@ -406,4 +406,11 @@ WWWWWWW....WW......WWWWW.
 10,41:small_mushroom
 
 === LIGHTS ===
-11.5,7.5:radius=18,angle=65,tint=#ffd28a,brightness=30,height=10,diffusion=0.55,decay=1
+11.5,7.5:radius=18,angle=65,tint=#79d2ac,brightness=30,height=10,diffusion=0.55,decay=1
+
+=== CANDLES ===
+11,48:dir=0,1,kind=torch,color=#ff8844
+22,42:dir=0,1,kind=torch,color=#ff8844
+23,36:dir=0,1,kind=torch,color=#ff8844
+5,47:dir=0,1,kind=torch,color=#ff8844
+2,42:dir=0,1,kind=torch,color=#ff8844

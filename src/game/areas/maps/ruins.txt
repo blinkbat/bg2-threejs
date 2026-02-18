@@ -2,10 +2,10 @@
 name: Temple Grounds
 flavor: Crumbling stone and overgrown vines speak of forgotten glory.
 size: 50x50
-background: #708090
-ground: #4a6741
-ambient: 0.4
-directional: 0.6
+background: #44525f
+ground: #3f5638
+ambient: 0.3
+directional: 0.4
 fog: true
 spawn: 3,25
 
@@ -168,7 +168,6 @@ spawn: 3,25
 === ENEMIES ===
 38.5,11.5:bat
 12.5,12.5:bat
-25.5,25.5:bat
 35.5,25.5:undead_knight
 12.5,37.5:bat
 38.5,38.5:bat
@@ -425,3 +424,6 @@ spawn: 3,25
 41,44:small_fern
 44,44:small_fern
 45,44:small_fern
+
+=== LIGHTS ===
+9.5,24.5:radius=18,angle=65,tint=#ffd28a,brightness=50,height=10,diffusion=0.55,decay=1

@@ -11,7 +11,7 @@ import { getSkillTextColor, setDebugSpeedMultiplier } from "./core/constants";
 import type { Unit, UnitGroup, Skill, CombatLogEntry, SelectionBox, CharacterStats, SummonType } from "./core/types";
 
 // Game Logic
-import { getCurrentArea, getCurrentAreaId, setCurrentArea, AREAS, DEFAULT_STARTING_AREA, DEFAULT_SPAWN_POINT, type AreaId, type AreaTransition } from "./game/areas";
+import { getCurrentArea, getCurrentAreaId, setCurrentArea, AREAS, DEFAULT_STARTING_AREA, type AreaId, type AreaTransition } from "./game/areas";
 import { UNIT_DATA, CORE_PLAYER_IDS, getEffectiveMaxHp, getEffectiveMaxMana, getXpForLevel, isCorePlayerId } from "./game/playerUnits";
 import { LEVEL_UP_HP, LEVEL_UP_MANA, LEVEL_UP_STAT_POINTS, LEVEL_UP_SKILL_POINTS, HP_PER_VITALITY, MP_PER_INTELLIGENCE } from "./game/statBonuses";
 import { ENEMY_STATS } from "./game/enemyStats";
@@ -249,13 +249,13 @@ function Game({
     const containerRef = useRef<HTMLDivElement>(null);
 
     // Initial camera offset
-    const initialCamOffset = useMemo(() => spawnPoint ?? DEFAULT_SPAWN_POINT, [spawnPoint]);
+    const initialCamOffset = useMemo(() => spawnPoint ?? getCurrentArea().defaultSpawn, [spawnPoint]);
     const [devMode, setDevMode] = useState<boolean>(loadDevMode);
 
     // Create initial units
     const createUnitsForArea = useCallback((): Unit[] => {
         const area = getCurrentArea();
-        const spawn = spawnPoint ?? DEFAULT_SPAWN_POINT;
+        const spawn = spawnPoint ?? area.defaultSpawn;
         // Sort player IDs by formation order so slot 0 (tip) goes to the right unit
         const fOrder = loadFormationOrder();
         const playerIds = [...CORE_PLAYER_IDS].sort((a, b) => {
@@ -263,7 +263,7 @@ function Game({
             const bi = fOrder.indexOf(b);
             return (ai === -1 ? 100 + a : ai) - (bi === -1 ? 100 + b : bi);
         });
-        const spawnPositions = findSpawnPositions(spawn.x, spawn.z, playerIds.length, spawnDirection ?? "south");
+        const spawnPositions = findSpawnPositions(spawn.x, spawn.z, playerIds.length, spawnDirection ?? "north");
         const INITIAL_XP_VALUES = [0, 10, 15, 20, 25, 30];
 
         const players: Unit[] = playerIds.map((id, i) => {

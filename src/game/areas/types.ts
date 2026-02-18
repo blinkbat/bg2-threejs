@@ -12,7 +12,6 @@ export type AreaId = BuiltInAreaId | (string & {});
 
 // Default game start configuration - single source of truth
 export const DEFAULT_STARTING_AREA: AreaId = "coast";
-export const DEFAULT_SPAWN_POINT = { x: 25, z: 12 };  // Near water's edge
 
 export interface EnemySpawn {
     x: number;

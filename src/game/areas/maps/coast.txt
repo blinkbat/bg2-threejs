@@ -4,29 +4,29 @@ flavor: Salt air fills your lungs as waves crash against the shore.
 size: 50x50
 background: #306b82
 ground: #ab9e78
-ambient: 0.5
-directional: 0.7
+ambient: 0.55
+directional: 0.75
 fog: true
-spawn: 25,12
+spawn: 25,7
 
 === GEOMETRY ===
-######################################............
-##.........#######....####....####................
+#####################........#########............
+##.........#######............####................
 #..............#...................##.............
 #...................................##.#..........
 #......#..........................................
 #.....##..............................#...........
 #....####.........................................
 ##.#####..........................................
-#######...........................................
-#####.............................................
-####...........................................##.
-###............................................##.
+#######...........................##..............
+#####.............................###.............
+####..............................####.........##.
+###................................###.........##.
 ##................................................
 #.................................................
 #................................................#
-#................................................#
-#................................................#
+#.....................................#..........#
+#.....................................##.........#
 #...............................................##
 <...............................................##
 <..........................................#...###
@@ -62,9 +62,9 @@ spawn: 25,12
 #######################.....######################
 
 === TERRAIN ===
-.......................................wwwwwwwwwww
-.....................................wwwwwwwwwwwww
-......................................wwwwwwwwwwww
+.....................wwwwwwww..........wwwwwwwwwww
+.......................wwwwww........wwwwwwwwwwwww
+.........................wwww.........wwwwwwwwwwww
 ........................................wwwwwwwwww
 .........................................wwwwwwwww
 .........................................wwwwwwwww
@@ -114,15 +114,15 @@ spawn: 25,12
 ..................................................
 
 === FLOOR ===
-..........................wwwwwwwwwwwWWWWWwWWWWWWW
-....sssss.................wwwwwwwwwwWWWWWWWWWWWWWW
-..sssssss.................wwwwwwwwwwWWWWWWWWWWWWWW
-..sssssss...........sssss.wwwwwwwwwWWWWWWWWWWWWWWW
-..sssssss.........ssSSSss..wwwwwwwwWWWWWWWWWWWWWWW
-..sssssss........ssSSSSss...wwwwwwwwWWWWWWWWWWWWWW
-..sssssss.......ssSSSSSss...wwwwwwwwWWWWWWWWWWWWWW
-.....sss.......sssSSSSsss....wwwwwwwwWWWWWWWWWWWWW
-...............ssSSSSSsss...wwwwwwwwwwWWWWWWWWWWWW
+.....................WWWWWWWWWWWWWwwwWWWWWwWWWWWWW
+....sssss..........wwWWWWWWWWWWWWWWWWWWWWWWWWWWWWW
+..sssssss............wWWWWWWWWWwWWWWWWWWWWWWWWWWWW
+..sssssss...........swwwWWWWWWWWWWWWWWWWWWWWWWWWWW
+..sssssss.........ssSSSwwWWWWWWWWWWWWWWWWWWWWWWWWW
+..sssssss........ssSSSS.wwwwwWWWWWWWWWWWWWWWWWWWWW
+..sssssss.......ssSSSSS..wwwwwWWWWWWWWWWWWWWWWWWWW
+.....sss.......sssSSSSss....wwwwwwwwwWWWWWWWWWWWWW
+...............ssSSSSSss....wwwwwwwwwwWWWWWWWWWWWW
 ..............sssSSSSsss....wwwwwwwwwwwWWWWWWWWWWW
 ..............sssSSSSss....wwwwwwwwwwwwwWWWWWWWWWW
 ..............sssSSSss....wwwwwwwwwwwwwWWWWWWWWWWW
@@ -166,15 +166,15 @@ spawn: 25,12
 ......gggggggggggggggggggggggggggggggggG..........
 
 === FLOOR_LAYER_0 ===
-..........................wwwwwwwwwwwwwwwww...www.
-....sssss.................wwwwwwwwwwwwwwwwwwwwwwww
-..sssssss.................wwwwwwwwwwwwwwwwwwwwwwww
-..sssssss...........sssss.wwwwwwwwwwwwwwwwwwwwwwww
-..sssssss.........sssssss..wwwwwwwwwwwwwwwwwwwwwww
-..sssssss........ssssssss...wwwwwwwwwwwwwwwwwwwwww
-..sssssss.......sssssssss...wwwwwwwwwwwwwwwwwwwwww
-.....sss.......ssssssssss....wwwwwwwwwwwwwwwwwwwww
-...............ssssssssss...wwwwwwwwwwwwwwwwwwwwww
+.....................wwwwwwwwwwwwwwwwwwwwww...www.
+....sssss............wwwwwwwwwwwwwwwwwwwwwwwwwwwww
+..sssssss............wwwwwwwwwwwwwwwwwwwwwwwwwwwww
+..sssssss...........swwwwwwwwwwwwwwwwwwwwwwwwwwwww
+..sssssss.........ssss.wwwwwwwwwwwwwwwwwwwwwwwwwww
+..sssssss........sssss..wwwwwwwwwwwwwwwwwwwwwwwwww
+..sssssss.......sssssss..wwwwwwwwwwwwwwwwwwwwwwwww
+.....sss.......sssssssss....wwwwwwwwwwwwwwwwwwwwww
+...............sssssssss....wwwwwwwwwwwwwwwwwwwwww
 ..............ssssssssss....wwwwwwwwwwwwwwwwwwwwww
 ..............sssssssss....wwwwwwwwwwwwwwwwwwwwwww
 ..............ssssssss....wwwwwwwwwwwwwwwwwwwwwwww
@@ -218,13 +218,13 @@ spawn: 25,12
 .................................GGGGGGG..........
 
 === FLOOR_LAYER_1 ===
-.....................................WWWWW.WWWWWWW
-....................................WWWWWWWWWWWWWW
-....................................WWWWWWWWWWWWWW
-...................................WWWWWWWWWWWWWWW
-....................SSS............WWWWWWWWWWWWWWW
-...................SSSS.............WWWWWWWWWWWWWW
-..................SSSSS.............WWWWWWWWWWWWWW
+.....................WWWWWWWWWWWWW...WWWWW.WWWWWWW
+...................wwWWWWWWWWWWWWWWWWWWWWWWWWWWWWW
+......................WWWWWWWWW.WWWWWWWWWWWWWWWWWW
+........................WWWWWWWWWWWWWWWWWWWWWWWWWW
+....................SSS..WWWWWWWWWWWWWWWWWWWWWWWWW
+...................SSSS......WWWWWWWWWWWWWWWWWWWWW
+..................SSSSS.......WWWWWWWWWWWWWWWWWWWW
 ..................SSSS...............WWWWWWWWWWWWW
 .................SSSSS................WWWWWWWWWWWW
 .................SSSS..................WWWWWWWWWWW
@@ -519,11 +519,13 @@ spawn: 25,12
 9,12:1,palm
 7,15:1,palm
 5,20:1,palm
+34,21:1,palm
 21,26:1,palm
 13,28:1,palm
 6,29:1,palm
 32,29:1,palm
 7,30:1,palm
+37,30:1,palm
 23,37:1,palm
 8,38:1
 28,38:1,palm
@@ -539,11 +541,23 @@ spawn: 25,12
 35,48:1
 
 === DECORATIONS ===
+28,0:small_rock
+29,0:rock
 18,1:weeds
+19,1:rock
+20,1:rock
+21,1:small_rock
+22,1:small_rock
+27,1:small_rock
+28,1:rock
 29,1:weeds
 19,2:weeds
 20,2:small_weeds
+21,2:small_rock
+22,2:rock
 27,2:small_weeds
+28,2:small_rock
+29,2:small_rock
 31,2:weeds
 18,3:small_weeds
 20,3:small_weeds
@@ -565,8 +579,11 @@ spawn: 25,12
 15,9:small_rock
 16,9:small_fern
 13,11:small_rock
+27,11:small_weeds
 34,11:weeds
 14,12:small_rock
+27,12:small_weeds
+28,12:small_weeds
 39,12:small_weeds
 12,13:small_rock
 33,13:fern
@@ -589,34 +606,62 @@ spawn: 25,12
 1,16:small_rock
 2,16:rock
 19,16:small_fern
+30,16:small_weeds
+31,16:small_weeds
 46,16:small_fern
+30,17:small_weeds
+31,17:small_weeds
+32,17:small_weeds
 42,17:weeds
 38,19:small_fern
 16,20:rock
 15,21:small_rock
 29,21:small_fern
+32,21:small_rock
 37,21:small_weeds
 27,22:fern
+32,22:small_rock
+33,22:rock
 37,22:small_weeds
 38,22:small_weeds
 1,23:rock
 27,23:rock
 28,23:fern
 29,23:small_fern
+31,23:small_weeds
 36,23:small_weeds
 47,23:weeds
 1,24:small_rock
+31,24:small_weeds
+32,24:small_weeds
+33,24:small_weeds
+34,24:small_rock
 45,24:small_fern
 27,25:small_rock
+32,25:small_weeds
+33,25:small_weeds
 38,25:small_weeds
 47,25:weeds
 28,26:small_fern
 37,26:weeds
 38,26:small_weeds
+37,27:small_weeds
 39,27:small_weeds
 46,27:weeds
+36,28:small_weeds
+37,28:small_weeds
 9,29:small_rock
 45,29:small_fern
+37,31:small_weeds
+38,31:small_weeds
+39,31:small_weeds
+40,31:small_rock
+41,31:small_rock
+37,32:small_weeds
+38,32:small_weeds
+39,32:small_weeds
+40,32:rock
+41,32:small_rock
 31,34:small_rock
 32,34:fern
 32,35:small_fern
@@ -647,4 +692,4 @@ spawn: 25,12
 26.5,33.5:radius=12,angle=45,tint=#ffd28a,brightness=30,height=8,diffusion=0.35,decay=1.2
 9.5,24.5:radius=12,angle=45,tint=#ffd28a,brightness=40,height=8,diffusion=0.35,decay=1.2
 16.5,38.5:radius=12,angle=45,tint=#ffd28a,brightness=6,height=8,diffusion=0.35,decay=1.2
-40.5,10.5:radius=18,angle=65,tint=#5294ff,brightness=30,height=10,diffusion=0.55,decay=1
+44.5,6.5:radius=18,angle=65,tint=#0052d6,brightness=30,height=10,diffusion=0.55,decay=1
