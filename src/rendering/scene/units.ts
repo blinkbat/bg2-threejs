@@ -169,14 +169,14 @@ function getEnemySpriteConfigs(): Record<string, SpriteConfig> {
         brood_mother: { texture: broodMotherTexture, width: 164, height: 128, spriteHeight: 2.25, color: 0xd7b8ff, brightness: 0.14, shadowSize: 0.74 },
         broodling: { texture: broodlingTexture, width: 128, height: 128, spriteHeight: 1.0, color: 0xdcc3ff, brightness: 0.12, shadowSize: 0.32 },
         corrupt_druid: { texture: corruptedDruidTexture, width: 96, height: 128, spriteHeight: 2.35, color: 0xdbfbc6, brightness: 0.18, emissiveIntensity: 0.30 },
-        chittering_crabling: { texture: crablingTexture, width: 128, height: 128, spriteHeight: 1.15, color: 0xffa36a, brightness: 0.1, shadowSize: 0.45 },
+        chittering_crabling: { texture: crablingTexture, width: 128, height: 128, spriteHeight: 1.15, color: 0xffa36a, brightness: 0.1, shadowSize: 0.45, offsetY: -0.14 },
         feral_hound: { texture: feralHoundTexture, width: 188, height: 128, spriteHeight: 1.45, color: 0xffc9a8, brightness: 0.14, shadowSize: 0.55 },
         giant_amoeba_lg: { texture: amoebaLgTexture, width: 128, height: 128, spriteHeight: 2.4, opacity: 0.58 },
         giant_amoeba_md: { texture: amoebaMdTexture, width: 128, height: 128, spriteHeight: 1.7, opacity: 0.58, offsetY: -0.10 },
         giant_amoeba_sm: { texture: amoebaSmTexture, width: 128, height: 128, spriteHeight: 1.2, opacity: 0.58, offsetY: -0.14 },
         kobold: { texture: koboldWarriorTexture, width: 128, height: 128, spriteHeight: 1.61, color: 0xffc8a3, brightness: 0.1, shadowSize: 0.4 },
         kraken_tentacle: { texture: krakenTentacleTexture, width: 80, height: 128, spriteHeight: 2.0, color: 0xd8c0e8 },
-        baby_kraken: { texture: krakenBodyTexture, width: 128, height: 128, spriteHeight: 2.5, color: 0xd8c0e8 },
+        baby_kraken: { texture: krakenBodyTexture, width: 128, height: 128, spriteHeight: 2.5, color: 0xd8c0e8, offsetY: -0.16 },
         wandering_shade: { texture: krakenBodyTexture, width: 128, height: 128, spriteHeight: 2.05, color: 0xc8d4ff, brightness: 0.2, opacity: 0.68, shadowSize: 0.44 },
     };
 }

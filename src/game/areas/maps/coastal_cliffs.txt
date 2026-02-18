@@ -1,11 +1,11 @@
 === AREA: coastal_cliffs ===
 name: Coastal Cliffs
-flavor: A mysterious place.
+flavor: Sea spray stings your eyes where cliffs meet the horizon.
 size: 30x50
 background: #5b5e6b
 ground: #bb9f63
-ambient: 0.6
-directional: 0.8
+ambient: 0.55
+directional: 0.7
 fog: true
 spawn: 3,46
 

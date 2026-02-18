@@ -8,12 +8,43 @@ import type { AreaData, AreaId } from "./types";
 // Dynamically import all .txt files from the maps directory
 const textFiles = import.meta.glob("./maps/*.txt", { eager: true, query: "?raw", import: "default" }) as Record<string, string>;
 
+function getMapFileId(filePath: string): string {
+    const parts = filePath.split("/");
+    const fileName = parts[parts.length - 1] ?? filePath;
+    return fileName.endsWith(".txt") ? fileName.slice(0, -4) : fileName;
+}
+
 // Parse all text maps into AreaData, keyed by their area ID from the file content
 const areaMap = new Map<string, AreaData>();
+const areaSources = new Map<string, string>();
 
-for (const content of Object.values(textFiles)) {
+for (const [filePath, content] of Object.entries(textFiles).sort(([a], [b]) => a.localeCompare(b))) {
     const areaData = textToAreaData(content);
-    areaMap.set(areaData.id, areaData);
+    const existing = areaMap.get(areaData.id);
+    if (!existing) {
+        areaMap.set(areaData.id, areaData);
+        areaSources.set(areaData.id, filePath);
+        continue;
+    }
+
+    const existingSource = areaSources.get(areaData.id) ?? "unknown";
+    const existingFileId = getMapFileId(existingSource);
+    const currentFileId = getMapFileId(filePath);
+    const currentMatchesId = currentFileId === areaData.id;
+    const existingMatchesId = existingFileId === areaData.id;
+
+    const shouldReplace = currentMatchesId && !existingMatchesId;
+    if (shouldReplace) {
+        areaMap.set(areaData.id, areaData);
+        areaSources.set(areaData.id, filePath);
+    }
+
+    if (import.meta.env.DEV) {
+        const chosenSource = shouldReplace ? filePath : existingSource;
+        console.warn(
+            `[areas] Duplicate area id "${areaData.id}" from "${filePath}" and "${existingSource}". Using "${chosenSource}".`
+        );
+    }
 }
 
 // Export as a Record for backwards compatibility

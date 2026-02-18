@@ -678,7 +678,6 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     const tileGeo = new THREE.PlaneGeometry(1, 1);
     const WATER_METALNESS = 0.52;
     const WATER_ROUGHNESS = 0.08;
-    const WATER_EMISSIVE_INTENSITY = 0.18;
     const WATER_TILE_OPACITY = 0.4;
     const TERRAIN_WATER_COLOR_SHALLOW = "#32718a";
     const TERRAIN_WATER_COLOR_DEEP = "#295f75";
@@ -708,8 +707,6 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 color,
                 metalness: WATER_METALNESS,
                 roughness: WATER_ROUGHNESS,
-                emissive: color,
-                emissiveIntensity: WATER_EMISSIVE_INTENSITY,
                 transparent: true,
                 opacity: WATER_TILE_OPACITY,
                 depthWrite: false,
@@ -782,8 +779,6 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 }
 
                 if (isWater) {
-                    tileMaterial.emissive.set(color);
-                    tileMaterial.emissiveIntensity = WATER_EMISSIVE_INTENSITY;
                     tileMaterial.transparent = true;
                     tileMaterial.opacity = WATER_TILE_OPACITY;
                     tileMaterial.depthWrite = false;
@@ -859,8 +854,6 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                             WATER_ROUGHNESS
                         )
                         : getWaterMat(terrainWaterColor);
-                    waterMat.emissive.set(terrainWaterColor);
-                    waterMat.emissiveIntensity = WATER_EMISSIVE_INTENSITY;
                     waterMat.transparent = true;
                     waterMat.opacity = WATER_TILE_OPACITY;
                     waterMat.depthWrite = false;
