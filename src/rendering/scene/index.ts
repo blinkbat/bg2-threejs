@@ -732,8 +732,8 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         "S": "#d4c490",  // Light sand
         "d": "#8b7355",  // Dirt - brown
         "D": "#6b5344",  // Dark dirt
-        "g": "#5a8a4a",  // Grass - green
-        "G": "#4a7a3a",  // Dark grass
+        "g": "#668A5A",  // Grass - green
+        "G": "#567A4A",  // Dark grass
         "w": "#5ba5b7",  // Water - light blue
         "W": "#4a8797",  // Deep water
         "t": "#707070",  // Stone - gray
@@ -1055,7 +1055,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
 
     // Trees - cylinders for trunk + cone for pyramidal foliage
     // Various green shades and brown trunks for variety
-    const foliageColors = ["#228B22", "#2E8B57", "#3CB371", "#006400", "#32CD32", "#556B2F"];
+    const foliageColors = ["#3C8B3C", "#458B64", "#5AB382", "#196419", "#59CD59", "#5B6B3E"];
     const trunkColors = ["#654321", "#8B4513", "#A0522D", "#5C4033", "#6F4E37"];
     const treeMeshes: THREE.Mesh[] = [];
     const fogOccluderMeshes: THREE.Mesh[] = [];
@@ -1067,7 +1067,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     const treeSizeMultiplier = area.id === "forest" ? 1.5 : 1.0;
 
     // Palm-specific colors
-    const palmFoliageColors = ["#2E8B57", "#3CB371", "#228B22", "#4CAF50"];
+    const palmFoliageColors = ["#458B64", "#5AB382", "#3C8B3C", "#65AF68"];
 
     const registerFoliageMesh = (
         foliageMesh: THREE.Mesh,
