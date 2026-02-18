@@ -26,6 +26,7 @@ import { ENEMY_STATS } from "../game/enemyStats";
 import { UNIT_DATA, getXpForLevel, getEffectiveMaxHp, getEffectiveMaxMana } from "../game/playerUnits";
 import { LEVEL_UP_HP, LEVEL_UP_MANA, LEVEL_UP_STAT_POINTS, LEVEL_UP_SKILL_POINTS } from "../game/statBonuses";
 import { trySubmergeKraken, isEnemyUntargetable } from "../gameLoop/enemyBehaviors";
+import { getCurrentArea } from "../game/areas";
 
 // =============================================================================
 // PROJECTILE CREATION
@@ -467,6 +468,9 @@ export function applyDamageToUnit(
         isMeleeHit = false,
         skipHighlandDefense = false
     } = options;
+
+    // Area-wide invulnerability (testing rooms, etc.)
+    if (getCurrentArea().invulnerable) return;
 
     // Skip already-defeated targets this frame
     if (defeatedThisFrame?.has(targetId)) return;

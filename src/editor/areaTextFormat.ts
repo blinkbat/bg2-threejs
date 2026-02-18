@@ -105,6 +105,7 @@ interface ParsedArea {
         ambient: number;
         directional: number;
         fog: boolean;
+        invulnerable?: boolean;
         spawnX: number;
         spawnZ: number;
     };
@@ -182,6 +183,7 @@ export function areaDataToText(area: AreaData): string {
     lines.push(`ambient: ${area.ambientLight}`);
     lines.push(`directional: ${area.directionalLight}`);
     lines.push(`fog: ${area.hasFogOfWar}`);
+    if (area.invulnerable) lines.push(`invulnerable: true`);
     lines.push(`spawn: ${area.defaultSpawn.x},${area.defaultSpawn.z}`);
     lines.push("");
 
@@ -511,6 +513,9 @@ function parseMetadataLine(line: string, metadata: ParsedArea["metadata"]) {
         case "fog":
             metadata.fog = value === "true";
             break;
+        case "invulnerable":
+            metadata.invulnerable = value === "true";
+            break;
         case "spawn": {
             const [x, z] = value.split(",").map(Number);
             metadata.spawnX = x;
@@ -762,6 +767,7 @@ function convertParsedToAreaData(parsed: ParsedArea): AreaData {
         ambientLight: parsed.metadata.ambient,
         directionalLight: parsed.metadata.directional,
         hasFogOfWar: parsed.metadata.fog,
+        invulnerable: parsed.metadata.invulnerable || undefined,
         defaultSpawn: { x: parsed.metadata.spawnX, z: parsed.metadata.spawnZ },
         geometry: parsed.geometry,
         terrain,

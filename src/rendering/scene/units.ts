@@ -191,7 +191,7 @@ function getEnemySpriteConfigs(): Record<string, SpriteConfig> {
         acid_slug: { texture: acidSlugTexture, width: 160, height: 128, color: 0xffffff, spriteHeight: 1.4, offsetY: -0.3, shadowSize: 0.6 },
         armored_crab: { texture: armoredCrabTexture, width: 160, height: 128, color: 0xffffff, spriteHeight: 1.8, offsetY: -0.16, shadowSize: 0.7 },
         baby_kraken: { texture: krakenBodyTexture, width: 128, height: 128, color: 0xffffff, spriteHeight: 2.5, offsetY: -0.16 },
-        bat: { texture: vampireBatTexture, width: 128, height: 128, color: 0xffffff, spriteHeight: 1.4 },
+        bat: { texture: vampireBatTexture, width: 128, height: 128, color: 0xffe8c0, spriteHeight: 1.4 },
         bloated_corpse: { texture: koboldWarriorTexture, width: 128, height: 128, color: 0xffffff, spriteHeight: 2.05, shadowSize: 0.62 },
         brood_mother: { texture: broodMotherTexture, width: 164, height: 128, color: 0xffffff, spriteHeight: 2.25, shadowSize: 0.74 },
         broodling: { texture: broodlingTexture, width: 128, height: 128, color: 0xffffff, spriteHeight: 1.0, shadowSize: 0.32 },
@@ -205,7 +205,7 @@ function getEnemySpriteConfigs(): Record<string, SpriteConfig> {
         kobold_archer: { texture: koboldArcherTexture, width: 128, height: 128, color: 0xffffff, spriteHeight: 1.61, shadowSize: 0.4 },
         kobold_witch_doctor: { texture: koboldWitchDoctorTexture, width: 128, height: 128, color: 0xffffff, spriteHeight: 1.61, shadowSize: 0.4 },
         kraken_tentacle: { texture: krakenTentacleTexture, width: 80, height: 128, color: 0xffffff, spriteHeight: 2.0 },
-        undead_knight: { texture: undeadKnightTexture, width: 128, height: 128, color: 0xb0c0d4, spriteHeight: 2.4, shadowSize: 0.7 },
+        undead_knight: { texture: undeadKnightTexture, width: 128, height: 128, color: 0xd0e4ff, spriteHeight: 2.88, shadowSize: 0.7 },
         wandering_shade: { texture: krakenBodyTexture, width: 128, height: 128, color: 0xffffff, spriteHeight: 2.05, shadowSize: 0.44, opacity: 0.68 },
     };
 }

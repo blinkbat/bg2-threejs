@@ -126,6 +126,7 @@ export interface AreaData {
     ambientLight: number;        // Ambient light intensity
     directionalLight: number;    // Directional light intensity
     hasFogOfWar: boolean;
+    invulnerable?: boolean;              // All units immune to damage, enemies don't aggro
     defaultSpawn: { x: number; z: number };  // Default spawn point for debug warps
 }
 

@@ -12,6 +12,7 @@ import {
     type TargetingContext, type PathContext, type MovementContext
 } from "../ai/unitAI";
 import { getUnitStats, getAttackRange } from "../game/units";
+import { getCurrentArea } from "../game/areas";
 import { getUnitById } from "../game/unitQuery";
 import { createPathToTarget, clearJitterTracking } from "../ai/movement";
 import { getBasicAttackSkill } from "../game/playerUnits";
@@ -98,6 +99,10 @@ export function updateUnitAI(
     acidTilesRef?: Map<string, import("../core/types").AcidTile>
 ): void {
     const isPlayer = unit.team === "player";
+
+    // Invulnerable areas: enemies stand still, no AI
+    if (!isPlayer && getCurrentArea().invulnerable) return;
+
     const data = getUnitStats(unit);
 
     // Enrage trigger: apply "enraged" status when HP drops below threshold
