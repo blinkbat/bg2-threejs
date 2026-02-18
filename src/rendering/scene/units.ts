@@ -198,14 +198,14 @@ function getEnemySpriteConfigs(): Record<string, SpriteConfig> {
         chittering_crabling: { texture: crablingTexture, width: 128, height: 128, color: 0xffffff, spriteHeight: 1.15, offsetY: -0.14, shadowSize: 0.45 },
         corrupt_druid: { texture: corruptedDruidTexture, width: 96, height: 128, color: 0xffffff, spriteHeight: 2.35 },
         feral_hound: { texture: feralHoundTexture, width: 188, height: 128, color: 0xffffff, spriteHeight: 1.45, shadowSize: 0.55 },
-        giant_amoeba_lg: { texture: amoebaLgTexture, width: 128, height: 128, color: 0xffffff, spriteHeight: 2.4, opacity: 0.58 },
-        giant_amoeba_md: { texture: amoebaMdTexture, width: 128, height: 128, color: 0xffffff, spriteHeight: 1.7, offsetY: -0.10, opacity: 0.58 },
-        giant_amoeba_sm: { texture: amoebaSmTexture, width: 128, height: 128, color: 0xffffff, spriteHeight: 1.2, offsetY: -0.14, opacity: 0.58 },
+        giant_amoeba_lg: { texture: amoebaLgTexture, width: 128, height: 128, color: 0xffffff, spriteHeight: 2.4, opacity: 0.42 },
+        giant_amoeba_md: { texture: amoebaMdTexture, width: 128, height: 128, color: 0xffffff, spriteHeight: 1.7, offsetY: -0.10, opacity: 0.42 },
+        giant_amoeba_sm: { texture: amoebaSmTexture, width: 128, height: 128, color: 0xffffff, spriteHeight: 1.2, offsetY: -0.14, opacity: 0.42 },
         kobold: { texture: koboldWarriorTexture, width: 128, height: 128, color: 0xffffff, spriteHeight: 1.61, shadowSize: 0.4 },
         kobold_archer: { texture: koboldArcherTexture, width: 128, height: 128, color: 0xffffff, spriteHeight: 1.61, shadowSize: 0.4 },
         kobold_witch_doctor: { texture: koboldWitchDoctorTexture, width: 128, height: 128, color: 0xffffff, spriteHeight: 1.61, shadowSize: 0.4 },
         kraken_tentacle: { texture: krakenTentacleTexture, width: 80, height: 128, color: 0xffffff, spriteHeight: 2.0 },
-        undead_knight: { texture: undeadKnightTexture, width: 128, height: 128, color: 0xd0e4ff, spriteHeight: 2.88, shadowSize: 0.7 },
+        undead_knight: { texture: undeadKnightTexture, width: 105, height: 128, color: 0xd0e4ff, spriteHeight: 3.5, shadowSize: 0.7 },
         wandering_shade: { texture: krakenBodyTexture, width: 128, height: 128, color: 0xffffff, spriteHeight: 2.05, shadowSize: 0.44, opacity: 0.68 },
     };
 }
