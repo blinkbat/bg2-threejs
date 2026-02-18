@@ -43,12 +43,6 @@ export function initializeEquipmentState(): void {
     isInitialized = true;
 }
 
-/** Reset equipment state (for game restart) */
-export function resetEquipmentState(): void {
-    isInitialized = false;
-    equipmentState = {};
-    inventoryState = { items: [] };
-}
 
 // =============================================================================
 // GETTERS

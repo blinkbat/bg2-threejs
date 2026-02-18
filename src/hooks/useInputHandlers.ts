@@ -531,7 +531,7 @@ export function useInputHandlers({
                             if (!playerG) return false;
                             const dx = playerG.position.x - doorCenterX;
                             const dz = playerG.position.z - doorCenterZ;
-                            return Math.sqrt(dx * dx + dz * dz) <= doorRange;
+                            return Math.hypot(dx, dz) <= doorRange;
                         });
                         if (allPlayersInRange) {
                             callbacks.handleAreaTransition(transition);

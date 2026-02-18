@@ -84,7 +84,7 @@ export function trySpawnTentacle(ctx: TentacleContext): boolean {
     // Calculate spawn position - between kraken and target, closer to target
     const dx = targetG.position.x - g.position.x;
     const dz = targetG.position.z - g.position.z;
-    const dist = Math.sqrt(dx * dx + dz * dz);
+    const dist = Math.hypot(dx, dz);
     const dirX = dx / dist;
     const dirZ = dz / dist;
 

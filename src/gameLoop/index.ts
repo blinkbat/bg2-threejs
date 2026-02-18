@@ -4,7 +4,7 @@
 
 import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation, EnemyStats } from "../core/types";
-import { SKILL_SINGLE_TARGET_CHANCE, FORMATION_SLOW_SPEED } from "../core/constants";
+import { SKILL_SINGLE_TARGET_CHANCE, FORMATION_SLOW_SPEED, BUFF_TICK_INTERVAL } from "../core/constants";
 import { getUnitRadius, isInRange } from "../rendering/range";
 import { tryKite, type KiteContext } from "../ai/targeting";
 import {
@@ -16,7 +16,7 @@ import { getUnitById } from "../game/unitQuery";
 import { createPathToTarget, clearJitterTracking } from "../ai/movement";
 import { getBasicAttackSkill } from "../game/playerUnits";
 import type { ActionQueue } from "../input";
-import { hasStatusEffect, isUnitAlive, getCooldownMultiplier, setSkillCooldown, isCooldownReady, getEffectiveSpeedMultiplier } from "../combat/combatMath";
+import { hasStatusEffect, isUnitAlive, getCooldownMultiplier, setSkillCooldown, isCooldownReady, getEffectiveSpeedMultiplier, applyStatusEffect } from "../combat/combatMath";
 import { getAliveUnitsInRange } from "../combat/damageEffects";
 import { isEnemyKiting, clearEnemyKiting } from "../game/enemyState";
 
@@ -99,6 +99,26 @@ export function updateUnitAI(
 ): void {
     const isPlayer = unit.team === "player";
     const data = getUnitStats(unit);
+
+    // Enrage trigger: apply "enraged" status when HP drops below threshold
+    if (!isPlayer && "enrage" in data && data.enrage && !hasStatusEffect(unit, "enraged")) {
+        if (unit.hp / data.maxHp <= data.enrage.hpThreshold) {
+            setUnits(prev => prev.map(u =>
+                u.id === unit.id
+                    ? { ...u, statusEffects: applyStatusEffect(u.statusEffects, {
+                        type: "enraged",
+                        duration: Number.MAX_SAFE_INTEGER,
+                        tickInterval: BUFF_TICK_INTERVAL,
+                        timeSinceTick: 0,
+                        lastUpdateTime: now,
+                        damagePerTick: 0,
+                        sourceId: unit.id,
+                    }) }
+                    : u
+            ));
+            addLog(`${data.name} becomes enraged!`, "#cc3300");
+        }
+    }
 
     // Skip all actions if stunned or asleep - unit cannot move or attack
     if (hasStatusEffect(unit, "stunned") || hasStatusEffect(unit, "sleep")) {

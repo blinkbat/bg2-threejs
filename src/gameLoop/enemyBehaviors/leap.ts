@@ -6,7 +6,7 @@ import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText } from "../../core/types";
 import { getUnitStats } from "../../game/units";
 import { soundFns } from "../../audio";
-import { setSkillCooldown } from "../../combat/combatMath";
+import { setSkillCooldown, rollDamage } from "../../combat/combatMath";
 import { COLORS, LEAP_DURATION, LEAP_ARC_HEIGHT, LEAP_DAMAGE_RADIUS, LEAP_MIN_LANDING_DIST, LEAP_LANDING_OFFSET } from "../../core/constants";
 import { accumulateDelta } from "../../core/gameClock";
 import { applyDamageToUnit, createAnimatedRing, type DamageContext } from "../../combat/damageEffects";
@@ -52,7 +52,7 @@ export function tryLeapToTarget(ctx: LeapContext): boolean {
     // Check distance to target
     const dx = targetG.position.x - g.position.x;
     const dz = targetG.position.z - g.position.z;
-    const dist = Math.sqrt(dx * dx + dz * dz);
+    const dist = Math.hypot(dx, dz);
 
     // Only leap if target is within the right range
     if (dist < leapSkill.minRange || dist > leapSkill.maxRange) {
@@ -183,7 +183,7 @@ export function updateLeaps(
 
                 // Deal damage if close enough on landing
                 if (landDist < LEAP_DAMAGE_RADIUS) {
-                    const damage = leap.damage[0] + Math.floor(Math.random() * (leap.damage[1] - leap.damage[0] + 1));
+                    const damage = rollDamage(leap.damage[0], leap.damage[1]);
                     const targetData = getUnitStats(targetUnit);
 
                     const dmgCtx: DamageContext = {

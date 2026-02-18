@@ -12,7 +12,7 @@ import { calculateDamageWithCrit, rollHit, getEffectiveArmor, logAoeHit } from "
 import { applyDamageToUnit, buildDamageContext, createAnimatedRing } from "../combat/damageEffects";
 import { soundFns } from "../audio";
 import { disposeBasicMesh } from "../rendering/disposal";
-import { createGroundWarningTile } from "./tileUtils";
+import { createGroundWarningTile, forEachTileInRadius } from "./tileUtils";
 
 // =============================================================================
 // TYPES
@@ -54,18 +54,10 @@ function createCurseMeshes(
     radius: number
 ): THREE.Mesh[] {
     const meshes: THREE.Mesh[] = [];
-    const radiusCeil = Math.ceil(radius);
 
-    for (let dx = -radiusCeil; dx <= radiusCeil; dx++) {
-        for (let dz = -radiusCeil; dz <= radiusCeil; dz++) {
-            // Only include tiles within the circular radius
-            const dist = Math.sqrt(dx * dx + dz * dz);
-            if (dist > radius) continue;
-
-            const mesh = createGroundWarningTile(scene, centerX + dx, centerZ + dz, "#4a0066", "curse-tile");
-            meshes.push(mesh);
-        }
-    }
+    forEachTileInRadius(centerX, centerZ, radius, (x, z) => {
+        meshes.push(createGroundWarningTile(scene, x, z, "#4a0066", "curse-tile"));
+    });
 
     return meshes;
 }

@@ -227,7 +227,8 @@ export function processStatusEffects(
 
     // Phase 3: Handle defeats and deferred side effects
     for (const [unitId, mut] of mutations) {
-        const unit = unitsState.find(u => u.id === unitId)!;
+        const unit = unitsState.find(u => u.id === unitId);
+        if (!unit) continue;
         const predictedHp = mut.doom ? 0 : Math.max(0, unit.hp + mut.hpDelta);
         if (predictedHp <= 0 && unit.hp > 0) {
             const unitG = unitsRef[unitId];

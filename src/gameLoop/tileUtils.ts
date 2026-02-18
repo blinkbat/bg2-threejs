@@ -150,6 +150,25 @@ export function isUnitOnTile(
 }
 
 /**
+ * Iterate all integer grid cells within a circular radius, calling `fn` for each.
+ * Computes `Math.ceil(radius)` offsets in each axis and filters by Euclidean distance.
+ */
+export function forEachTileInRadius(
+    centerX: number,
+    centerZ: number,
+    radius: number,
+    fn: (x: number, z: number) => void
+): void {
+    const radiusCeil = Math.ceil(radius);
+    for (let dx = -radiusCeil; dx <= radiusCeil; dx++) {
+        for (let dz = -radiusCeil; dz <= radiusCeil; dz++) {
+            if (Math.hypot(dx, dz) > radius) continue;
+            fn(centerX + dx, centerZ + dz);
+        }
+    }
+}
+
+/**
  * Create a ground warning tile (PlaneGeometry 0.9x0.9) used by telegraphed AoE attacks.
  * Consolidates the identical createChargeTile / createCurseTile helpers.
  */

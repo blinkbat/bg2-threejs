@@ -76,7 +76,7 @@ function resolveDeadAllyTarget(
         const deadZ = deadGroup ? deadGroup.position.z : dead.z;
         const dx = deadX - targetX;
         const dz = deadZ - targetZ;
-        const dist = Math.sqrt(dx * dx + dz * dz);
+        const dist = Math.hypot(dx, dz);
         if (!closestDead || dist < closestDead.dist) {
             closestDead = { unit: dead, group: deadGroup, x: deadX, z: deadZ, dist };
         }

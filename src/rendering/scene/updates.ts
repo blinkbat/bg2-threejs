@@ -439,7 +439,7 @@ export function updateWallTransparency(
                     // Check if candle is roughly in front of unit from camera's perspective
                     const dx = candleX - unitX;
                     const dz = candleZ - unitZ;
-                    const distToCandle = Math.sqrt(dx * dx + dz * dz);
+                    const distToCandle = Math.hypot(dx, dz);
                     // Candle occludes if it's close to unit (within 2 units) and between camera and unit
                     if (distToCandle < 2.5) {
                         // Check if candle is between camera and unit using dot product

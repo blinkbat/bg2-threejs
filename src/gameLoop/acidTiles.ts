@@ -8,7 +8,7 @@ import { COLORS, ACID_TILE_DURATION, ACID_TICK_INTERVAL, ACID_DAMAGE_PER_TICK, A
 import type { EnemyStats } from "../core/types";
 import { getUnitStats } from "../game/units";
 import { applyDamageToUnit, buildDamageContext } from "../combat/damageEffects";
-import { createTileMesh, updateTileFade, removeExpiredTiles, clearAllTiles, getTileKey, isUnitOnTile, type TileProcessConfig } from "./tileUtils";
+import { createTileMesh, updateTileFade, removeExpiredTiles, clearAllTiles, getTileKey, isUnitOnTile, forEachTileInRadius, type TileProcessConfig } from "./tileUtils";
 import { isUnitAlive, setSkillCooldown } from "../combat/combatMath";
 
 // =============================================================================
@@ -96,18 +96,13 @@ export function createAcidPool(
 ): number {
     const originX = Math.floor(centerX);
     const originZ = Math.floor(centerZ);
-    const radiusCells = Math.ceil(radius);
     let tilesTouched = 0;
 
-    for (let dx = -radiusCells; dx <= radiusCells; dx++) {
-        for (let dz = -radiusCells; dz <= radiusCells; dz++) {
-            const dist = Math.sqrt(dx * dx + dz * dz);
-            if (dist > radius) continue;
-            if (createAcidTile(scene, acidTiles, originX + dx, originZ + dz, sourceId, now, duration)) {
-                tilesTouched++;
-            }
+    forEachTileInRadius(originX, originZ, radius, (x, z) => {
+        if (createAcidTile(scene, acidTiles, x, z, sourceId, now, duration)) {
+            tilesTouched++;
         }
-    }
+    });
 
     return tilesTouched;
 }

@@ -778,7 +778,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                     tileMaterial = getFloorMat(color);
                 }
 
-                if (isWater) {
+                if (isWater && hasRounding) {
                     tileMaterial.transparent = true;
                     tileMaterial.opacity = WATER_TILE_OPACITY;
                     tileMaterial.depthWrite = false;
@@ -854,9 +854,6 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                             WATER_ROUGHNESS
                         )
                         : getWaterMat(terrainWaterColor);
-                    waterMat.transparent = true;
-                    waterMat.opacity = WATER_TILE_OPACITY;
-                    waterMat.depthWrite = false;
 
                     const tile = new THREE.Mesh(tileGeo, waterMat);
                     tile.rotation.x = -Math.PI / 2;
@@ -1947,7 +1944,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 const makeCrack = (x1: number, y1: number, x2: number, y2: number, thickness = 0.06): THREE.Mesh => {
                     const dx = x2 - x1;
                     const dy = y2 - y1;
-                    const length = Math.sqrt(dx * dx + dy * dy);
+                    const length = Math.hypot(dx, dy);
                     const angle = Math.atan2(dx, dy);
 
                     const crack = new THREE.Mesh(

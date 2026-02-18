@@ -219,12 +219,12 @@ function updateMarkerAnimations(
     // Update target rings - fade out over time
     const targetRingDuration = 1500;
     const targetRingFadeStart = 500;
-    Object.entries(targetRingTimers).forEach(([idStr, startTime]) => {
+    for (const idStr in targetRingTimers) {
         const id = Number(idStr);
         const ring = targetRings[id];
-        if (!ring) return;
+        if (!ring) continue;
 
-        const age = now - startTime;
+        const age = now - targetRingTimers[id];
         if (age >= targetRingDuration) {
             ring.visible = false;
             delete targetRingTimers[id];
@@ -232,7 +232,7 @@ function updateMarkerAnimations(
             const fadeProgress = (age - targetRingFadeStart) / (targetRingDuration - targetRingFadeStart);
             (ring.material as THREE.MeshBasicMaterial).opacity = 1 - fadeProgress;
         }
-    });
+    }
 }
 
 function updateRangeIndicator(
@@ -254,16 +254,17 @@ function updateAncestorAuraBonuses(
     unitGroups: Record<number, UnitGroup>,
     setUnits: React.Dispatch<React.SetStateAction<Unit[]>>
 ): void {
-    const auraSources = units
-        .filter(u => u.team === "player" && u.hp > 0 && u.summonType === "ancestor_warrior")
-        .map(u => {
+    const auraSources: { id: number; x: number; z: number }[] = [];
+    for (const u of units) {
+        if (u.team === "player" && u.hp > 0 && u.summonType === "ancestor_warrior") {
             const group = unitGroups[u.id];
-            return {
+            auraSources.push({
                 id: u.id,
                 x: group?.position.x ?? u.x,
                 z: group?.position.z ?? u.z
-            };
-        });
+            });
+        }
+    }
 
     let changed = false;
     const nextBonusById: Record<number, number> = {};

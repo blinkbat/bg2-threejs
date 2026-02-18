@@ -6,7 +6,7 @@ import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, EnemyStats, EnemySkill, EnemyHealSkill } from "../core/types";
 import { COLORS, SWIPE_ANIMATE_DURATION } from "../core/constants";
 import { getUnitStats } from "../game/units";
-import { calculateDamageWithCrit, rollHit, getEffectiveArmor, logAoeHit, logAoeMiss } from "../combat/combatMath";
+import { calculateDamageWithCrit, rollHit, rollDamage, getEffectiveArmor, logAoeHit, logAoeMiss } from "../combat/combatMath";
 import { distance } from "../game/geometry";
 import { applyDamageToUnit, animateExpandingMesh, getAliveUnitsInRange, spawnDamageNumber, buildDamageContext, createAnimatedRing } from "../combat/damageEffects";
 import { soundFns } from "../audio";
@@ -154,7 +154,7 @@ export function executeEnemyHeal(
 
     if (!bestTarget) return false;
 
-    const healAmount = Math.floor(Math.random() * (skill.heal[1] - skill.heal[0] + 1)) + skill.heal[0];
+    const healAmount = rollDamage(skill.heal[0], skill.heal[1]);
     const targetStats = getUnitStats(bestTarget.unit) as EnemyStats;
     const targetId = bestTarget.unit.id;
     const maxHp = targetStats.maxHp;

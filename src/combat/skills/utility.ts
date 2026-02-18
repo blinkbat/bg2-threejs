@@ -27,6 +27,7 @@ import { getAliveUnits } from "../../game/unitQuery";
 import { soundFns } from "../../audio";
 import { createAnimatedRing } from "../damageEffects";
 import { createSanctuaryTile } from "../../gameLoop/sanctuaryTiles";
+import { forEachTileInRadius } from "../../gameLoop/tileUtils";
 import { findNearestPassable } from "../../ai/pathfinding";
 import { getGameTime } from "../../core/gameClock";
 import type { SkillExecutionContext } from "./types";
@@ -340,25 +341,18 @@ export function executeSanctuarySkill(
     // Create sanctuary tiles in radius, dispelling acid
     const centerX = Math.floor(targetX);
     const centerZ = Math.floor(targetZ);
-    const radiusCells = Math.ceil(radius);
 
-    for (let dx = -radiusCells; dx <= radiusCells; dx++) {
-        for (let dz = -radiusCells; dz <= radiusCells; dz++) {
-            const dist = Math.sqrt(dx * dx + dz * dz);
-            if (dist <= radius) {
-                createSanctuaryTile(
-                    scene,
-                    sanctuaryTilesRef.current,
-                    acidTilesRef.current,
-                    centerX + dx,
-                    centerZ + dz,
-                    casterId,
-                    healPerTick,
-                    now
-                );
-            }
-        }
-    }
+    forEachTileInRadius(centerX, centerZ, radius, (x, z) => {
+        createSanctuaryTile(
+            scene,
+            sanctuaryTilesRef.current,
+            acidTilesRef.current,
+            x, z,
+            casterId,
+            healPerTick,
+            now
+        );
+    });
 
     // Create visual ring effect
     createAnimatedRing(scene, casterG.position.x, casterG.position.z, COLORS.sanctuary, {

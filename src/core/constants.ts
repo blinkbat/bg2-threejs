@@ -61,6 +61,9 @@ export const THORNS_DURATION = 30000;       // 30 seconds
 export const THORNS_DAMAGE_MIN = 2;
 export const THORNS_DAMAGE_MAX = 4;
 
+// Status Effects - Enrage (enemy low-HP buff)
+export const ENRAGED_TINT_STRENGTH = 0.35;  // lerp blend toward red-orange when enraged
+
 // Status Effects - Highland Defense (barbarian cantrip redirect)
 export const HIGHLAND_DEFENSE_DURATION = Number.MAX_SAFE_INTEGER; // Effectively permanent until intercept pool is exhausted
 export const HIGHLAND_DEFENSE_INTERCEPT_CAP = 50;        // max redirected damage before expiring
@@ -120,6 +123,9 @@ export const HEAL_FLASH_DURATION = 200;    // ms for green healing flash
 export const RING_EXPAND_DURATION = 400;   // ms for taunt ring animation
 export const DEFAULT_CANDLE_LIGHT_COLOR = "#ffaa44";
 export const DEFAULT_TORCH_LIGHT_COLOR = "#ff8844";
+
+// Sprite Rendering
+export const SPRITE_DEFAULT_BRIGHTNESS = 0.07;  // Emissive boost — feeds into emissiveIntensity formula
 
 // Animation Durations
 export const SWING_DURATION = 150;

@@ -6,7 +6,7 @@ import * as THREE from "three";
 import { getUnitStats } from "../../game/units";
 import { distance } from "../../game/geometry";
 import { soundFns } from "../../audio";
-import { setSkillCooldown } from "../../combat/combatMath";
+import { setSkillCooldown, rollDamage } from "../../combat/combatMath";
 import { BUFF_TICK_INTERVAL, COLORS } from "../../core/constants";
 import { getGameTime } from "../../core/gameClock";
 import { applyDamageToUnit, type DamageContext } from "../../combat/damageEffects";
@@ -67,7 +67,7 @@ export function tryVinesSkill(ctx: VinesContext): boolean {
     }));
 
     // Calculate and apply damage using centralized damage system
-    const damage = vinesSkill.damage[0] + Math.floor(Math.random() * (vinesSkill.damage[1] - vinesSkill.damage[0] + 1));
+    const damage = rollDamage(vinesSkill.damage[0], vinesSkill.damage[1]);
     const targetData = getUnitStats(targetUnit);
     const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now, defeatedThisFrame };
     applyDamageToUnit(dmgCtx, targetUnit.id, targetG, damage, targetData.name, {

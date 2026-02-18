@@ -3,10 +3,10 @@
 // =============================================================================
 
 // Enemy type identifiers
-export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba" | "acid_slug" | "armored_crab" | "basilisk" | "bat" | "bloated_corpse" | "undead_knight" | "ancient_construct" | "feral_hound" | "corrupt_druid" | "skeleton_warrior" | "baby_kraken" | "kraken_tentacle" | "magma_imp" | "necromancer" | "skeleton_minion" | "chittering_crabling" | "spine_spitter" | "occultist_dreamwalker" | "occultist_firebreather" | "occultist_pygmy" | "wandering_shade";
+export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba" | "acid_slug" | "armored_crab" | "basilisk" | "bat" | "bloated_corpse" | "dire_possum" | "undead_knight" | "ancient_construct" | "feral_hound" | "corrupt_druid" | "skeleton_warrior" | "baby_kraken" | "kraken_tentacle" | "magma_imp" | "necromancer" | "skeleton_minion" | "chittering_crabling" | "spine_spitter" | "occultist_dreamwalker" | "occultist_firebreather" | "occultist_pygmy" | "wandering_shade";
 
 // Status effect types
-export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed" | "chilled" | "qi_drain" | "energyShield" | "defiance" | "doom" | "invul" | "sleep" | "sun_stance" | "thorns" | "highland_defense" | "divine_lattice" | "weakened" | "hamstrung" | "blind" | "vanquishing_light";
+export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed" | "chilled" | "qi_drain" | "energyShield" | "defiance" | "doom" | "invul" | "sleep" | "sun_stance" | "thorns" | "highland_defense" | "divine_lattice" | "weakened" | "hamstrung" | "blind" | "vanquishing_light" | "enraged";
 
 export interface StatusEffect {
     type: StatusEffectType;
@@ -218,6 +218,12 @@ export interface EnemyPhaseShiftSkill {
     repositionMaxRange: number; // Max distance from target reposition point
 }
 
+export interface EnrageConfig {
+    hpThreshold: number;       // Fraction (e.g. 0.5 = enrage below 50% HP)
+    speedMultiplier: number;   // Multiplicative speed boost when enraged
+    damageMultiplier: number;  // Multiplicative damage boost when enraged
+}
+
 export interface EnemyDeathAcidPool {
     radius: number;          // Pool radius in grid cells
     duration: number;        // ms each acid tile persists
@@ -308,6 +314,8 @@ export interface EnemyStats {
     phaseShiftSkill?: EnemyPhaseShiftSkill;
     // Optional death effect - spawn a temporary acid pool at death location
     deathAcidPool?: EnemyDeathAcidPool;
+    // Optional enrage - gains speed and damage when HP drops below threshold
+    enrage?: EnrageConfig;
 }
 
 // =============================================================================

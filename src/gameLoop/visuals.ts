@@ -4,7 +4,7 @@
 
 import * as THREE from "three";
 import type { Unit, DamageText, UnitGroup, FogTexture } from "../core/types";
-import { FOG_SCALE, FLASH_DURATION } from "../core/constants";
+import { FOG_SCALE, FLASH_DURATION, ENRAGED_TINT_STRENGTH } from "../core/constants";
 import { hasStatusEffect } from "../combat/combatMath";
 import { updateVisibility } from "../ai/pathfinding";
 import { getCurrentArea } from "../game/areas";
@@ -42,6 +42,7 @@ export function updateDamageTexts(
 
 // Pre-allocated color objects to avoid allocations every frame
 const _flashWhite = new THREE.Color(1, 1, 1);
+const _enragedTint = new THREE.Color(0xcc3300);
 const _tempColor = new THREE.Color();
 
 function isColorMaterial(material: THREE.Material): material is THREE.MeshStandardMaterial | THREE.MeshPhongMaterial | THREE.MeshBasicMaterial {
@@ -71,17 +72,18 @@ export function updateHitFlash(
     unitOriginalColorRef: Record<number, THREE.Color>,
     now: number
 ): void {
-    Object.entries(hitFlashRef).forEach(([id, hitTime]) => {
-        const mesh = unitMeshRef[Number(id)];
-        const originalColor = unitOriginalColorRef[Number(id)];
-        if (!mesh || !originalColor) return;
+    for (const id in hitFlashRef) {
+        const numId = Number(id);
+        const mesh = unitMeshRef[numId];
+        const originalColor = unitOriginalColorRef[numId];
+        if (!mesh || !originalColor) continue;
         const colorMaterial = getColorMaterial(mesh);
-        if (!colorMaterial) return;
-        const elapsed = now - hitTime;
+        if (!colorMaterial) continue;
+        const elapsed = now - hitFlashRef[numId];
 
         if (elapsed > FLASH_DURATION) {
             colorMaterial.color.copy(originalColor);
-            delete hitFlashRef[Number(id)];
+            delete hitFlashRef[numId];
         } else {
             if (isSpriteMesh(mesh)) {
                 // Keep sprites at base color; no runtime tinting.
@@ -92,7 +94,7 @@ export function updateHitFlash(
                 colorMaterial.color.copy(_tempColor);
             }
         }
-    });
+    }
 }
 
 export function updatePoisonVisuals(
@@ -110,7 +112,13 @@ export function updatePoisonVisuals(
 
         // Skip if currently flashing (hit flash will handle the color)
         if (hitFlashRef[unit.id] !== undefined) continue;
+
+        // Reset to original color, then overlay any status tints
         colorMaterial.color.copy(originalColor);
+
+        if (hasStatusEffect(unit, "enraged")) {
+            colorMaterial.color.lerp(_enragedTint, ENRAGED_TINT_STRENGTH);
+        }
     }
 }
 

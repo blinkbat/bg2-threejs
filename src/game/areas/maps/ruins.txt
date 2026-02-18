@@ -426,4 +426,4 @@ spawn: 3,25
 45,44:small_fern
 
 === LIGHTS ===
-9.5,24.5:radius=18,angle=65,tint=#ffd28a,brightness=50,height=10,diffusion=0.55,decay=1
+9.5,24.5:radius=18,angle=65,tint=#ffd28a,brightness=40,height=10,diffusion=0.55,decay=1

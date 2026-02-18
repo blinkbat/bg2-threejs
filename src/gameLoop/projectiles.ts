@@ -384,12 +384,13 @@ export function updateProjectiles(
 
         let hitCount = 0;
         let totalDamage = 0;
-        unitsState.filter(u => u.hp > 0 && !defeatedThisFrame.has(u.id)).forEach(target => {
+        for (const target of unitsState) {
+            if (target.hp <= 0 || defeatedThisFrame.has(target.id)) continue;
             const tg = unitsRef[target.id];
-            if (!tg) return;
+            if (!tg) continue;
 
             const targetDist = distance(tg.position.x, tg.position.z, explodeX, explodeZ);
-            if (targetDist > aoeRadius) return;
+            if (targetDist > aoeRadius) continue;
 
             const targetData = getUnitStats(target);
             const statBonus = calculateStatBonus(attackerUnit, proj.damageType);
@@ -413,7 +414,7 @@ export function updateProjectiles(
             if (attackerUnit?.team === "player") {
                 aggroOnHit(target, proj.attackerId, unitsRef);
             }
-        });
+        }
 
         if (hitCount > 0) {
             soundFns.playHit();
@@ -652,7 +653,7 @@ export function updateProjectiles(
                             // Calculate damage if trap has damage
                             let damage = 0;
                             if (trapProj.trapDamage) {
-                                damage = trapProj.trapDamage[0] + Math.floor(Math.random() * (trapProj.trapDamage[1] - trapProj.trapDamage[0] + 1));
+                                damage = rollDamage(trapProj.trapDamage[0], trapProj.trapDamage[1]);
                                 totalDamage += damage;
                                 const targetData = getUnitStats(target);
                                 applyDamageToUnit(dmgCtx, target.id, targetG, damage, targetData.name, {

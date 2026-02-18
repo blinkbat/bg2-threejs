@@ -161,12 +161,13 @@ export function processFireBreaths(
         }
 
         // Aim at current target — retarget if needed
-        let targetG = unitsRef[breath.targetId];
+        let targetG: UnitGroup | undefined = unitsRef[breath.targetId];
         let targetUnit = unitsState.find(u => u.id === breath.targetId);
 
         // If current target is dead/gone, find nearest alive player
         if (!targetUnit || targetUnit.hp <= 0 || !targetG) {
             let bestDist = Infinity;
+            targetG = undefined;
             for (const u of unitsState) {
                 if (u.team !== "player" || !isUnitAlive(u, defeatedThisFrame)) continue;
                 const ug = unitsRef[u.id];
@@ -178,6 +179,12 @@ export function processFireBreaths(
                     targetG = ug;
                     targetUnit = u;
                 }
+            }
+            // No valid targets remain — end breath early
+            if (!targetG) {
+                cleanupBreath(scene, breath);
+                toRemove.push(unitId);
+                return;
             }
         }
 

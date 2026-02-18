@@ -160,7 +160,8 @@ export function executeEnemyMeleeAttack(ctx: EnemyAttackContext): void {
         // Check for bite attack (random chance to bite instead of claw)
         const isBite = attackerStats.biteChance && attackerStats.biteDamage && rollChance(attackerStats.biteChance);
         const baseDamage = isBite ? attackerStats.biteDamage! : attackerStats.damage;
-        const effectiveDamage = getEffectiveDamage(attacker, baseDamage);
+        const enrageMult = hasStatusEffect(attacker, "enraged") && attackerStats.enrage ? attackerStats.enrage.damageMultiplier : 1;
+        const effectiveDamage = getEffectiveDamage(attacker, baseDamage, enrageMult);
 
         let dmg: number;
         let isCrit: boolean;

@@ -439,18 +439,22 @@ export function isCooldownReady(
 }
 
 /**
- * Get effective damage range for a unit, accounting for amoeba split weakening.
- * Each split reduces damage by 15%.
+ * Get effective damage range for a unit, accounting for amoeba split weakening
+ * and enrage multiplier. Each split reduces damage by 15%.
  */
-export function getEffectiveDamage(unit: Unit, baseDamage: [number, number]): [number, number] {
+export function getEffectiveDamage(unit: Unit, baseDamage: [number, number], damageMultiplier: number = 1): [number, number] {
+    let low = baseDamage[0];
+    let high = baseDamage[1];
     if (unit.enemyType === "giant_amoeba" && unit.splitCount !== undefined && unit.splitCount > 0) {
         const scaleFactor = Math.pow(0.85, unit.splitCount);
-        return [
-            Math.max(1, Math.floor(baseDamage[0] * scaleFactor)),
-            Math.max(1, Math.floor(baseDamage[1] * scaleFactor))
-        ];
+        low = Math.floor(low * scaleFactor);
+        high = Math.floor(high * scaleFactor);
     }
-    return baseDamage;
+    if (damageMultiplier !== 1) {
+        low = Math.floor(low * damageMultiplier);
+        high = Math.floor(high * damageMultiplier);
+    }
+    return [Math.max(1, low), Math.max(1, high)];
 }
 
 /**
@@ -463,7 +467,9 @@ export function getEffectiveSpeedMultiplier(unit: Unit, data: EnemyStats | UnitD
     const slow = hasStatusEffect(unit, "slowed") ? SLOW_MOVE_MULT : 1;
     const chill = hasStatusEffect(unit, "chilled") ? CHILLED_MOVE_MULT : 1;
     const hamstrung = hasStatusEffect(unit, "hamstrung") ? HAMSTRUNG_MOVE_MULT : 1;
-    return base * slow * chill * hamstrung;
+    const enraged = hasStatusEffect(unit, "enraged") && "enrage" in data && (data as EnemyStats).enrage
+        ? (data as EnemyStats).enrage!.speedMultiplier : 1;
+    return base * slow * chill * hamstrung * enraged;
 }
 
 /**
