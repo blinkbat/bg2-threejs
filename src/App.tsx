@@ -22,7 +22,7 @@ import { isConsumable } from "./core/types";
 import { updateChestStates } from "./rendering/scene";
 import { soundFns } from "./audio";
 import { findNearestPassable, findSpawnPositions } from "./ai/pathfinding";
-import { updateUnit, updateUnitWith } from "./core/stateUtils";
+import { updateUnit, updateUnitWith, createLiveUnitsDispatch } from "./core/stateUtils";
 
 // Extracted modules
 import { executeSkill, type SkillExecutionContext } from "./combat/skills";
@@ -429,6 +429,12 @@ function Game({
     useEffect(() => { formationOrderRef.current = formationOrder; }, [formationOrder]);
     useEffect(() => { commandModeRef.current = commandMode; }, [commandMode]);
 
+    // Live dispatch keeps unitsStateRef in sync immediately (no waiting for useEffect)
+    const setUnitsLive = useMemo(
+        () => createLiveUnitsDispatch(setUnits, unitsStateRef as { current: Unit[] }),
+        [setUnits]
+    );
+
     // =============================================================================
     // MUTABLE REFS FOR INPUT
     // =============================================================================
@@ -654,14 +660,14 @@ function Game({
         unitMeshRef: { current: sceneState.unitMeshes },
         unitOriginalColorRef: { current: sceneState.unitOriginalColors },
         swingAnimationsRef: { current: gameRefs.current.swingAnimations },
-        setUnits,
+        setUnits: setUnitsLive,
         setSkillCooldowns,
         addLog,
         defeatedThisFrame: defeatedThisFrame ?? new Set<number>(),
         sanctuaryTilesRef: { current: gameRefs.current.sanctuaryTiles },
         acidTilesRef: { current: gameRefs.current.acidTiles },
         holyTilesRef: { current: gameRefs.current.holyTiles }
-    }), [sceneState, gameRefs, addLog]);
+    }), [sceneState, gameRefs, addLog, setUnitsLive]);
 
     // Execute consumable
     const executeConsumable = useCallback((unitId: number, itemId: string, targetId?: number): boolean => {
