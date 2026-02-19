@@ -275,6 +275,12 @@ export const COLORS = {
     blindBg: "#1f2629",
     chilled: "#5dade2",             // Ice blue
     chilledText: "#85c1e9",         // Lighter ice blue
+    slowedText: "#5dade2",          // Blue - movement debuff
+    energyShieldText: "#bb86fc",    // Purple glow - arcane shield
+    qiDrainText: "#ff6b6b",        // Red - life drain
+    invulText: "#d2b4ff",           // Light purple - divine protection
+    regenText: "#6bef8a",           // Bright green - healing over time
+    enragedText: "#ff6633",         // Orange-red - fury
     fireBreath: "#ff4400",       // Orange-red for fire breath cone
     acid: "#9acd32",            // Yellow-green for acid tiles
     acidText: "#b8e060",        // Brighter for damage text
