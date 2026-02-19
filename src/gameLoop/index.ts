@@ -36,8 +36,8 @@ import { executeEnemySwipe, executeEnemyHeal } from "./enemySkills";
 import { executeEnemyBasicAttack } from "./enemyAttack";
 import { isUnitCharging } from "./constructCharge";
 import { isUnitBreathing, startFireBreath } from "./fireBreath";
-import { tryStartChargeAttack, tryLeapToTarget, isUnitLeaping, tryVinesSkill, tryAcidSlugPatrol, processAcidTrailAndAura, runPreAttackBehaviors, isShadePhased } from "./enemyBehaviors";
-export { clearLeaps, updateLeaps, isUnitLeaping, updateTentacles, clearTentacles, trySubmergeKraken, isKrakenSubmerged, isKrakenFullySubmerged, updateSubmergedKrakens, processGlares, clearGlares, processShadePhases, clearShadePhases, isShadePhased } from "./enemyBehaviors";
+import { tryStartChargeAttack, tryLeapToTarget, isUnitLeaping, tryVinesSkill, tryAcidSlugPatrol, processAcidTrailAndAura, runPreAttackBehaviors, isShadePhased, isUnitCastingGlare } from "./enemyBehaviors";
+export { clearLeaps, updateLeaps, isUnitLeaping, updateTentacles, clearTentacles, trySubmergeKraken, isKrakenSubmerged, isKrakenFullySubmerged, updateSubmergedKrakens, processGlares, clearGlares, isUnitCastingGlare, processShadePhases, clearShadePhases, isShadePhased } from "./enemyBehaviors";
 export { spawnLootBag, removeLootBag, clearAllLootBags, resetLootBagIds } from "./lootBags";
 
 // Re-export unit ID utilities for backwards compatibility
@@ -153,6 +153,13 @@ export function updateUnitAI(
         return;
     }
 
+    // Basilisk glare wind-up: lock caster in place until the cast resolves.
+    if (!isPlayer && isUnitCastingGlare(unit.id)) {
+        g.userData.attackTarget = null;
+        pathsRef[unit.id] = [];
+        return;
+    }
+
     // Check if enemy is actively kiting - skip targeting and continue retreat
     if (!isPlayer && isEnemyKiting(unit.id, now)) {
         // Check if kite path is complete
@@ -174,9 +181,10 @@ export function updateUnitAI(
     const aggroRange = isPlayer ? 12 : (data as { aggroRange: number }).aggroRange;
     const hasFrontShield = !isPlayer && (data as EnemyStats).frontShield === true;
     const hasAggressiveTargeting = !isPlayer && (data as EnemyStats).aggressiveTargeting === true;
+    const hasFastRetargeting = !isPlayer && ((((data as EnemyStats).size ?? 1) >= 1) || (data as EnemyStats).moveSpeed < 1);
     const targetingCtx: TargetingContext = {
         unit, g, unitsRef, unitsState, visibility, pathsRef, moveStartRef,
-        now, defeatedThisFrame, aggroRange, hasFrontShield, hasAggressiveTargeting
+        now, defeatedThisFrame, aggroRange, hasFrontShield, hasAggressiveTargeting, hasFastRetargeting
     };
     runTargetingPhase(targetingCtx);
 
@@ -232,6 +240,13 @@ export function updateUnitAI(
 
         // Shade might have just phase-shifted during pre-attack behavior dispatch.
         if (isShadePhased(unit.id)) {
+            g.userData.attackTarget = null;
+            pathsRef[unit.id] = [];
+            return;
+        }
+
+        // Basilisk may have just started glare in this dispatch.
+        if (isUnitCastingGlare(unit.id)) {
             g.userData.attackTarget = null;
             pathsRef[unit.id] = [];
             return;

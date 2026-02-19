@@ -42,6 +42,18 @@ interface GlareState {
 let nextGlareId = 0;
 const activeGlares = new Map<number, GlareState>();
 
+/**
+ * Returns true while the unit has an active glare wind-up.
+ */
+export function isUnitCastingGlare(unitId: number): boolean {
+    for (const glare of activeGlares.values()) {
+        if (glare.casterId === unitId) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // =============================================================================
 // VISUAL CREATION
 // =============================================================================

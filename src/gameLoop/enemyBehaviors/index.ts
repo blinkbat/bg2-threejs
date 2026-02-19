@@ -41,7 +41,7 @@ export { tryAcidSlugPatrol, processAcidTrailAndAura } from "./acidSlug";
 export type { AcidSlugContext } from "./acidSlug";
 
 // Basilisk Glare
-export { tryBasiliskGlare, processGlares, clearGlares } from "./basiliskGlare";
+export { tryBasiliskGlare, processGlares, clearGlares, isUnitCastingGlare } from "./basiliskGlare";
 
 // Occultist Dreamwalker Sleep
 export { trySleep } from "./sleep";

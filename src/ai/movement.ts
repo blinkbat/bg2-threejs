@@ -240,9 +240,9 @@ export function recordPathRecalculation(
 /**
  * Check if enough time has passed to scan for targets again.
  */
-export function canScanForTargets(unitId: number, now: number): boolean {
+export function canScanForTargets(unitId: number, now: number, scanInterval: number = TARGET_SCAN_INTERVAL): boolean {
     const lastScan = lastTargetScan[unitId] || 0;
-    return now - lastScan >= TARGET_SCAN_INTERVAL;
+    return now - lastScan >= scanInterval;
 }
 
 /**

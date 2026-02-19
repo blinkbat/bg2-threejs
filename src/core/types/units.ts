@@ -82,7 +82,6 @@ export interface UnitData {
     damage: [number, number];
     accuracy: number;  // hit chance percentage (0-100)
     armor: number;     // flat damage reduction
-    color: string;
     skills: Skill[];
     items: string[];
     range?: number;
@@ -236,7 +235,6 @@ export interface EnemyStats {
     damage: [number, number];
     accuracy: number;
     armor: number;
-    color: string;
     aggroRange: number;
     attackCooldown: number;
     expReward: number;  // Experience points awarded on death

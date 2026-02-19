@@ -3,6 +3,7 @@ import Tippy from "@tippyjs/react";
 import type { Unit, Skill, StatusEffect, DamageType, Item, CharacterStats } from "../core/types";
 import { isConsumable, isWeapon, isShield, isArmor, isAccessory } from "../core/types";
 import { UNIT_DATA, getAllSkills, getAvailableSkills, getEffectiveUnitData, getEffectiveMaxHp, getEffectiveMaxMana, getXpForLevel } from "../game/playerUnits";
+import { getPlayerUnitColor } from "../game/unitColors";
 import { getHpPercentage, getHpColor, getMana, hasStatusEffect, getEffectiveArmor } from "../combat/combatMath";
 import { getDexterityCritChance } from "../game/statBonuses";
 import { COLORS, getDamageTypeColor, getSkillTextColor, getSkillBorderColor } from "../core/constants";
@@ -71,7 +72,7 @@ export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, ski
 
     return (
         <div className="unit-panel glass-panel">
-            <div className="unit-panel-header" style={{ backgroundColor: data.color, "--header-bg-image": `url(${getPortrait(data.class)})`, "--header-bg-pos": PORTRAIT_POS[data.class] ?? "center bottom" } as React.CSSProperties}>
+            <div className="unit-panel-header" style={{ backgroundColor: getPlayerUnitColor(unitId), "--header-bg-image": `url(${getPortrait(data.class)})`, "--header-bg-pos": PORTRAIT_POS[data.class] ?? "center bottom" } as React.CSSProperties}>
                 <div className="close-btn header-close" onClick={onClose}>×</div>
                 <div className="unit-info header-info">
                     <div className="unit-name">{data.name}</div>

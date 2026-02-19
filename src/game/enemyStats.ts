@@ -13,7 +13,6 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         damage: [2, 5],
         accuracy: 65,
         armor: 1,
-        color: "#a4f018",  // Bright acidic lime
         aggroRange: 7,
         attackCooldown: 2000,
         size: 1.0,
@@ -31,7 +30,6 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         damage: [7, 12],
         accuracy: 65,
         armor: 4,              // Heavy shell
-        color: "#c07090",      // Rosy pink shell
         aggroRange: 8,
         attackCooldown: 2400,
         size: 1.8,             // Large enemy
@@ -48,7 +46,6 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         damage: [10, 16],
         accuracy: 70,
         armor: 3,          // Heavy armor (magic bypasses)
-        color: "#a07028",  // Golden bronze
         aggroRange: 12,
         attackCooldown: 2500,
         size: 2.5,         // Large boss
@@ -72,7 +69,6 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         damage: [8, 14],
         accuracy: 65,
         armor: 2,
-        color: "#a040e8",      // Bright vivid purple
         aggroRange: 12,
         attackCooldown: 3000,
         size: 2.5,             // Large
@@ -93,7 +89,6 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         damage: [3, 7],
         accuracy: 70,
         armor: 1,
-        color: "#903090",  // Bright purple
         aggroRange: 10,    // Good vision in the dark
         attackCooldown: 1200,  // Fast attacks
         size: 1,
@@ -109,7 +104,6 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         damage: [5, 9],
         accuracy: 55,
         armor: 1,
-        color: "#70a830",      // Sickly undead green
         aggroRange: 8,
         attackCooldown: 2400,
         size: 1.35,            // Chunky, lumbering body
@@ -127,7 +121,6 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         damage: [8, 14],
         accuracy: 70,
         armor: 3,
-        color: "#00e000",
         aggroRange: 10,
         attackCooldown: 2200,
         moveSpeed: 0.7,
@@ -156,7 +149,6 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         damage: [3, 8],
         accuracy: 55,
         armor: 2,
-        color: "#a868c0",  // Light purple
         aggroRange: 12,  // Good LOS - sees you from far
         attackCooldown: 2500,
         size: 1.8,  // Large
@@ -176,7 +168,6 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         damage: [1, 2],  // Low damage
         accuracy: 65,
         armor: 0,
-        color: "#9868b0",  // Medium purple
         aggroRange: 4,  // Limited LOS - relies on mother's sight
         attackCooldown: 1000,  // Fast attacks
         size: 0.8,  // Small
@@ -193,7 +184,6 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         damage: [2, 4],
         accuracy: 60,
         armor: 2,              // Hard shell
-        color: "#e84010",      // Vivid orange-red shell
         aggroRange: 6,
         attackCooldown: 1400,  // Fast snipping
         size: 0.7,             // Small
@@ -207,7 +197,6 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         damage: [5, 9],        // Chaos missile damage
         accuracy: 70,
         armor: 0,
-        color: "#206808",      // Dark saturated green
         aggroRange: 10,
         attackCooldown: 2200,  // Slower caster attacks
         range: 7,              // Long range
@@ -234,7 +223,6 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         damage: [3, 7],
         accuracy: 60,
         armor: 2,
-        color: "#886040",
         aggroRange: 7,
         attackCooldown: 2000,
         moveSpeed: 0.9,
@@ -253,7 +241,6 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         damage: [2, 5],
         accuracy: 65,
         armor: 0,
-        color: "#c09868",  // Medium tan
         aggroRange: 10,
         attackCooldown: 1600,  // Fast attacks
         size: 0.85,
@@ -274,7 +261,6 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         damage: [3, 6],
         accuracy: 55,
         armor: 0,
-        color: "#08d858",  // Vivid sea green - translucent blob
         aggroRange: 6,
         attackCooldown: 2200,
         size: 2.0,  // Large - decreases with each split
@@ -290,7 +276,6 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         damage: [1, 5],
         accuracy: 50,
         armor: 0,
-        color: "#b84400",
         aggroRange: 6,
         attackCooldown: 2000,
         moveSpeed: DEFAULT_MOVE_SPEED,
@@ -303,7 +288,6 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         damage: [3, 7],
         accuracy: 55,
         armor: 0,
-        color: "#904800",
         aggroRange: 8,
         attackCooldown: 2500,
         range: 6,
@@ -323,7 +307,6 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         damage: [1, 3],
         accuracy: 50,
         armor: 0,
-        color: "#5800b0",  // Vivid purple
         aggroRange: 8,
         attackCooldown: 3000,
         range: 5,
@@ -348,7 +331,6 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         damage: [4, 8],
         accuracy: 70,
         armor: 0,
-        color: "#8830e0",      // Vivid purple
         aggroRange: 3,         // Short aggro - melee turret
         attackCooldown: 1500,  // Fast attacks
         size: 0.8,
@@ -362,7 +344,6 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         damage: [6, 10],       // Fireball damage
         accuracy: 75,
         armor: 0,
-        color: "#ff3800",      // Bright orange-red (magma)
         aggroRange: 10,
         attackCooldown: 3000,  // Slow attack rate
         range: 8,              // Long range caster
@@ -383,7 +364,6 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         damage: [4, 8],            // Dark bolt damage
         accuracy: 65,
         armor: 0,
-        color: "#420042",          // Dark vivid purple
         aggroRange: 10,
         attackCooldown: 2500,
         range: 7,                  // Ranged caster
@@ -420,7 +400,6 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         damage: [0, 0],
         accuracy: 70,
         armor: 4,
-        color: "#c42000",
         aggroRange: 8,
         attackCooldown: 1000,
         size: 1.5,
@@ -445,7 +424,6 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         damage: [3, 6],
         accuracy: 70,
         armor: 0,
-        color: "#5800b0",
         aggroRange: 10,
         attackCooldown: 2500,
         range: 8,
@@ -478,7 +456,6 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         damage: [2, 4],
         accuracy: 55,
         armor: 0,
-        color: "#804000",
         aggroRange: 8,
         attackCooldown: 1200,
         size: 0.6,
@@ -492,7 +469,6 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         damage: [6, 10],
         accuracy: 60,
         armor: 3,
-        color: "#408810",
         aggroRange: 8,
         moveSpeed: 0.4,  // Slow movement
         attackCooldown: 3000,
@@ -514,7 +490,6 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         damage: [2, 4],
         accuracy: 50,
         armor: 0,
-        color: "#b0a868",          // Warm bone
         aggroRange: 6,
         attackCooldown: 1800,
         size: 0.9,                 // Smaller than warrior
@@ -528,7 +503,6 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         damage: [6, 10],
         accuracy: 60,
         armor: 1,
-        color: "#c8c078",      // Warm ivory
         aggroRange: 7,
         attackCooldown: 2000,
         size: 1.2,
@@ -543,7 +517,6 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         damage: [3, 6],
         accuracy: 60,
         armor: 0,
-        color: "#907028",      // Sandy brown
         aggroRange: 8,
         attackCooldown: 2200,
         range: 6,              // Ranged
@@ -562,7 +535,6 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         damage: [8, 18],
         accuracy: 65,
         armor: 2,          // Heavy armor
-        color: "#0c3870",  // Vivid dark steel blue
         aggroRange: 8,
         attackCooldown: 3500,  // Slow heavy swings
         size: 1.6,         // Large
@@ -578,7 +550,6 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         damage: [6, 11],
         accuracy: 74,
         armor: 1,
-        color: "#6080c8",
         aggroRange: 11,
         attackCooldown: 1400,
         size: 1.0,

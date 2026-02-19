@@ -127,7 +127,10 @@ export interface TargetingContext {
     aggroRange: number;
     hasFrontShield?: boolean;  // Front-shielded enemies reacquire targets immediately
     hasAggressiveTargeting?: boolean;  // Boss enemies that aggressively retarget
+    hasFastRetargeting?: boolean;  // Medium+ or slow enemies retarget more aggressively
 }
+
+const FAST_RETARGET_SCAN_INTERVAL = 250;
 
 /**
  * Check if the current attack target is still valid (alive, not defeated, not untargetable).
@@ -322,6 +325,7 @@ function findRecentDamageSource(ctx: TargetingContext): number | null {
 export function runTargetingPhase(ctx: TargetingContext): void {
     const { unit, g, pathsRef, now, hasFrontShield } = ctx;
     const isPlayer = unit.team === "player";
+    const usesFastRetargeting = !isPlayer && ctx.hasFastRetargeting === true;
     if (hasStatusEffect(unit, "divine_lattice")) {
         g.userData.attackTarget = null;
         return;
@@ -363,10 +367,9 @@ export function runTargetingPhase(ctx: TargetingContext): void {
         return;
     }
 
-    // Aggressive targeting - front-shielded enemies and bosses with aggressiveTargeting
-    // They immediately retarget to damage sources and bypass scan cooldowns
-    const isAggressive = (hasFrontShield || ctx.hasAggressiveTargeting) && !isPlayer;
-    if (isAggressive) {
+    // Aggressive damage-source retargeting for shielded enemies and explicit boss configs.
+    const shouldRetargetToDamageSource = (hasFrontShield || ctx.hasAggressiveTargeting) && !isPlayer;
+    if (shouldRetargetToDamageSource) {
         // ALWAYS check for recent damage source - switch targets if someone hit us
         const damageSourceTarget = findRecentDamageSource(ctx);
         if (damageSourceTarget !== null && damageSourceTarget !== g.userData.attackTarget) {
@@ -375,15 +378,15 @@ export function runTargetingPhase(ctx: TargetingContext): void {
             recordTargetScan(unit.id, now);
             return;
         }
+    }
 
-        // If we don't have a valid target, find one immediately (bypass scan cooldown)
-        if (!targetStillValid && !recentlyGaveUp(unit.id, now)) {
-            const nearest = findNearestTarget(ctx);
-            if (nearest !== null) {
-                acquireTarget(ctx, nearest);
-                recordTargetScan(unit.id, now);
-                return;
-            }
+    // Fast-retarget units (medium+ or slow movers) bypass scan cooldown when target is lost.
+    if (!isPlayer && (shouldRetargetToDamageSource || usesFastRetargeting) && !targetStillValid && !recentlyGaveUp(unit.id, now)) {
+        const nearest = findNearestTarget(ctx);
+        if (nearest !== null) {
+            acquireTarget(ctx, nearest);
+            recordTargetScan(unit.id, now);
+            return;
         }
     }
 
@@ -392,7 +395,9 @@ export function runTargetingPhase(ctx: TargetingContext): void {
     const isAttackMoving = isPlayer && g.userData.attackMoveTarget !== undefined;
     const isExecutingMoveCommand = (hasActivePath || g.userData.pendingMove) && g.userData.attackTarget === null && !isAttackMoving;
     const canAutoTarget = shouldAutoTarget && !targetStillValid && !isExecutingMoveCommand;
-    const canScan = canScanForTargets(unit.id, now);
+    const canScan = usesFastRetargeting
+        ? canScanForTargets(unit.id, now, FAST_RETARGET_SCAN_INTERVAL)
+        : canScanForTargets(unit.id, now);
 
     if (canAutoTarget && canScan) {
         recordTargetScan(unit.id, now);

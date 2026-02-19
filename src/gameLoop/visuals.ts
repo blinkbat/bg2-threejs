@@ -66,6 +66,14 @@ function getColorMaterial(mesh: THREE.Mesh): THREE.MeshStandardMaterial | THREE.
     return isColorMaterial(material) ? material : null;
 }
 
+function getSpriteBaseColor(
+    colorMaterial: THREE.MeshStandardMaterial | THREE.MeshPhongMaterial | THREE.MeshBasicMaterial,
+    fallbackColor: THREE.Color
+): THREE.Color {
+    const spriteBaseColor = Reflect.get(colorMaterial.userData, "spriteBaseColor");
+    return spriteBaseColor instanceof THREE.Color ? spriteBaseColor : fallbackColor;
+}
+
 export function updateHitFlash(
     hitFlashRef: Record<number, number>,
     unitMeshRef: Record<number, THREE.Mesh>,
@@ -82,12 +90,16 @@ export function updateHitFlash(
         const elapsed = now - hitFlashRef[numId];
 
         if (elapsed > FLASH_DURATION) {
-            colorMaterial.color.copy(originalColor);
+            if (isSpriteMesh(mesh)) {
+                colorMaterial.color.copy(getSpriteBaseColor(colorMaterial, originalColor));
+            } else {
+                colorMaterial.color.copy(originalColor);
+            }
             delete hitFlashRef[numId];
         } else {
             if (isSpriteMesh(mesh)) {
                 // Keep sprites at base color; no runtime tinting.
-                colorMaterial.color.copy(originalColor);
+                colorMaterial.color.copy(getSpriteBaseColor(colorMaterial, originalColor));
             } else {
                 const t = elapsed / FLASH_DURATION;
                 _tempColor.copy(_flashWhite).lerp(originalColor, t);
@@ -113,7 +125,13 @@ export function updatePoisonVisuals(
         // Skip if currently flashing (hit flash will handle the color)
         if (hitFlashRef[unit.id] !== undefined) continue;
 
-        // Reset to original color, then overlay any status tints
+        if (isSpriteMesh(mesh)) {
+            // Keep sprites at their configured base color.
+            colorMaterial.color.copy(getSpriteBaseColor(colorMaterial, originalColor));
+            continue;
+        }
+
+        // Reset to original color, then overlay status tints
         colorMaterial.color.copy(originalColor);
 
         if (hasStatusEffect(unit, "enraged")) {

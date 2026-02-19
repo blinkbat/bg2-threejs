@@ -2094,7 +2094,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         unitGroups[unit.id] = result.group;
         selectRings[unit.id] = result.selectRing;
         unitMeshes[unit.id] = result.mesh;
-        unitOriginalColors[unit.id] = new THREE.Color(data.color);
+        unitOriginalColors[unit.id] = result.baseColor.clone();
         maxHp[unit.id] = data.maxHp;
 
         if (result.targetRing) {

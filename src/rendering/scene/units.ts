@@ -6,6 +6,7 @@ import * as THREE from "three";
 import type { Unit, UnitGroup, EnemyStats } from "../../core/types";
 import { SPRITE_DEFAULT_BRIGHTNESS } from "../../core/constants";
 import { getUnitStats } from "../../game/units";
+import { getUnitColor } from "../../game/unitColors";
 
 // Import player sprite textures
 import wizardSpriteUrl from "../../assets/wizard.png";
@@ -17,6 +18,11 @@ import monkSpriteUrl from "../../assets/monk.png";
 
 // Import enemy sprite textures
 import vampireBatSpriteUrl from "../../assets/vampire-bat.png";
+import basiliskYounglingSpriteUrl from "../../assets/basilisk_youngling.png";
+import bloatedCorpseSpriteUrl from "../../assets/bloated_corpse.png";
+import fireImpSpriteUrl from "../../assets/fire_imp.png";
+import occultistPygmySpriteUrl from "../../assets/occultist_pygmy.png";
+import wanderingShadeSpriteUrl from "../../assets/wandering_shade.png";
 import acidSlugSpriteUrl from "../../assets/acid-slug.png";
 import amoebaLgSpriteUrl from "../../assets/amoeba-lg.png";
 import amoebaMdSpriteUrl from "../../assets/amoeba-md.png";
@@ -62,6 +68,11 @@ let paladinTexture: THREE.Texture;
 let thiefTexture: THREE.Texture;
 let monkTexture: THREE.Texture;
 let vampireBatTexture: THREE.Texture;
+let basiliskYounglingTexture: THREE.Texture;
+let bloatedCorpseTexture: THREE.Texture;
+let fireImpTexture: THREE.Texture;
+let occultistPygmyTexture: THREE.Texture;
+let wanderingShadeTexture: THREE.Texture;
 let acidSlugTexture: THREE.Texture;
 let amoebaLgTexture: THREE.Texture;
 let amoebaMdTexture: THREE.Texture;
@@ -97,6 +108,11 @@ export function ensureTexturesLoaded(): void {
     thiefTexture = loadFilteredTexture(thiefSpriteUrl);
     monkTexture = loadFilteredTexture(monkSpriteUrl);
     vampireBatTexture = loadFilteredTexture(vampireBatSpriteUrl);
+    basiliskYounglingTexture = loadFilteredTexture(basiliskYounglingSpriteUrl);
+    bloatedCorpseTexture = loadFilteredTexture(bloatedCorpseSpriteUrl);
+    fireImpTexture = loadFilteredTexture(fireImpSpriteUrl);
+    occultistPygmyTexture = loadFilteredTexture(occultistPygmySpriteUrl);
+    wanderingShadeTexture = loadFilteredTexture(wanderingShadeSpriteUrl);
     acidSlugTexture = loadFilteredTexture(acidSlugSpriteUrl);
     amoebaLgTexture = loadFilteredTexture(amoebaLgSpriteUrl);
     amoebaMdTexture = loadFilteredTexture(amoebaMdSpriteUrl);
@@ -121,7 +137,7 @@ interface SpriteConfig {
     texture: THREE.Texture;
     width: number;
     height: number;
-    color: number;          // Diffuse + emissive tint (use 0xffffff for neutral)
+    color: number;
     offsetX?: number;
     offsetY?: number;       // Vertical offset (negative = lower on shadow)
     spriteHeight?: number;  // Override default 1.8 sprite height
@@ -129,30 +145,42 @@ interface SpriteConfig {
     emissiveIntensity?: number;  // Optional direct emissive intensity override
     shadowSize?: number;    // Override shadow radius
     opacity?: number;       // Transparency (0-1, default 1)
+    toneMix?: number;       // 0-1 grayscale-to-color remap strength
 }
 
 function getSpriteConfigs(): Record<number, SpriteConfig> {
     ensureTexturesLoaded();
     return {
-        1: { texture: barbarianTexture, width: 196, height: 195, color: 0xffffff, spriteHeight: 1.8, offsetX: -0.1 },  // Barbarian
-        2: { texture: paladinTexture, width: 128, height: 196, color: 0xffffff, spriteHeight: 1.8 },    // Paladin
-        3: { texture: thiefTexture, width: 128, height: 196, color: 0xffffff, spriteHeight: 1.8, offsetX: 0.1 },  // Thief
-        4: { texture: wizardTexture, width: 110, height: 196, color: 0xffffff, spriteHeight: 1.8 },     // Wizard
-        5: { texture: monkTexture, width: 128, height: 196, color: 0xffffff, spriteHeight: 1.8, offsetX: -0.1 },  // Monk
-        6: { texture: clericTexture, width: 128, height: 196, color: 0xcccccc, spriteHeight: 1.8 },   // Cleric
-        7: { texture: barbarianTexture, width: 196, height: 195, color: 0xe8d6b8, spriteHeight: 2.0, offsetX: -0.1, brightness: 0.09, opacity: 0.3 }, // Ancestor summon
+        1: { texture: barbarianTexture, width: 196, height: 195, color: 0xce6f5f, spriteHeight: 1.8, offsetX: -0.1 },  // Barbarian - lighter, slightly more saturated
+        2: { texture: paladinTexture, width: 128, height: 196, color: 0xd4a017, spriteHeight: 1.8 },    // Paladin
+        3: { texture: thiefTexture, width: 128, height: 196, color: 0xb275ce, spriteHeight: 1.8, offsetX: 0.1 },  // Thief - lighter, slightly more saturated
+        4: { texture: wizardTexture, width: 110, height: 196, color: 0x3498db, spriteHeight: 1.8 },     // Wizard
+        5: { texture: monkTexture, width: 128, height: 196, color: 0x27ae60, spriteHeight: 1.8, offsetX: -0.1 },  // Monk
+        6: { texture: clericTexture, width: 128, height: 196, color: 0xc0c8d0, spriteHeight: 1.8 },   // Cleric
+        7: { texture: barbarianTexture, width: 196, height: 195, color: 0xd7c09a, spriteHeight: 2.0, offsetX: -0.1, brightness: 0.09, opacity: 0.3 }, // Ancestor summon
     };
 }
 
-function applySpriteEdgeBlur(material: THREE.MeshStandardMaterial, textureWidth: number, textureHeight: number): void {
-    material.customProgramCacheKey = () => "sprite_edge_blur";
+function applySpriteEdgeBlur(
+    material: THREE.MeshStandardMaterial,
+    textureWidth: number,
+    textureHeight: number,
+    toneMix: number = 0
+): void {
+    const texelX = (1 / textureWidth).toFixed(8);
+    const texelY = (1 / textureHeight).toFixed(8);
+    const clampedToneMix = Math.max(0, Math.min(1, toneMix));
+    const toneMixLiteral = clampedToneMix.toFixed(4);
+    material.customProgramCacheKey = () => `sprite_edge_blur_${textureWidth}x${textureHeight}_${toneMixLiteral}`;
     material.onBeforeCompile = (shader) => {
-        shader.uniforms.uTexelSize = {
-            value: new THREE.Vector2(1.0 / textureWidth, 1.0 / textureHeight)
-        };
         shader.fragmentShader = shader.fragmentShader.replace(
             "#include <common>",
-            "#include <common>\nuniform vec2 uTexelSize;"
+            [
+                "#include <common>",
+                `#define SPRITE_TEXEL_X ${texelX}`,
+                `#define SPRITE_TEXEL_Y ${texelY}`,
+                `#define SPRITE_TONE_MIX ${toneMixLiteral}`,
+            ].join("\n")
         );
         // 2D Gaussian blur over a 5-texel-wide kernel (13 samples):
         // center + 4 cardinal at 1tx + 4 diagonal at 1tx + 4 cardinal at 2tx
@@ -162,7 +190,7 @@ function applySpriteEdgeBlur(material: THREE.MeshStandardMaterial, textureWidth:
             [
                 "{",
                 "    float am = opacity;",
-                "    vec2 ts = uTexelSize;",
+                "    vec2 ts = vec2(SPRITE_TEXEL_X, SPRITE_TEXEL_Y);",
                 "    float a   = texture2D(map, vMapUv).a * am;",
                 "    float aL1 = texture2D(map, vMapUv + vec2(-1.0, 0.0) * ts).a * am;",
                 "    float aR1 = texture2D(map, vMapUv + vec2( 1.0, 0.0) * ts).a * am;",
@@ -179,6 +207,9 @@ function applySpriteEdgeBlur(material: THREE.MeshStandardMaterial, textureWidth:
                 "    float blurA = (a * 4.0 + (aL1 + aR1 + aU1 + aD1) * 2.0 + (aDL + aDR + aUL + aUR) + (aL2 + aR2 + aU2 + aD2)) / 20.0;",
                 "    if (blurA < 0.15) discard;",
                 "    diffuseColor.a = blurA;",
+                "    float gray = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));",
+                "    vec3 toned = gray * diffuse;",
+                "    diffuseColor.rgb = mix(diffuseColor.rgb, toned, SPRITE_TONE_MIX);",
                 "}",
             ].join("\n")
         );
@@ -188,25 +219,28 @@ function applySpriteEdgeBlur(material: THREE.MeshStandardMaterial, textureWidth:
 function getEnemySpriteConfigs(): Record<string, SpriteConfig> {
     ensureTexturesLoaded();
     return {
-        acid_slug: { texture: acidSlugTexture, width: 160, height: 128, color: 0xffffff, spriteHeight: 1.4, offsetY: -0.3, shadowSize: 0.6 },
-        armored_crab: { texture: armoredCrabTexture, width: 160, height: 128, color: 0xffffff, spriteHeight: 1.8, offsetY: -0.16, shadowSize: 0.7 },
-        baby_kraken: { texture: krakenBodyTexture, width: 128, height: 128, color: 0xffffff, spriteHeight: 2.5, offsetY: -0.16 },
-        bat: { texture: vampireBatTexture, width: 128, height: 128, color: 0xffe8c0, spriteHeight: 1.4 },
-        bloated_corpse: { texture: koboldWarriorTexture, width: 128, height: 128, color: 0xffffff, spriteHeight: 2.05, shadowSize: 0.62 },
-        brood_mother: { texture: broodMotherTexture, width: 164, height: 128, color: 0xffffff, spriteHeight: 2.25, shadowSize: 0.74 },
-        broodling: { texture: broodlingTexture, width: 128, height: 128, color: 0xffffff, spriteHeight: 1.0, shadowSize: 0.32 },
-        chittering_crabling: { texture: crablingTexture, width: 128, height: 128, color: 0xffffff, spriteHeight: 1.15, offsetY: -0.14, shadowSize: 0.45 },
-        corrupt_druid: { texture: corruptedDruidTexture, width: 96, height: 128, color: 0xffffff, spriteHeight: 2.35 },
-        feral_hound: { texture: feralHoundTexture, width: 188, height: 128, color: 0xffffff, spriteHeight: 1.45, shadowSize: 0.55 },
-        giant_amoeba_lg: { texture: amoebaLgTexture, width: 128, height: 128, color: 0xffffff, spriteHeight: 2.4, opacity: 0.42 },
-        giant_amoeba_md: { texture: amoebaMdTexture, width: 128, height: 128, color: 0xffffff, spriteHeight: 1.7, offsetY: -0.10, opacity: 0.42 },
-        giant_amoeba_sm: { texture: amoebaSmTexture, width: 128, height: 128, color: 0xffffff, spriteHeight: 1.2, offsetY: -0.14, opacity: 0.42 },
-        kobold: { texture: koboldWarriorTexture, width: 128, height: 128, color: 0xffffff, spriteHeight: 1.61, shadowSize: 0.4 },
-        kobold_archer: { texture: koboldArcherTexture, width: 128, height: 128, color: 0xffffff, spriteHeight: 1.61, shadowSize: 0.4 },
-        kobold_witch_doctor: { texture: koboldWitchDoctorTexture, width: 128, height: 128, color: 0xffffff, spriteHeight: 1.61, shadowSize: 0.4 },
-        kraken_tentacle: { texture: krakenTentacleTexture, width: 80, height: 128, color: 0xffffff, spriteHeight: 2.0 },
-        undead_knight: { texture: undeadKnightTexture, width: 105, height: 128, color: 0xd0e4ff, spriteHeight: 3.5, shadowSize: 0.7 },
-        wandering_shade: { texture: krakenBodyTexture, width: 128, height: 128, color: 0xffffff, spriteHeight: 2.05, shadowSize: 0.44, opacity: 0.68 },
+        acid_slug: { texture: acidSlugTexture, width: 160, height: 128, color: 0xa9e735, spriteHeight: 1.4, offsetY: -0.3, shadowSize: 0.6 },
+        armored_crab: { texture: armoredCrabTexture, width: 160, height: 128, color: 0xdf8fb3, spriteHeight: 1.8, offsetY: -0.22, shadowSize: 0.7 }, // slightly lighter and less saturated; lowered on shadow
+        baby_kraken: { texture: krakenBodyTexture, width: 128, height: 128, color: 0xa85ae3, spriteHeight: 2.5, offsetY: -0.16 },
+        basilisk: { texture: basiliskYounglingTexture, width: 238, height: 191, color: 0xd8e381, spriteHeight: 2.95, offsetY: -0.14, emissiveIntensity: 0.0, shadowSize: 1.05, toneMix: 1.0 }, // brighter, paler yellow-green; slightly smaller and lower
+        bat: { texture: vampireBatTexture, width: 128, height: 128, color: 0xba8678, spriteHeight: 1.4 }, // light red-brown
+        bloated_corpse: { texture: bloatedCorpseTexture, width: 128, height: 128, color: 0x7ab13b, spriteHeight: 2.05, shadowSize: 0.62 },
+        brood_mother: { texture: broodMotherTexture, width: 164, height: 128, color: 0xae7ac2, spriteHeight: 2.25, offsetY: -0.12, shadowSize: 0.74 }, // lowered on shadow
+        broodling: { texture: broodlingTexture, width: 128, height: 128, color: 0xa079b4, spriteHeight: 1.0, shadowSize: 0.32 },
+        chittering_crabling: { texture: crablingTexture, width: 128, height: 128, color: 0xec816c, spriteHeight: 1.15, offsetY: -0.14, shadowSize: 0.45 }, // lighter red
+        corrupt_druid: { texture: corruptedDruidTexture, width: 96, height: 128, color: 0x598950, spriteHeight: 2.35 }, // brighter, less saturated
+        feral_hound: { texture: feralHoundTexture, width: 188, height: 128, color: 0xc2a17a, spriteHeight: 1.45, shadowSize: 0.55 },
+        giant_amoeba_lg: { texture: amoebaLgTexture, width: 128, height: 128, color: 0x14e063, spriteHeight: 2.4, opacity: 0.42 },
+        giant_amoeba_md: { texture: amoebaMdTexture, width: 128, height: 128, color: 0x14e063, spriteHeight: 1.7, offsetY: -0.10, opacity: 0.42 },
+        giant_amoeba_sm: { texture: amoebaSmTexture, width: 128, height: 128, color: 0x14e063, spriteHeight: 1.2, offsetY: -0.14, opacity: 0.42 },
+        kobold: { texture: koboldWarriorTexture, width: 128, height: 128, color: 0xc39976, spriteHeight: 1.61, offsetX: 0.06, shadowSize: 0.4 }, // light brown; slightly right
+        kobold_archer: { texture: koboldArcherTexture, width: 128, height: 128, color: 0xad611c, spriteHeight: 1.61, shadowSize: 0.4 }, // touch brighter
+        kobold_witch_doctor: { texture: koboldWitchDoctorTexture, width: 128, height: 128, color: 0x9576bf, spriteHeight: 1.61, shadowSize: 0.4 }, // brighter, less saturated
+        magma_imp: { texture: fireImpTexture, width: 128, height: 128, color: 0xf68b5a, spriteHeight: 1.85, shadowSize: 0.42 }, // lighter orange-red; larger sprite
+        occultist_pygmy: { texture: occultistPygmyTexture, width: 128, height: 128, color: 0x8d4a07, spriteHeight: 1.0, shadowSize: 0.32 },
+        kraken_tentacle: { texture: krakenTentacleTexture, width: 80, height: 128, color: 0x924adb, spriteHeight: 2.0 },
+        undead_knight: { texture: undeadKnightTexture, width: 105, height: 128, color: 0x6f8bb5, spriteHeight: 3.5, shadowSize: 0.7 }, // less saturated blue
+        wandering_shade: { texture: wanderingShadeTexture, width: 128, height: 128, color: 0x748ec9, spriteHeight: 2.05, shadowSize: 0.44, opacity: 0.68 },
     };
 }
 
@@ -241,6 +275,7 @@ function resolveSpriteConfig(unit: Unit): SpriteConfig | undefined {
 interface UnitCreationResult {
     group: UnitGroup;
     mesh: THREE.Mesh;
+    baseColor: THREE.Color;
     selectRing: THREE.Mesh;
     targetRing?: THREE.Mesh;
     shieldIndicator?: THREE.Mesh;
@@ -269,8 +304,10 @@ function buildUnitGroup(
     const boxW = 0.6 * size;
     const isAmoeba = unit.enemyType === "giant_amoeba";
     const fallbackShape = isPlayer && "shape" in data ? data.shape : "box";
+    const unitColor = getUnitColor(unit);
 
     const spriteConfig = resolveSpriteConfig(unit);
+    const resolvedBaseColor = new THREE.Color(unitColor);
 
     let unitMesh: THREE.Mesh;
     let billboard: THREE.Mesh | undefined;
@@ -280,6 +317,7 @@ function buildUnitGroup(
         const spriteHeight = spriteConfig.spriteHeight ?? 1.8;
         const spriteWidth = spriteHeight * (spriteConfig.width / spriteConfig.height);
         const spriteColor = spriteConfig.color;
+        resolvedBaseColor.setHex(spriteColor);
         const emissiveBoost = spriteConfig.emissiveIntensity ?? Math.min(0.2, 0.09 + (spriteConfig.brightness ?? SPRITE_DEFAULT_BRIGHTNESS));
         const spriteLightingBase = {
             emissiveIntensity: emissiveBoost,
@@ -300,7 +338,8 @@ function buildUnitGroup(
             emissiveMap: spriteConfig.texture,
         });
         planeMat.userData.spriteLightingBase = spriteLightingBase;
-        applySpriteEdgeBlur(planeMat, spriteConfig.width, spriteConfig.height);
+        planeMat.userData.spriteBaseColor = new THREE.Color(spriteColor);
+        applySpriteEdgeBlur(planeMat, spriteConfig.width, spriteConfig.height, spriteConfig.toneMix ?? 0);
         const plane = new THREE.Mesh(new THREE.PlaneGeometry(spriteWidth, spriteHeight), planeMat);
         plane.position.y = spriteHeight / 2 + (spriteConfig.offsetY ?? 0);
         plane.position.x = spriteConfig.offsetX ?? 0;
@@ -313,7 +352,7 @@ function buildUnitGroup(
     } else if (unit.enemyType === "kraken_tentacle") {
         // Tentacles use cone geometry (pointing up)
         const coneMat = new THREE.MeshStandardMaterial({
-            color: data.color,
+            color: unitColor,
             metalness: 0.3,
             roughness: 0.6
         });
@@ -325,8 +364,8 @@ function buildUnitGroup(
     } else {
         // Fallback meshes for units without sprites.
         const fallbackMat = new THREE.MeshStandardMaterial({
-            color: data.color,
-            emissive: fallbackShape === "sphere" ? new THREE.Color(data.color) : new THREE.Color(0x000000),
+            color: unitColor,
+            emissive: fallbackShape === "sphere" ? new THREE.Color(unitColor) : new THREE.Color(0x000000),
             emissiveIntensity: fallbackShape === "sphere" ? 0.32 : 0,
             metalness: isAmoeba ? 0.1 : 0.5,
             roughness: isAmoeba ? 0.2 : 0.4,
@@ -445,6 +484,7 @@ function buildUnitGroup(
     return {
         group: group as UnitGroup,
         mesh: unitMesh,
+        baseColor: resolvedBaseColor,
         selectRing,
         targetRing,
         shieldIndicator,
@@ -489,7 +529,7 @@ export function addUnitToScene(
 
     unitGroups[unit.id] = result.group;
     unitMeshes[unit.id] = result.mesh;
-    unitOriginalColors[unit.id] = new THREE.Color(data.color);
+    unitOriginalColors[unit.id] = result.baseColor.clone();
     selectRings[unit.id] = result.selectRing;
     maxHp[unit.id] = (data as EnemyStats).maxHp ?? data.maxHp;
 

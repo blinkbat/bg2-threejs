@@ -8,6 +8,7 @@ import {
     VISHAS_EYES_ORB_HEAL_RADIUS
 } from "../core/constants";
 import { UNIT_DATA, getEffectiveMaxHp, getEffectiveMaxMana, isCorePlayerId } from "../game/playerUnits";
+import { getPlayerUnitColor } from "../game/unitColors";
 import { getHpPercentage, getHpColor } from "../combat/combatMath";
 import { SkillHotbar } from "./SkillHotbar";
 import type { HotbarAssignments } from "../hooks/hotbarStorage";
@@ -177,7 +178,7 @@ export function PartyBar({
     const sortedUnits = [...corePlayerUnits].sort((a, b) => effectiveOrder.indexOf(a.id) - effectiveOrder.indexOf(b.id));
 
     // Dragged unit color for the spacer bar
-    const dragColor = draggingId !== null ? (UNIT_DATA[draggingId]?.color ?? "#999") : "#999";
+    const dragColor = draggingId !== null ? getPlayerUnitColor(draggingId) : "#999";
 
     // Spacer element — a real flex child that receives drag events
     const spacer = (
@@ -294,7 +295,7 @@ export function PartyBar({
                         />
                     </div>
                 )}
-                <div className={`portrait-icon${unit.holdPosition ? " hold-active" : ""}`} style={{ background: `${data.color} url(${getPortrait(data.class)}) center / cover` }}>
+                <div className={`portrait-icon${unit.holdPosition ? " hold-active" : ""}`} style={{ background: `${getPlayerUnitColor(unit.id)} url(${getPortrait(data.class)}) center / cover` }}>
                     <span className="portrait-fkey">F{renderIndex + 1}</span>
                     {hasUnspentPoints && <span className="levelup-badge">+</span>}
                     {unit.statusEffects && unit.statusEffects.length > 0 && (

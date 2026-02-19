@@ -1,4 +1,5 @@
 import { UNIT_DATA } from "../game/playerUnits";
+import { getPlayerUnitColor } from "../game/unitColors";
 import type { Unit } from "../core/types";
 import { sortUnitsByFormationOrder } from "../game/formationOrder";
 
@@ -48,7 +49,7 @@ export function FormationIndicator({ units, formationOrder }: FormationIndicator
                             style={{
                                 gridColumn: pos.col + 1,
                                 gridRow: pos.row + 1,
-                                background: dead ? "#333" : data.color,
+                                background: dead ? "#333" : getPlayerUnitColor(unit.id),
                             }}
                             title={data.name}
                         >
