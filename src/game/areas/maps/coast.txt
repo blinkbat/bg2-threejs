@@ -503,8 +503,8 @@ spawn: 25,7
 15.5,42.5:giant_amoeba
 
 === CHESTS ===
-2.5,5.5:gold=50
-5.5,40.5:gold=25
+2.5,5.5:gold=14
+5.5,40.5:gold=4
 
 === TRANSITIONS ===
 0,18,1,5:west->cliffs@47,25

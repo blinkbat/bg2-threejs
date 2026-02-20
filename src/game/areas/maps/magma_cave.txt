@@ -173,7 +173,7 @@ spawn: 46,25
 14.5,28.5:bat
 
 === CHESTS ===
-5.5,28.5:gold=40
+5.5,28.5:gold=13,items=[smallManaPotion:1]
 
 === TRANSITIONS ===
 21,6,1,5:north->tomb@3,12

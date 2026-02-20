@@ -169,7 +169,7 @@ spawn: 3,25
 33.5,25.5:ancient_construct
 
 === CHESTS ===
-40.5,25.5:gold=90
+40.5,25.5:gold=20,items=[woodenAnkh:1]
 
 === TRANSITIONS ===
 0,23,1,4:west->ruins@43,25

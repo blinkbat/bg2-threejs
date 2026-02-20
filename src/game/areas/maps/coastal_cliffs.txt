@@ -411,8 +411,8 @@ WWWWW.........................
 10.5,16.5:chittering_crabling
 
 === CHESTS ===
-26.5,8.5:gold=50
-26.5,46.5:gold=50
+26.5,8.5:gold=16
+26.5,46.5:gold=12,items=[smallManaPotion:1]
 
 === TRANSITIONS ===
 0,43,1,6:east->coast@47,45

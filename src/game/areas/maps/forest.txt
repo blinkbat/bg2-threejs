@@ -280,8 +280,8 @@ spawn: 25,25
 10.5,41.5:spine_spitter
 
 === CHESTS ===
-6.5,6.5:gold=15
-38.5,38.5:
+6.5,6.5:gold=3
+38.5,38.5:gold=5,items=[loafOfBread:1]
 
 === TRANSITIONS ===
 23,49,5,1:north->dungeon@6.5,2

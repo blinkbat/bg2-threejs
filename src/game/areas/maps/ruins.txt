@@ -173,7 +173,7 @@ spawn: 3,25
 38.5,38.5:bat
 
 === CHESTS ===
-40.5,38.5:gold=30
+40.5,38.5:gold=11
 
 === TRANSITIONS ===
 0,23,1,4:west->forest@47,25

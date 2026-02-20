@@ -283,8 +283,8 @@ DDDDDDDDDDD.......................................
 28.5,32.5:feral_hound
 
 === CHESTS ===
-30.5,5.5:gold=50
-5.5,30.5:gold=20
+30.5,5.5:gold=17,items=[loafOfBread:1]
+5.5,30.5:gold=9
 
 === TRANSITIONS ===
 49,23,1,5:west->coast@2,20

@@ -194,8 +194,8 @@ DD................................................
 5.5,44.5:kobold_archer
 
 === CHESTS ===
-28.5,28.5:
-8.5,42.5:gold=20
+28.5,28.5:gold=7,items=[smallManaPotion:1]
+8.5,42.5:gold=10,items=[stripOfBatJerky:1]
 
 === TRANSITIONS ===
 5,0,3,1:south->forest@25,47
