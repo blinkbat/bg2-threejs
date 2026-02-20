@@ -104,7 +104,7 @@ export interface InputSetters {
     setHoveredPlayer: React.Dispatch<React.SetStateAction<{ id: number; x: number; y: number } | null>>;
     setHoveredDoor: React.Dispatch<React.SetStateAction<{ targetArea: string; x: number; y: number } | null>>;
     setHoveredSecretDoor: React.Dispatch<React.SetStateAction<{ x: number; y: number } | null>>;
-    setHoveredLootBag: React.Dispatch<React.SetStateAction<{ x: number; y: number; gold: number } | null>>;
+    setHoveredLootBag: React.Dispatch<React.SetStateAction<{ x: number; y: number; gold: number; hasItems: boolean } | null>>;
     setOpenedChests: React.Dispatch<React.SetStateAction<Set<string>>>;
     setOpenedSecretDoors: React.Dispatch<React.SetStateAction<Set<string>>>;
     setGold: React.Dispatch<React.SetStateAction<number>>;
@@ -372,7 +372,12 @@ export function useInputHandlers({
                     const bagId = hit.object.userData.lootBagId;
                     const bag = gameRefs.current.lootBags.find(b => b.id === bagId);
                     if (bag) {
-                        setters.setHoveredLootBag({ x: e.clientX, y: e.clientY, gold: bag.gold });
+                        setters.setHoveredLootBag({
+                            x: e.clientX,
+                            y: e.clientY,
+                            gold: bag.gold,
+                            hasItems: (bag.items?.length ?? 0) > 0
+                        });
                     }
                     break;
                 }
@@ -875,10 +880,34 @@ function handleLootBagClick(
     }
 
     const bag = gameRefs.current.lootBags[bagIndex];
+    const lootMessages: string[] = [];
+
     if (bag.gold > 0) {
         setters.setGold(prev => prev + bag.gold);
-        callbacks.addLog(`Found: ${bag.gold} gold`, "#ffd700");
+        lootMessages.push(`${bag.gold} gold`);
     }
+
+    if (bag.items && bag.items.length > 0) {
+        let inventory = getPartyInventory();
+        const itemCounts = new Map<string, number>();
+
+        for (const itemId of bag.items) {
+            inventory = addToInventory(inventory, itemId, 1);
+            itemCounts.set(itemId, (itemCounts.get(itemId) ?? 0) + 1);
+        }
+        setPartyInventory(inventory);
+
+        for (const [itemId, quantity] of itemCounts) {
+            const item = getItem(itemId);
+            const itemName = item?.name ?? itemId;
+            lootMessages.push(`${quantity > 1 ? `${quantity}x ` : ""}${itemName}`);
+        }
+    }
+
+    callbacks.addLog(
+        lootMessages.length > 0 ? `Found: ${lootMessages.join(", ")}` : "The bag was empty.",
+        lootMessages.length > 0 ? "#ffd700" : "#888"
+    );
 
     removeLootBag(scene, bag);
     gameRefs.current.lootBags.splice(bagIndex, 1);

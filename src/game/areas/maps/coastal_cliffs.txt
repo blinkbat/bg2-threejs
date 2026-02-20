@@ -404,15 +404,22 @@ WWWWW.........................
 6.5,5.5:armored_crab
 13.5,5.5:chittering_crabling
 10.5,6.5:chittering_crabling
+23.5,6.5:giant_amoeba
 12.5,9.5:chittering_crabling
 6.5,10.5:chittering_crabling
 8.5,13.5:chittering_crabling
 4.5,14.5:chittering_crabling
 10.5,16.5:chittering_crabling
+26.5,28.5:acid_slug
+25.5,30.5:acid_slug
+25.5,45.5:spine_spitter
+27.5,45.5:spine_spitter
+24.5,47.5:spine_spitter
+27.5,47.5:spine_spitter
 
 === CHESTS ===
 26.5,8.5:gold=16
-26.5,46.5:gold=12,items=[smallManaPotion:1]
+26.5,46.5:gold=12
 
 === TRANSITIONS ===
 0,43,1,6:east->coast@47,45

@@ -131,5 +131,5 @@ export interface LootBag {
     x: number;           // World X position
     z: number;           // World Z position
     gold: number;        // Gold contained in bag
-    items?: string[];    // Item IDs (for future use)
+    items?: string[];    // Optional item IDs contained in bag
 }

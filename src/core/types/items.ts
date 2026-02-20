@@ -68,11 +68,13 @@ export type ConsumableSound = "gulp" | "crunch";
 // Consumable item
 export interface ConsumableItem extends ItemBase {
     category: "consumable";
-    effect: "heal" | "mana" | "exp" | "revive";
+    effect: "heal" | "mana" | "exp" | "revive" | "cleanse";
     value: number;
     cooldown: number;               // Cooldown in ms (default 5000)
     sound?: ConsumableSound;        // Sound to play on use
     targetType?: "dead_ally";       // If set, requires targeting a unit before use
+    poisonChanceOnUse?: number;     // Optional self-poison chance (%) when consumed
+    poisonDamageOnUse?: number;     // Optional poison damage-per-tick if self-poison procs
 }
 
 // Union type for all items

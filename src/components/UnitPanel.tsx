@@ -1030,6 +1030,7 @@ function InventoryTab({
                 const unitAlive = unit.hp > 0;
                 const isQueued = queuedSkills.includes(item.name);
                 const isRevive = item.effect === "revive";
+                const isCleanse = item.effect === "cleanse";
 
                 // Check if using would be wasteful
                 let wouldBeWasted = false;
@@ -1040,6 +1041,10 @@ function InventoryTab({
                     } else if (item.effect === "mana") {
                         const maxMana = getEffectiveMaxMana(unit.id, unit);
                         wouldBeWasted = (unit.mana ?? 0) >= maxMana;
+                    } else if (isCleanse) {
+                        const hasPoison = unit.statusEffects?.some(effect => effect.type === "poison") ?? false;
+                        const alreadyCleansed = unit.statusEffects?.some(effect => effect.type === "cleansed") ?? false;
+                        wouldBeWasted = !hasPoison && alreadyCleansed;
                     } else if (isRevive) {
                         wouldBeWasted = !hasDeadAllies;
                     }
@@ -1048,8 +1053,24 @@ function InventoryTab({
                 // Can click if alive and not wasted (can queue even on cooldown)
                 const canClick = unitAlive && !wouldBeWasted;
 
-                const effectColor = item.effect === "heal" ? COLORS.hpHigh : item.effect === "mana" ? COLORS.mana : isRevive ? "#ffd700" : "#9b59b6";
-                const effectLabel = item.effect === "heal" ? "HP" : item.effect === "mana" ? "Mana" : isRevive ? "" : "Experience";
+                const effectColor = item.effect === "heal"
+                    ? COLORS.hpHigh
+                    : item.effect === "mana"
+                        ? COLORS.mana
+                        : isCleanse
+                            ? COLORS.cleansedText
+                            : isRevive
+                                ? "#ffd700"
+                                : "#9b59b6";
+                const effectLabel = item.effect === "heal"
+                    ? "HP"
+                    : item.effect === "mana"
+                        ? "Mana"
+                        : isCleanse
+                            ? "Cleanse"
+                            : isRevive
+                                ? ""
+                                : "Experience";
                 const itemClass = `inventory-item-row ${!canClick && !isQueued ? "disabled" : ""} ${wouldBeWasted ? "wasted" : ""} ${isQueued ? "queued" : ""}`;
 
                 return (
@@ -1064,6 +1085,12 @@ function InventoryTab({
                                             Revive to {item.value} HP
                                         </span>
                                     </div>
+                                ) : isCleanse ? (
+                                    <div className="consumable-tooltip-row">
+                                        <span className="consumable-tooltip-value" style={{ color: effectColor }}>
+                                            Removes poison and grants poison immunity
+                                        </span>
+                                    </div>
                                 ) : (
                                     <div className="consumable-tooltip-row">
                                         <span className="consumable-tooltip-label">Restores</span>
@@ -1072,10 +1099,21 @@ function InventoryTab({
                                         </span>
                                     </div>
                                 )}
+                                {item.poisonChanceOnUse && item.poisonChanceOnUse > 0 && (
+                                    <div className="consumable-tooltip-row">
+                                        <span className="consumable-tooltip-label">Risk</span>
+                                        <span className="consumable-tooltip-value" style={{ color: COLORS.poisonText }}>
+                                            {item.poisonChanceOnUse}% chance to self-poison
+                                        </span>
+                                    </div>
+                                )}
                                 {wouldBeWasted && isRevive && (
                                     <div className="consumable-tooltip-warning">No fallen allies</div>
                                 )}
-                                {wouldBeWasted && !isRevive && (
+                                {wouldBeWasted && isCleanse && (
+                                    <div className="consumable-tooltip-warning">Already protected</div>
+                                )}
+                                {wouldBeWasted && !isRevive && !isCleanse && (
                                     <div className="consumable-tooltip-warning">Already at full {effectLabel}</div>
                                 )}
                             </div>
@@ -1103,7 +1141,7 @@ function InventoryTab({
                             )}
                             <div className="inventory-item-stats">
                                 <span className="inventory-item-effect" style={{ color: effectColor }}>
-                                    {isRevive ? "Revive" : `+${item.value} ${effectLabel}`}
+                                    {isRevive ? "Revive" : isCleanse ? "Cleanse" : `+${item.value} ${effectLabel}`}
                                 </span>
                                 <span className="inventory-item-qty">×{entry.quantity}</span>
                             </div>

@@ -7,14 +7,16 @@ import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import * as THREE from "three";
 
 // Constants & Types
-import { getSkillTextColor, setDebugSpeedMultiplier } from "./core/constants";
-import type { Unit, UnitGroup, Skill, CombatLogEntry, SelectionBox, CharacterStats, SummonType } from "./core/types";
+import { BUFF_TICK_INTERVAL, getSkillTextColor, setDebugSpeedMultiplier } from "./core/constants";
+import type { Unit, UnitGroup, Skill, CombatLogEntry, SelectionBox, CharacterStats, SummonType, StatusEffect } from "./core/types";
 
 // Game Logic
 import { getCurrentArea, getCurrentAreaId, setCurrentArea, AREAS, DEFAULT_STARTING_AREA, type AreaId, type AreaTransition } from "./game/areas";
 import { UNIT_DATA, CORE_PLAYER_IDS, getEffectiveMaxHp, getEffectiveMaxMana, getXpForLevel, isCorePlayerId } from "./game/playerUnits";
 import { LEVEL_UP_HP, LEVEL_UP_MANA, LEVEL_UP_STAT_POINTS, LEVEL_UP_SKILL_POINTS, HP_PER_VITALITY, MP_PER_INTELLIGENCE } from "./game/statBonuses";
 import { ENEMY_STATS } from "./game/enemyStats";
+import { SKILLS } from "./game/skills";
+import { rollEnemyLoot } from "./game/enemyLoot";
 import { initializeEquipmentState, getPartyInventory, setPartyInventory, getAllEquipment, setAllEquipment } from "./game/equipmentState";
 import { removeFromInventory } from "./game/equipment";
 import { getItem } from "./game/items";
@@ -26,6 +28,7 @@ import { updateUnit, updateUnitWith, createLiveUnitsDispatch } from "./core/stat
 
 // Extracted modules
 import { executeSkill, type SkillExecutionContext } from "./combat/skills";
+import { applyPoison, applyStatusEffect } from "./combat/combatMath";
 import { setupTargetingMode } from "./input";
 import { createLightningPillar } from "./combat/damageEffects";
 import { initializeUnitIdCounter, spawnLootBag } from "./gameLoop";
@@ -410,7 +413,7 @@ function Game({
     const [hoveredPlayer, setHoveredPlayer] = useState<{ id: number; x: number; y: number } | null>(null);
     const [hoveredDoor, setHoveredDoor] = useState<{ targetArea: string; x: number; y: number } | null>(null);
     const [hoveredSecretDoor, setHoveredSecretDoor] = useState<{ x: number; y: number } | null>(null);
-    const [hoveredLootBag, setHoveredLootBag] = useState<{ x: number; y: number; gold: number } | null>(null);
+    const [hoveredLootBag, setHoveredLootBag] = useState<{ x: number; y: number; gold: number; hasItems: boolean } | null>(null);
     const [fps, setFps] = useState(0);
     const [debug, setDebug] = useState(false);
     const [fastMove, setFastMove] = useState(false);
@@ -707,6 +710,18 @@ function Game({
             const healed = newHp - userUnit.hp;
             updateUnit(setUnits, unitId, { hp: newHp });
             addLog(`${UNIT_DATA[unitId].name} uses ${item.name}, restoring ${healed} HP.`, "#22c55e");
+
+            const poisonChanceOnUse = item.poisonChanceOnUse ?? 0;
+            const isPoisonImmune = userUnit.statusEffects?.some(effect => effect.type === "cleansed") ?? false;
+            if (poisonChanceOnUse > 0 && !isPoisonImmune && Math.random() * 100 < poisonChanceOnUse) {
+                const now = Date.now();
+                setUnits(prev => prev.map(u => (
+                    u.id === unitId
+                        ? applyPoison(u, unitId, now, item.poisonDamageOnUse)
+                        : u
+                )));
+                addLog(`${UNIT_DATA[unitId].name} is poisoned by ${item.name}!`, "#7cba7c");
+            }
         } else if (item.effect === "mana") {
             const maxMana = UNIT_DATA[unitId].maxMana ?? 0;
             const currentMana = userUnit.mana ?? 0;
@@ -715,6 +730,29 @@ function Game({
             const restored = newMana - currentMana;
             updateUnit(setUnits, unitId, { mana: newMana });
             addLog(`${UNIT_DATA[unitId].name} uses ${item.name}, restoring ${restored} Mana.`, "#3b82f6");
+        } else if (item.effect === "cleanse") {
+            const hasPoison = userUnit.statusEffects?.some(effect => effect.type === "poison") ?? false;
+            const alreadyCleansed = userUnit.statusEffects?.some(effect => effect.type === "cleansed") ?? false;
+            if (!hasPoison && alreadyCleansed) return false;
+
+            const now = Date.now();
+            const cleanseDuration = SKILLS.cleanse.duration ?? 30000;
+            const cleansedEffect: StatusEffect = {
+                type: "cleansed",
+                duration: cleanseDuration,
+                tickInterval: BUFF_TICK_INTERVAL,
+                timeSinceTick: 0,
+                lastUpdateTime: now,
+                damagePerTick: 0,
+                sourceId: unitId
+            };
+
+            setUnits(prev => prev.map(u => {
+                if (u.id !== unitId) return u;
+                const withoutPoison = (u.statusEffects ?? []).filter(effect => effect.type !== "poison");
+                return { ...u, statusEffects: applyStatusEffect(withoutPoison, cleansedEffect) };
+            }));
+            addLog(`${UNIT_DATA[unitId].name} uses ${item.name}, cleansing poison and gaining immunity.`, "#ecf0f1");
         } else if (item.effect === "exp") {
             const newExp = (userUnit.exp ?? 0) + item.value;
             const currentLevel = userUnit.level ?? 1;
@@ -956,7 +994,7 @@ function Game({
     // EFFECTS
     // =============================================================================
 
-    // Track enemy deaths for loot bags
+    // Track enemy deaths for persistence and loot bag drops
     const prevAliveEnemiesRef = useRef<Set<number>>(new Set());
     useEffect(() => {
         const areaId = getCurrentAreaId();
@@ -966,15 +1004,20 @@ function Game({
         const newlyDeadUnits: Unit[] = [];
 
         for (const u of units) {
-            if (u.team === "enemy" && u.id >= 100 && u.id <= staticEnemyMaxId) {
-                if (u.hp > 0) {
-                    currentAlive.add(u.id);
-                } else if (prevAliveEnemiesRef.current.has(u.id)) {
-                    const spawnIndex = u.id - 100;
-                    newlyDead.push(`${areaId}-${spawnIndex}`);
-                    newlyDeadUnits.push(u);
-                }
+            if (u.team !== "enemy") continue;
+
+            if (u.hp > 0) {
+                currentAlive.add(u.id);
+                continue;
             }
+
+            if (!prevAliveEnemiesRef.current.has(u.id)) continue;
+
+            if (u.id >= 100 && u.id <= staticEnemyMaxId) {
+                const spawnIndex = u.id - 100;
+                newlyDead.push(`${areaId}-${spawnIndex}`);
+            }
+            newlyDeadUnits.push(u);
         }
 
         if (newlyDead.length > 0) {
@@ -989,16 +1032,28 @@ function Game({
 
         if (sceneState.scene) {
             for (const u of newlyDeadUnits) {
-                if (u.enemyType === "baby_kraken") {
-                    const g = sceneState.unitGroups[u.id];
-                    const x = g ? g.position.x : u.x;
-                    const z = g ? g.position.z : u.z;
-                    const bag = spawnLootBag(sceneState.scene, x, z, 100);
-                    gameRefs.current.lootBags.push(bag);
-                    queueMicrotask(() => {
-                        addLog("The Kraken Nymph drops a bag of treasure!", "#ffd700");
-                    });
-                }
+                const rolledLoot = rollEnemyLoot(u.enemyType);
+                if (!rolledLoot) continue;
+
+                const g = sceneState.unitGroups[u.id];
+                const x = g ? g.position.x : u.x;
+                const z = g ? g.position.z : u.z;
+                const bagItems = rolledLoot.items.length > 0 ? rolledLoot.items : undefined;
+                const bag = spawnLootBag(sceneState.scene, x, z, rolledLoot.gold, bagItems);
+                gameRefs.current.lootBags.push(bag);
+
+                queueMicrotask(() => {
+                    const lootParts: string[] = [];
+                    if (rolledLoot.gold > 0) {
+                        lootParts.push(`${rolledLoot.gold} gold`);
+                    }
+                    for (const itemId of rolledLoot.items) {
+                        const item = getItem(itemId);
+                        lootParts.push(item?.name ?? itemId);
+                    }
+                    const enemyName = u.enemyType ? ENEMY_STATS[u.enemyType].name : "Enemy";
+                    addLog(`${enemyName} drops ${lootParts.join(", ")}.`, "#ffd700");
+                });
             }
         }
 
@@ -1442,7 +1497,13 @@ function Game({
             {hoveredLootBag && (
                 <div className="enemy-tooltip" style={{ left: hoveredLootBag.x + 12, top: hoveredLootBag.y - 10 }}>
                     <div className="enemy-tooltip-name">Loot Bag</div>
-                    <div className="enemy-tooltip-status" style={{ color: "#f1c40f" }}>{hoveredLootBag.gold} Gold</div>
+                    <div className="enemy-tooltip-status" style={{ color: "#f1c40f" }}>
+                        {hoveredLootBag.gold > 0
+                            ? `${hoveredLootBag.gold} Gold`
+                            : hoveredLootBag.hasItems
+                                ? "Contains items"
+                                : "Empty"}
+                    </div>
                 </div>
             )}
 
