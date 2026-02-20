@@ -32,6 +32,7 @@ export interface EntityDef {
     chestGold?: number;
     chestItems?: string;
     chestLocked?: string;
+    chestDecorOnly?: boolean;
     transitionTarget?: AreaId;
     transitionSpawnX?: number;
     transitionSpawnZ?: number;
@@ -63,7 +64,7 @@ export interface TreeDef {
 export interface DecorationDef {
     x: number;
     z: number;
-    type: "column" | "broken_column" | "broken_wall" | "rock" | "small_rock" | "mushroom" | "small_mushroom" | "weeds" | "small_weeds" | "fern" | "small_fern";
+    type: "column" | "broken_column" | "broken_wall" | "rock" | "small_rock" | "mushroom" | "small_mushroom" | "weeds" | "small_weeds" | "fern" | "small_fern" | "bookshelf" | "bar" | "chair" | "bed";
     rotation?: number;
     size?: number;
 }

@@ -850,7 +850,7 @@ export function MapEditor() {
                     }]);
                 } else if (activeBrush === "X") {
                     setEntities(prev => [...prev, {
-                        id: entityId, x, z, type: "chest", chestGold: 0, chestItems: ""
+                        id: entityId, x, z, type: "chest", chestGold: 0, chestItems: "", chestDecorOnly: false
                     }]);
                 }
             }
@@ -1267,7 +1267,10 @@ export function MapEditor() {
             const items = c.contents.map(i => `${i.itemId}:${i.quantity}`).join(",");
             entityDefs.push({
                 id: `e${entityId++}`, x: c.x, z: c.z, type: "chest",
-                chestGold: c.gold, chestItems: items, chestLocked: c.locked ? (c.requiredKeyId ?? "true") : undefined
+                chestGold: c.gold,
+                chestItems: items,
+                chestLocked: c.locked ? (c.requiredKeyId ?? "true") : undefined,
+                chestDecorOnly: c.decorOnly ?? false
             });
         });
         area.transitions.forEach(t => {
@@ -1474,6 +1477,9 @@ export function MapEditor() {
                 if (stateChest.chestLocked) {
                     chest.locked = true;
                     if (stateChest.chestLocked !== "true") chest.requiredKeyId = stateChest.chestLocked;
+                }
+                if (stateChest.chestDecorOnly) {
+                    chest.decorOnly = true;
                 }
                 return chest;
             }
@@ -2388,6 +2394,7 @@ const NON_BLOCKING_PROP_DECORATIONS = new Set<Decoration["type"]>([
     "small_fern",
     "weeds",
     "small_weeds",
+    "chair",
 ]);
 
 function clampTreeSizeByType(size: number, treeType: TreeLocation["type"]): number {

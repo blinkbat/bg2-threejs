@@ -73,6 +73,7 @@ import {
 // === CHESTS ===
 // x,z:gold=N,items=[itemId:qty,...]
 // x,z:gold=N,items=[...],locked=keyId
+// x,z:...,decorOnly=true
 //
 // === TRANSITIONS ===
 // x,z,w,h:direction->targetArea@spawnX,spawnZ
@@ -242,6 +243,7 @@ export function areaDataToText(area: AreaData): string {
                 parts.push(`items=[${items}]`);
             }
             if (chest.locked) parts.push(`locked=${chest.requiredKeyId ?? "true"}`);
+            if (chest.decorOnly) parts.push("decorOnly=true");
             lines.push(`${chest.x},${chest.z}:${parts.join(",")}`);
         });
         lines.push("");
@@ -534,14 +536,15 @@ function parseEnemyLine(line: string, enemies: EnemySpawn[]) {
 function parseChestLine(line: string, chests: ChestLocation[]) {
     const [coords, props] = line.split(":");
     const [x, z] = coords.split(",").map(Number);
+    const propsText = props ?? "";
 
     const chest: ChestLocation = { x, z, contents: [] };
 
     // Parse properties
-    const goldMatch = props.match(/gold=(\d+)/);
+    const goldMatch = propsText.match(/gold=(\d+)/);
     if (goldMatch) chest.gold = parseInt(goldMatch[1]);
 
-    const itemsMatch = props.match(/items=\[([^\]]*)\]/);
+    const itemsMatch = propsText.match(/items=\[([^\]]*)\]/);
     if (itemsMatch && itemsMatch[1]) {
         const items = itemsMatch[1].split(",");
         for (const item of items) {
@@ -550,12 +553,16 @@ function parseChestLine(line: string, chests: ChestLocation[]) {
         }
     }
 
-    const lockedMatch = props.match(/locked=(\w+)/);
+    const lockedMatch = propsText.match(/locked=(\w+)/);
     if (lockedMatch) {
         chest.locked = true;
         if (lockedMatch[1] !== "true") {
             chest.requiredKeyId = lockedMatch[1];
         }
+    }
+
+    if (/decorOnly=(true|1)/i.test(propsText)) {
+        chest.decorOnly = true;
     }
 
     chests.push(chest);

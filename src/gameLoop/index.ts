@@ -98,6 +98,8 @@ export function updateUnitAI(
     // For acid slug enemies
     acidTilesRef?: Map<string, import("../core/types").AcidTile>
 ): void {
+    if (unit.team === "neutral") return;
+
     const isPlayer = unit.team === "player";
 
     // Invulnerable areas: enemies stand still, no AI
@@ -500,34 +502,50 @@ export function updateUnitAI(
 // Reusable vector for HP bar position calculations
 const _hpWorldPos = new THREE.Vector3();
 
+export interface HpBarPosition {
+    id: number;
+    x: number;
+    y: number;
+    visible: boolean;
+    hp: number;
+    maxHp: number;
+}
+
+export interface HpBarPositionsFrame {
+    bars: HpBarPosition[];
+    scale: number;
+}
+
 export function updateHpBarPositions(
     unitsState: Unit[],
     unitsRef: Record<number, UnitGroup>,
     camera: THREE.OrthographicCamera,
     rendererRect: DOMRect,
-    zoomLevel: number
-): { positions: Record<number, { x: number; y: number; visible: boolean }>; scale: number } {
-    const positions: Record<number, { x: number; y: number; visible: boolean }> = {};
+    zoomLevel: number,
+    maxHpById: Record<number, number>
+): HpBarPositionsFrame {
+    const bars: HpBarPosition[] = [];
     const halfWidth = rendererRect.width * 0.5;
     const halfHeight = rendererRect.height * 0.5;
 
     for (const u of unitsState) {
+        if (u.team !== "player") continue;
         const g = unitsRef[u.id];
         if (!g) continue;
-        const isPlayer = u.team === "player";
-        const data = getUnitStats(u);
-        const size = (!isPlayer && 'size' in data && data.size) ? data.size : 1;
-        const boxH = isPlayer ? 1.8 : (size > 1 ? 1.8 : 0.6);
+        const boxH = 1.8;
         _hpWorldPos.set(g.position.x, boxH + 0.4, g.position.z);
         _hpWorldPos.project(camera);
-        positions[u.id] = {
+        bars.push({
+            id: u.id,
             x: (_hpWorldPos.x + 1) * halfWidth,
             y: (-_hpWorldPos.y + 1) * halfHeight,
-            visible: g.visible && u.hp > 0
-        };
+            visible: g.visible && u.hp > 0,
+            hp: u.hp,
+            maxHp: Math.max(1, maxHpById[u.id] ?? 1)
+        });
     }
 
-    return { positions, scale: 10 / zoomLevel };
+    return { bars, scale: 10 / zoomLevel };
 }
 
 // =============================================================================
@@ -557,7 +575,7 @@ export function updateShieldFacing(
     const now = Date.now();
 
     for (const unit of unitsState) {
-        if (unit.team === "player" || unit.hp <= 0) continue;
+        if (unit.team !== "enemy" || unit.hp <= 0) continue;
 
         const data = getUnitStats(unit) as EnemyStats;
         if (!data.frontShield) continue;

@@ -1045,7 +1045,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         chestGroup.add(buckle);
 
         // Mark all chest parts as "chest" for raycasting with chest data
-        const chestData = { chestIndex: index, chestX: chest.x, chestZ: chest.z };
+        const chestData = { chestIndex: index, chestX: chest.x, chestZ: chest.z, chestDecorOnly: chest.decorOnly === true };
         chestBody.name = "chest";
         chestBody.userData = chestData;
         chestLid.name = "chest";
@@ -1817,6 +1817,139 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                     dec.z + (Math.random() - 0.5) * 0.1 * bushScale
                 );
                 scene.add(top);
+            } else if (dec.type === "bookshelf") {
+                const shelfGroup = new THREE.Group();
+                shelfGroup.position.set(dec.x, 0, dec.z);
+                shelfGroup.rotation.y = dec.rotation ?? 0;
+                scene.add(shelfGroup);
+
+                const frameWidth = 0.95 * size;
+                const frameDepth = 0.28 * size;
+                const frameHeight = 1.9 * size;
+                const frame = new THREE.Mesh(
+                    new THREE.BoxGeometry(frameWidth, frameHeight, frameDepth),
+                    new THREE.MeshStandardMaterial({ color: "#6f4b2d", metalness: 0.06, roughness: 0.92, transparent: true, opacity: 1 })
+                );
+                frame.position.y = frameHeight / 2;
+                frame.name = "decoration";
+                shelfGroup.add(frame);
+                columnMeshes.push(frame);
+                registerFogOccluderMesh(frame, dec.x, dec.z, 0, frameHeight);
+
+                for (let shelfIndex = 0; shelfIndex < 4; shelfIndex++) {
+                    const shelf = new THREE.Mesh(
+                        new THREE.BoxGeometry(frameWidth * 0.9, 0.05 * size, frameDepth * 0.92),
+                        new THREE.MeshStandardMaterial({ color: "#88603b", metalness: 0.04, roughness: 0.9, transparent: true, opacity: 1 })
+                    );
+                    shelf.position.y = 0.28 * size + shelfIndex * 0.4 * size;
+                    shelfGroup.add(shelf);
+                    columnMeshes.push(shelf);
+                }
+            } else if (dec.type === "bar") {
+                const barGroup = new THREE.Group();
+                barGroup.position.set(dec.x, 0, dec.z);
+                barGroup.rotation.y = dec.rotation ?? 0;
+                scene.add(barGroup);
+
+                const barWidth = 1.7 * size;
+                const barDepth = 0.7 * size;
+                const barHeight = 0.95 * size;
+
+                const base = new THREE.Mesh(
+                    new THREE.BoxGeometry(barWidth, barHeight, barDepth),
+                    new THREE.MeshStandardMaterial({ color: "#76492a", metalness: 0.08, roughness: 0.9, transparent: true, opacity: 1 })
+                );
+                base.position.y = barHeight / 2;
+                base.name = "decoration";
+                barGroup.add(base);
+                columnMeshes.push(base);
+                registerFogOccluderMesh(base, dec.x, dec.z, 0, barHeight);
+
+                const top = new THREE.Mesh(
+                    new THREE.BoxGeometry(barWidth * 1.02, 0.08 * size, barDepth * 1.02),
+                    new THREE.MeshStandardMaterial({ color: "#9a6237", metalness: 0.12, roughness: 0.82, transparent: true, opacity: 1 })
+                );
+                top.position.y = barHeight + 0.04 * size;
+                barGroup.add(top);
+                columnMeshes.push(top);
+            } else if (dec.type === "chair") {
+                const chairGroup = new THREE.Group();
+                chairGroup.position.set(dec.x, 0, dec.z);
+                chairGroup.rotation.y = dec.rotation ?? 0;
+                scene.add(chairGroup);
+
+                const seatWidth = 0.44 * size;
+                const seatDepth = 0.44 * size;
+                const seatHeight = 0.48 * size;
+
+                const seat = new THREE.Mesh(
+                    new THREE.BoxGeometry(seatWidth, 0.08 * size, seatDepth),
+                    new THREE.MeshStandardMaterial({ color: "#8b5c33", metalness: 0.05, roughness: 0.9 })
+                );
+                seat.position.y = seatHeight;
+                seat.name = "decoration";
+                chairGroup.add(seat);
+
+                const legGeo = new THREE.BoxGeometry(0.06 * size, seatHeight, 0.06 * size);
+                const legMat = new THREE.MeshStandardMaterial({ color: "#704625", metalness: 0.04, roughness: 0.92 });
+                const legOffsets: Array<[number, number]> = [
+                    [-seatWidth * 0.4, -seatDepth * 0.4],
+                    [seatWidth * 0.4, -seatDepth * 0.4],
+                    [-seatWidth * 0.4, seatDepth * 0.4],
+                    [seatWidth * 0.4, seatDepth * 0.4]
+                ];
+                for (const [lx, lz] of legOffsets) {
+                    const leg = new THREE.Mesh(legGeo, legMat);
+                    leg.position.set(lx, seatHeight / 2, lz);
+                    chairGroup.add(leg);
+                }
+
+                const back = new THREE.Mesh(
+                    new THREE.BoxGeometry(seatWidth, 0.5 * size, 0.08 * size),
+                    new THREE.MeshStandardMaterial({ color: "#8b5c33", metalness: 0.05, roughness: 0.9 })
+                );
+                back.position.set(0, seatHeight + 0.25 * size, -seatDepth * 0.45);
+                chairGroup.add(back);
+            } else if (dec.type === "bed") {
+                const bedGroup = new THREE.Group();
+                bedGroup.position.set(dec.x, 0, dec.z);
+                bedGroup.rotation.y = dec.rotation ?? 0;
+                scene.add(bedGroup);
+
+                const bedWidth = 1.7 * size;
+                const bedDepth = 1.0 * size;
+
+                const frame = new THREE.Mesh(
+                    new THREE.BoxGeometry(bedWidth, 0.28 * size, bedDepth),
+                    new THREE.MeshStandardMaterial({ color: "#6b4328", metalness: 0.06, roughness: 0.9, transparent: true, opacity: 1 })
+                );
+                frame.position.y = 0.14 * size;
+                frame.name = "decoration";
+                bedGroup.add(frame);
+                columnMeshes.push(frame);
+
+                const mattress = new THREE.Mesh(
+                    new THREE.BoxGeometry(bedWidth * 0.92, 0.18 * size, bedDepth * 0.92),
+                    new THREE.MeshStandardMaterial({ color: "#d9d3c5", metalness: 0, roughness: 0.95, transparent: true, opacity: 1 })
+                );
+                mattress.position.y = 0.14 * size + 0.14 * size + 0.09 * size;
+                bedGroup.add(mattress);
+                columnMeshes.push(mattress);
+
+                const pillowMat = new THREE.MeshStandardMaterial({ color: "#f0ebe0", metalness: 0, roughness: 0.95, transparent: true, opacity: 1 });
+                const pillowGeo = new THREE.BoxGeometry(bedWidth * 0.32, 0.1 * size, bedDepth * 0.2);
+                const pillowY = mattress.position.y + 0.11 * size;
+                const pillowZ = -bedDepth * 0.36;
+
+                const pillowLeft = new THREE.Mesh(pillowGeo, pillowMat);
+                pillowLeft.position.set(-bedWidth * 0.2, pillowY, pillowZ);
+                bedGroup.add(pillowLeft);
+                columnMeshes.push(pillowLeft);
+
+                const pillowRight = new THREE.Mesh(pillowGeo, pillowMat.clone());
+                pillowRight.position.set(bedWidth * 0.2, pillowY, pillowZ);
+                bedGroup.add(pillowRight);
+                columnMeshes.push(pillowRight);
             }
         });
     }

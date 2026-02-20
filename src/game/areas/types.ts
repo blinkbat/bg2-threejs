@@ -41,6 +41,7 @@ export interface ChestLocation {
     gold?: number;
     locked?: boolean;
     requiredKeyId?: string;  // keyId from KeyItem to unlock
+    decorOnly?: boolean;     // Non-interactive chest prop (cannot be hovered/opened)
 }
 
 export type TreeType = "pine" | "palm" | "oak";
@@ -59,7 +60,7 @@ export interface TreeLocation {
 export interface Decoration {
     x: number;
     z: number;
-    type: "column" | "broken_column" | "broken_wall" | "rock" | "small_rock" | "mushroom" | "small_mushroom" | "weeds" | "small_weeds" | "fern" | "small_fern";
+    type: "column" | "broken_column" | "broken_wall" | "rock" | "small_rock" | "mushroom" | "small_mushroom" | "weeds" | "small_weeds" | "fern" | "small_fern" | "bookshelf" | "bar" | "chair" | "bed";
     rotation?: number;  // Rotation in radians (for broken walls)
     size?: number;      // Scale multiplier
 }

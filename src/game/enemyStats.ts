@@ -269,6 +269,19 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         slowChance: 30,  // 30% chance to slow on hit
         expReward: 12
     },
+    innkeeper: {
+        name: "Innkeeper",
+        hp: 9999,
+        maxHp: 9999,
+        damage: [0, 0],
+        accuracy: 100,
+        armor: 999,
+        aggroRange: 0,
+        attackCooldown: 999999,
+        size: 1.1,
+        moveSpeed: 0,
+        expReward: 0
+    },
     kobold: {
         name: "Kobold",
         hp: 12,

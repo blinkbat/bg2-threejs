@@ -212,15 +212,15 @@ export function computeAreaData(area: AreaData): ComputedAreaData {
     });
 
     // Block decoration positions for pathing (large types) and LOS (tall things only)
-    const nonBlockingDecorations = new Set(["small_rock", "mushroom", "small_mushroom", "fern", "small_fern", "weeds", "small_weeds"]);
+    const nonBlockingDecorations = new Set(["small_rock", "mushroom", "small_mushroom", "fern", "small_fern", "weeds", "small_weeds", "chair"]);
     if (area.decorations) {
         area.decorations.forEach(dec => {
             const dx = Math.floor(dec.x);
             const dz = Math.floor(dec.z);
 
             if (dx >= 0 && dx < area.gridWidth && dz >= 0 && dz < area.gridHeight) {
-                // Only block movement for large decorations
-                if (!nonBlockingDecorations.has(dec.type)) {
+                // Bars are always solid blockers; other large decorations block by default.
+                if (dec.type === "bar" || !nonBlockingDecorations.has(dec.type)) {
                     blocked[dx][dz] = true;
                 }
 
@@ -231,6 +231,15 @@ export function computeAreaData(area: AreaData): ComputedAreaData {
             }
         });
     }
+
+    // Chests are solid props for movement/pathing.
+    area.chests.forEach(chest => {
+        const cx = Math.floor(chest.x);
+        const cz = Math.floor(chest.z);
+        if (cx >= 0 && cx < area.gridWidth && cz >= 0 && cz < area.gridHeight) {
+            blocked[cx][cz] = true;
+        }
+    });
 
     return { blocked, mergedObstacles, candlePositions, treeBlocked, terrainBlocked };
 }

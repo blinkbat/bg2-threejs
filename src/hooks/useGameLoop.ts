@@ -20,6 +20,7 @@ import type { Unit, UnitGroup } from "../core/types";
 import { ENEMY_STATS } from "../game/enemyStats";
 import { getEffectiveMaxHp } from "../game/playerUnits";
 import { createLiveUnitsDispatch } from "../core/stateUtils";
+import { publishHpBarOverlayFrame, resetHpBarOverlayFrame } from "./hpBarOverlayStore";
 import { updateCamera, updateWallTransparency, updateTreeFogVisibility, updateFogOccluderVisibility, updateLightLOD, addUnitToScene, updateBillboards } from "../rendering/scene";
 import { updateDynamicObstacles } from "../ai/pathfinding";
 import { updateAvoidanceCache } from "../ai/unitAI";
@@ -79,7 +80,6 @@ export interface GameLoopStateRefs {
 export interface GameLoopCallbacks {
     setUnits: React.Dispatch<React.SetStateAction<Unit[]>>;
     setFps: React.Dispatch<React.SetStateAction<number>>;
-    setHpBarPositions: React.Dispatch<React.SetStateAction<{ positions: Record<number, { x: number; y: number; visible: boolean }>; scale: number }>>;
     setSkillCooldowns: React.Dispatch<React.SetStateAction<Record<string, { end: number; duration: number }>>>;
     setQueuedActions: React.Dispatch<React.SetStateAction<{ unitId: number; skillName: string }[]>>;
     addLog: (text: string, color?: string) => void;
@@ -479,7 +479,10 @@ export function useGameLoop({
     }, [sceneState?.camera, gameRefs]);
 
     useEffect(() => {
-        if (!sceneState) return;
+        if (!sceneState) {
+            resetHpBarOverlayFrame();
+            return;
+        }
 
         const {
             scene, camera, renderer, flames, candleLights, fogTexture, fogMesh, moveMarker,
@@ -805,7 +808,7 @@ export function useGameLoop({
             if (hpBarFrame % 60 === 0) {
                 cachedRect = renderer.domElement.getBoundingClientRect();
             }
-            callbacks.setHpBarPositions(updateHpBarPositions(currentUnits, unitGroups, camera, cachedRect, refs.zoomLevel));
+            publishHpBarOverlayFrame(updateHpBarPositions(currentUnits, unitGroups, camera, cachedRect, refs.zoomLevel, maxHp));
             const hpBarsMs = performance.now() - sectionStart;
 
             // Wall/tree/candle transparency
@@ -845,7 +848,7 @@ export function useGameLoop({
                     if (unit.hp <= 0) continue;
                     if (unit.team === "player") {
                         playersAlive++;
-                    } else {
+                    } else if (unit.team === "enemy") {
                         enemiesAlive++;
                     }
                 }
@@ -898,6 +901,7 @@ export function useGameLoop({
 
         return () => {
             cancelAnimationFrame(animId);
+            resetHpBarOverlayFrame();
         };
     }, [sceneState, gameRefs, stateRefs, callbacks, keysPressed, updateCam]);
 }

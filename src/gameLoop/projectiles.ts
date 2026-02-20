@@ -30,6 +30,10 @@ function getBasicAttackDamageType(unit: Unit, unitData: UnitData | EnemyStats): 
     return "physical";
 }
 
+function isCombatUnit(unit: Unit): unit is Unit & { team: "player" | "enemy" } {
+    return unit.team === "player" || unit.team === "enemy";
+}
+
 // =============================================================================
 // MAGIC WAVE VOLLEY TRACKING
 // =============================================================================
@@ -366,11 +370,13 @@ export function updateProjectiles(
 ): Projectile[] {
     // Shared DamageContext for all projectile hit processing
     const dmgCtx = buildDamageContext(scene, damageTexts, hitFlashRef, unitsRef, unitsState, setUnits, addLog, now, defeatedThisFrame);
-    const aliveUnits: Unit[] = [];
-    const alivePlayers: Unit[] = [];
-    const aliveEnemies: Unit[] = [];
+    type CombatUnit = Unit & { team: "player" | "enemy" };
+    const aliveUnits: CombatUnit[] = [];
+    const alivePlayers: CombatUnit[] = [];
+    const aliveEnemies: CombatUnit[] = [];
     for (const unit of unitsState) {
         if (unit.hp <= 0 || defeatedThisFrame.has(unit.id)) continue;
+        if (!isCombatUnit(unit)) continue;
         aliveUnits.push(unit);
         if (unit.team === "enemy") {
             aliveEnemies.push(unit);
@@ -948,6 +954,11 @@ export function updateProjectiles(
         const { dx, dz, dist } = getDirectionAndDistance(proj.mesh.position.x, proj.mesh.position.z, targetG.position.x, targetG.position.z);
 
         if (dist < HIT_DETECTION_RADIUS) {
+            if (targetUnit.team === "neutral") {
+                disposeProjectile(scene, proj);
+                return false;
+            }
+
             const attackerData = getUnitStats(attackerUnit);
             const targetData = getUnitStats(targetUnit);
             const logColor = getDamageColor(targetUnit.team);

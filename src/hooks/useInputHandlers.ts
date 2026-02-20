@@ -132,6 +132,13 @@ export interface UseInputHandlersOptions {
 
 const DIRECT_MOVE_SAMPLE_DENSITY = 4;
 
+interface ChestHitData {
+    chestIndex: number;
+    chestX: number;
+    chestZ: number;
+    chestDecorOnly?: boolean;
+}
+
 /**
  * Use direct movement only when the straight segment is clear of hard or
  * terrain blockers. This keeps open-field movement snappy without forcing
@@ -194,9 +201,9 @@ export function useInputHandlers({
         const staticHoverNames = new Set(["ground", "chest", "door", "secretDoor"]);
         const staticHoverRaycastRoots: THREE.Object3D[] = [];
         scene.traverse(obj => {
-            if (staticHoverNames.has(obj.name)) {
-                staticHoverRaycastRoots.push(obj);
-            }
+            if (!staticHoverNames.has(obj.name)) return;
+            if (obj.name === "chest" && obj.userData?.chestDecorOnly === true) return;
+            staticHoverRaycastRoots.push(obj);
         });
         staticHoverRaycastRootsRef.current = staticHoverRaycastRoots;
 
@@ -345,7 +352,8 @@ export function useInputHandlers({
                     }
                 }
                 if (hit.object.name === "chest" && hit.object.userData?.chestIndex !== undefined) {
-                    const { chestIndex, chestX, chestZ } = hit.object.userData;
+                    const { chestIndex, chestX, chestZ, chestDecorOnly } = hit.object.userData as ChestHitData;
+                    if (chestDecorOnly) continue;
                     foundChest = { x: e.clientX, y: e.clientY, chestIndex, chestX, chestZ };
                     break;
                 }
@@ -553,7 +561,10 @@ export function useInputHandlers({
 
                 // Chest click
                 if (h.object.name === "chest" && h.object.userData?.chestIndex !== undefined) {
-                    const chestData = h.object.userData as { chestIndex: number; chestX: number; chestZ: number };
+                    const chestData = h.object.userData as ChestHitData;
+                    if (chestData.chestDecorOnly) {
+                        continue;
+                    }
                     handleChestClick(chestData, stateRefs, unitGroups, setters, callbacks);
                     return;
                 }
@@ -760,7 +771,7 @@ export function useInputHandlers({
 // =============================================================================
 
 function handleChestClick(
-    userData: { chestIndex: number; chestX: number; chestZ: number },
+    userData: ChestHitData,
     stateRefs: InputStateRefs,
     unitGroups: Record<number, UnitGroup>,
     setters: InputSetters,
@@ -790,6 +801,7 @@ function handleChestClick(
 
     const chest = area.chests[chestIndex];
     if (!chest) return;
+    if (chest.decorOnly) return;
 
     if (chest.locked && chest.requiredKeyId) {
         const inventory = getPartyInventory();

@@ -31,6 +31,7 @@ export const ENEMY_UNIT_COLORS: Record<EnemyType, string> = {
     dire_possum: "#886040",
     feral_hound: "#c09868",
     giant_amoeba: "#08d858",
+    innkeeper: "#c18a52",
     kobold: "#c18e63",
     kobold_archer: "#a35712",
     kobold_witch_doctor: "#8a64bd",

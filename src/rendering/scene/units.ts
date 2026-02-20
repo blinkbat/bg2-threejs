@@ -151,13 +151,13 @@ interface SpriteConfig {
 function getSpriteConfigs(): Record<number, SpriteConfig> {
     ensureTexturesLoaded();
     return {
-        1: { texture: barbarianTexture, width: 196, height: 195, color: 0xce6f5f, spriteHeight: 1.8, offsetX: -0.1 },  // Barbarian - lighter, slightly more saturated
-        2: { texture: paladinTexture, width: 128, height: 196, color: 0xd4a017, spriteHeight: 1.8 },    // Paladin
-        3: { texture: thiefTexture, width: 128, height: 196, color: 0xb275ce, spriteHeight: 1.8, offsetX: 0.1 },  // Thief - lighter, slightly more saturated
-        4: { texture: wizardTexture, width: 110, height: 196, color: 0x3498db, spriteHeight: 1.8 },     // Wizard
-        5: { texture: monkTexture, width: 128, height: 196, color: 0x27ae60, spriteHeight: 1.8, offsetX: -0.1 },  // Monk
-        6: { texture: clericTexture, width: 128, height: 196, color: 0xc0c8d0, spriteHeight: 1.8 },   // Cleric
-        7: { texture: barbarianTexture, width: 196, height: 195, color: 0xd7c09a, spriteHeight: 2.0, offsetX: -0.1, brightness: 0.09, opacity: 0.3 }, // Ancestor summon
+        1: { texture: barbarianTexture, width: 196, height: 195, color: 0xd08a7f, spriteHeight: 1.8, offsetX: -0.1 },  // Barbarian - lighter, lightly desaturated
+        2: { texture: paladinTexture, width: 128, height: 196, color: 0xd8b062, spriteHeight: 1.8 },    // Paladin - lighter, lightly desaturated
+        3: { texture: thiefTexture, width: 128, height: 196, color: 0xb487c0, spriteHeight: 1.8, offsetX: 0.1 },  // Thief - lightly desaturated
+        4: { texture: wizardTexture, width: 110, height: 196, color: 0x68abd7, spriteHeight: 1.8 },     // Wizard - lighter, lightly desaturated
+        5: { texture: monkTexture, width: 128, height: 196, color: 0x59b382, spriteHeight: 1.8, offsetX: -0.1 },  // Monk - lightly desaturated
+        6: { texture: clericTexture, width: 128, height: 196, color: 0xc4ccd2, spriteHeight: 1.8 },   // Cleric - lightly desaturated
+        7: { texture: barbarianTexture, width: 196, height: 195, color: 0xd4c3aa, spriteHeight: 2.0, offsetX: -0.1, brightness: 0.09, opacity: 0.3 }, // Ancestor summon
     };
 }
 
@@ -233,6 +233,7 @@ function getEnemySpriteConfigs(): Record<string, SpriteConfig> {
         giant_amoeba_lg: { texture: amoebaLgTexture, width: 128, height: 128, color: 0x14e063, spriteHeight: 2.4, opacity: 0.42 },
         giant_amoeba_md: { texture: amoebaMdTexture, width: 128, height: 128, color: 0x14e063, spriteHeight: 1.7, offsetY: -0.10, opacity: 0.42 },
         giant_amoeba_sm: { texture: amoebaSmTexture, width: 128, height: 128, color: 0x14e063, spriteHeight: 1.2, offsetY: -0.14, opacity: 0.42 },
+        innkeeper: { texture: monkTexture, width: 128, height: 196, color: 0xc18a52, spriteHeight: 1.95, shadowSize: 0.45 },
         kobold: { texture: koboldWarriorTexture, width: 128, height: 128, color: 0xc39976, spriteHeight: 1.61, offsetX: 0.06, shadowSize: 0.4 }, // light brown; slightly right
         kobold_archer: { texture: koboldArcherTexture, width: 128, height: 128, color: 0xad611c, spriteHeight: 1.61, shadowSize: 0.4 }, // touch brighter
         kobold_witch_doctor: { texture: koboldWitchDoctorTexture, width: 128, height: 128, color: 0x9576bf, spriteHeight: 1.61, shadowSize: 0.4 }, // brighter, less saturated
@@ -435,7 +436,7 @@ function buildUnitGroup(
     let targetRing: THREE.Mesh | undefined;
     let shieldIndicator: THREE.Mesh | undefined;
 
-    if (!isPlayer) {
+    if (unit.team === "enemy") {
         targetRing = new THREE.Mesh(
             new THREE.RingGeometry(selInner, selOuter, UNIT_RING_SEGMENTS),
             new THREE.MeshBasicMaterial({

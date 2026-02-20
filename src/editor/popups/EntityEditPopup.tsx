@@ -74,9 +74,11 @@ export function EntityEditPopup({ entity, screenX, screenY, onSave, onClose, onN
                     gold={draft.chestGold || 0}
                     itemsString={draft.chestItems || ""}
                     locked={draft.chestLocked || ""}
+                    decorOnly={draft.chestDecorOnly ?? false}
                     onGoldChange={gold => setDraft({ ...draft, chestGold: gold })}
                     onItemsChange={items => setDraft({ ...draft, chestItems: items })}
                     onLockedChange={locked => setDraft({ ...draft, chestLocked: locked || undefined })}
+                    onDecorOnlyChange={decorOnly => setDraft({ ...draft, chestDecorOnly: decorOnly })}
                 />
             )}
 
@@ -354,9 +356,11 @@ interface ChestItemsEditorProps {
     gold: number;
     itemsString: string;
     locked: string;
+    decorOnly: boolean;
     onGoldChange: (gold: number) => void;
     onItemsChange: (items: string) => void;
     onLockedChange: (locked: string) => void;
+    onDecorOnlyChange: (decorOnly: boolean) => void;
 }
 
 interface ChestItem {
@@ -376,7 +380,16 @@ function itemsToString(items: ChestItem[]): string {
     return items.map(i => `${i.itemId}:${i.quantity}`).join(",");
 }
 
-function ChestItemsEditor({ gold, itemsString, locked, onGoldChange, onItemsChange, onLockedChange }: ChestItemsEditorProps) {
+function ChestItemsEditor({
+    gold,
+    itemsString,
+    locked,
+    decorOnly,
+    onGoldChange,
+    onItemsChange,
+    onLockedChange,
+    onDecorOnlyChange
+}: ChestItemsEditorProps) {
     const [items, setItems] = useState<ChestItem[]>(() => parseItemsString(itemsString));
     const [selectedCategory, setSelectedCategory] = useState(0);
     const [selectedItem, setSelectedItem] = useState("");
@@ -572,6 +585,15 @@ function ChestItemsEditor({ gold, itemsString, locked, onGoldChange, onItemsChan
                         <option key={keyId} value={KEYS[keyId].keyId}>{KEYS[keyId].name}</option>
                     ))}
                 </select>
+            </label>
+
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, marginBottom: 10 }}>
+                <input
+                    type="checkbox"
+                    checked={decorOnly}
+                    onChange={e => onDecorOnlyChange(e.target.checked)}
+                />
+                Decor only (unhoverable/unopenable)
             </label>
         </>
     );

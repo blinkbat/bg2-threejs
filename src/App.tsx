@@ -51,6 +51,7 @@ import { loadDevMode, saveDevMode } from "./hooks/localStorage";
 import { CombatLog } from "./components/CombatLog";
 import { HUD } from "./components/HUD";
 import { FormationIndicator } from "./components/FormationIndicator";
+import { HpBarsOverlay } from "./components/HpBarsOverlay";
 import { loadFormationOrder, saveFormationOrder } from "./hooks/formationStorage";
 import { HelpModal } from "./components/HelpModal";
 import { SaveLoadModal } from "./components/SaveLoadModal";
@@ -336,10 +337,33 @@ function Game({
         const areaId = getCurrentAreaId();
         const killedSet = initialKilledEnemies ?? new Set<string>();
         const enemies: Unit[] = [];
+        const invulnerableStatus = {
+            type: "invul" as const,
+            duration: Number.MAX_SAFE_INTEGER,
+            tickInterval: 1000,
+            timeSinceTick: 0,
+            lastUpdateTime: Date.now(),
+            damagePerTick: 0,
+            sourceId: -1
+        };
         area.enemySpawns.forEach((spawn, i) => {
             const enemyKey = `${areaId}-${i}`;
             if (killedSet.has(enemyKey)) return;
             const stats = ENEMY_STATS[spawn.type];
+            if (spawn.type === "innkeeper") {
+                enemies.push({
+                    id: 100 + i,
+                    x: spawn.x,
+                    z: spawn.z,
+                    hp: stats.maxHp,
+                    team: "neutral" as const,
+                    enemyType: spawn.type,
+                    target: null,
+                    aiEnabled: false,
+                    statusEffects: [invulnerableStatus],
+                });
+                return;
+            }
             enemies.push({
                 id: 100 + i,
                 x: spawn.x,
@@ -373,7 +397,6 @@ function Game({
     const [showPanel, setShowPanel] = useState(false);
     const [combatLog, setCombatLog] = useState<CombatLogEntry[]>(() => [{ text: `The party enters ${getCurrentArea().name}.`, color: "#f59e0b" }]);
     const [paused, setPaused] = useState(true);
-    const [hpBarPositions, setHpBarPositions] = useState<{ positions: Record<number, { x: number; y: number; visible: boolean }>; scale: number }>({ positions: {}, scale: 1 });
     const [skillCooldowns, setSkillCooldowns] = useState<Record<string, { end: number; duration: number }>>({});
     const [targetingMode, setTargetingMode] = useState<{ casterId: number; skill: Skill } | null>(null);
     const [consumableTargetingMode, setConsumableTargetingMode] = useState<{ userId: number; itemId: string } | null>(null);
@@ -914,7 +937,6 @@ function Game({
     const gameLoopCallbacks = useMemo(() => ({
         setUnits,
         setFps,
-        setHpBarPositions,
         setSkillCooldowns,
         setQueuedActions,
         addLog,
@@ -1371,22 +1393,7 @@ function Game({
         <div style={{ width: "100%", height: "100vh", position: "relative", cursor: (targetingMode || consumableTargetingMode || commandMode === "attackMove") ? "crosshair" : "default" }}>
             <div ref={containerRef} style={{ width: "100%", height: "100%", filter: paused ? "saturate(0.4) brightness(0.85)" : "none", transition: "filter 0.2s" }} />
             {selBox && <div style={{ position: "absolute", left: selBox.left, top: selBox.top, width: selBox.width, height: selBox.height, border: "1px solid #00ff00", backgroundColor: "rgba(0,255,0,0.1)", pointerEvents: "none" }} />}
-
-            {/* HP bars */}
-            {playerUnits.map(u => {
-                const pos = hpBarPositions.positions[u.id];
-                if (!pos?.visible) return null;
-                const maxHp = sceneState.maxHp[u.id] || 1;
-                const pct = Math.max(0, u.hp / maxHp);
-                const color = pct > 0.5 ? "#22c55e" : pct > 0.25 ? "#eab308" : "#ef4444";
-                const barWidth = Math.max(16, 24 * hpBarPositions.scale);
-                const barHeight = Math.max(2, 3 * hpBarPositions.scale);
-                return (
-                    <div key={u.id} style={{ position: "absolute", left: pos.x - barWidth / 2, top: pos.y - barHeight / 2, width: barWidth, height: barHeight, backgroundColor: "#111", pointerEvents: "none" }}>
-                        <div style={{ width: `${pct * 100}%`, height: "100%", backgroundColor: color }} />
-                    </div>
-                );
-            })}
+            <HpBarsOverlay />
 
             {/* Tooltips */}
             {hoveredEnemy && (() => {
@@ -1582,6 +1589,16 @@ export default function App() {
             }
             return;
         }
+
+        // Persist world progression across the forced Game remount on area transitions.
+        const worldState = gameStateRef.current?.();
+        if (worldState) {
+            setInitialOpenedChests(new Set(worldState.openedChests));
+            setInitialOpenedSecretDoors(new Set(worldState.openedSecretDoors));
+            setInitialKilledEnemies(new Set(worldState.killedEnemies));
+            setInitialGold(worldState.gold);
+        }
+
         // Store pending transition and start fade to black
         pendingTransition.current = { players, targetArea, spawn, direction };
         setTransitionOpacity(1);
