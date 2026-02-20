@@ -19,7 +19,7 @@ import { cleanupUnitState } from "../ai/movement";
 import { cleanupEnemyKiteCooldown } from "../game/enemyState";
 import { getGameTime } from "../core/gameClock";
 import { scheduleEffectAnimation } from "../core/effectScheduler";
-import { applySyncedUnitsUpdate } from "../core/stateUtils";
+import { applySyncedUnitUpdate, applySyncedUnitsUpdate } from "../core/stateUtils";
 import { logDefeated, applyPoison, applySlowed, hasStatusEffect, isUnitAlive } from "./combatMath";
 import { tryKillBark } from "./barks";
 import { getNextUnitId } from "../core/unitIds";
@@ -680,8 +680,7 @@ export function applyDamageToUnit(
     }
 
     // Normal damage handling (non-amoeba or can't split)
-    const nextUnits = applySyncedUnitsUpdate(unitsStateRef, setUnits, prev => prev.map(u => {
-        if (u.id !== targetId) return u;
+    const updatedTarget = applySyncedUnitUpdate(unitsStateRef, setUnits, targetId, u => {
         let updated = { ...u, hp: Math.max(0, u.hp - effectiveDamage) };
         if (updated.hp <= 0) {
             return { ...updated, statusEffects: undefined };
@@ -724,8 +723,7 @@ export function applyDamageToUnit(
             };
         }
         return updated;
-    }));
-    const updatedTarget = nextUnits.find(u => u.id === targetId);
+    });
     const newHp = updatedTarget?.hp ?? 0;
 
     // Log energy shield effects

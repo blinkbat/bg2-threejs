@@ -1333,9 +1333,38 @@ function Game({
     // RENDER
     // =============================================================================
 
-    const alivePlayers = units.filter(u => u.team === "player" && isCorePlayerId(u.id) && u.hp > 0).length;
-    const partyAutoBattleActive = units.some(u => u.team === "player")
-        && units.filter(u => u.team === "player").every(u => u.aiEnabled);
+    const playerUnits = useMemo(
+        () => units.filter(u => u.team === "player"),
+        [units]
+    );
+    const unitsById = useMemo(() => {
+        const byId = new Map<number, Unit>();
+        for (const unit of units) {
+            byId.set(unit.id, unit);
+        }
+        return byId;
+    }, [units]);
+    const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+    const alivePlayers = useMemo(
+        () => playerUnits.reduce((count, unit) => count + (isCorePlayerId(unit.id) && unit.hp > 0 ? 1 : 0), 0),
+        [playerUnits]
+    );
+    const partyAutoBattleActive = useMemo(
+        () => playerUnits.length > 0 && playerUnits.every(unit => unit.aiEnabled),
+        [playerUnits]
+    );
+    const holdActive = useMemo(
+        () => units.some(unit => selectedIdSet.has(unit.id) && unit.holdPosition),
+        [units, selectedIdSet]
+    );
+    const hoveredEnemyUnit = useMemo(
+        () => (hoveredEnemy ? unitsById.get(hoveredEnemy.id) : undefined),
+        [hoveredEnemy, unitsById]
+    );
+    const hoveredPlayerUnit = useMemo(
+        () => (hoveredPlayer ? unitsById.get(hoveredPlayer.id) : undefined),
+        [hoveredPlayer, unitsById]
+    );
     const areaData = getCurrentArea();
 
     return (
@@ -1344,7 +1373,7 @@ function Game({
             {selBox && <div style={{ position: "absolute", left: selBox.left, top: selBox.top, width: selBox.width, height: selBox.height, border: "1px solid #00ff00", backgroundColor: "rgba(0,255,0,0.1)", pointerEvents: "none" }} />}
 
             {/* HP bars */}
-            {units.filter(u => u.team === "player").map(u => {
+            {playerUnits.map(u => {
                 const pos = hpBarPositions.positions[u.id];
                 if (!pos?.visible) return null;
                 const maxHp = sceneState.maxHp[u.id] || 1;
@@ -1361,7 +1390,7 @@ function Game({
 
             {/* Tooltips */}
             {hoveredEnemy && (() => {
-                const enemy = units.find(u => u.id === hoveredEnemy.id);
+                const enemy = hoveredEnemyUnit;
                 if (!enemy?.enemyType || enemy.hp <= 0) return null;
                 const stats = ENEMY_STATS[enemy.enemyType];
                 const pct = enemy.hp / stats.maxHp;
@@ -1379,7 +1408,7 @@ function Game({
             {hoveredChest && <div className="enemy-tooltip" style={{ left: hoveredChest.x + 12, top: hoveredChest.y - 10 }}><div className="enemy-tooltip-name">{openedChests.has(`${getCurrentAreaId()}-${hoveredChest.chestIndex}`) ? "Empty Chest" : "Chest"}</div></div>}
 
             {hoveredPlayer && (() => {
-                const player = units.find(u => u.id === hoveredPlayer.id);
+                const player = hoveredPlayerUnit;
                 if (!player || player.hp <= 0) return null;
                 const data = UNIT_DATA[player.id];
                 if (!data) return null;
@@ -1427,7 +1456,7 @@ function Game({
                 onDeselectAll={handleDeselectAllPlayers}
                 onToggleAutoBattle={handleTogglePartyAutoBattle}
                 hasSelection={selectedIds.length > 0}
-                holdActive={units.some(u => selectedIds.includes(u.id) && u.holdPosition)}
+                holdActive={holdActive}
                 partyAutoBattleActive={partyAutoBattleActive}
             />
             <PartyBar

@@ -255,11 +255,18 @@ export function recordTargetScan(unitId: number, now: number): void {
 /**
  * Get list of targets that this enemy recently couldn't reach.
  */
-export function getBlockedTargets(unitId: number, now: number): number[] {
-    if (!unreachableTargets[unitId]) return [];
-    return unreachableTargets[unitId]
-        .filter(e => e.until > now)
-        .map(e => e.targetId);
+export function getBlockedTargets(unitId: number, now: number): Set<number> {
+    const blocked = new Set<number>();
+    const unreachable = unreachableTargets[unitId];
+    if (!unreachable) return blocked;
+
+    for (const entry of unreachable) {
+        if (entry.until > now) {
+            blocked.add(entry.targetId);
+        }
+    }
+
+    return blocked;
 }
 
 // =============================================================================

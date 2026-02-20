@@ -87,6 +87,38 @@ export function applySyncedUnitsUpdate(
 }
 
 /**
+ * Update a single unit within applySyncedUnitsUpdate without mapping the whole array.
+ * Returns the updated unit snapshot when the unit exists.
+ */
+export function applySyncedUnitUpdate(
+    unitsStateRef: React.RefObject<Unit[]>,
+    setUnits: SetUnits,
+    unitId: number,
+    updater: (unit: Unit) => Unit
+): Unit | undefined {
+    let updatedUnit: Unit | undefined;
+
+    applySyncedUnitsUpdate(unitsStateRef, setUnits, prev => {
+        const index = prev.findIndex(unit => unit.id === unitId);
+        if (index < 0) return prev;
+
+        const currentUnit = prev[index];
+        const nextUnit = updater(currentUnit);
+        updatedUnit = nextUnit;
+
+        if (nextUnit === currentUnit) {
+            return prev;
+        }
+
+        const nextUnits = [...prev];
+        nextUnits[index] = nextUnit;
+        return nextUnits;
+    });
+
+    return updatedUnit;
+}
+
+/**
  * Update a single unit by ID with partial updates.
  * Replaces the common pattern: setUnits(prev => prev.map(u => u.id === id ? { ...u, ...updates } : u))
  */
@@ -95,7 +127,13 @@ export function updateUnit(
     unitId: number,
     updates: Partial<Unit>
 ): void {
-    setUnits(prev => prev.map(u => u.id === unitId ? { ...u, ...updates } : u));
+    setUnits(prev => {
+        const index = prev.findIndex(u => u.id === unitId);
+        if (index < 0) return prev;
+        const next = [...prev];
+        next[index] = { ...next[index], ...updates };
+        return next;
+    });
 }
 
 /**
@@ -107,7 +145,15 @@ export function updateUnitWith(
     unitId: number,
     transform: (unit: Unit) => Partial<Unit>
 ): void {
-    setUnits(prev => prev.map(u => u.id === unitId ? { ...u, ...transform(u) } : u));
+    setUnits(prev => {
+        const index = prev.findIndex(u => u.id === unitId);
+        if (index < 0) return prev;
+        const current = prev[index];
+        const updates = transform(current);
+        const next = [...prev];
+        next[index] = { ...current, ...updates };
+        return next;
+    });
 }
 
 /**

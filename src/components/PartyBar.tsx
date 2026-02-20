@@ -98,6 +98,13 @@ export function PartyBar({
         const playerIds = corePlayerUnits.map(u => u.id);
         return buildEffectiveFormationOrder(playerIds, formationOrder);
     }, [corePlayerUnits, formationOrder]);
+    const effectiveOrderIndex = useMemo(() => {
+        const indexById = new Map<number, number>();
+        for (let i = 0; i < effectiveOrder.length; i++) {
+            indexById.set(effectiveOrder[i], i);
+        }
+        return indexById;
+    }, [effectiveOrder]);
     const effectiveOrderRef = useRef(effectiveOrder);
     useEffect(() => {
         effectiveOrderRef.current = effectiveOrder;
@@ -174,8 +181,16 @@ export function PartyBar({
         onReorderFormation?.(newOrder);
     }, [insertIdx, onReorderFormation]);
 
-    // Sort playerUnits by effective formation order for rendering
-    const sortedUnits = [...corePlayerUnits].sort((a, b) => effectiveOrder.indexOf(a.id) - effectiveOrder.indexOf(b.id));
+    // Sort playerUnits by effective formation order for rendering.
+    const sortedUnits = useMemo(() => {
+        const ordered = [...corePlayerUnits];
+        ordered.sort((a, b) => {
+            const aIndex = effectiveOrderIndex.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+            const bIndex = effectiveOrderIndex.get(b.id) ?? Number.MAX_SAFE_INTEGER;
+            return aIndex - bIndex;
+        });
+        return ordered;
+    }, [corePlayerUnits, effectiveOrderIndex]);
 
     // Dragged unit color for the spacer bar
     const dragColor = draggingId !== null ? getPlayerUnitColor(draggingId) : "#999";
@@ -238,7 +253,7 @@ export function PartyBar({
             setContextMenu({ unitId: unit.id, x: e.clientX, y: e.clientY });
         };
 
-        const orderIdx = effectiveOrder.indexOf(unit.id);
+        const orderIdx = effectiveOrderIndex.get(unit.id) ?? -1;
         const isDragSource = draggingId === unit.id;
 
         const portraitClass = [

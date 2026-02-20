@@ -264,6 +264,97 @@ function doesCircleOccludeSegmentXZ(
     return dx * dx + dz * dz <= circle.radius * circle.radius;
 }
 
+let cachedTreeMeshesRef: THREE.Mesh[] | undefined;
+let cachedTreeMeshCount = -1;
+let cachedTreeOcclusionGroups: TreeOcclusionGroup[] = [];
+
+function buildTreeOcclusionGroups(treeMeshes: THREE.Mesh[]): TreeOcclusionGroup[] {
+    const treeGroupMap = new Map<string, THREE.Mesh[]>();
+    const standaloneTreeMeshes: THREE.Mesh[] = [];
+    const groups: TreeOcclusionGroup[] = [];
+
+    for (const mesh of treeMeshes) {
+        const fogObjectId = Reflect.get(mesh.userData, "fogObjectId");
+        if (typeof fogObjectId === "string" && fogObjectId.length > 0) {
+            const existingGroup = treeGroupMap.get(fogObjectId);
+            if (existingGroup) {
+                existingGroup.push(mesh);
+            } else {
+                treeGroupMap.set(fogObjectId, [mesh]);
+            }
+        } else {
+            standaloneTreeMeshes.push(mesh);
+        }
+    }
+
+    for (const group of treeGroupMap.values()) {
+        groups.push({
+            meshes: group,
+            circle: buildTreeOcclusionCircle(group),
+        });
+    }
+
+    for (const mesh of standaloneTreeMeshes) {
+        groups.push({
+            meshes: [mesh],
+            circle: buildTreeOcclusionCircle([mesh]),
+        });
+    }
+
+    return groups;
+}
+
+function getTreeOcclusionGroups(treeMeshes?: THREE.Mesh[]): TreeOcclusionGroup[] {
+    if (!treeMeshes || treeMeshes.length === 0) return [];
+
+    if (treeMeshes === cachedTreeMeshesRef && treeMeshes.length === cachedTreeMeshCount) {
+        return cachedTreeOcclusionGroups;
+    }
+
+    cachedTreeMeshesRef = treeMeshes;
+    cachedTreeMeshCount = treeMeshes.length;
+    cachedTreeOcclusionGroups = buildTreeOcclusionGroups(treeMeshes);
+    return cachedTreeOcclusionGroups;
+}
+
+let cachedColumnGroupsRef: THREE.Mesh[][] | undefined;
+let cachedColumnGroupMeshCount = -1;
+let cachedGroupedColumnMeshes = new Set<THREE.Mesh>();
+
+function countColumnGroupMeshes(columnGroups: THREE.Mesh[][]): number {
+    let count = 0;
+    for (const group of columnGroups) {
+        count += group.length;
+    }
+    return count;
+}
+
+function getGroupedColumnMeshes(columnGroups?: THREE.Mesh[][]): Set<THREE.Mesh> {
+    if (!columnGroups || columnGroups.length === 0) {
+        cachedColumnGroupsRef = undefined;
+        cachedColumnGroupMeshCount = -1;
+        cachedGroupedColumnMeshes = new Set<THREE.Mesh>();
+        return cachedGroupedColumnMeshes;
+    }
+
+    const totalMeshCount = countColumnGroupMeshes(columnGroups);
+    if (columnGroups === cachedColumnGroupsRef && totalMeshCount === cachedColumnGroupMeshCount) {
+        return cachedGroupedColumnMeshes;
+    }
+
+    const nextGroupedMeshes = new Set<THREE.Mesh>();
+    for (const group of columnGroups) {
+        for (const mesh of group) {
+            nextGroupedMeshes.add(mesh);
+        }
+    }
+
+    cachedColumnGroupsRef = columnGroups;
+    cachedColumnGroupMeshCount = totalMeshCount;
+    cachedGroupedColumnMeshes = nextGroupedMeshes;
+    return cachedGroupedColumnMeshes;
+}
+
 // Throttle expensive ray-box tests - only recalculate every N frames
 const WALL_CHECK_INTERVAL = 3;
 let wallCheckFrame = 0;
@@ -294,47 +385,8 @@ export function updateWallTransparency(
 
         _cameraPos.copy(camera.position);
 
-        const treeOcclusionGroups: TreeOcclusionGroup[] = [];
-        const groupedColumnMeshes = new Set<THREE.Mesh>();
-        if (columnGroups) {
-            for (const group of columnGroups) {
-                for (const mesh of group) {
-                    groupedColumnMeshes.add(mesh);
-                }
-            }
-        }
-
-        if (treeMeshes) {
-            const treeGroupMap = new Map<string, THREE.Mesh[]>();
-            const standaloneTreeMeshes: THREE.Mesh[] = [];
-            for (const mesh of treeMeshes) {
-                const fogObjectId = Reflect.get(mesh.userData, "fogObjectId");
-                if (typeof fogObjectId === "string" && fogObjectId.length > 0) {
-                    const existingGroup = treeGroupMap.get(fogObjectId);
-                    if (existingGroup) {
-                        existingGroup.push(mesh);
-                    } else {
-                        treeGroupMap.set(fogObjectId, [mesh]);
-                    }
-                } else {
-                    standaloneTreeMeshes.push(mesh);
-                }
-            }
-
-            for (const group of treeGroupMap.values()) {
-                treeOcclusionGroups.push({
-                    meshes: group,
-                    circle: buildTreeOcclusionCircle(group),
-                });
-            }
-
-            for (const mesh of standaloneTreeMeshes) {
-                treeOcclusionGroups.push({
-                    meshes: [mesh],
-                    circle: buildTreeOcclusionCircle([mesh]),
-                });
-            }
-        }
+        const treeOcclusionGroups = getTreeOcclusionGroups(treeMeshes);
+        const groupedColumnMeshes = getGroupedColumnMeshes(columnGroups);
 
         // Only check player units for occlusion (enemies don't need wall transparency)
         for (const unit of unitsState) {

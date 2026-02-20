@@ -161,7 +161,7 @@ export function findNearestTarget(ctx: TargetingContext, alerted: boolean = fals
     const enemyTeam = isPlayer ? "enemy" : "player";
 
     // For enemies, get list of targets they recently couldn't reach
-    const blockedTargets = !isPlayer ? getBlockedTargets(unit.id, now) : [];
+    const blockedTargets = !isPlayer ? getBlockedTargets(unit.id, now) : null;
 
     let nearest: number | null = null;
     // Alerted enemies search the whole map, otherwise use aggro range
@@ -172,7 +172,7 @@ export function findNearestTarget(ctx: TargetingContext, alerted: boolean = fals
     // regardless of the broodling's own limited aggro range
     if (!isPlayer && unit.enemyType === "broodling") {
         const motherTarget = getMothersSightTarget(unit, unitsState, unitsRef, defeatedThisFrame);
-        if (motherTarget && !blockedTargets.includes(motherTarget.targetId)) {
+        if (motherTarget && !blockedTargets?.has(motherTarget.targetId)) {
             // Mother can see a player - broodling ALWAYS targets them (missile behavior)
             // Set this as the target and use its distance as the reference
             nearest = motherTarget.targetId;
@@ -186,7 +186,7 @@ export function findNearestTarget(ctx: TargetingContext, alerted: boolean = fals
         if (enemy.team !== enemyTeam || enemy.hp <= 0) continue;
         if (hasStatusEffect(enemy, "divine_lattice")) continue;
         if (defeatedThisFrame.has(enemy.id)) continue;
-        if (blockedTargets.includes(enemy.id)) continue;
+        if (blockedTargets?.has(enemy.id)) continue;
         // Skip untargetable enemies.
         if (isEnemyUntargetable(enemy.id)) continue;
 

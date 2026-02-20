@@ -290,6 +290,7 @@ function executeGlare(
 
     let hitCount = 0;
     let totalDamage = 0;
+    const stunnedTargets = new Set<number>();
 
     unitsState.forEach(target => {
         if (target.team !== "player") return;
@@ -317,23 +318,28 @@ function executeGlare(
 
             hitCount++;
             totalDamage += dmg;
-
-            // Apply stunned status effect to surviving targets
-            const stunnedEffect: StatusEffect = {
-                type: "stunned",
-                duration: glare.stunDuration,
-                tickInterval: BUFF_TICK_INTERVAL,
-                timeSinceTick: 0,
-                lastUpdateTime: now,
-                damagePerTick: 0,
-                sourceId: glare.casterId
-            };
-            setUnits(prev => prev.map(u => {
-                if (u.id !== target.id || u.hp <= 0) return u;
-                return { ...u, statusEffects: applyStatusEffect(u.statusEffects, stunnedEffect) };
-            }));
+            if (!defeatedThisFrame.has(target.id)) {
+                stunnedTargets.add(target.id);
+            }
         }
     });
+
+    if (stunnedTargets.size > 0) {
+        const stunnedEffect: StatusEffect = {
+            type: "stunned",
+            duration: glare.stunDuration,
+            tickInterval: BUFF_TICK_INTERVAL,
+            timeSinceTick: 0,
+            lastUpdateTime: now,
+            damagePerTick: 0,
+            sourceId: glare.casterId
+        };
+
+        setUnits(prev => prev.map(u => {
+            if (!stunnedTargets.has(u.id) || u.hp <= 0) return u;
+            return { ...u, statusEffects: applyStatusEffect(u.statusEffects, stunnedEffect) };
+        }));
+    }
 
     // Flash visual effect
     createGlareFlash(scene, glare);

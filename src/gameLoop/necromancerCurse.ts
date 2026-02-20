@@ -197,6 +197,7 @@ function executeCurse(
 
     let hitCount = 0;
     let totalDamage = 0;
+    const doomTargets = new Set<number>();
 
     unitsState.forEach(target => {
         if (target.team !== "player") return;
@@ -225,31 +226,35 @@ function executeCurse(
 
                 hitCount++;
                 totalDamage += dmg;
-
-                // Apply Doom status effect to surviving targets
-                setUnits(prev => prev.map(u => {
-                    if (u.id !== target.id || u.hp <= 0) return u;
-                    // Don't stack doom - refresh if already present
-                    const existingEffects = (u.statusEffects ?? []).filter(e => e.type !== "doom");
-                    return {
-                        ...u,
-                        statusEffects: [
-                            ...existingEffects,
-                            {
-                                type: "doom" as const,
-                                duration: DOOM_DURATION,
-                                tickInterval: BUFF_TICK_INTERVAL,
-                                timeSinceTick: 0,
-                                lastUpdateTime: now,
-                                damagePerTick: 0,
-                                sourceId: curse.casterId
-                            }
-                        ]
-                    };
-                }));
+                if (!defeatedThisFrame.has(target.id)) {
+                    doomTargets.add(target.id);
+                }
             }
         }
     });
+
+    if (doomTargets.size > 0) {
+        setUnits(prev => prev.map(u => {
+            if (!doomTargets.has(u.id) || u.hp <= 0) return u;
+            // Don't stack doom - refresh if already present.
+            const existingEffects = (u.statusEffects ?? []).filter(e => e.type !== "doom");
+            return {
+                ...u,
+                statusEffects: [
+                    ...existingEffects,
+                    {
+                        type: "doom" as const,
+                        duration: DOOM_DURATION,
+                        tickInterval: BUFF_TICK_INTERVAL,
+                        timeSinceTick: 0,
+                        lastUpdateTime: now,
+                        damagePerTick: 0,
+                        sourceId: curse.casterId
+                    }
+                ]
+            };
+        }));
+    }
 
     // Explosion visual
     createAnimatedRing(scene, curse.centerX + 0.5, curse.centerZ + 0.5, "#8b00ff", {

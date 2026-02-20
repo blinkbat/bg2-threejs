@@ -183,6 +183,7 @@ export function useInputHandlers({
     const mouseRef = useRef(new THREE.Vector2());
     const lastHoverUpdateRef = useRef(0);
     const staticHoverRaycastRootsRef = useRef<THREE.Object3D[]>([]);
+    const hoverRaycastRootsRef = useRef<THREE.Object3D[]>([]);
 
     useEffect(() => {
         if (!sceneRefs || !containerRef.current) return;
@@ -271,15 +272,23 @@ export function useInputHandlers({
             mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
             mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
             raycaster.setFromCamera(mouse, camera);
-            const hoverRoots: THREE.Object3D[] = [
-                ...Object.values(unitGroups),
-                ...secretDoorMeshes,
-                ...staticHoverRaycastRootsRef.current
-            ];
-            for (const child of scene.children) {
-                if (child.name === "lootBag") {
-                    hoverRoots.push(child);
+            const hoverRoots = hoverRaycastRootsRef.current;
+            hoverRoots.length = 0;
+
+            for (const unitId in unitGroups) {
+                const unitGroup = unitGroups[Number(unitId)];
+                if (unitGroup) {
+                    hoverRoots.push(unitGroup);
                 }
+            }
+            for (const secretDoor of secretDoorMeshes) {
+                hoverRoots.push(secretDoor);
+            }
+            for (const staticRoot of staticHoverRaycastRootsRef.current) {
+                hoverRoots.push(staticRoot);
+            }
+            for (const bag of gameRefs.current.lootBags) {
+                hoverRoots.push(bag.mesh);
             }
             const hits = raycaster.intersectObjects(hoverRoots, true);
 

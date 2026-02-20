@@ -66,9 +66,14 @@ export function processStatusEffects(
         doom: boolean;
         newEffects: StatusEffect[];
     }
+    interface PendingBlind {
+        effect: StatusEffect;
+        targetName: string;
+    }
     const mutations = new Map<number, UnitMutation>();
     // Side effects to run after the single setUnits call
     const sideEffects: Array<() => void> = [];
+    const pendingBlinds = new Map<number, PendingBlind>();
     const auraDamageCtx = buildDamageContext(
         scene,
         damageTexts,
@@ -147,20 +152,16 @@ export function processStatusEffects(
                                 if (defeatedThisFrame.has(targetId)) return;
                                 if (blindChance <= 0 || !rollChance(blindChance)) return;
 
-                                setUnits(prev => prev.map(u => {
-                                    if (u.id !== targetId || u.hp <= 0 || hasStatusEffect(u, "blind")) return u;
-                                    const blindEffect: StatusEffect = {
-                                        type: "blind",
-                                        duration: blindDuration,
-                                        tickInterval: BUFF_TICK_INTERVAL,
-                                        timeSinceTick: 0,
-                                        lastUpdateTime: now,
-                                        damagePerTick: 0,
-                                        sourceId
-                                    };
-                                    return { ...u, statusEffects: applyStatusEffect(u.statusEffects, blindEffect) };
-                                }));
-                                addLog(`${targetName} is blinded!`, COLORS.blindText);
+                                const blindEffect: StatusEffect = {
+                                    type: "blind",
+                                    duration: blindDuration,
+                                    tickInterval: BUFF_TICK_INTERVAL,
+                                    timeSinceTick: 0,
+                                    lastUpdateTime: now,
+                                    damagePerTick: 0,
+                                    sourceId
+                                };
+                                pendingBlinds.set(targetId, { effect: blindEffect, targetName });
                             });
                         }
                     }
@@ -241,4 +242,16 @@ export function processStatusEffects(
     }
 
     for (const fn of sideEffects) fn();
+
+    if (pendingBlinds.size > 0) {
+        setUnits(prev => prev.map(u => {
+            const pending = pendingBlinds.get(u.id);
+            if (!pending || u.hp <= 0 || hasStatusEffect(u, "blind")) return u;
+            return { ...u, statusEffects: applyStatusEffect(u.statusEffects, pending.effect) };
+        }));
+
+        for (const pending of pendingBlinds.values()) {
+            addLog(`${pending.targetName} is blinded!`, COLORS.blindText);
+        }
+    }
 }

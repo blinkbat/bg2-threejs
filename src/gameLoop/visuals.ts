@@ -205,8 +205,30 @@ export function updateEnergyShieldVisuals(
 
 // Cache for fog change detection - simple hash of visible cells
 let lastFogHash = 0;
+let lastFogVisibilityKey = 0;
+let hasFogVisibilityKey = false;
+let lastFogAreaId: string | null = null;
 const ENEMY_VIEW_FADE_LERP = 0.32;
 const ENEMY_VIEW_FADE_MIN_VISIBLE = 0.02;
+
+function computePlayerVisibilityKey(
+    playerUnits: Unit[],
+    unitsRef: Record<number, UnitGroup>
+): number {
+    let visibilityKey = 2166136261;
+
+    for (const unit of playerUnits) {
+        const group = unitsRef[unit.id];
+        if (!group) continue;
+        const x = Math.round(group.position.x);
+        const z = Math.round(group.position.z);
+        visibilityKey = Math.imul(visibilityKey ^ unit.id, 16777619);
+        visibilityKey = Math.imul(visibilityKey ^ x, 16777619);
+        visibilityKey = Math.imul(visibilityKey ^ z, 16777619);
+    }
+
+    return visibilityKey >>> 0;
+}
 
 function applyViewFadeToGroup(group: UnitGroup, opacity: number): void {
     const clampedOpacity = THREE.MathUtils.clamp(opacity, 0, 1);
@@ -263,6 +285,9 @@ function updateEnemyGroupFade(group: UnitGroup, shouldBeVisible: boolean): void 
  */
 export function resetFogCache(): void {
     lastFogHash = 0;
+    lastFogVisibilityKey = 0;
+    hasFogVisibilityKey = false;
+    lastFogAreaId = null;
 }
 
 export function updateFogOfWar(
@@ -274,78 +299,94 @@ export function updateFogOfWar(
     fogMesh: THREE.Mesh
 ): void {
     const area = getCurrentArea();
+    if (lastFogAreaId !== area.id) {
+        lastFogAreaId = area.id;
+        lastFogHash = 0;
+        hasFogVisibilityKey = false;
+    }
 
     // If area doesn't have fog of war, clear and hide it
     if (!area.hasFogOfWar) {
         fogMesh.visible = false;
+        hasFogVisibilityKey = false;
         // Make all enemies visible (except hidden enemy states).
-        unitsState.filter(u => u.team === "enemy").forEach(u => {
+        for (const u of unitsState) {
+            if (u.team !== "enemy") continue;
             const g = unitsRef[u.id];
-            if (!g) return;
+            if (!g) continue;
             if (u.hp <= 0) {
                 g.visible = false;
                 applyViewFadeToGroup(g, 0);
-                return;
+                continue;
             }
             updateEnemyGroupFade(g, !isEnemyHiddenFromView(u.id));
-        });
+        }
         return;
     }
 
     // Ensure fog mesh is visible for areas with fog
     fogMesh.visible = true;
 
-    updateVisibility(visibility, playerUnits, { current: unitsRef });
+    const visibilityKey = computePlayerVisibilityKey(playerUnits, unitsRef);
+    const shouldRecomputeVisibility = !hasFogVisibilityKey || visibilityKey !== lastFogVisibilityKey;
 
-    // FNV-style rolling hash to detect visibility changes with low collision risk.
-    let fogHash = 2166136261;
-    for (let x = 0; x < area.gridWidth; x++) {
-        for (let z = 0; z < area.gridHeight; z++) {
-            const vis = visibility[x]?.[z] ?? 0;
-            const mixed = (x * 73856093) ^ (z * 19349663) ^ vis;
-            fogHash = Math.imul(fogHash ^ mixed, 16777619);
-        }
-    }
-    fogHash >>>= 0;
+    if (shouldRecomputeVisibility) {
+        hasFogVisibilityKey = true;
+        lastFogVisibilityKey = visibilityKey;
 
-    // Only redraw fog texture if visibility changed
-    if (fogHash !== lastFogHash) {
-        lastFogHash = fogHash;
+        updateVisibility(visibility, playerUnits, { current: unitsRef });
 
-        const { ctx, texture } = fogTexture;
-
-        ctx.clearRect(0, 0, area.gridWidth * FOG_SCALE, area.gridHeight * FOG_SCALE);
-
-        // Simple fog rendering without expensive distance calculations
-        // Use fixed alpha values - the texture filtering provides some softness
+        // FNV-style rolling hash to detect visibility changes with low collision risk.
+        let fogHash = 2166136261;
         for (let x = 0; x < area.gridWidth; x++) {
             for (let z = 0; z < area.gridHeight; z++) {
-                const vis = visibility[x][z];
-                if (vis === 2) continue;  // Visible - no fog
-
-                // Simple alpha: seen = 0.4, unexplored = 1.0
-                ctx.fillStyle = vis === 1 ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,1)";
-                ctx.fillRect(x * FOG_SCALE, z * FOG_SCALE, FOG_SCALE, FOG_SCALE);
+                const vis = visibility[x]?.[z] ?? 0;
+                const mixed = (x * 73856093) ^ (z * 19349663) ^ vis;
+                fogHash = Math.imul(fogHash ^ mixed, 16777619);
             }
         }
+        fogHash >>>= 0;
 
-        texture.needsUpdate = true;
+        // Only redraw fog texture if visibility changed
+        if (fogHash !== lastFogHash) {
+            lastFogHash = fogHash;
+
+            const { ctx, texture } = fogTexture;
+
+            ctx.clearRect(0, 0, area.gridWidth * FOG_SCALE, area.gridHeight * FOG_SCALE);
+
+            // Simple fog rendering without expensive distance calculations
+            // Use fixed alpha values - the texture filtering provides some softness
+            for (let x = 0; x < area.gridWidth; x++) {
+                for (let z = 0; z < area.gridHeight; z++) {
+                    const vis = visibility[x][z];
+                    if (vis === 2) continue;  // Visible - no fog
+
+                    // Simple alpha: seen = 0.4, unexplored = 1.0
+                    ctx.fillStyle = vis === 1 ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,1)";
+                    ctx.fillRect(x * FOG_SCALE, z * FOG_SCALE, FOG_SCALE, FOG_SCALE);
+                }
+            }
+
+            texture.needsUpdate = true;
+        }
     }
 
     // Hide enemies in fog (always check this) - also hide hidden enemy states.
-    unitsState.filter(u => u.team === "enemy").forEach(u => {
+    for (const u of unitsState) {
+        if (u.team !== "enemy") continue;
         const g = unitsRef[u.id];
-        if (!g) return;
+        if (!g) continue;
         if (u.hp <= 0) {
             g.visible = false;
             applyViewFadeToGroup(g, 0);
-            return;
+            continue;
         }
         const cx = Math.floor(g.position.x), cz = Math.floor(g.position.z);
         const vis = visibility[cx]?.[cz] ?? 0;
         const shouldBeVisible = vis === 2 && !isEnemyHiddenFromView(u.id);
         updateEnemyGroupFade(g, shouldBeVisible);
-    });
+    }
 }
 
 // =============================================================================
