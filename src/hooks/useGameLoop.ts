@@ -14,6 +14,7 @@ import {
     VISHAS_EYES_ORB_HEAL_RANGE
 } from "../core/constants";
 import { getGameTime, updateGameClock } from "../core/gameClock";
+import { updateEffectAnimations } from "../core/effectScheduler";
 import { getCurrentArea } from "../game/areas";
 import type { Unit, UnitGroup } from "../core/types";
 import { ENEMY_STATS } from "../game/enemyStats";
@@ -794,6 +795,9 @@ export function useGameLoop({
             updateMarkerAnimations(moveMarker, refs.moveMarkerStart, targetRings, refs.targetRingTimers, now);
             updateRangeIndicator(stateRefs.targetingModeRef.current, rangeIndicator, unitGroups);
             visualMs += performance.now() - sectionStart;
+
+            // Shared transient effect animations (rings, beams, flash overlays, etc.)
+            updateEffectAnimations(gameNow);
 
             // HP bar positions (rect measurement cached; only re-measured every 60 frames)
             sectionStart = performance.now();

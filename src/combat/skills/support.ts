@@ -23,6 +23,7 @@ import { soundFns } from "../../audio";
 import { createAnimatedRing, createLightningPillar } from "../damageEffects";
 import { updateUnitWith } from "../../core/stateUtils";
 import { getGameTime } from "../../core/gameClock";
+import { scheduleEffectAnimation } from "../../core/effectScheduler";
 import type { SkillExecutionContext } from "./types";
 import { findAndValidateAllyTarget, findClosestUnit, consumeSkill } from "./helpers";
 
@@ -115,25 +116,25 @@ function createPulseBeam(
     scene.add(beam);
 
     const startTime = getGameTime();
+    const material = beam.material as THREE.MeshBasicMaterial;
 
-    const animate = () => {
-        const elapsed = getGameTime() - startTime;
+    scheduleEffectAnimation((gameNow) => {
+        const elapsed = gameNow - startTime;
         const t = Math.min(1, elapsed / duration);
-        const material = beam.material as THREE.MeshBasicMaterial;
 
         material.opacity = 0.85 * (1 - t);
         const pulseScale = 1 + Math.sin(t * Math.PI) * 0.35;
         beam.scale.set(pulseScale, 1, pulseScale);
 
         if (t < 1) {
-            requestAnimationFrame(animate);
-        } else {
-            scene.remove(beam);
-            beam.geometry.dispose();
-            material.dispose();
+            return false;
         }
-    };
-    requestAnimationFrame(animate);
+
+        scene.remove(beam);
+        beam.geometry.dispose();
+        material.dispose();
+        return true;
+    });
 }
 
 // =============================================================================

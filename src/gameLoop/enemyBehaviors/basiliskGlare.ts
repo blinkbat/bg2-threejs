@@ -7,6 +7,7 @@ import type { Unit, UnitGroup, DamageText, EnemyStats, DamageType, StatusEffect 
 import { BUFF_TICK_INTERVAL, COLORS } from "../../core/constants";
 import { getUnitStats } from "../../game/units";
 import { getGameTime, accumulateDelta } from "../../core/gameClock";
+import { scheduleEffectAnimation } from "../../core/effectScheduler";
 import { calculateDamageWithCrit, rollHit, getEffectiveArmor, logAoeHit, isUnitAlive, applyStatusEffect, setSkillCooldown } from "../../combat/combatMath";
 import { applyDamageToUnit, buildDamageContext } from "../../combat/damageEffects";
 import { soundFns } from "../../audio";
@@ -370,22 +371,21 @@ function createGlareFlash(scene: THREE.Scene, glare: GlareState): void {
     const startTime = getGameTime();
     const duration = 400;
 
-    function animate(): void {
-        const elapsed = getGameTime() - startTime;
+    scheduleEffectAnimation((gameNow) => {
+        const elapsed = gameNow - startTime;
         const progress = elapsed / duration;
 
         if (progress >= 1) {
             disposeBasicMesh(scene, ring);
-            return;
+            return true;
         }
 
         const scale = 1 + progress * 1.5;
         ring.scale.set(scale, scale, scale);
         material.opacity = 0.8 * (1 - progress);
 
-        requestAnimationFrame(animate);
-    }
-    animate();
+        return false;
+    });
 }
 
 // =============================================================================

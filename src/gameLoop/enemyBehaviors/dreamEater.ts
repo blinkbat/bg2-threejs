@@ -10,6 +10,7 @@ import { getAliveUnitsInRange, createAnimatedRing, applyDamageToUnit, buildDamag
 import { getUnitStats } from "../../game/units";
 import { soundFns } from "../../audio";
 import { getGameTime } from "../../core/gameClock";
+import { scheduleEffectAnimation } from "../../core/effectScheduler";
 import type { DreamEaterContext } from "./types";
 
 const UP_AXIS = new THREE.Vector3(0, 1, 0);
@@ -39,25 +40,24 @@ function createDreamBeam(
     scene.add(beam);
 
     const startTime = getGameTime();
-    const animate = () => {
-        const t = Math.min(1, (getGameTime() - startTime) / duration);
-        const material = beam.material as THREE.MeshBasicMaterial;
+    const material = beam.material as THREE.MeshBasicMaterial;
+
+    scheduleEffectAnimation((gameNow) => {
+        const t = Math.min(1, (gameNow - startTime) / duration);
         material.opacity = 0.82 * (1 - t);
 
         const pulseScale = 1 + Math.sin(t * Math.PI) * 0.3;
         beam.scale.set(pulseScale, 1, pulseScale);
 
         if (t < 1) {
-            requestAnimationFrame(animate);
-            return;
+            return false;
         }
 
         scene.remove(beam);
         beam.geometry.dispose();
         material.dispose();
-    };
-
-    requestAnimationFrame(animate);
+        return true;
+    });
 }
 
 /**

@@ -855,6 +855,13 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                         )
                         : getWaterMat(terrainWaterColor);
 
+                    // Keep rounded terrain-water tiles visually consistent with pooled water tiles.
+                    if (hasRounding) {
+                        waterMat.transparent = true;
+                        waterMat.opacity = WATER_TILE_OPACITY;
+                        waterMat.depthWrite = false;
+                    }
+
                     const tile = new THREE.Mesh(tileGeo, waterMat);
                     tile.rotation.x = -Math.PI / 2;
                     tile.position.set(x + 0.5, TERRAIN_BASE_Y + layerIndex * TERRAIN_LAYER_HEIGHT_STEP, z + 0.5);

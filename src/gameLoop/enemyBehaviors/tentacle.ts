@@ -11,6 +11,7 @@ import { soundFns } from "../../audio";
 import { setSkillCooldown } from "../../combat/combatMath";
 import { COLORS, TENTACLE_EMERGE_DURATION, TENTACLE_START_Y, MAX_LIFETIME_TENTACLES, TENTACLE_SPAWN_BUFFER } from "../../core/constants";
 import { getGameTime } from "../../core/gameClock";
+import { scheduleEffectAnimation } from "../../core/effectScheduler";
 import { applyDamageToUnit, type DamageContext } from "../../combat/damageEffects";
 import type { TentacleContext } from "./types";
 
@@ -308,8 +309,8 @@ function createTentacleEmergeEffect(scene: THREE.Scene, x: number, z: number): v
 
     // Animate rings expanding
     const startTime = getGameTime();
-    const animate = () => {
-        const elapsed = getGameTime() - startTime;
+    scheduleEffectAnimation((gameNow) => {
+        const elapsed = gameNow - startTime;
         const progress = elapsed / TENTACLE_EMERGE_DURATION;
 
         if (progress >= 1) {
@@ -318,7 +319,7 @@ function createTentacleEmergeEffect(scene: THREE.Scene, x: number, z: number): v
                 (r.geometry as THREE.BufferGeometry).dispose();
                 (r.material as THREE.Material).dispose();
             });
-            return;
+            return true;
         }
 
         // Stagger ring animations
@@ -331,7 +332,6 @@ function createTentacleEmergeEffect(scene: THREE.Scene, x: number, z: number): v
             }
         });
 
-        requestAnimationFrame(animate);
-    };
-    animate();
+        return false;
+    });
 }

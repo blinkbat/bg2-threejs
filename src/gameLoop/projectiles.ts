@@ -366,11 +366,24 @@ export function updateProjectiles(
 ): Projectile[] {
     // Shared DamageContext for all projectile hit processing
     const dmgCtx = buildDamageContext(scene, damageTexts, hitFlashRef, unitsRef, unitsState, setUnits, addLog, now, defeatedThisFrame);
+    const aliveUnits: Unit[] = [];
+    const alivePlayers: Unit[] = [];
+    const aliveEnemies: Unit[] = [];
+    for (const unit of unitsState) {
+        if (unit.hp <= 0 || defeatedThisFrame.has(unit.id)) continue;
+        aliveUnits.push(unit);
+        if (unit.team === "enemy") {
+            aliveEnemies.push(unit);
+        } else {
+            alivePlayers.push(unit);
+        }
+    }
 
     const explodeAoeProjectile = (proj: Projectile & { type: "aoe" }, explodeX: number, explodeZ: number): void => {
         const attackerUnit = getUnitById(proj.attackerId);
         const attackerData = attackerUnit ? getUnitStats(attackerUnit) : null;
         const { aoeRadius, damage } = proj;
+        const statBonus = calculateStatBonus(attackerUnit, proj.damageType);
 
         const explosion = new THREE.Mesh(
             new THREE.RingGeometry(0.1, aoeRadius, 32),
@@ -384,8 +397,7 @@ export function updateProjectiles(
 
         let hitCount = 0;
         let totalDamage = 0;
-        for (const target of unitsState) {
-            if (target.hp <= 0 || defeatedThisFrame.has(target.id)) continue;
+        for (const target of aliveUnits) {
             const tg = unitsRef[target.id];
             if (!tg) continue;
 
@@ -393,7 +405,6 @@ export function updateProjectiles(
             if (targetDist > aoeRadius) continue;
 
             const targetData = getUnitStats(target);
-            const statBonus = calculateStatBonus(attackerUnit, proj.damageType);
             const { damage: dmg } = calculateDamageWithCrit(
                 damage[0] + statBonus,
                 damage[1] + statBonus,
@@ -448,6 +459,7 @@ export function updateProjectiles(
             }
             proj.mesh.position.x = nextX;
             proj.mesh.position.z = nextZ;
+
             return true;
         }
 
@@ -458,6 +470,7 @@ export function updateProjectiles(
             updateMagicMissileVisual(proj.mesh, mmProj.missileIndex);
             const attackerName = attackerUnit ? getUnitStats(attackerUnit).name : "Unknown";
             const attackerG = unitsRef[mmProj.attackerId];
+            const statBonus = calculateStatBonus(attackerUnit, mmProj.damageType);
 
             if (!attackerUnit || !attackerG) {
                 resolveMagicWaveMissile(mmProj, attackerName, 0, addLog);
@@ -494,9 +507,7 @@ export function updateProjectiles(
             let damageDealt = 0;
             let shieldBlocked = false;
 
-            for (const targetUnit of unitsState) {
-                if (targetUnit.team !== "enemy") continue;
-                if (targetUnit.hp <= 0 || defeatedThisFrame.has(targetUnit.id)) continue;
+            for (const targetUnit of aliveEnemies) {
                 if (mmProj.hitUnits.has(targetUnit.id)) continue;
 
                 const targetG = unitsRef[targetUnit.id];
@@ -535,7 +546,6 @@ export function updateProjectiles(
 
                 if (!shieldBlocked) {
                     const targetData = getUnitStats(targetUnit);
-                    const statBonus = calculateStatBonus(attackerUnit, mmProj.damageType);
                     const result = calculateDamageWithCrit(
                         mmProj.damage[0] + statBonus,
                         mmProj.damage[1] + statBonus,
@@ -617,16 +627,11 @@ export function updateProjectiles(
             updateArmedTrapVisual(proj.mesh);
 
             // Trap is on the ground - check for enemy triggers
-            const enemies = unitsState.filter(u =>
-                u.team === "enemy" &&
-                u.hp > 0 &&
-                !defeatedThisFrame.has(u.id)
-            );
             const trapCaster = getUnitById(trapProj.attackerId);
             const trapCasterGroup = unitsRef[trapProj.attackerId];
             const trapCasterName = trapCaster ? getUnitStats(trapCaster).name : undefined;
 
-            for (const enemy of enemies) {
+            for (const enemy of aliveEnemies) {
                 const enemyG = unitsRef[enemy.id];
                 if (!enemyG) continue;
 
@@ -639,10 +644,11 @@ export function updateProjectiles(
                     // Trap triggered! Apply pinned effect and damage to all enemies in radius
                     let pinnedCount = 0;
                     let totalDamage = 0;
+                    const pinnedTargetIds: number[] = [];
 
-                    enemies.forEach(target => {
+                    for (const target of aliveEnemies) {
                         const targetG = unitsRef[target.id];
-                        if (!targetG) return;
+                        if (!targetG) continue;
 
                         const targetDist = distance(
                             targetG.position.x, targetG.position.z,
@@ -666,25 +672,29 @@ export function updateProjectiles(
                                 });
                             }
 
-                            // Apply pinned effect
-                            const pinnedEffect: StatusEffect = {
-                                type: "pinned",
-                                duration: trapProj.pinnedDuration,
-                                tickInterval: BUFF_TICK_INTERVAL,
-                                timeSinceTick: 0,
-                                lastUpdateTime: now,
-                                damagePerTick: 0,
-                                sourceId: trapProj.attackerId
-                            };
-
-                            setUnits(prev => prev.map(u => {
-                                if (u.id !== target.id || u.hp <= 0) return u;
-                                return { ...u, statusEffects: applyStatusEffect(u.statusEffects, pinnedEffect) };
-                            }));
+                            pinnedTargetIds.push(target.id);
 
                             pinnedCount++;
                         }
-                    });
+                    }
+
+                    if (pinnedTargetIds.length > 0) {
+                        const pinnedSet = new Set<number>(pinnedTargetIds);
+                        const pinnedEffect: StatusEffect = {
+                            type: "pinned",
+                            duration: trapProj.pinnedDuration,
+                            tickInterval: BUFF_TICK_INTERVAL,
+                            timeSinceTick: 0,
+                            lastUpdateTime: now,
+                            damagePerTick: 0,
+                            sourceId: trapProj.attackerId
+                        };
+
+                        setUnits(prev => prev.map(u => {
+                            if (!pinnedSet.has(u.id) || u.hp <= 0) return u;
+                            return { ...u, statusEffects: applyStatusEffect(u.statusEffects, pinnedEffect) };
+                        }));
+                    }
 
                     // Visual effect - red ring expanding
                     const triggerRing = new THREE.Mesh(
@@ -764,9 +774,11 @@ export function updateProjectiles(
 
             // Hit detection — only hit enemies (based on attackerTeam)
             const targetTeam = pProj.attackerTeam === "player" ? "enemy" : "player";
-            for (const target of unitsState) {
-                if (target.team !== targetTeam) continue;
-                if (target.hp <= 0 || defeatedThisFrame.has(target.id)) continue;
+            const targetCandidates = targetTeam === "enemy" ? aliveEnemies : alivePlayers;
+            const chilledTargets = new Set<number>();
+            const attackerName = attackerUnit ? getUnitStats(attackerUnit).name : undefined;
+            const statBonus = calculateStatBonus(attackerUnit, pProj.damageType);
+            for (const target of targetCandidates) {
                 if (pProj.hitUnits.has(target.id)) continue;
 
                 const targetG = unitsRef[target.id];
@@ -781,7 +793,6 @@ export function updateProjectiles(
                     pProj.hitUnits.add(target.id);
 
                     const targetData = getUnitStats(target);
-                    const statBonus = calculateStatBonus(attackerUnit, pProj.damageType);
                     const { damage: dmg } = calculateDamageWithCrit(
                         pProj.damage[0] + statBonus, pProj.damage[1] + statBonus,
                         getEffectiveArmor(target, targetData.armor),
@@ -790,7 +801,7 @@ export function updateProjectiles(
 
                     applyDamageToUnit(dmgCtx, target.id, targetG, dmg, targetData.name, {
                         color: COLORS.dmgCold,
-                        attackerName: attackerUnit ? getUnitStats(attackerUnit).name : undefined,
+                        attackerName,
                         targetUnit: target,
                         damageType: pProj.damageType
                     });
@@ -806,14 +817,19 @@ export function updateProjectiles(
 
                     // Roll for chill
                     if (rollChance(pProj.chillChance)) {
-                        setUnits(prev => prev.map(u =>
-                            u.id === target.id ? applyChilled(u, pProj.attackerId, now) : u
-                        ));
+                        chilledTargets.add(target.id);
                     }
 
                     soundFns.playHit();
                     aggroOnHit(target, pProj.attackerId, unitsRef);
                 }
+            }
+
+            if (chilledTargets.size > 0) {
+                setUnits(prev => prev.map(u => {
+                    if (!chilledTargets.has(u.id) || u.hp <= 0) return u;
+                    return applyChilled(u, pProj.attackerId, now);
+                }));
             }
 
             return true;
@@ -823,6 +839,7 @@ export function updateProjectiles(
         if (proj.type === "fireball") {
             const fbProj = proj as FireballProjectile;
             const attackerUnit = getUnitById(fbProj.attackerId);
+            const attackerData = attackerUnit ? getUnitStats(attackerUnit) : null;
             updateFireballVisual(proj.mesh);
 
             // Move fireball in straight line
@@ -859,9 +876,8 @@ export function updateProjectiles(
 
             // Check collision with all living units (hurts EVERYTHING - friendly fire!)
             // But don't hurt the attacker who fired it
-            for (const target of unitsState) {
+            for (const target of aliveUnits) {
                 if (target.id === fbProj.attackerId) continue;  // Don't hurt self
-                if (target.hp <= 0 || defeatedThisFrame.has(target.id)) continue;
                 if (fbProj.hitUnits.has(target.id)) continue;  // Already hit this unit
 
                 const targetG = unitsRef[target.id];
@@ -878,7 +894,6 @@ export function updateProjectiles(
                     fbProj.hitUnits.add(target.id);
 
                     const targetData = getUnitStats(target);
-                    const attackerData = attackerUnit ? getUnitStats(attackerUnit) : null;
 
                     const { damage: dmg } = calculateDamageWithCrit(
                         fbProj.damage[0], fbProj.damage[1],
@@ -1078,4 +1093,3 @@ export function updateProjectiles(
         return true;
     });
 }
-

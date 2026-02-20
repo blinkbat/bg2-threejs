@@ -14,6 +14,7 @@ import { resetAllBroodMotherScreeches, resetAllEnemyKiteCooldowns, resetAllEnemy
 import { resetAllMovementState } from "../ai/movement";
 import { resetBarks } from "../combat/barks";
 import { loadFogVisibility, saveFogVisibility } from "../game/fogMemory";
+import { clearEffectAnimations } from "../core/effectScheduler";
 
 /** All refs needed for Three.js scene management */
 export interface ThreeSceneState {
@@ -265,6 +266,7 @@ export function useThreeScene({
         resetAllEnemyKitingState();
         resetAllMovementState();
         resetBarks();
+        clearEffectAnimations();
 
         // Clear local refs that persist between game sessions
         const gameRefs = gameRefsRef.current;
@@ -351,6 +353,7 @@ export function useThreeScene({
         // Cleanup
         return () => {
             saveFogVisibility(areaIdAtMount, gameRefs.visibility);
+            clearEffectAnimations();
             disposeSceneResources(sceneRefs.scene);
             if (sceneRefs.renderer) {
                 sceneRefs.renderer.dispose();

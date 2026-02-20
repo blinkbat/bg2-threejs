@@ -13,6 +13,7 @@ import { soundFns } from "../../audio";
 import { createAnimatedRing } from "../damageEffects";
 import { updateUnitWith } from "../../core/stateUtils";
 import { getGameTime } from "../../core/gameClock";
+import { scheduleEffectAnimation } from "../../core/effectScheduler";
 import type { SkillExecutionContext } from "./types";
 import { consumeSkill, findClosestUnit } from "./helpers";
 
@@ -49,24 +50,24 @@ function createSwapBeam(
     scene.add(beam);
 
     const startTime = getGameTime();
-    const animate = () => {
-        const elapsed = getGameTime() - startTime;
+    const material = beam.material as THREE.MeshBasicMaterial;
+
+    scheduleEffectAnimation((gameNow) => {
+        const elapsed = gameNow - startTime;
         const t = Math.min(1, elapsed / duration);
-        const material = beam.material as THREE.MeshBasicMaterial;
         material.opacity = 0.82 * (1 - t);
         const pulseScale = 1 + Math.sin(t * Math.PI) * 0.25;
         beam.scale.set(pulseScale, 1, pulseScale);
 
         if (t < 1) {
-            requestAnimationFrame(animate);
-            return;
+            return false;
         }
 
         scene.remove(beam);
         beam.geometry.dispose();
         material.dispose();
-    };
-    requestAnimationFrame(animate);
+        return true;
+    });
 }
 
 /**
@@ -84,8 +85,8 @@ function animateDodgeDash(
     const flyHeight = casterG.userData.flyHeight ?? 0;
     const startTime = getGameTime();
 
-    const animate = () => {
-        const elapsed = getGameTime() - startTime;
+    scheduleEffectAnimation((gameNow) => {
+        const elapsed = gameNow - startTime;
         const t = Math.min(1, elapsed / DODGE_DASH_DURATION);
 
         // Ease-out for snappy feel
@@ -96,14 +97,13 @@ function animateDodgeDash(
         casterG.position.set(x, flyHeight, z);
 
         if (t < 1) {
-            requestAnimationFrame(animate);
-        } else {
-            // Ensure final position is exact
-            casterG.position.set(targetX, flyHeight, targetZ);
+            return false;
         }
-    };
 
-    requestAnimationFrame(animate);
+        // Ensure final position is exact
+        casterG.position.set(targetX, flyHeight, targetZ);
+        return true;
+    });
 
     // Spawn trail rings along the path
     const trailCount = 3;

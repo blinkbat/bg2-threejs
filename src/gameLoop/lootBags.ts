@@ -5,6 +5,7 @@
 import * as THREE from "three";
 import type { LootBag } from "../core/types";
 import { getGameTime } from "../core/gameClock";
+import { scheduleEffectAnimation } from "../core/effectScheduler";
 import { LOOT_BAG_DROP_HEIGHT, LOOT_BAG_BOUNCE_DURATION, LOOT_BAG_DROP_PHASE, LOOT_BAG_BOUNCE_HEIGHT } from "../core/constants";
 
 // =============================================================================
@@ -98,8 +99,8 @@ export function spawnLootBag(
     const startTime = getGameTime();
     const duration = LOOT_BAG_BOUNCE_DURATION;
 
-    const animate = () => {
-        const elapsed = getGameTime() - startTime;
+    scheduleEffectAnimation((gameNow) => {
+        const elapsed = gameNow - startTime;
         const progress = Math.min(1, elapsed / duration);
 
         // Bounce easing - cubic out with bounce
@@ -117,12 +118,12 @@ export function spawnLootBag(
         mesh.position.y = y;
 
         if (progress < 1) {
-            requestAnimationFrame(animate);
-        } else {
-            mesh.position.y = endY;
+            return false;
         }
-    };
-    animate();
+
+        mesh.position.y = endY;
+        return true;
+    });
 
     return {
         id,

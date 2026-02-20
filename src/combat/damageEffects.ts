@@ -18,6 +18,7 @@ import { soundFns } from "../audio";
 import { cleanupUnitState } from "../ai/movement";
 import { cleanupEnemyKiteCooldown } from "../game/enemyState";
 import { getGameTime } from "../core/gameClock";
+import { scheduleEffectAnimation } from "../core/effectScheduler";
 import { applySyncedUnitsUpdate } from "../core/stateUtils";
 import { logDefeated, applyPoison, applySlowed, hasStatusEffect, isUnitAlive } from "./combatMath";
 import { tryKillBark } from "./barks";
@@ -217,16 +218,10 @@ export function animateExpandingMesh(
     } = config;
 
     const startTime = getGameTime();
-    let animationId: number | null = null;
     let disposed = false;
+    let cancelScheduledAnimation: (() => void) | null = null;
 
-    const dispose = () => {
-        if (disposed) return;
-        disposed = true;
-        if (animationId !== null) {
-            cancelAnimationFrame(animationId);
-            animationId = null;
-        }
+    const cleanup = () => {
         scene.remove(mesh);
         if (mesh.userData.sharedGeometry !== true) {
             mesh.geometry.dispose();
@@ -234,22 +229,36 @@ export function animateExpandingMesh(
         (mesh.material as THREE.MeshBasicMaterial).dispose();
     };
 
-    const animate = () => {
+    const dispose = () => {
         if (disposed) return;
+        disposed = true;
+        if (cancelScheduledAnimation) {
+            cancelScheduledAnimation();
+            cancelScheduledAnimation = null;
+        }
+        cleanup();
+    };
 
-        const elapsed = getGameTime() - startTime;
+    cancelScheduledAnimation = scheduleEffectAnimation((gameNow) => {
+        if (disposed) {
+            return true;
+        }
+
+        const elapsed = gameNow - startTime;
         const t = Math.min(1, elapsed / duration);
         const currentScale = baseRadius + (maxScale - baseRadius) * t;
         mesh.scale.set(currentScale / baseRadius, currentScale / baseRadius, 1);
         (mesh.material as THREE.MeshBasicMaterial).opacity = initialOpacity * (1 - t);
 
         if (t < 1) {
-            requestAnimationFrame(animate);
-        } else {
-            dispose();
+            return false;
         }
-    };
-    requestAnimationFrame(animate);
+
+        disposed = true;
+        cleanup();
+        cancelScheduledAnimation = null;
+        return true;
+    });
 
     return dispose;
 }
@@ -294,32 +303,34 @@ export function createLightningPillar(
     scene.add(glow);
 
     const startTime = getGameTime();
+    const pillarMaterial = pillar.material as THREE.MeshBasicMaterial;
+    const glowMaterial = glow.material as THREE.MeshBasicMaterial;
 
-    const animate = () => {
-        const elapsed = getGameTime() - startTime;
+    scheduleEffectAnimation((gameNow) => {
+        const elapsed = gameNow - startTime;
         const t = Math.min(1, elapsed / duration);
 
         // Flash bright at start, then fade
         const flashT = t < 0.2 ? 1 : (1 - (t - 0.2) / 0.8);
-        (pillar.material as THREE.MeshBasicMaterial).opacity = flashT;
-        (glow.material as THREE.MeshBasicMaterial).opacity = flashT * 0.8;
+        pillarMaterial.opacity = flashT;
+        glowMaterial.opacity = flashT * 0.8;
 
         // Expand glow ring slightly
         const glowScale = 1 + t * 0.5;
         glow.scale.set(glowScale, glowScale, 1);
 
         if (t < 1) {
-            requestAnimationFrame(animate);
-        } else {
-            scene.remove(pillar);
-            scene.remove(glow);
-            pillar.geometry.dispose();
-            (pillar.material as THREE.MeshBasicMaterial).dispose();
-            glow.geometry.dispose();
-            (glow.material as THREE.MeshBasicMaterial).dispose();
+            return false;
         }
-    };
-    requestAnimationFrame(animate);
+
+        scene.remove(pillar);
+        scene.remove(glow);
+        pillar.geometry.dispose();
+        pillarMaterial.dispose();
+        glow.geometry.dispose();
+        glowMaterial.dispose();
+        return true;
+    });
 }
 
 // =============================================================================

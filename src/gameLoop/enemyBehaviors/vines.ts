@@ -9,6 +9,7 @@ import { soundFns } from "../../audio";
 import { setSkillCooldown, rollDamage } from "../../combat/combatMath";
 import { BUFF_TICK_INTERVAL, COLORS } from "../../core/constants";
 import { getGameTime } from "../../core/gameClock";
+import { scheduleEffectAnimation } from "../../core/effectScheduler";
 import { applyDamageToUnit, type DamageContext } from "../../combat/damageEffects";
 import type { VinesContext } from "./types";
 
@@ -125,15 +126,15 @@ function createVinesEffect(scene: THREE.Scene, x: number, z: number, duration: n
 
     // Animate and remove after duration
     const startTime = getGameTime();
-    const animate = () => {
-        const elapsed = getGameTime() - startTime;
+    scheduleEffectAnimation((gameNow) => {
+        const elapsed = gameNow - startTime;
         const progress = elapsed / duration;
 
         if (progress >= 1) {
             scene.remove(vinesGroup);
             geometries.forEach(g => g.dispose());
             vineMaterial.dispose();
-            return;
+            return true;
         }
 
         // Fade out near the end
@@ -146,7 +147,6 @@ function createVinesEffect(scene: THREE.Scene, x: number, z: number, duration: n
         // Gentle sway
         vinesGroup.rotation.y = Math.sin(elapsed / 200) * 0.1;
 
-        requestAnimationFrame(animate);
-    };
-    animate();
+        return false;
+    });
 }
