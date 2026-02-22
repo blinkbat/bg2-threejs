@@ -20,6 +20,8 @@ Adapted from `CLAUDE.md` for Codex usage.
 - Hard guardrail: do not introduce special-case unit mesh branches for individual enemy/unit IDs or types unless the user explicitly asks for that exact approach in the current thread.
 - Keep `EnemyType` and `ENEMY_STATS` strictly alphabetical when adding enemies.
 - If adding new fields to `EnemyStats`, wire them into runtime logic in the same change (or explicitly document why not).
+- Resource-cap rule: when clamping/restoring HP/MP at runtime, always use `getEffectiveMaxHp(unit.id, unit)` / `getEffectiveMaxMana(unit.id, unit)` with the live `Unit` snapshot (never raw `UNIT_DATA` max values).
+- Basic-attack rule: basic attack damage already receives stat bonuses in the combat/projectile pipeline; avoid pre-baking stat bonuses into execution payloads.
 - For rendering changes (`units`, `trees`, `water`, `lights`), always run `npm run build` and include a short verification note.
 - Do not add or reintroduce flashy basic-attack visuals unless explicitly requested.
 
@@ -36,6 +38,7 @@ React + Three.js ARPG. State in React (`Unit[]` via `setUnits`), 3D positions on
 | `core/types/` | `Unit`, `EnemyStats`, `Skill`, `StatusEffect`, `Projectile`, etc. Split: `units.ts`, `combat.ts`, `items.ts`, `world.ts` |
 | `core/constants.ts` | Magic numbers, durations, `COLORS`, speeds |
 | `core/gameClock.ts` | Pause-aware clock for animations: `getGameTime`, `updateGameClock`, `pauseGameClock`, `resumeGameClock` |
+| `core/effectScheduler.ts` | Shared pause-aware visual effect ticker (`scheduleEffectAnimation`, `updateEffectAnimations`, `clearEffectAnimations`) |
 | `core/stateUtils.ts` | `updateUnit()`, `updateUnitWith()`, `updateUnitsWhere()` — functional React state helpers |
 | `core/unitIds.ts` | `getNextUnitId()`, `initializeUnitIdCounter()` — collision-safe ID generation for spawns |
 | **Game data** | |
@@ -50,7 +53,10 @@ React + Three.js ARPG. State in React (`Unit[]` via `setUnits`), 3D positions on
 | `game/enemyState.ts` | Module-level enemy state: kite cooldowns, kiting status tracking |
 | `game/geometry.ts` | `distance()`, `distanceBetween()`, `distanceToPoint()`, `clampToGrid()`, `worldToCell()`, `cellToWorld()` |
 | `game/formation.ts` | `getFormationPositions()`, `getFormationPositionsForSpawn()` |
+| `game/formationOrder.ts` | Formation ordering helpers (`buildEffectiveFormationOrder`, `sortUnitsByFormationOrder`) |
 | `game/unitQuery.ts` | `getAliveUnits()`, `findNearestUnit()`, `isPlayerVisible()` |
+| `game/fogMemory.ts` | Persistent fog-of-war memory per area (`loadFogVisibility`, `saveFogVisibility`) |
+| `game/dungeon.ts` | Backwards-compatible proxy exports for current area grids (`blocked`, `getBlocked`, etc.) |
 | `game/saveLoad.ts` | Save/load system: save slots, versioning, persistence |
 | `game/areas/` | Area/map defs. `textLoader.ts` parses text maps, `helpers.ts` for blocked/terrain, `maps/` has map files |
 | **Combat** | |
@@ -159,5 +165,8 @@ React + Three.js ARPG. State in React (`Unit[]` via `setUnits`), 3D positions on
 - **`updateUnit()`/`updateUnitWith()`** — functional React state helpers in `core/stateUtils.ts`. Prefer over raw `setUnits(prev => prev.map(...))` for single-unit updates.
 - **Module-level state** — `game/equipmentState.ts`, `game/enemyState.ts`, `ai/movement.ts` store state outside React. Each has `initialize*()` / `reset*()` called from `useThreeScene` on area transitions.
 - **Unit ID generation** — `getNextUnitId()` from `core/unitIds.ts`. Use for all spawned units (broodlings, tentacles, split amoebas).
+- **HP/MP clamping** — healing/mana restoration must clamp against effective caps from the current `Unit` snapshot (`getEffectiveMaxHp/getEffectiveMaxMana` with `unit` arg).
+- **Basic attack payloads** — execution should rely on combat-time stat bonus application; do not double-apply stat bonuses in precomputed `Skill.damageRange`.
 - **Arc/Cone rotation**: For flat ground-plane arcs using `RingGeometry` + `rotation.x = -PI/2`, use `rotation.z = -facingAngle` where `facingAngle = atan2(dz, dx)`. Euler XYZ means Rz applies before Rx, so negation maps correctly to XZ plane. The shield mesh is a special case (`rotation.z = facing - PI/2`) due to its thetaStart.
+- **Verification scripts** — this repo currently exposes `npm run lint` and `npm run build` (no dedicated `test` script in `package.json`).
 

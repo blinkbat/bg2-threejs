@@ -3,7 +3,7 @@
 // =============================================================================
 
 // Enemy type identifiers
-export type EnemyType = "kobold" | "kobold_archer" | "kobold_witch_doctor" | "ogre" | "brood_mother" | "broodling" | "giant_amoeba" | "innkeeper" | "acid_slug" | "armored_crab" | "basilisk" | "bat" | "bloated_corpse" | "dire_possum" | "undead_knight" | "ancient_construct" | "feral_hound" | "corrupt_druid" | "skeleton_warrior" | "baby_kraken" | "kraken_tentacle" | "magma_imp" | "necromancer" | "skeleton_minion" | "chittering_crabling" | "spine_spitter" | "occultist_dreamwalker" | "occultist_firebreather" | "occultist_pygmy" | "wandering_shade";
+export type EnemyType = "acid_slug" | "ancient_construct" | "armored_crab" | "baby_kraken" | "basilisk" | "bat" | "bloated_corpse" | "brood_mother" | "broodling" | "chittering_crabling" | "corrupt_druid" | "dire_possum" | "feral_hound" | "giant_amoeba" | "innkeeper" | "kobold" | "kobold_archer" | "kobold_witch_doctor" | "kraken_tentacle" | "magma_imp" | "necromancer" | "occultist_dreamwalker" | "occultist_firebreather" | "occultist_pygmy" | "ogre" | "skeleton_minion" | "skeleton_warrior" | "spine_spitter" | "undead_knight" | "wandering_shade";
 
 // Status effect types
 export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed" | "chilled" | "qi_drain" | "energyShield" | "defiance" | "doom" | "invul" | "sleep" | "sun_stance" | "thorns" | "highland_defense" | "divine_lattice" | "weakened" | "hamstrung" | "blind" | "vanquishing_light" | "enraged";

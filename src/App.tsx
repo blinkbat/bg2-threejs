@@ -704,7 +704,7 @@ function Game({
         if (!userUnit || userUnit.hp <= 0) return false;
 
         if (item.effect === "heal") {
-            const maxHp = getEffectiveMaxHp(unitId);
+            const maxHp = getEffectiveMaxHp(unitId, userUnit);
             if (userUnit.hp >= maxHp) return false;
             const newHp = Math.min(maxHp, userUnit.hp + item.value);
             const healed = newHp - userUnit.hp;
@@ -723,7 +723,7 @@ function Game({
                 addLog(`${UNIT_DATA[unitId].name} is poisoned by ${item.name}!`, "#7cba7c");
             }
         } else if (item.effect === "mana") {
-            const maxMana = UNIT_DATA[unitId].maxMana ?? 0;
+            const maxMana = getEffectiveMaxMana(unitId, userUnit);
             const currentMana = userUnit.mana ?? 0;
             if (currentMana >= maxMana) return false;
             const newMana = Math.min(maxMana, currentMana + item.value);
@@ -1628,8 +1628,14 @@ export default function App() {
     // Transition overlay state (starts opaque so initial load fades in from black)
     const [transitionOpacity, setTransitionOpacity] = useState(1);
     const pendingTransition = useRef<{ players: PersistedPlayer[]; targetArea: AreaId; spawn: { x: number; z: number }; direction?: "north" | "south" | "east" | "west" } | null>(null);
+    const transitionTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
 
     const handleFullRestart = () => {
+        if (transitionTimeoutRef.current !== null) {
+            window.clearTimeout(transitionTimeoutRef.current);
+            transitionTimeoutRef.current = null;
+        }
+        pendingTransition.current = null;
         setPersistedPlayers(null);
         setSpawnPoint(null);
         setSpawnDirection(undefined);
@@ -1666,7 +1672,11 @@ export default function App() {
         soundFns.playFootsteps();
 
         // After fade completes, execute the actual transition
-        setTimeout(() => {
+        if (transitionTimeoutRef.current !== null) {
+            window.clearTimeout(transitionTimeoutRef.current);
+        }
+        transitionTimeoutRef.current = window.setTimeout(() => {
+            transitionTimeoutRef.current = null;
             if (pendingTransition.current) {
                 const { players: p, targetArea: area, spawn: s, direction: dir } = pendingTransition.current;
                 setPersistedPlayers(p);
@@ -1677,6 +1687,15 @@ export default function App() {
             }
         }, FADE_DURATION);
     };
+
+    useEffect(() => {
+        return () => {
+            if (transitionTimeoutRef.current !== null) {
+                window.clearTimeout(transitionTimeoutRef.current);
+                transitionTimeoutRef.current = null;
+            }
+        };
+    }, []);
 
     const handleSceneReady = useCallback(() => {
         // Scene is ready, fade out the overlay

@@ -14,7 +14,7 @@ import {
     HIGHLAND_DEFENSE_INTERCEPT_CAP,
     getSkillTextColor
 } from "../../core/constants";
-import { UNIT_DATA, getEffectiveMaxHp } from "../../game/playerUnits";
+import { UNIT_DATA, getEffectiveMaxHp, getEffectiveMaxMana } from "../../game/playerUnits";
 import { getFaithHealingBonus } from "../../game/statBonuses";
 import { rollDamage, hasStatusEffect, logHeal, logBuff, logCleanse, applyStatusEffect } from "../combatMath";
 import { tryHealBark } from "../barks";
@@ -253,7 +253,8 @@ export function executeManaTransferSkill(
 
     // Check if target is at full mana
     const targetData = UNIT_DATA[targetAlly.id];
-    if ((targetAlly.mana ?? 0) >= (targetData.maxMana ?? 0)) {
+    const targetMaxMana = getEffectiveMaxMana(targetAlly.id, targetAlly);
+    if ((targetAlly.mana ?? 0) >= targetMaxMana) {
         addLog(`${UNIT_DATA[casterId].name}: ${targetData.name} is at full mana!`, COLORS.logNeutral);
         return false;
     }
@@ -272,7 +273,7 @@ export function executeManaTransferSkill(
 
     // Give mana to ally
     const manaAmount = rollDamage(skill.manaRange![0], skill.manaRange![1]);
-    const actualMana = Math.min(manaAmount, (targetData.maxMana ?? 0) - (targetAlly.mana ?? 0));
+    const actualMana = Math.min(manaAmount, targetMaxMana - (targetAlly.mana ?? 0));
     const healTargetId = targetAlly.id;
 
     // Calculate self-damage (total damage over the duration)
@@ -282,7 +283,8 @@ export function executeManaTransferSkill(
     // Apply mana to target and qi_drain effect to caster
     setUnits(prev => prev.map(u => {
         if (u.id === healTargetId) {
-            return { ...u, mana: Math.min(targetData.maxMana ?? 0, (u.mana ?? 0) + actualMana) };
+            const maxMana = getEffectiveMaxMana(u.id, u);
+            return { ...u, mana: Math.min(maxMana, (u.mana ?? 0) + actualMana) };
         }
         if (u.id === casterId) {
             const existingEffects = u.statusEffects || [];
@@ -907,8 +909,7 @@ export function executeSunStanceSkill(
     if (success && skill.healRange) {
         // Small immediate heal
         const healAmount = rollDamage(skill.healRange[0], skill.healRange[1]);
-        const targetMaxHp = getEffectiveMaxHp(casterId);
-        updateUnitWith(setUnits, casterId, u => ({ hp: Math.min(targetMaxHp, u.hp + healAmount) }));
+        updateUnitWith(setUnits, casterId, u => ({ hp: Math.min(getEffectiveMaxHp(u.id, u), u.hp + healAmount) }));
 
         // Orange flash
         const mesh = unitMeshRef.current[casterId];

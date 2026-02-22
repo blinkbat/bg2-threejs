@@ -23,22 +23,6 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         acidAuraRadius: 1.5,     // 1.5 grid cells around itself
         expReward: 30
     },
-    armored_crab: {
-        name: "Armored Crab",
-        hp: 95,
-        maxHp: 95,
-        damage: [7, 12],
-        accuracy: 65,
-        armor: 4,              // Heavy shell
-        aggroRange: 8,
-        attackCooldown: 2400,
-        size: 1.8,             // Large enemy
-        moveSpeed: 0.55,       // Slow scuttling
-        expReward: 90,
-        baseCrit: 15,          // Medium crit chance
-        stunChance: 35,        // Medium chance to stun on hit
-        stunDuration: 1800
-    },
     ancient_construct: {
         name: "Ancient Construct",
         hp: 300,
@@ -62,6 +46,22 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
             damageType: "chaos"
         }
     },
+    armored_crab: {
+        name: "Armored Crab",
+        hp: 95,
+        maxHp: 95,
+        damage: [7, 12],
+        accuracy: 65,
+        armor: 4,              // Heavy shell
+        aggroRange: 8,
+        attackCooldown: 2400,
+        size: 1.8,             // Large enemy
+        moveSpeed: 0.55,       // Slow scuttling
+        expReward: 90,
+        baseCrit: 15,          // Medium crit chance
+        stunChance: 35,        // Medium chance to stun on hit
+        stunDuration: 1800
+    },
     baby_kraken: {
         name: "Kraken Nymph",
         hp: 150,
@@ -80,6 +80,34 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
             spawnRange: 6,         // Tentacles spawn up to 6 tiles away toward targets
             tentacleDuration: 5000, // Tentacles last 5 seconds
             damageToParent: 15     // Killing tentacle deals 15 damage to kraken
+        }
+    },
+    basilisk: {
+        name: "Basilisk Youngling",
+        hp: 180,
+        maxHp: 180,
+        damage: [8, 14],
+        accuracy: 70,
+        armor: 3,
+        aggroRange: 10,
+        attackCooldown: 2200,
+        moveSpeed: 0.7,
+        size: 1.8,
+        expReward: 100,
+        baseCrit: 5,
+        biteChance: 20,
+        biteDamage: [14, 22],
+        biteCrit: 40,
+        glareSkill: {
+            name: "Stunning Glare",
+            cooldown: 8000,
+            range: 7,
+            coneAngle: Math.PI / 4,
+            coneDistance: 5,
+            delay: 1500,
+            damage: [6, 12],
+            damageType: "chaos",
+            stunDuration: 2500
         }
     },
     bat: {
@@ -112,34 +140,6 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         deathAcidPool: {
             radius: 2.2,
             duration: 10000
-        }
-    },
-    basilisk: {
-        name: "Basilisk Youngling",
-        hp: 180,
-        maxHp: 180,
-        damage: [8, 14],
-        accuracy: 70,
-        armor: 3,
-        aggroRange: 10,
-        attackCooldown: 2200,
-        moveSpeed: 0.7,
-        size: 1.8,
-        expReward: 100,
-        baseCrit: 5,
-        biteChance: 20,
-        biteDamage: [14, 22],
-        biteCrit: 40,
-        glareSkill: {
-            name: "Stunning Glare",
-            cooldown: 8000,
-            range: 7,
-            coneAngle: Math.PI / 4,
-            coneDistance: 5,
-            delay: 1500,
-            damage: [6, 12],
-            damageType: "chaos",
-            stunDuration: 2500
         }
     },
     brood_mother: {
@@ -406,30 +406,6 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
             damageType: "chaos"
         }
     },
-    occultist_firebreather: {
-        name: "Occultist Firebreather",
-        hp: 100,
-        maxHp: 100,
-        damage: [0, 0],
-        accuracy: 70,
-        armor: 4,
-        aggroRange: 8,
-        attackCooldown: 1000,
-        size: 1.5,
-        moveSpeed: 0.35,
-        expReward: 55,
-        breathSkill: {
-            name: "Fire Breath",
-            cooldown: 4000,
-            range: 4,
-            coneAngle: Math.PI / 5,
-            coneDistance: 4,
-            tickInterval: 500,
-            damage: [3, 6],
-            damageType: "fire",
-            duration: 3000
-        }
-    },
     occultist_dreamwalker: {
         name: "Occultist Dreamwalker",
         hp: 55,
@@ -460,6 +436,30 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
             range: 8,
             damage: [20, 30],
             damageType: "chaos"
+        }
+    },
+    occultist_firebreather: {
+        name: "Occultist Firebreather",
+        hp: 100,
+        maxHp: 100,
+        damage: [0, 0],
+        accuracy: 70,
+        armor: 4,
+        aggroRange: 8,
+        attackCooldown: 1000,
+        size: 1.5,
+        moveSpeed: 0.35,
+        expReward: 55,
+        breathSkill: {
+            name: "Fire Breath",
+            cooldown: 4000,
+            range: 4,
+            coneAngle: Math.PI / 5,
+            coneDistance: 4,
+            tickInterval: 500,
+            damage: [3, 6],
+            damageType: "fire",
+            duration: 3000
         }
     },
     occultist_pygmy: {

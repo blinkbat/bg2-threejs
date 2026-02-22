@@ -67,18 +67,14 @@ export const UNIT_DATA: Record<number, UnitData> = {
 // =============================================================================
 
 /** Generate a "basic attack" pseudo-skill for display in UI. Uses equipment stats. */
-export function getBasicAttackSkill(unitId: number, unit?: Unit): Skill {
+export function getBasicAttackSkill(unitId: number): Skill {
     const data = UNIT_DATA[unitId];
 
     const usesEquipment = usesEquipmentForUnit(unitId);
-    const baseDamage = usesEquipment ? getEffectivePlayerDamage(unitId) : data.damage;
+    const damage = usesEquipment ? getEffectivePlayerDamage(unitId) : data.damage;
     const damageType = usesEquipment ? getEffectivePlayerDamageType(unitId) : (data.basicDamageType ?? "physical");
     const range = usesEquipment ? getEffectivePlayerRange(unitId) : data.range;
     const projectileColor = usesEquipment ? getEffectivePlayerProjectileColor(unitId) : data.projectileColor;
-
-    // Apply strength bonus to physical damage only
-    const strengthBonus = unit && damageType === "physical" ? getStrengthDamageBonus(unit) : 0;
-    const damage: [number, number] = [baseDamage[0] + strengthBonus, baseDamage[1] + strengthBonus];
 
     return {
         name: "Attack",
@@ -123,7 +119,7 @@ export function getAllSkills(unitId: number, unit?: Unit): Skill[] {
     const specials = learnedSet !== undefined
         ? data.skills.filter(s => learnedSet.includes(s.name))
         : data.skills;
-    return [getBasicAttackSkill(unitId, unit), ...specials];
+    return [getBasicAttackSkill(unitId), ...specials];
 }
 
 /** Get all possible skills for a unit (for skill learning UI) */

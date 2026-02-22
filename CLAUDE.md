@@ -9,6 +9,8 @@
 - Inspect usages on every change — reuse correctly, don't break contracts
 - Explicit complete types — no `any`, `as`, `!`, no guessed defaults (ask)
 - No placeholders/TODOs, no invented utilities, no runtime checks the type system covers
+- Resource-cap rule: when clamping/restoring HP/MP at runtime, always use `getEffectiveMaxHp(unit.id, unit)` / `getEffectiveMaxMana(unit.id, unit)` with the live `Unit` snapshot (never raw `UNIT_DATA` max values)
+- Basic-attack rule: basic attack damage already receives stat bonuses in the combat/projectile pipeline; avoid pre-baking stat bonuses into execution payloads
 - Ask before substantial refactors — offer `git commit` first
 - ALWAYS ask clarifying questions as though the user had finished by asking, "any questions?"
 - Consider the "cleanest" approach from a future-you perspective, not a get-it-done-now perspective. We have plenty of time, code carefully -- it matters!
@@ -27,6 +29,7 @@ React + Three.js ARPG. State in React (`Unit[]` via `setUnits`), 3D positions on
 | `core/types/` | `Unit`, `EnemyStats`, `Skill`, `StatusEffect`, `Projectile`, etc. Split: `units.ts`, `combat.ts`, `items.ts`, `world.ts` |
 | `core/constants.ts` | Magic numbers, durations, `COLORS`, speeds |
 | `core/gameClock.ts` | Pause-aware clock for animations: `getGameTime`, `updateGameClock`, `pauseGameClock`, `resumeGameClock` |
+| `core/effectScheduler.ts` | Shared pause-aware visual effect ticker (`scheduleEffectAnimation`, `updateEffectAnimations`, `clearEffectAnimations`) |
 | `core/stateUtils.ts` | `updateUnit()`, `updateUnitWith()`, `updateUnitsWhere()` — functional React state helpers |
 | `core/unitIds.ts` | `getNextUnitId()`, `initializeUnitIdCounter()` — collision-safe ID generation for spawns |
 | **Game data** | |
@@ -155,7 +158,10 @@ React + Three.js ARPG. State in React (`Unit[]` via `setUnits`), 3D positions on
 - **`updateUnit()`/`updateUnitWith()`** — functional React state helpers in `core/stateUtils.ts`. Prefer over raw `setUnits(prev => prev.map(...))` for single-unit updates.
 - **Module-level state** — `game/equipmentState.ts`, `game/enemyState.ts`, `game/fogMemory.ts`, `ai/movement.ts` store state outside React. Each has `initialize*()` / `reset*()` called from `useThreeScene` on area transitions.
 - **Unit ID generation** — `getNextUnitId()` from `core/unitIds.ts`. Use for all spawned units (broodlings, tentacles, split amoebas).
+- **HP/MP clamping** — healing/mana restoration must clamp against effective caps from the current `Unit` snapshot (`getEffectiveMaxHp/getEffectiveMaxMana` with `unit` arg).
+- **Basic attack payloads** — execution should rely on combat-time stat bonus application; do not double-apply stat bonuses in precomputed `Skill.damageRange`.
 - **Arc/Cone rotation**: For flat ground-plane arcs using `RingGeometry` + `rotation.x = -PI/2`, use `rotation.z = -facingAngle` where `facingAngle = atan2(dz, dx)`. Euler XYZ means Rz applies before Rx, so negation maps correctly to XZ plane. The shield mesh is a special case (`rotation.z = facing - PI/2`) due to its thetaStart.
 - **Projectile materials** — all projectiles use `MeshPhongMaterial` with emissive/specular. `createProjectileMaterial()` in `damageEffects.ts` clones from `projectileBaseMaterials`.
 - **Pre-attack dispatcher** — `runPreAttackBehaviors()` in `enemyBehaviors/preAttack.ts` runs all pre-attack behaviors (spawn, raise, tentacles, curses, glare, dream eater, sleep) before basic attack phase.
 - **Skill on-hit effects** — `onHitEffect` on `Skill` applies status (stun, attack_down, move_slow) via `SkillOnHitEffectType`. `delivery` field distinguishes melee vs ranged single-target skills. `isCantrip`/`maxUses` for charge-based skills.
+- **Verification scripts** — this repo currently exposes `npm run lint` and `npm run build` (no dedicated `test` script in `package.json`).
