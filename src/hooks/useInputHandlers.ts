@@ -66,6 +66,7 @@ export interface InputStateRefs {
     unitsStateRef: React.MutableRefObject<Unit[]>;
     selectedRef: React.MutableRefObject<number[]>;
     pausedRef: React.MutableRefObject<boolean>;
+    pauseToggleLockedRef: React.MutableRefObject<boolean>;
     targetingModeRef: React.MutableRefObject<{ casterId: number; skill: Skill } | null>;
     consumableTargetingModeRef: React.MutableRefObject<{ userId: number; itemId: string } | null>;
     showPanelRef: React.MutableRefObject<boolean>;
@@ -621,6 +622,9 @@ export function useInputHandlers({
         const onKeyDown = (e: KeyboardEvent) => {
             if (e.code === "Space") {
                 e.preventDefault();
+                if (stateRefs.pauseToggleLockedRef.current && stateRefs.pausedRef.current) {
+                    return;
+                }
                 togglePause(
                     { pauseStartTimeRef: stateRefs.pauseStartTimeRef, actionCooldownRef: mutableRefs.actionCooldownRef },
                     { pausedRef: stateRefs.pausedRef },

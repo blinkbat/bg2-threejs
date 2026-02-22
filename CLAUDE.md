@@ -1,167 +1,189 @@
-# Rules
+# Project Agent Guide (Timeless)
 
-## Environment
+This document is intentionally evergreen. It captures stable architecture, invariants, and workflows that should remain true even as implementations move.
 
-- This project runs on Windows. When using bash commands, always use relative paths from the project root. Never use absolute Windows paths (c:\...) in bash - they don't work in the shell environment. Use `find`, `ls`, `grep`, etc. with relative paths like `./src/...`.
-- For file reading/writing, use the dedicated file tools which handle Windows paths natively.
-- `"` not `'`, 4-space indent
-- Search for existing code before writing new — import, never rewrite
-- Inspect usages on every change — reuse correctly, don't break contracts
-- Explicit complete types — no `any`, `as`, `!`, no guessed defaults (ask)
-- No placeholders/TODOs, no invented utilities, no runtime checks the type system covers
-- Resource-cap rule: when clamping/restoring HP/MP at runtime, always use `getEffectiveMaxHp(unit.id, unit)` / `getEffectiveMaxMana(unit.id, unit)` with the live `Unit` snapshot (never raw `UNIT_DATA` max values)
-- Basic-attack rule: basic attack damage already receives stat bonuses in the combat/projectile pipeline; avoid pre-baking stat bonuses into execution payloads
-- Ask before substantial refactors — offer `git commit` first
-- ALWAYS ask clarifying questions as though the user had finished by asking, "any questions?"
-- Consider the "cleanest" approach from a future-you perspective, not a get-it-done-now perspective. We have plenty of time, code carefully -- it matters!
+## Goals
 
----
+- Keep changes safe, correct, and maintainable.
+- Favor reuse over reinvention.
+- Preserve gameplay and rendering contracts unless explicitly asked to change them.
 
-# Codebase Cheatsheet
+## Environment Defaults
 
-React + Three.js ARPG. State in React (`Unit[]` via `setUnits`), 3D positions on `UnitGroup` objects. Game loop mutates positions directly, batches React updates via `setUnits(prev => ...)`.
+- Platform: Windows.
+- In bash-style commands, use repo-relative paths (never absolute `c:\...` paths).
+- Use `"` quotes and 4-space indentation in TypeScript/TSX.
+- Prefer `rg` for search and file discovery.
 
-## Directory Map
+## Working Rules
 
-| Path | Purpose |
-|------|---------|
-| **Core** | |
-| `core/types/` | `Unit`, `EnemyStats`, `Skill`, `StatusEffect`, `Projectile`, etc. Split: `units.ts`, `combat.ts`, `items.ts`, `world.ts` |
-| `core/constants.ts` | Magic numbers, durations, `COLORS`, speeds |
-| `core/gameClock.ts` | Pause-aware clock for animations: `getGameTime`, `updateGameClock`, `pauseGameClock`, `resumeGameClock` |
-| `core/effectScheduler.ts` | Shared pause-aware visual effect ticker (`scheduleEffectAnimation`, `updateEffectAnimations`, `clearEffectAnimations`) |
-| `core/stateUtils.ts` | `updateUnit()`, `updateUnitWith()`, `updateUnitsWhere()` — functional React state helpers |
-| `core/unitIds.ts` | `getNextUnitId()`, `initializeUnitIdCounter()` — collision-safe ID generation for spawns |
-| **Game data** | |
-| `game/playerUnits.ts` | `UNIT_DATA`, `getEffectiveUnitData`, `getEffectiveMaxHp`, `getAllSkills`, `getBasicAttackSkill`, `getXpForLevel` |
-| `game/enemyStats.ts` | `ENEMY_STATS` keyed by `EnemyType` (alphabetical — editor dropdown derives from key order) |
-| `game/units.ts` | `getUnitStats(unit)` (player or enemy), `getAttackRange()` |
-| `game/skills.ts` | Player skill definitions (ranges, damage, cooldowns, mana) |
-| `game/statBonuses.ts` | Stat formulas: str->dmg, dex->crit, int->magic, faith->heal, vit->hp |
-| `game/items.ts` | Item definitions: weapons, shields, armor, accessories, consumables |
-| `game/equipment.ts` | Equipment slot logic and stat mods |
-| `game/equipmentState.ts` | Module-level equipment/inventory state store (`initializeEquipmentState`, `resetEquipmentState`) |
-| `game/enemyState.ts` | Module-level enemy state: kite cooldowns, kiting status tracking |
-| `game/geometry.ts` | `distance()`, `distanceBetween()`, `distanceToPoint()`, `clampToGrid()`, `worldToCell()`, `cellToWorld()` |
-| `game/formation.ts` | `getFormationPositions()`, `getFormationPositionsForSpawn()` |
-| `game/formationOrder.ts` | `buildEffectiveFormationOrder()`, `getFormationRank()`, `sortUnitsByFormationOrder()` |
-| `game/unitQuery.ts` | `getAliveUnits()`, `findNearestUnit()`, `isPlayerVisible()` |
-| `game/fogMemory.ts` | Fog-of-war visibility persistence: `loadFogVisibility()`, `saveFogVisibility()`, `clearFogVisibilityMemory()` |
-| `game/dungeon.ts` | Backwards-compat re-exports from area system (`getBlocked`, `blocked`, etc.) |
-| `game/saveLoad.ts` | Save/load system: save slots, versioning, persistence |
-| `game/areas/` | Area/map defs. `textLoader.ts` parses text maps, `helpers.ts` for blocked/terrain, `maps/` has map files |
-| **Combat** | |
-| `combat/combatMath.ts` | Hit/damage/crit/armor calc, poison/slow/weakened/hamstrung helpers, cooldown math, log builders |
-| `combat/damageEffects.ts` | `applyDamageToUnit()` (shields, split, defeat, XP, tentacle), `DamageContext`, projectile/ring creation |
-| `combat/barks.ts` | Random voice-line barks on kill/heal/spell events |
-| `combat/skills/` | Player skill executors. Router `index.ts`, `damage.ts`, `support.ts`, `utility.ts`, `movement.ts` |
-| `combat/skills/helpers.ts` | `findClosestTargetByTeam()`, `consumeSkill()` |
-| `combat/skills/types.ts` | `SkillExecutionContext` |
-| **Game loop** | |
-| `gameLoop/index.ts` | `updateUnitAI()`: targeting -> kiting -> behaviors -> attack -> movement |
-| `gameLoop/enemyAttack.ts` | `executeEnemyBasicAttack()` — melee/ranged/fireball (incl. bite) |
-| `gameLoop/enemySkills.ts` | `executeEnemySwipe()`, `executeEnemyHeal()` |
-| `gameLoop/enemyBehaviors/` | One file per ability, pattern: `try*()` returning boolean. `preAttack.ts` dispatches all pre-attack behaviors. |
-| `gameLoop/statusEffects.ts` | Per-tick processing: poison, buff expiry, doom, stun |
-| `gameLoop/projectiles.ts` | Projectile movement + impact per frame |
-| `gameLoop/acidTiles.ts` | Acid tile creation, damage ticks, aura |
-| `gameLoop/sanctuaryTiles.ts` | Sanctuary healing ticks |
-| `gameLoop/necromancerCurse.ts` | Delayed circular AoE with ground warning (curse telegraph) |
-| `gameLoop/constructCharge.ts` | Construct charge attack processing |
-| `gameLoop/lootBags.ts` | Loot bag spawning, bounce animation, pickup, cleanup |
-| `gameLoop/swingAnimations.ts` | Melee swing indicator visuals |
-| `gameLoop/fireBreath.ts` | Sustained channeled fire breath: cone mesh, per-frame damage, caster lockdown |
-| `gameLoop/visuals.ts` | Status effect tints, unit visual updates |
-| `gameLoop/tileUtils.ts` | Tile-related utility functions |
-| **Input / Hooks** | |
-| `input/index.ts` | Action queue (`QueuedAction`), pause handling, skill queueing, `processActionQueue()` |
-| `hooks/useGameLoop.ts` | Main game loop hook — calls `updateUnitAI`, processes effects/projectiles/glares/curses |
-| `hooks/useThreeScene.ts` | Three.js scene setup/teardown, cleanup on area transitions |
-| `hooks/useInputHandlers.ts` | Mouse/keyboard input, click-to-move, skill targeting, selection |
-| `hooks/hotbarStorage.ts` | Hotbar layout persistence |
-| `hooks/formationStorage.ts` | Formation layout persistence |
-| `hooks/useDisplayTime.ts` | Display time hook |
-| `hooks/localStorage.ts` | Persistent UI state: hotbar assignments, formation order (NOT game save) |
-| **AI** | |
-| `ai/unitAI.ts` | `runTargetingPhase()`, `runPathFollowingPhase()`, `runMovementPhase()` |
-| `ai/pathfinding.ts` | A* on the grid |
-| `ai/targeting.ts` | `tryKite()` for ranged enemy retreat |
-| `ai/movement.ts` | Stuck detection, jitter prevention, give-up cooldowns, target scan cooldowns |
-| **Rendering** | |
-| `rendering/range.ts` | `getUnitRadius()`, `isInRange()` — hitbox-aware |
-| `rendering/disposal.ts` | `disposeBasicMesh()`, `disposeGeometry()` — Three.js cleanup |
-| `rendering/scene/units.ts` | Unit mesh creation per enemy type |
-| `rendering/scene/updates.ts` | Scene element updates: chests, camera, water, billboards, LOD, transparency, fog |
-| `rendering/scene/types.ts` | `DoorMesh`, `SecretDoorMesh`, `ChestMeshData`, `SceneRefs` |
-| **UI / Audio** | |
-| `components/` | React UI: `PartyBar`, `UnitPanel`, `SkillHotbar`, `HUD`, `CombatLog`, modals |
-| `audio/` | `soundFns.*` object. Modular: `core.ts`, `combat.ts`, `creatures.ts`, `spells.ts`, `ui.ts`, `noise.ts`, re-exported from `index.ts` |
-| `editor/` | Map editor UI. `constants.ts` has `ENEMY_TYPES` from `Object.keys(ENEMY_STATS)` |
+- Search for existing patterns before adding new code.
+- Inspect usages before changing types, signatures, or data contracts.
+- Prefer explicit complete types.
+- Avoid `any`, type assertions, and non-null assertions unless strictly necessary.
+- Do not add placeholder/TODO code or speculative utilities.
+- Ask before substantial refactors.
+- Ask clarifying questions only when ambiguity blocks a safe implementation.
 
-## How-To Recipes
+## Hard Guardrails
 
-### New Enemy
-1. `core/types/units.ts` -> `EnemyType` union
-2. `game/enemyStats.ts` -> `ENEMY_STATS` entry (alphabetical key order)
-3. `rendering/scene/units.ts` -> mesh case
-4. Place in map or editor. If special behavior, see below.
+- Unit visuals:
+  - Do not add custom per-unit mesh branches in `src/rendering/scene/units.ts` unless explicitly requested.
+  - For new enemies, use existing sprite config paths or the shared default unit geometry path.
+- Enemy registries:
+  - Keep `EnemyType` and `ENEMY_STATS` strictly alphabetical.
+- Enemy stats schema:
+  - If adding fields to `EnemyStats`, wire them into runtime behavior in the same change (or document why not).
+- Resource caps:
+  - HP/MP clamping and restoration must use live-unit effective caps:
+  - `getEffectiveMaxHp(unit.id, unit)` and `getEffectiveMaxMana(unit.id, unit)`.
+- Basic attacks:
+  - Do not pre-bake stat bonuses into basic attack payload damage ranges.
+  - Stat bonuses are applied in combat/projectile runtime logic.
+- Rendering changes:
+  - For changes touching units/trees/water/lights, run `npm run build` and include a short verification note.
+- Visual style:
+  - Do not add flashy basic-attack visuals unless explicitly requested.
 
-### New Enemy Behavior
-1. Skill type on `EnemyStats` in `core/types/units.ts` (`mySkill?: EnemyMySkill`)
-2. Skill interface in `core/types/units.ts`
-3. Context interface in `gameLoop/enemyBehaviors/types.ts`
-4. `gameLoop/enemyBehaviors/myBehavior.ts` -> `tryMyBehavior(ctx): boolean`
-5. Export from `gameLoop/enemyBehaviors/index.ts` (types + functions)
-6. Wire in `gameLoop/index.ts` `updateUnitAI()`: `if (!isPlayer && 'mySkill' in data && data.mySkill) { ... }`
-7. If per-frame processing needed (telegraphs): add `process*()` call in `hooks/useGameLoop.ts`, add `clear*()` in `hooks/useThreeScene.ts`
-8. Set skill on enemy in `ENEMY_STATS`
+## Stable Entry Points
 
-### New Player Skill
-1. Define in `game/skills.ts`, add to unit's skill list
-2. Executor: single-target -> `executeTargetedDamageSkill()` in `damage.ts` | AoE -> custom in `damage.ts` | heal/buff -> `support.ts` | taunt/debuff/trap -> `utility.ts`
-3. Wire router in `combat/skills/index.ts` matching `skill.type` + `skill.targetType`
-4. Helpers: `consumeSkill`, `findClosestTargetByTeam`, `applyDamageToUnit`, `createAnimatedRing`, `createLightningPillar`, `rollHit`, `calculateDamageWithCrit`, `calculateDamageWithOptionalCritChance`, `getEffectiveArmor`, `calculateStatBonus`
+- App shell and orchestration:
+  - `src/App.tsx`
+  - `src/app/helpers.ts`
+- Scene creation and updates:
+  - `src/rendering/scene/index.ts`
+  - `src/rendering/scene/updates.ts`
+  - `src/rendering/scene/floorUtils.ts`
+  - `src/rendering/scene/lightUtils.ts`
+  - `src/rendering/scene/units.ts`
+- Main loop and input:
+  - `src/hooks/useGameLoop.ts`
+  - `src/hooks/useThreeScene.ts`
+  - `src/hooks/useInputHandlers.ts`
+  - `src/input/index.ts`
+- Combat and damage pipeline:
+  - `src/combat/skills/index.ts`
+  - `src/combat/combatMath.ts`
+  - `src/combat/damageEffects.ts`
+- Data and stats:
+  - `src/game/playerUnits.ts`
+  - `src/game/enemyStats.ts`
+  - `src/game/units.ts`
+  - `src/game/statBonuses.ts`
+- Map editor:
+  - `src/editor/MapEditor.tsx`
+  - `src/editor/areaConversion.ts`
+  - `src/editor/editorViewUtils.ts`
+  - `src/editor/constants.ts`
 
-### New Status Effect
-1. `core/types/units.ts` -> `StatusEffectType` union
-2. `core/constants.ts` -> duration, tick interval, colors
-3. `gameLoop/statusEffects.ts` -> tick processing
-4. `gameLoop/visuals.ts` -> visual tint
-5. Optional: `combat/combatMath.ts` -> application helper
+## Core Architectural Patterns
 
-### New Projectile Type
-1. `core/types/combat.ts` -> `Projectile` union
-2. Mesh in `combat/damageEffects.ts` or inline
-3. `gameLoop/projectiles.ts` -> case in `updateProjectiles()`
+- React owns canonical game state (`Unit[]`).
+- Three.js `UnitGroup` objects hold live visual transforms.
+- Game loop mutates scene objects each frame and batches React updates.
+- Functional updates are the default for React state writes.
+- Module-level runtime stores exist (for example equipment/enemy/movement/fog memory) and must be reset/initialized on area transitions.
 
-### New Equipment Item
-1. `game/items.ts` -> add to appropriate section (`WEAPONS`, `SHIELDS`, `ARMOR`, `ACCESSORIES`, `CONSUMABLES`)
-2. Define stat bonuses in item definition
-3. Optionally add to starting equipment in `game/equipment.ts`
+## Important Invariants
 
-### New Area/Map
-1. Create `.txt` map file in `game/areas/maps/`
-2. Register area in `game/areas/index.ts`
-3. Define transitions, decorations, secret doors, chests in area config
-4. Reference `game/areas/textLoader.ts` for map tile format, `game/areas/types.ts` for area types
+- Use `isInRange()` from `src/rendering/range.ts` for range checks.
+- Use `getGameTime()` for pause-aware visual animation timing.
+- Use `Date.now()` for game-logic timestamps (cooldowns, status effects) unless a subsystem requires otherwise.
+- Use `updateUnit()` / `updateUnitWith()` helpers from `src/core/stateUtils.ts` for targeted unit updates.
+- Use `getNextUnitId()` from `src/core/unitIds.ts` for spawned units.
+- Enemy behavior functions follow `try*(ctx): boolean` pattern.
+- Skill cooldown keys follow `${unitId}-${skillName}`.
 
-## Key Patterns
+## Rendering Notes
 
-- **`getGameTime()`** — visual animations that freeze when paused. Import from `core/gameClock`. Game-logic timestamps (cooldowns, status effects) still use `Date.now()`. Updated per frame in `useGameLoop`, paused/resumed in `togglePause()`.
-- **`defeatedThisFrame: Set<number>`** — prevents overkill from multiple damage sources per frame. `applyDamageToUnit` checks this internally.
-- **`setUnits(prev => prev.map(...))`** — always functional updates
-- **`unitsStateRef.current`** — read-only ref for fresh HP reads mid-frame
-- **`SkillExecutionContext`** / **`DamageContext`** — context bags for skill execution / damage pipeline
-- **Enemy behaviors**: `try*(ctx): boolean`
-- **Cooldown key**: `` `${unitId}-${skillName}` `` via `setSkillCooldown()`
-- **Range checks**: always `isInRange()` from `rendering/range.ts` (hitbox-aware)
-- **`updateUnit()`/`updateUnitWith()`** — functional React state helpers in `core/stateUtils.ts`. Prefer over raw `setUnits(prev => prev.map(...))` for single-unit updates.
-- **Module-level state** — `game/equipmentState.ts`, `game/enemyState.ts`, `game/fogMemory.ts`, `ai/movement.ts` store state outside React. Each has `initialize*()` / `reset*()` called from `useThreeScene` on area transitions.
-- **Unit ID generation** — `getNextUnitId()` from `core/unitIds.ts`. Use for all spawned units (broodlings, tentacles, split amoebas).
-- **HP/MP clamping** — healing/mana restoration must clamp against effective caps from the current `Unit` snapshot (`getEffectiveMaxHp/getEffectiveMaxMana` with `unit` arg).
-- **Basic attack payloads** — execution should rely on combat-time stat bonus application; do not double-apply stat bonuses in precomputed `Skill.damageRange`.
-- **Arc/Cone rotation**: For flat ground-plane arcs using `RingGeometry` + `rotation.x = -PI/2`, use `rotation.z = -facingAngle` where `facingAngle = atan2(dz, dx)`. Euler XYZ means Rz applies before Rx, so negation maps correctly to XZ plane. The shield mesh is a special case (`rotation.z = facing - PI/2`) due to its thetaStart.
-- **Projectile materials** — all projectiles use `MeshPhongMaterial` with emissive/specular. `createProjectileMaterial()` in `damageEffects.ts` clones from `projectileBaseMaterials`.
-- **Pre-attack dispatcher** — `runPreAttackBehaviors()` in `enemyBehaviors/preAttack.ts` runs all pre-attack behaviors (spawn, raise, tentacles, curses, glare, dream eater, sleep) before basic attack phase.
-- **Skill on-hit effects** — `onHitEffect` on `Skill` applies status (stun, attack_down, move_slow) via `SkillOnHitEffectType`. `delivery` field distinguishes melee vs ranged single-target skills. `isCantrip`/`maxUses` for charge-based skills.
-- **Verification scripts** — this repo currently exposes `npm run lint` and `npm run build` (no dedicated `test` script in `package.json`).
+- Keep floor/tint/variation logic in `src/rendering/scene/floorUtils.ts`.
+- Keep light normalization and clustering logic in `src/rendering/scene/lightUtils.ts`.
+- Keep scene assembly and object ownership in `src/rendering/scene/index.ts`.
+- Keep frame-to-frame scene mutations in `src/rendering/scene/updates.ts`.
+- Flat ground-plane arc/circle meshes (`RingGeometry` with `rotation.x = -PI/2`): use `rotation.z = -facingAngle` where `facingAngle = atan2(dz, dx)`.
+
+## Editor Notes
+
+- `src/editor/MapEditor.tsx` should remain focused on UI interactions and state orchestration.
+- Area/grid conversions and sanitization belong in `src/editor/areaConversion.ts`.
+- Canvas drawing colors/storage helpers belong in `src/editor/editorViewUtils.ts`.
+- Editor enemy types are derived from `Object.keys(ENEMY_STATS)` in `src/editor/constants.ts`; alphabetical ordering matters.
+
+## Extension Playbooks
+
+### Add a New Enemy
+
+1. Add new `EnemyType` in `src/core/types/units.ts` (alphabetical).
+2. Add `ENEMY_STATS` entry in `src/game/enemyStats.ts` (alphabetical).
+3. Reuse existing sprite/default geometry path in `src/rendering/scene/units.ts`.
+4. Place in map/editor and validate behavior in-game.
+
+### Add a New Enemy Behavior
+
+1. Add optional behavior config on `EnemyStats` type.
+2. Add behavior interfaces in `src/core/types/units.ts` and behavior context types.
+3. Implement `tryMyBehavior(ctx): boolean` in `src/gameLoop/enemyBehaviors/`.
+4. Export via `src/gameLoop/enemyBehaviors/index.ts`.
+5. Wire execution from `src/gameLoop/index.ts`.
+6. If it has per-frame processing/telegraphs, wire process and clear lifecycle in loop/scene hooks.
+
+### Add a New Player Skill
+
+1. Define skill in `src/game/skills.ts` and add to class/unit lists.
+2. Implement execution in appropriate combat skill module (`damage`, `support`, `utility`, `movement`).
+3. Route in `src/combat/skills/index.ts` by `skill.type` and target semantics.
+4. Reuse damage/status helper pipeline functions.
+
+### Add a New Status Effect
+
+1. Add type in `src/core/types/units.ts`.
+2. Add constants/colors/durations in `src/core/constants.ts`.
+3. Process effect in `src/gameLoop/statusEffects.ts`.
+4. Add visuals in `src/gameLoop/visuals.ts`.
+
+### Add a New Projectile Type
+
+1. Extend projectile type(s) in `src/core/types/combat.ts`.
+2. Add creation logic in damage/skill executor path.
+3. Handle runtime update/impact in `src/gameLoop/projectiles.ts`.
+
+### Add a New Area/Map
+
+1. Add map text file under `src/game/areas/maps/`.
+2. Register area in `src/game/areas/index.ts`.
+3. Define transitions/decorations/chests/secret doors in area data.
+4. Validate blocked/terrain semantics through area helpers.
+
+## Verification Defaults
+
+- Fast checks:
+  - `npm run lint`
+  - `npm run build`
+- Full local gate:
+  - `npm run test`
+- For rendering-affecting changes, always include a concise visual verification note.
+
+## Change Checklist
+
+Before finalizing:
+
+1. Contracts preserved (types, call sites, serialized data).
+2. Invariants preserved (ordering, caps, IDs, range checks, behavior patterns).
+3. Module ownership respected (scene vs updates vs helpers, editor UI vs conversion helpers).
+4. Verification commands completed and results noted.
+
+## Anti-Patterns to Avoid
+
+- Re-implementing existing helpers instead of importing them.
+- Silent behavior changes while doing structural refactors.
+- Introducing per-enemy visual special cases in core unit rendering.
+- Clamping HP/MP to static base values instead of effective runtime caps.
+- Adding one-off fixes that bypass shared pipelines.
+
+## Maintenance Rule for This Document
+
+- Prefer stable concepts over volatile specifics.
+- Update this guide when architectural ownership or invariants change.
+- Avoid adding temporary migration notes, dates, or recency language.
+
+

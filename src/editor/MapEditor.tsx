@@ -9,9 +9,6 @@ import {
     DEFAULT_AREA_LIGHT_HEIGHT,
     DEFAULT_AREA_LIGHT_RADIUS,
     DEFAULT_AREA_LIGHT_TINT,
-    MAX_PINE_TREE_SIZE,
-    MAX_TREE_SIZE,
-    MIN_TREE_SIZE,
     type AreaId,
     type AreaData,
     type EnemySpawn,
@@ -27,10 +24,32 @@ import { DEFAULT_CANDLE_LIGHT_COLOR, DEFAULT_TORCH_LIGHT_COLOR } from "../core/c
 
 // Editor modules
 import type { Tool, Layer, MapMetadata, EntityDef, TreeDef, DecorationDef, EditorSnapshot } from "./types";
-import { getAvailableAreaIds, BASE_CELL_SIZE, MAX_HISTORY, LAYER_COLORS, LAYER_BRUSHES, PROP_TYPE_TO_CHAR, PROP_CHAR_TO_TYPE, PROP_TREE_CHARS, PROP_CHAR_TO_TREE_TYPE, PROP_TREE_TYPE_TO_CHAR } from "./constants";
+import { getAvailableAreaIds, BASE_CELL_SIZE, MAX_HISTORY, LAYER_BRUSHES, PROP_TYPE_TO_CHAR, PROP_TREE_TYPE_TO_CHAR } from "./constants";
 import { registerAreaFromText } from "../game/areas";
 import { EntityEditPopup, TreeEditPopup, DecorationEditPopup } from "./popups";
 import { ConnectionsPanel } from "./panels";
+import {
+    clampFiniteNumber,
+    clampTreeSizeByType,
+    computeEntitiesFromArea,
+    computePropsFromArea,
+    createEmptyLayer,
+    extractEntitiesFromGrid,
+    extractPropsFromLayer,
+    isBlockingPropCell,
+    normalizeLightHexColor,
+    resizeLayer,
+    resizeTintLayer,
+    sanitizeEnemySpawns,
+} from "./areaConversion";
+import {
+    drawLayer,
+    getCharColor,
+    getLayerColor,
+    loadLastSavedAreaId,
+    normalizeSecretDoorEntity,
+    persistLastSavedAreaId,
+} from "./editorViewUtils";
 import {
     clampTileTintPercent,
     cloneTileLayerStack,
@@ -43,79 +62,6 @@ import {
     normalizeTintLayerStack,
     TILE_EMPTY,
 } from "../game/areas/tileLayers";
-
-function getCharColor(char: string, layer: Layer): string {
-    return LAYER_COLORS[layer].get(char) ?? "#666";
-}
-
-function getLayerColor(layer: Layer): string {
-    switch (layer) {
-        case "geometry": return "#888";
-        case "terrain": return "#f80";
-        case "floor": return "#a86";
-        case "props": return "#4a4";
-        case "entities": return "#f44";
-    }
-}
-
-function tintColorForEditor(hexColor: string, tintPercent: number): string {
-    const clamped = clampTileTintPercent(tintPercent);
-    if (clamped === 0) return hexColor;
-    const parsed = hexColor.match(/^#?([0-9a-fA-F]{6})$/);
-    if (!parsed) return hexColor;
-    const raw = parsed[1];
-    const r = parseInt(raw.slice(0, 2), 16);
-    const g = parseInt(raw.slice(2, 4), 16);
-    const b = parseInt(raw.slice(4, 6), 16);
-    const factor = Math.min(1, Math.abs(clamped) / 35);
-
-    const blendChannel = (value: number): number => {
-        if (clamped > 0) {
-            return Math.round(value + (255 - value) * factor * 0.45);
-        }
-        return Math.round(value * (1 - factor * 0.45));
-    };
-
-    const tintedR = blendChannel(r);
-    const tintedG = blendChannel(g);
-    const tintedB = blendChannel(b);
-    const toHex = (value: number): string => value.toString(16).padStart(2, "0");
-    return `#${toHex(tintedR)}${toHex(tintedG)}${toHex(tintedB)}`;
-}
-
-function drawLayer(
-    ctx: CanvasRenderingContext2D,
-    layer: string[][],
-    layerType: Layer,
-    cellSize: number,
-    tintGrid?: number[][]
-): void {
-    for (let z = 0; z < layer.length; z++) {
-        for (let x = 0; x < layer[z].length; x++) {
-            const char = layer[z][x];
-            if (char === ".") continue;
-
-            const tintPercent = tintGrid?.[z]?.[x] ?? 0;
-            const baseColor = getCharColor(char, layerType);
-            const color = (layerType === "floor" || layerType === "terrain") && baseColor
-                ? tintColorForEditor(baseColor, tintPercent)
-                : baseColor;
-            ctx.fillStyle = color;
-            ctx.fillRect(x * cellSize + 1, z * cellSize + 1, cellSize - 2, cellSize - 2);
-
-            // Draw char label (skip for floor layer - just show color)
-            if (layerType !== "floor") {
-                ctx.fillStyle = "#fff";
-                ctx.font = "14px monospace";
-                ctx.textAlign = "center";
-                ctx.textBaseline = "middle";
-                ctx.fillText(char, x * cellSize + cellSize / 2, z * cellSize + cellSize / 2);
-            }
-        }
-    }
-}
-
-const LAST_SAVED_AREA_ID_STORAGE_KEY = "bg2-editor-last-saved-area-id";
 
 type EditorClipboard =
     | { kind: "entity"; entity: EntityDef }
@@ -133,57 +79,6 @@ interface EditorContextMenuState {
 }
 
 type DragEntityBrush = "D" | "S";
-
-function getSecretDoorCenterTile(
-    blockX: number,
-    blockZ: number,
-    blockW: number,
-    blockH: number
-): { x: number; z: number } {
-    return {
-        x: blockX + Math.floor((blockW - 1) / 2),
-        z: blockZ + Math.floor((blockH - 1) / 2),
-    };
-}
-
-function normalizeSecretDoorEntity(entity: EntityDef): EntityDef {
-    if (entity.type !== "secret_door") {
-        return entity;
-    }
-
-    const blockX = Math.floor(entity.secretBlockX ?? entity.x);
-    const blockZ = Math.floor(entity.secretBlockZ ?? entity.z);
-    const blockW = Math.max(1, Math.floor(entity.secretBlockW ?? 1));
-    const blockH = Math.max(1, Math.floor(entity.secretBlockH ?? 1));
-    const center = getSecretDoorCenterTile(blockX, blockZ, blockW, blockH);
-
-    return {
-        ...entity,
-        x: center.x,
-        z: center.z,
-        secretBlockX: blockX,
-        secretBlockZ: blockZ,
-        secretBlockW: blockW,
-        secretBlockH: blockH,
-    };
-}
-
-function loadLastSavedAreaId(): string | null {
-    try {
-        const raw = localStorage.getItem(LAST_SAVED_AREA_ID_STORAGE_KEY);
-        return raw && raw.trim().length > 0 ? raw.trim() : null;
-    } catch {
-        return null;
-    }
-}
-
-function persistLastSavedAreaId(areaId: string): void {
-    try {
-        localStorage.setItem(LAST_SAVED_AREA_ID_STORAGE_KEY, areaId);
-    } catch {
-        // Ignore storage failures (private mode/quota).
-    }
-}
 
 // =============================================================================
 // COMPONENT
@@ -2194,342 +2089,4 @@ export function MapEditor() {
             </div>
         </div>
     );
-}
-
-// =============================================================================
-// HELPERS
-// =============================================================================
-
-function normalizeLightHexColor(color: string | undefined, fallback: string): string {
-    if (typeof color === "string" && /^#[0-9a-fA-F]{6}$/.test(color)) {
-        return color.toLowerCase();
-    }
-    return fallback;
-}
-
-function clampFiniteNumber(value: number | undefined, min: number, max: number, fallback: number): number {
-    if (typeof value !== "number" || !Number.isFinite(value)) {
-        return fallback;
-    }
-    return Math.max(min, Math.min(max, value));
-}
-
-function createEmptyLayer(width: number, height: number, fill: string): string[][] {
-    return Array.from({ length: height }, () => Array(width).fill(fill));
-}
-
-function resizeLayer(layer: string[][], newWidth: number, newHeight: number, fill: string): string[][] {
-    const result: string[][] = [];
-    for (let z = 0; z < newHeight; z++) {
-        const row: string[] = [];
-        for (let x = 0; x < newWidth; x++) {
-            if (z < layer.length && x < layer[z].length) {
-                row.push(layer[z][x]);
-            } else {
-                row.push(fill);
-            }
-        }
-        result.push(row);
-    }
-    return result;
-}
-
-function resizeTintLayer(layer: number[][], newWidth: number, newHeight: number): number[][] {
-    const result: number[][] = [];
-    for (let z = 0; z < newHeight; z++) {
-        const row: number[] = [];
-        for (let x = 0; x < newWidth; x++) {
-            row.push(clampTileTintPercent(layer[z]?.[x] ?? 0));
-        }
-        result.push(row);
-    }
-    return result;
-}
-
-// =============================================================================
-// AREA DATA CONVERSION HELPERS
-// =============================================================================
-
-function computePropsFromArea(area: AreaData, width: number, height: number): string[][] {
-    const grid: string[][] = Array.from({ length: height }, () => Array(width).fill("."));
-
-    for (const tree of area.trees) {
-        const x = Math.floor(tree.x);
-        const z = Math.floor(tree.z);
-        if (x >= 0 && x < width && z >= 0 && z < height) {
-            grid[z][x] = PROP_TREE_TYPE_TO_CHAR.get(tree.type ?? "pine") ?? "T";
-        }
-    }
-
-    if (area.decorations) {
-        for (const dec of area.decorations) {
-            const x = Math.floor(dec.x);
-            const z = Math.floor(dec.z);
-            if (x >= 0 && x < width && z >= 0 && z < height) {
-                const char = PROP_TYPE_TO_CHAR.get(dec.type);
-                if (char) grid[z][x] = char;
-            }
-        }
-    }
-
-    return grid;
-}
-
-function computeEntitiesFromArea(area: AreaData, width: number, height: number): string[][] {
-    const grid: string[][] = Array.from({ length: height }, () => Array(width).fill("."));
-
-    // Spawn point
-    const sx = Math.floor(area.defaultSpawn.x);
-    const sz = Math.floor(area.defaultSpawn.z);
-    if (sx >= 0 && sx < width && sz >= 0 && sz < height) grid[sz][sx] = "@";
-
-    // Enemies
-    for (const enemy of area.enemySpawns) {
-        const x = Math.floor(enemy.x);
-        const z = Math.floor(enemy.z);
-        if (x >= 0 && x < width && z >= 0 && z < height) grid[z][x] = "E";
-    }
-
-    // Chests
-    for (const chest of area.chests) {
-        const x = Math.floor(chest.x);
-        const z = Math.floor(chest.z);
-        if (x >= 0 && x < width && z >= 0 && z < height) grid[z][x] = "X";
-    }
-
-    // Transitions (doors) - fill entire door area for multi-tile doors
-    for (const trans of area.transitions) {
-        const startX = Math.floor(trans.x);
-        const startZ = Math.floor(trans.z);
-        for (let dz = 0; dz < trans.h; dz++) {
-            for (let dx = 0; dx < trans.w; dx++) {
-                const x = startX + dx;
-                const z = startZ + dz;
-                if (x >= 0 && x < width && z >= 0 && z < height) grid[z][x] = "D";
-            }
-        }
-    }
-
-    // Candles
-    if (area.candles) {
-        for (const candle of area.candles) {
-            const x = Math.floor(candle.x);
-            const z = Math.floor(candle.z);
-            if (x >= 0 && x < width && z >= 0 && z < height) {
-                grid[z][x] = candle.kind === "torch" ? "Y" : "L";
-            }
-        }
-    }
-
-    // High lights
-    if (area.lights) {
-        for (const light of area.lights) {
-            const x = Math.floor(light.x);
-            const z = Math.floor(light.z);
-            if (x >= 0 && x < width && z >= 0 && z < height) grid[z][x] = "H";
-        }
-    }
-
-    // Secret doors
-    if (area.secretDoors) {
-        for (const sd of area.secretDoors) {
-            const startX = Math.floor(sd.blockingWall.x);
-            const startZ = Math.floor(sd.blockingWall.z);
-            const wallW = Math.max(1, Math.floor(sd.blockingWall.w));
-            const wallH = Math.max(1, Math.floor(sd.blockingWall.h));
-            for (let dz = 0; dz < wallH; dz++) {
-                for (let dx = 0; dx < wallW; dx++) {
-                    const x = startX + dx;
-                    const z = startZ + dz;
-                    if (x >= 0 && x < width && z >= 0 && z < height) grid[z][x] = "S";
-                }
-            }
-        }
-    }
-
-    return grid;
-}
-
-function extractPropsFromLayer(props: string[][]): { trees: TreeLocation[]; decorations: Decoration[] } {
-    const trees: TreeLocation[] = [];
-    const decorations: Decoration[] = [];
-
-    for (let z = 0; z < props.length; z++) {
-        for (let x = 0; x < props[z].length; x++) {
-            const char = props[z][x];
-            if (PROP_TREE_CHARS.has(char)) {
-                trees.push({ x, z, size: 1.0, type: PROP_CHAR_TO_TREE_TYPE.get(char) });
-            } else {
-                const decType = PROP_CHAR_TO_TYPE.get(char);
-                if (decType) {
-                    decorations.push({ x, z, type: decType });
-                }
-            }
-        }
-    }
-
-    return { trees, decorations };
-}
-
-function extractEntitiesFromGrid(entitiesLayer: string[][]): { enemies: { x: number; z: number }[]; chests: { x: number; z: number }[] } {
-    const enemies: { x: number; z: number }[] = [];
-    const chests: { x: number; z: number }[] = [];
-
-    for (let z = 0; z < entitiesLayer.length; z++) {
-        for (let x = 0; x < entitiesLayer[z].length; x++) {
-            const char = entitiesLayer[z][x];
-            if (char === "E") enemies.push({ x, z });
-            else if (char === "X") chests.push({ x, z });
-        }
-    }
-
-    return { enemies, chests };
-}
-
-const NON_BLOCKING_PROP_DECORATIONS = new Set<Decoration["type"]>([
-    "small_rock",
-    "mushroom",
-    "small_mushroom",
-    "fern",
-    "small_fern",
-    "weeds",
-    "small_weeds",
-    "chair",
-]);
-
-function clampTreeSizeByType(size: number, treeType: TreeLocation["type"]): number {
-    const normalizedType = treeType ?? "pine";
-    const clampedBase = Math.max(MIN_TREE_SIZE, Math.min(MAX_TREE_SIZE, Number.isFinite(size) ? size : 1));
-    if (normalizedType === "pine") {
-        return Math.min(clampedBase, MAX_PINE_TREE_SIZE);
-    }
-    return clampedBase;
-}
-
-function isBlockingPropCell(propsLayer: string[][], x: number, z: number): boolean {
-    const char = propsLayer[z]?.[x] ?? ".";
-    if (PROP_TREE_CHARS.has(char)) {
-        return true;
-    }
-    const decType = PROP_CHAR_TO_TYPE.get(char);
-    if (!decType) {
-        return false;
-    }
-    return !NON_BLOCKING_PROP_DECORATIONS.has(decType);
-}
-
-function isValidEnemySpawnCell(
-    x: number,
-    z: number,
-    geometryLayer: string[][],
-    terrainLayer: string[][],
-    propsLayer: string[][],
-    width: number,
-    height: number,
-    occupied: Set<string>
-): boolean {
-    if (x < 0 || z < 0 || x >= width || z >= height) {
-        return false;
-    }
-
-    if ((geometryLayer[z]?.[x] ?? "#") !== ".") {
-        return false;
-    }
-
-    const terrain = terrainLayer[z]?.[x] ?? ".";
-    if (terrain === "~" || terrain === "w") {
-        return false;
-    }
-
-    if (isBlockingPropCell(propsLayer, x, z)) {
-        return false;
-    }
-
-    return !occupied.has(`${x},${z}`);
-}
-
-function findNearestValidEnemySpawnCell(
-    startX: number,
-    startZ: number,
-    geometryLayer: string[][],
-    terrainLayer: string[][],
-    propsLayer: string[][],
-    width: number,
-    height: number,
-    occupied: Set<string>
-): { x: number; z: number } | null {
-    if (isValidEnemySpawnCell(startX, startZ, geometryLayer, terrainLayer, propsLayer, width, height, occupied)) {
-        return { x: startX, z: startZ };
-    }
-
-    const maxRadius = Math.max(width, height);
-    for (let radius = 1; radius <= maxRadius; radius++) {
-        let best: { x: number; z: number; distSq: number } | null = null;
-
-        for (let dz = -radius; dz <= radius; dz++) {
-            for (let dx = -radius; dx <= radius; dx++) {
-                if (Math.abs(dx) !== radius && Math.abs(dz) !== radius) {
-                    continue;
-                }
-
-                const x = startX + dx;
-                const z = startZ + dz;
-                if (!isValidEnemySpawnCell(x, z, geometryLayer, terrainLayer, propsLayer, width, height, occupied)) {
-                    continue;
-                }
-
-                const distSq = dx * dx + dz * dz;
-                if (
-                    best === null
-                    || distSq < best.distSq
-                    || (distSq === best.distSq && (z < best.z || (z === best.z && x < best.x)))
-                ) {
-                    best = { x, z, distSq };
-                }
-            }
-        }
-
-        if (best) {
-            return { x: best.x, z: best.z };
-        }
-    }
-
-    return null;
-}
-
-function sanitizeEnemySpawns(
-    spawns: EnemySpawn[],
-    geometryLayer: string[][],
-    terrainLayer: string[][],
-    propsLayer: string[][],
-    width: number,
-    height: number
-): EnemySpawn[] {
-    const sanitized: EnemySpawn[] = [];
-    const occupied = new Set<string>();
-
-    for (const spawn of spawns) {
-        const startX = Math.floor(spawn.x);
-        const startZ = Math.floor(spawn.z);
-        const nearest = findNearestValidEnemySpawnCell(
-            startX,
-            startZ,
-            geometryLayer,
-            terrainLayer,
-            propsLayer,
-            width,
-            height,
-            occupied
-        );
-
-        if (!nearest) {
-            sanitized.push(spawn);
-            continue;
-        }
-
-        occupied.add(`${nearest.x},${nearest.z}`);
-        sanitized.push({ ...spawn, x: nearest.x + 0.5, z: nearest.z + 0.5 });
-    }
-
-    return sanitized;
 }

@@ -37,6 +37,7 @@ interface HUDProps {
     devModeEnabled?: boolean;
     onToggleFastMove?: () => void;
     fastMoveEnabled?: boolean;
+    onStartDialogDemo?: () => void;
     lightingTuning?: LightingTuningSettings;
     onUpdateLightingTuning?: (patch: Partial<LightingTuningSettings>) => void;
     onResetLightingTuning?: () => void;
@@ -64,6 +65,7 @@ export function HUD({
     devModeEnabled,
     onToggleFastMove,
     fastMoveEnabled,
+    onStartDialogDemo,
     lightingTuning,
     onUpdateLightingTuning,
     onResetLightingTuning,
@@ -229,6 +231,11 @@ export function HUD({
                                         onClick={onToggleFastMove}
                                     >
                                         Speed x10
+                                    </button>
+                                )}
+                                {onStartDialogDemo && (
+                                    <button className="btn btn-tiny" onClick={onStartDialogDemo}>
+                                        Dialog Demo
                                     </button>
                                 )}
                                 <button

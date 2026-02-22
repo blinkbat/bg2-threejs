@@ -5,6 +5,41 @@
 import { isMuted, getAudioCtx } from "./core";
 import { createNoiseBuffer } from "./noise";
 
+let lastDialogBlipAt = 0;
+const DIALOG_BLIP_COOLDOWN_MS = 28;
+const DIALOG_BLIP_GAIN = 0.24;
+
+export const playDialogBlip = () => {
+    if (isMuted()) return;
+
+    const now = Date.now();
+    if (now - lastDialogBlipAt < DIALOG_BLIP_COOLDOWN_MS) return;
+    lastDialogBlipAt = now;
+
+    const ctx = getAudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+
+    const basePitch = 560 + (Math.random() - 0.5) * 120;
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(basePitch, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(220, basePitch * 0.84), ctx.currentTime + 0.04);
+
+    filter.type = "bandpass";
+    filter.frequency.setValueAtTime(1800, ctx.currentTime);
+    filter.Q.setValueAtTime(1.1, ctx.currentTime);
+
+    gain.gain.setValueAtTime(DIALOG_BLIP_GAIN, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.055);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.055);
+};
+
 // Gulp - liquid drinking sound
 export const playGulp = () => {
     if (isMuted()) return;

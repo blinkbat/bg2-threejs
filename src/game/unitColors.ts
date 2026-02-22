@@ -1,15 +1,29 @@
 import type { EnemyType, Unit } from "../core/types";
 
-const DEFAULT_PLAYER_UNIT_COLOR = "#999999";
+const DEFAULT_PLAYER_SPRITE_COLOR = "#999999";
+const DEFAULT_PLAYER_PORTRAIT_COLOR = "#999999";
 const DEFAULT_ENEMY_UNIT_COLOR = "#999999";
 
-export const PLAYER_UNIT_COLORS: Record<number, string> = {
+export const PLAYER_UNIT_SPRITE_COLORS: Record<number, string> = {
     1: "#ce6f5f",
     2: "#d4a017",
     3: "#b275ce",
     4: "#3498db",
     5: "#27ae60",
     6: "#c0c8d0",
+    7: "#d7c09a",
+    8: "#f6edc2",
+    9: "#f6edc2",
+    10: "#f6edc2",
+};
+
+export const PLAYER_UNIT_PORTRAIT_COLORS: Record<number, string> = {
+    1: "#b95c42",
+    2: "#5d7fbf",
+    3: "#4f9b86",
+    4: "#6f68bc",
+    5: "#5b8f6d",
+    6: "#8a6bbd",
     7: "#d7c09a",
     8: "#f6edc2",
     9: "#f6edc2",
@@ -49,8 +63,16 @@ export const ENEMY_UNIT_COLORS: Record<EnemyType, string> = {
     wandering_shade: "#6080c8",
 };
 
+export function getPlayerUnitSpriteColor(unitId: number): string {
+    return PLAYER_UNIT_SPRITE_COLORS[unitId] ?? DEFAULT_PLAYER_SPRITE_COLOR;
+}
+
+export function getPlayerUnitPortraitColor(unitId: number): string {
+    return PLAYER_UNIT_PORTRAIT_COLORS[unitId] ?? DEFAULT_PLAYER_PORTRAIT_COLOR;
+}
+
 export function getPlayerUnitColor(unitId: number): string {
-    return PLAYER_UNIT_COLORS[unitId] ?? DEFAULT_PLAYER_UNIT_COLOR;
+    return getPlayerUnitSpriteColor(unitId);
 }
 
 export function getEnemyUnitColor(enemyType: EnemyType | undefined): string {
@@ -60,7 +82,7 @@ export function getEnemyUnitColor(enemyType: EnemyType | undefined): string {
 
 export function getUnitColor(unit: Unit): string {
     if (unit.team === "player") {
-        return getPlayerUnitColor(unit.id);
+        return getPlayerUnitSpriteColor(unit.id);
     }
     return getEnemyUnitColor(unit.enemyType);
 }

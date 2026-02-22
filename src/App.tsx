@@ -8,7 +8,7 @@ import * as THREE from "three";
 
 // Constants & Types
 import { BUFF_TICK_INTERVAL, getSkillTextColor, setDebugSpeedMultiplier } from "./core/constants";
-import type { Unit, UnitGroup, Skill, CombatLogEntry, SelectionBox, CharacterStats, SummonType, StatusEffect } from "./core/types";
+import type { Unit, Skill, CombatLogEntry, SelectionBox, CharacterStats, SummonType, StatusEffect } from "./core/types";
 
 // Game Logic
 import { getCurrentArea, getCurrentAreaId, setCurrentArea, AREAS, DEFAULT_STARTING_AREA, type AreaId, type AreaTransition } from "./game/areas";
@@ -58,8 +58,23 @@ import { HpBarsOverlay } from "./components/HpBarsOverlay";
 import { loadFormationOrder, saveFormationOrder } from "./hooks/formationStorage";
 import { HelpModal } from "./components/HelpModal";
 import { SaveLoadModal } from "./components/SaveLoadModal";
+import { DialogModal } from "./components/DialogModal";
 import { type SaveSlotData, SAVE_VERSION, saveGame, loadGame } from "./game/saveLoad";
 import { clearFogVisibilityMemory } from "./game/fogMemory";
+import { DEMO_BRANCHING_DIALOG } from "./dialog/data/demoDialog";
+import type { DialogChoice, DialogDefinition, DialogNode, DialogSpeaker, DialogState } from "./dialog/types";
+import {
+    formatPerfLogLine,
+    getForwardVectorForDirection,
+    PERF_LOG_BUFFER_LIMIT,
+    PERF_LOG_ENDPOINT,
+    PERF_LOG_FLUSH_INTERVAL_MS,
+    preloadPortraits,
+    reviveUnitVisual,
+    STAT_BOOST_AMOUNT,
+    syncHoveredDoorRef,
+    ZERO_STATS,
+} from "./app/helpers";
 import monkPortrait from "./assets/monk-portrait.png";
 import barbarianPortrait from "./assets/barbarian-portrait.png";
 import wizardPortrait from "./assets/wizard-portrait.png";
@@ -68,48 +83,6 @@ import thiefPortrait from "./assets/thief-portrait.png";
 import clericPortrait from "./assets/cleric-portrait.png";
 
 const PORTRAIT_URLS = [monkPortrait, barbarianPortrait, wizardPortrait, paladinPortrait, thiefPortrait, clericPortrait];
-
-function preloadPortraits(): Promise<void> {
-    return Promise.all(
-        PORTRAIT_URLS.map(src => new Promise<void>((resolve) => {
-            const img = new Image();
-            img.onload = () => resolve();
-            img.onerror = () => resolve(); // Don't block on failure
-            img.src = src;
-        }))
-    ).then(() => {});
-}
-
-function syncHoveredDoorRef<T extends { hoveredDoor: string | null }>(
-    refs: React.MutableRefObject<T>,
-    hoveredDoorTarget: string | null
-): void {
-    refs.current.hoveredDoor = hoveredDoorTarget;
-}
-
-function reviveUnitVisual(
-    unitGroups: Record<number, UnitGroup>,
-    targetId: number,
-    reviveX: number,
-    reviveZ: number
-): void {
-    const reviveGroup = unitGroups[targetId];
-    if (!reviveGroup) return;
-    reviveGroup.visible = true;
-    reviveGroup.position.set(reviveX, reviveGroup.userData.flyHeight, reviveZ);
-    reviveGroup.userData.targetX = reviveX;
-    reviveGroup.userData.targetZ = reviveZ;
-}
-
-function getForwardVectorForDirection(direction?: "north" | "south" | "east" | "west"): { x: number; z: number } {
-    switch (direction ?? "south") {
-        case "north": return { x: 0, z: 1 };
-        case "south": return { x: 0, z: -1 };
-        case "east": return { x: 1, z: 0 };
-        case "west": return { x: -1, z: 0 };
-        default: return { x: 0, z: -1 };
-    }
-}
 
 // =============================================================================
 // TYPES
@@ -188,58 +161,9 @@ const DEFAULT_LIGHTING_TUNING: LightingTuningSettings = {
     spriteMetalness: 0
 };
 
-const ZERO_STATS: CharacterStats = {
-    strength: 0,
-    dexterity: 0,
-    vitality: 0,
-    intelligence: 0,
-    faith: 0
-};
-
-const STAT_BOOST_AMOUNT = 10;
-const PERF_LOG_FLUSH_INTERVAL_MS = 3000;
-const PERF_LOG_BUFFER_LIMIT = 2000;
-const PERF_LOG_ENDPOINT = "/__perf-log";
-
-function formatPerfLogLine(sample: PerfFrameSample): string {
-    const ts = new Date(sample.timestamp).toISOString();
-    const heap = sample.jsHeapMb !== null ? sample.jsHeapMb.toFixed(1) : "na";
-    const programs = sample.programs !== null ? String(sample.programs) : "na";
-    const mode = sample.belowThreshold ? "trigger" : "capture";
-    return [
-        ts,
-        `mode=${mode}`,
-        `fps=${sample.fps.toFixed(1)}`,
-        `frame=${sample.frameMs.toFixed(2)}ms`,
-        `paused=${sample.paused ? 1 : 0}`,
-        `units=${sample.units}`,
-        `aliveP=${sample.playersAlive}`,
-        `aliveE=${sample.enemiesAlive}`,
-        `proj=${sample.projectiles}`,
-        `dmgTxt=${sample.damageTexts}`,
-        `acid=${sample.acidTiles}`,
-        `sanct=${sample.sanctuaryTiles}`,
-        `lights=${sample.lightsVisible}/${sample.lightsTotal}`,
-        `draw=${sample.drawCalls}`,
-        `tris=${sample.triangles}`,
-        `geo=${sample.geometries}`,
-        `tex=${sample.textures}`,
-        `prog=${programs}`,
-        `heapMb=${heap}`,
-        `t_cache=${sample.cacheMs.toFixed(2)}`,
-        `t_visual=${sample.visualMs.toFixed(2)}`,
-        `t_combat=${sample.combatMs.toFixed(2)}`,
-        `t_proj=${sample.projectilesMs.toFixed(2)}`,
-        `t_status=${sample.statusMs.toFixed(2)}`,
-        `t_fog=${sample.fogMs.toFixed(2)}`,
-        `t_ai=${sample.aiMs.toFixed(2)}`,
-        `t_unitAi=${sample.unitAiMs.toFixed(2)}`,
-        `t_hp=${sample.hpBarsMs.toFixed(2)}`,
-        `t_wall=${sample.wallMs.toFixed(2)}`,
-        `t_lod=${sample.lightLodMs.toFixed(2)}`,
-        `t_render=${sample.renderMs.toFixed(2)}`
-    ].join(" ");
-}
+const DIALOG_TYPING_INTERVAL_MS = 18;
+const DIALOG_CHARS_PER_TICK = 3;
+const DIALOG_MIN_BLIP_INTERVAL_MS = 38;
 
 // =============================================================================
 // GAME COMPONENT
@@ -421,6 +345,8 @@ function Game({
     const [hotbarAssignments, setHotbarAssignments] = useState<HotbarAssignments>(loadHotbarAssignments);
     const [formationOrder, setFormationOrder] = useState<number[]>(loadFormationOrder);
     const [lightingTuning, setLightingTuning] = useState<LightingTuningSettings>({ ...DEFAULT_LIGHTING_TUNING });
+    const [dialogState, setDialogState] = useState<DialogState | null>(null);
+    const [dialogTypedChars, setDialogTypedChars] = useState(0);
 
     // =============================================================================
     // STATE SYNC REFS
@@ -429,6 +355,7 @@ function Game({
     const selectedRef = useRef(selectedIds);
     const unitsStateRef = useRef(units);
     const pausedRef = useRef(paused);
+    const pauseToggleLockedRef = useRef(false);
     const targetingModeRef = useRef(targetingMode);
     const consumableTargetingModeRef = useRef(consumableTargetingMode);
     const pauseStartTimeRef = useRef<number | null>(null);
@@ -440,6 +367,9 @@ function Game({
     const formationOrderRef = useRef(formationOrder);
     const commandModeRef = useRef(commandMode);
     const handleCastSkillRef = useRef<((unitId: number, skill: Skill) => void) | null>(null);
+    const dialogPauseForcedRef = useRef(false);
+    const dialogLastBlipAtRef = useRef(0);
+    const dialogPreviousTypedCharsRef = useRef(0);
 
     // Sync refs with state
     useEffect(() => { selectedRef.current = selectedIds; }, [selectedIds]);
@@ -454,6 +384,72 @@ function Game({
     useEffect(() => { hotbarAssignmentsRef.current = hotbarAssignments; }, [hotbarAssignments]);
     useEffect(() => { formationOrderRef.current = formationOrder; }, [formationOrder]);
     useEffect(() => { commandModeRef.current = commandMode; }, [commandMode]);
+
+    const currentDialogNode = useMemo<DialogNode | null>(() => {
+        if (!dialogState) return null;
+        return dialogState.definition.nodes[dialogState.nodeId] ?? null;
+    }, [dialogState]);
+
+    const currentDialogSpeaker = useMemo<DialogSpeaker | null>(() => {
+        if (!dialogState || !currentDialogNode) return null;
+        return dialogState.definition.speakers[currentDialogNode.speakerId] ?? null;
+    }, [dialogState, currentDialogNode]);
+
+    const dialogChoices = currentDialogNode?.choices ?? [];
+    const isDialogOpen = dialogState !== null;
+    const isDialogTyping = currentDialogNode !== null && dialogTypedChars < currentDialogNode.text.length;
+    const dialogVisibleText = currentDialogNode ? currentDialogNode.text.slice(0, dialogTypedChars) : "";
+    const canContinueWithoutChoices = !isDialogTyping && dialogChoices.length === 0 && currentDialogNode !== null;
+
+    useEffect(() => {
+        pauseToggleLockedRef.current = isDialogOpen;
+    }, [isDialogOpen]);
+
+    useEffect(() => {
+        if (!currentDialogNode) {
+            setDialogTypedChars(0);
+            dialogPreviousTypedCharsRef.current = 0;
+            return;
+        }
+        setDialogTypedChars(0);
+        dialogPreviousTypedCharsRef.current = 0;
+        dialogLastBlipAtRef.current = 0;
+    }, [currentDialogNode]);
+
+    useEffect(() => {
+        if (!currentDialogNode) return;
+        if (dialogTypedChars >= currentDialogNode.text.length) return;
+
+        const intervalId = window.setInterval(() => {
+            setDialogTypedChars(prev => {
+                if (prev >= currentDialogNode.text.length) return prev;
+                return Math.min(currentDialogNode.text.length, prev + DIALOG_CHARS_PER_TICK);
+            });
+        }, DIALOG_TYPING_INTERVAL_MS);
+
+        return () => window.clearInterval(intervalId);
+    }, [currentDialogNode, dialogTypedChars]);
+
+    useEffect(() => {
+        if (!currentDialogNode) return;
+        if (!isDialogTyping) return;
+
+        const previousChars = dialogPreviousTypedCharsRef.current;
+        const nextChars = dialogTypedChars;
+        dialogPreviousTypedCharsRef.current = nextChars;
+
+        const delta = nextChars - previousChars;
+        if (delta <= 0 || delta > DIALOG_CHARS_PER_TICK) return;
+
+        const latestChar = currentDialogNode.text.charAt(Math.max(0, nextChars - 1));
+        if (!latestChar || /\s/.test(latestChar)) return;
+
+        const now = performance.now();
+        if (now - dialogLastBlipAtRef.current < DIALOG_MIN_BLIP_INTERVAL_MS) return;
+
+        dialogLastBlipAtRef.current = now;
+        soundFns.playDialogBlip();
+    }, [dialogTypedChars, currentDialogNode, isDialogTyping]);
 
     // Live dispatch keeps unitsStateRef in sync immediately (no waiting for useEffect)
     const setUnitsLive = useMemo(
@@ -511,7 +507,7 @@ function Game({
     // Preload portrait images before fade-in
     const [portraitsReady, setPortraitsReady] = useState(false);
     useEffect(() => {
-        preloadPortraits().then(() => setPortraitsReady(true));
+        preloadPortraits(PORTRAIT_URLS).then(() => setPortraitsReady(true));
     }, []);
 
     // Notify parent when scene + portraits are ready
@@ -831,6 +827,74 @@ function Game({
         );
     }, [getSkillContext, sceneState.unitGroups, gameRefs, executeConsumable]);
 
+    const closeDialog = useCallback(() => {
+        setDialogState(null);
+        setDialogTypedChars(0);
+        dialogPreviousTypedCharsRef.current = 0;
+        dialogLastBlipAtRef.current = 0;
+
+        if (dialogPauseForcedRef.current && pausedRef.current) {
+            togglePause(
+                { pauseStartTimeRef, actionCooldownRef },
+                { pausedRef },
+                { setPaused, setSkillCooldowns },
+                doProcessQueue
+            );
+        }
+        dialogPauseForcedRef.current = false;
+    }, [doProcessQueue]);
+
+    const startDialog = useCallback((definition: DialogDefinition) => {
+        if (!definition.nodes[definition.startNodeId]) {
+            addLog(`Dialog "${definition.id}" is missing start node "${definition.startNodeId}".`, "#ef4444");
+            return;
+        }
+
+        if (!pausedRef.current) {
+            dialogPauseForcedRef.current = true;
+            togglePause(
+                { pauseStartTimeRef, actionCooldownRef },
+                { pausedRef },
+                { setPaused, setSkillCooldowns },
+                doProcessQueue
+            );
+        } else {
+            dialogPauseForcedRef.current = false;
+        }
+
+        setDialogState({ definition, nodeId: definition.startNodeId });
+        setDialogTypedChars(0);
+        dialogPreviousTypedCharsRef.current = 0;
+        dialogLastBlipAtRef.current = 0;
+    }, [addLog, doProcessQueue]);
+
+    const skipDialogTyping = useCallback(() => {
+        if (!currentDialogNode) return;
+        setDialogTypedChars(currentDialogNode.text.length);
+    }, [currentDialogNode]);
+
+    const continueDialogWithoutChoices = useCallback(() => {
+        if (!dialogState || !currentDialogNode) return;
+
+        if (currentDialogNode.nextNodeId && dialogState.definition.nodes[currentDialogNode.nextNodeId]) {
+            setDialogState({ definition: dialogState.definition, nodeId: currentDialogNode.nextNodeId });
+            return;
+        }
+
+        closeDialog();
+    }, [dialogState, currentDialogNode, closeDialog]);
+
+    const chooseDialogOption = useCallback((choice: DialogChoice) => {
+        if (!dialogState) return;
+
+        if (choice.nextNodeId && dialogState.definition.nodes[choice.nextNodeId]) {
+            setDialogState({ definition: dialogState.definition, nodeId: choice.nextNodeId });
+            return;
+        }
+
+        closeDialog();
+    }, [dialogState, closeDialog]);
+
     const buildPersistedPlayers = useCallback((allUnits: Unit[]): PersistedPlayer[] => {
         const players = allUnits.filter(u => u.team === "player");
         const corePlayers = players.filter(u => !u.summonType);
@@ -891,6 +955,7 @@ function Game({
         unitsStateRef,
         selectedRef,
         pausedRef,
+        pauseToggleLockedRef,
         targetingModeRef,
         consumableTargetingModeRef,
         showPanelRef,
@@ -1211,13 +1276,16 @@ function Game({
     }, [addLog]);
 
     const handleTogglePause = useCallback(() => {
+        if (isDialogOpen && pausedRef.current) {
+            return;
+        }
         togglePause(
             { pauseStartTimeRef, actionCooldownRef },
             { pausedRef },
             { setPaused, setSkillCooldowns },
             doProcessQueue
         );
-    }, [doProcessQueue]);
+    }, [doProcessQueue, isDialogOpen]);
 
     const handleUseConsumable = useCallback((itemId: string, userId: number) => {
         const item = getItem(itemId);
@@ -1383,6 +1451,10 @@ function Game({
         setLightingTuning({ ...DEFAULT_LIGHTING_TUNING });
     }, []);
 
+    const handleStartDialogDemo = useCallback(() => {
+        startDialog(DEMO_BRANCHING_DIALOG);
+    }, [startDialog]);
+
     const currentAreaId = getCurrentAreaId();
     const lightingTuningOutput = useMemo(() => {
         const payload = {
@@ -1507,11 +1579,28 @@ function Game({
                 </div>
             )}
 
+            {currentDialogNode && currentDialogSpeaker && (
+                <DialogModal
+                    speakerName={currentDialogSpeaker.name}
+                    portraitSrc={currentDialogSpeaker.portraitSrc}
+                    portraitTint={currentDialogSpeaker.portraitTint}
+                    visibleText={dialogVisibleText}
+                    fullText={currentDialogNode.text}
+                    isTyping={isDialogTyping}
+                    choices={dialogChoices}
+                    canContinueWithoutChoices={canContinueWithoutChoices}
+                    continueLabel={currentDialogNode.continueLabel ?? "Continue"}
+                    onSkipTyping={skipDialogTyping}
+                    onContinueWithoutChoices={continueDialogWithoutChoices}
+                    onChoose={chooseDialogOption}
+                />
+            )}
+
             {/* FPS */}
             <div style={{ position: "absolute", top: 10, right: 10, color: "#888", fontSize: 11, opacity: 0.6 }}>{fps} fps</div>
 
             {/* UI Components */}
-            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onShowHelp={onShowHelp} onRestart={onRestart} onSaveClick={onSaveClick} onLoadClick={onLoadClick} debug={debug} onToggleDebug={() => setDebug(d => !d)} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} onStatBoost={handleStatBoost} onToggleDevMode={handleToggleDevMode} devModeEnabled={devMode} onToggleFastMove={() => setFastMove(f => !f)} fastMoveEnabled={fastMove} lightingTuning={lightingTuning} onUpdateLightingTuning={handleUpdateLightingTuning} onResetLightingTuning={handleResetLightingTuning} lightingTuningOutput={lightingTuningOutput} otherModalOpen={helpOpen || saveLoadOpen} hasSelection={selectedIds.length > 0} />
+            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onShowHelp={onShowHelp} onRestart={onRestart} onSaveClick={onSaveClick} onLoadClick={onLoadClick} debug={debug} onToggleDebug={() => setDebug(d => !d)} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} onStatBoost={handleStatBoost} onToggleDevMode={handleToggleDevMode} devModeEnabled={devMode} onToggleFastMove={() => setFastMove(f => !f)} fastMoveEnabled={fastMove} onStartDialogDemo={handleStartDialogDemo} lightingTuning={lightingTuning} onUpdateLightingTuning={handleUpdateLightingTuning} onResetLightingTuning={handleResetLightingTuning} lightingTuningOutput={lightingTuningOutput} otherModalOpen={helpOpen || saveLoadOpen || isDialogOpen} hasSelection={selectedIds.length > 0} />
             <CombatLog log={combatLog} />
             <FormationIndicator units={units} formationOrder={formationOrder} />
             <div className="bottom-bar-container">
