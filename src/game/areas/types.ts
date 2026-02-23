@@ -3,6 +3,7 @@
 // =============================================================================
 
 import type { CandlePosition, MergedObstacle, EnemyType } from "../../core/types";
+import type { DialogSpeakerId } from "../../dialog/types";
 
 // Built-in areas (for autocomplete)
 export type BuiltInAreaId = "dungeon" | "forest" | "coast" | "ruins" | "sanctum" | "cliffs" | "magma_cave";
@@ -27,6 +28,87 @@ export interface AreaTransition {
     targetArea: AreaId;
     targetSpawn: { x: number; z: number };  // Where party spawns in target area
     direction: "north" | "south" | "east" | "west";  // Which way door faces
+}
+
+export interface AreaDialogChoice {
+    id: string;
+    label: string;
+    nextNodeId?: string;
+    onDialogEndAction?: AreaDialogUiAction;
+}
+
+export type AreaDialogMenuId = "controls" | "save_game" | "load_game";
+
+export interface AreaDialogOpenMenuAction {
+    type: "open_menu";
+    menuId: AreaDialogMenuId;
+}
+
+export type AreaDialogUiAction = AreaDialogOpenMenuAction;
+
+export interface AreaDialogNode {
+    id: string;
+    speakerId: DialogSpeakerId;
+    text: string;
+    choices?: AreaDialogChoice[];
+    nextNodeId?: string;
+    continueLabel?: string;
+    onDialogEndAction?: AreaDialogUiAction;
+}
+
+export interface AreaDialogDefinition {
+    id: string;
+    startNodeId: string;
+    nodes: Record<string, AreaDialogNode>;
+}
+
+export interface DialogTriggerOnAreaLoadCondition {
+    type: "on_area_load";
+}
+
+export interface DialogTriggerEnemyKilledCondition {
+    type: "enemy_killed";
+    spawnIndex: number;  // Index in area.enemySpawns
+}
+
+export interface DialogTriggerPartyEntersRegionCondition {
+    type: "party_enters_region";
+    x: number;
+    z: number;
+    w: number;
+    h: number;
+}
+
+export interface DialogTriggerUnitSeenCondition {
+    type: "unit_seen";
+    spawnIndex: number;  // Index in area.enemySpawns
+    range?: number;      // Optional override range from party (world units)
+}
+
+export interface DialogTriggerOutOfCombatRangeCondition {
+    type: "party_out_of_combat_range";
+    range: number;  // No living enemy within this range of any living party member
+}
+
+export interface DialogTriggerDelayCondition {
+    type: "after_delay";
+    ms: number;  // Delay after area load
+}
+
+export type AreaDialogTriggerCondition =
+    | DialogTriggerOnAreaLoadCondition
+    | DialogTriggerEnemyKilledCondition
+    | DialogTriggerPartyEntersRegionCondition
+    | DialogTriggerUnitSeenCondition
+    | DialogTriggerOutOfCombatRangeCondition
+    | DialogTriggerDelayCondition;
+
+export interface AreaDialogTrigger {
+    id: string;
+    dialogId: string;
+    once?: boolean;   // Defaults to true
+    priority?: number; // Higher runs first when multiple triggers are satisfied
+    conditions: AreaDialogTriggerCondition[];
 }
 
 export interface ChestContents {
@@ -129,6 +211,8 @@ export interface AreaData {
     hasFogOfWar: boolean;
     invulnerable?: boolean;              // All units immune to damage, enemies don't aggro
     defaultSpawn: { x: number; z: number };  // Default spawn point for debug warps
+    dialogs?: AreaDialogDefinition[];
+    dialogTriggers?: AreaDialogTrigger[];
 }
 
 export interface ComputedAreaData {

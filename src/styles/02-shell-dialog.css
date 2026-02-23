@@ -1,0 +1,291 @@
+/* -----------------------------------------------------------------------------
+   GLASS PANEL (shared background for modals/panels)
+   ----------------------------------------------------------------------------- */
+.glass-panel {
+    background: linear-gradient(180deg, rgba(30,30,46,0.72) 0%, rgba(18,18,26,0.72) 100%);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 2px solid rgba(61,61,92,0.5);
+    border-radius: 8px;
+    color: #ddd;
+}
+
+.glass-panel-light {
+    background: rgba(15,15,25,0.7);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(60,60,90,0.4);
+    border-radius: 6px;
+}
+
+/* Modal overlay */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background: var(--ui-modal-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: var(--ui-modal-border);
+    border-radius: var(--ui-modal-radius);
+    padding: var(--ui-modal-padding);
+    width: min(var(--ui-modal-default-max-width), calc(100vw - var(--ui-modal-edge-gap)));
+    max-width: var(--ui-modal-default-max-width);
+    color: #ddd;
+}
+
+.startup-title-screen {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: auto;
+}
+
+.startup-title-card {
+    width: min(var(--ui-startup-card-max-width), calc(100vw - var(--ui-modal-edge-gap)));
+    border: 1px solid rgba(72, 84, 118, 0.72);
+    border-radius: 12px;
+    background: rgba(8, 10, 20, 0.78);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    padding: 36px 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 40px;
+    box-shadow: 0 20px 56px rgba(0, 0, 0, 0.48);
+}
+
+.startup-title-text {
+    margin: 0;
+    color: #f2f5ff;
+    font-size: 22px;
+    line-height: 1.15;
+    letter-spacing: 0.7px;
+    text-align: center;
+}
+
+.startup-title-btn {
+    border: 1px solid #5b7fd4;
+    border-radius: 8px;
+    background: linear-gradient(180deg, #2d66ca 0%, #1f4fa2 100%);
+    color: #ffffff;
+    font-size: 16px;
+    line-height: 1;
+    padding: 14px 24px;
+    cursor: pointer;
+    transition: border-color 0.14s, filter 0.14s, transform 0.14s;
+}
+
+.startup-title-btn:hover {
+    border-color: #7ea0eb;
+    filter: brightness(1.08);
+    transform: translateY(-1px);
+}
+
+.startup-title-btn:active {
+    transform: translateY(0);
+}
+
+.dialog-overlay {
+    background: rgba(0, 0, 0, 0.72);
+    z-index: 1300;
+    animation: dialogOverlayFadeIn 180ms ease-out;
+}
+
+.dialog-modal {
+    width: min(var(--ui-dialog-max-width), calc(100vw - var(--ui-dialog-edge-gap)));
+    max-width: var(--ui-dialog-max-width);
+    min-height: 280px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    position: relative;
+    padding-bottom: 44px;
+    animation: dialogModalFadeIn 220ms ease-out;
+    will-change: opacity, transform;
+}
+
+@keyframes dialogOverlayFadeIn {
+    from { background: rgba(0, 0, 0, 0); }
+    to { background: rgba(0, 0, 0, 0.72); }
+}
+
+@keyframes dialogModalFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px) scale(0.996);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.dialog-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.dialog-portrait-frame {
+    position: relative;
+    width: 104px;
+    height: 104px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: var(--dialog-portrait-tint, #6b86c9);
+    overflow: hidden;
+    flex-shrink: 0;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.28), 0 4px 14px rgba(0, 0, 0, 0.36);
+}
+
+.dialog-portrait-frame::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to bottom, rgba(255, 255, 255, 0.16), rgba(0, 0, 0, 0.22));
+    pointer-events: none;
+    z-index: 0;
+}
+
+.dialog-portrait {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    filter: grayscale(100%) contrast(1.08) brightness(1.05);
+    position: relative;
+    z-index: 1;
+}
+
+.dialog-portrait-tint {
+    position: absolute;
+    inset: 0;
+    background: var(--dialog-portrait-tint, #6b86c9);
+    mix-blend-mode: multiply;
+    opacity: 0.8;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.dialog-header-text {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 104px;
+}
+
+.dialog-speaker {
+    font-size: 20px;
+    font-weight: 700;
+    color: #f3f4f6;
+}
+
+.dialog-body {
+    min-height: 104px;
+    line-height: 1.5;
+    color: #e5e7eb;
+    background: #12121d;
+    border: 1px solid #2e2e42;
+    border-radius: 6px;
+    padding: 12px;
+    white-space: pre-wrap;
+}
+
+.dialog-caret {
+    margin-left: 1px;
+    color: #60a5fa;
+    animation: dialog-caret-blink 0.7s steps(1) infinite;
+}
+
+@keyframes dialog-caret-blink {
+    0%, 45% { opacity: 1; }
+    46%, 100% { opacity: 0; }
+}
+
+.dialog-choices {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.dialog-controls {
+    min-height: 72px;
+}
+
+.dialog-keyhint {
+    color: #9ca3b5;
+    font-size: 11px;
+    letter-spacing: 0.2px;
+}
+
+.dialog-keyhint-fixed {
+    position: absolute;
+    right: 24px;
+    bottom: 14px;
+    pointer-events: none;
+}
+
+.dialog-choice-btn {
+    width: 100%;
+    text-align: left;
+    border: 1px solid #3f3f5f;
+    border-radius: 6px;
+    background: #1a1a2a;
+    color: #e5e7eb;
+    padding: 10px 12px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 13px;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.dialog-choice-btn:hover {
+    border-color: #60a5fa;
+    background: #1f2438;
+}
+
+.dialog-choice-index {
+    display: inline-block;
+    width: 18px;
+    color: #93c5fd;
+    font-weight: 600;
+}
+
+.dialog-continue-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+.dialog-continue-btn {
+    width: auto;
+    min-width: 140px;
+    text-align: center;
+}
+
+/* -----------------------------------------------------------------------------
+   CLOSE BUTTON
+   ----------------------------------------------------------------------------- */
+.close-btn {
+    cursor: pointer;
+    font-size: 20px;
+    opacity: 0.7;
+}
+
+.close-btn:hover {
+    opacity: 1;
+}
+

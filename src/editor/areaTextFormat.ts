@@ -12,7 +12,14 @@ import {
     DEFAULT_AREA_LIGHT_RADIUS,
     DEFAULT_AREA_LIGHT_TINT,
     type AreaData,
+    type AreaDialogChoice,
+    type AreaDialogDefinition,
+    type AreaDialogMenuId,
+    type AreaDialogNode,
+    type AreaDialogUiAction,
     type AreaId,
+    type AreaDialogTrigger,
+    type AreaDialogTriggerCondition,
     type EnemySpawn,
     type AreaTransition,
     type ChestLocation,
@@ -23,6 +30,7 @@ import {
     type AreaLight,
 } from "../game/areas/types";
 import type { CandlePosition, EnemyType } from "../core/types";
+import type { DialogSpeakerId } from "../dialog/types";
 import {
     clampTileTintPercent,
     composeTileLayers,
@@ -31,6 +39,7 @@ import {
     normalizeTintLayerStack,
     TILE_EMPTY,
 } from "../game/areas/tileLayers";
+import { DIALOG_SPEAKERS } from "../dialog/speakers";
 
 // =============================================================================
 // TEXT FORMAT SPECIFICATION
@@ -92,6 +101,12 @@ import {
 //
 // === CANDLES ===
 // x,z:dir=dx,dz,kind=candle|torch,color=#rrggbb
+//
+// === DIALOGS ===
+// One JSON object per line (AreaDialogDefinition)
+//
+// === DIALOG_TRIGGERS ===
+// One JSON object per line (AreaDialogTrigger)
 // =============================================================================
 
 interface ParsedArea {
@@ -125,6 +140,8 @@ interface ParsedArea {
     secretDoors: SecretDoor[];
     lights: AreaLight[];
     candles: CandlePosition[];
+    dialogs: AreaDialogDefinition[];
+    dialogTriggers: AreaDialogTrigger[];
 }
 
 function normalizeHexColor(color: string | undefined, fallback: string): string {
@@ -317,6 +334,22 @@ export function areaDataToText(area: AreaData): string {
         lines.push("");
     }
 
+    if (area.dialogs && area.dialogs.length > 0) {
+        lines.push("=== DIALOGS ===");
+        area.dialogs.forEach(dialog => {
+            lines.push(JSON.stringify(dialog));
+        });
+        lines.push("");
+    }
+
+    if (area.dialogTriggers && area.dialogTriggers.length > 0) {
+        lines.push("=== DIALOG_TRIGGERS ===");
+        area.dialogTriggers.forEach(trigger => {
+            lines.push(JSON.stringify(trigger));
+        });
+        lines.push("");
+    }
+
     return lines.join("\n");
 }
 
@@ -364,6 +397,8 @@ function parseTextFormat(text: string): ParsedArea {
         secretDoors: [],
         lights: [],
         candles: [],
+        dialogs: [],
+        dialogTriggers: [],
     };
 
     while (lineIndex < lines.length) {
@@ -449,6 +484,12 @@ function parseTextFormat(text: string): ParsedArea {
                 break;
             case "candles":
                 parseCandleLine(line, result.candles);
+                break;
+            case "dialogs":
+                parseDialogDefinitionLine(line, result.dialogs);
+                break;
+            case "dialog_triggers":
+                parseDialogTriggerLine(line, result.dialogTriggers);
                 break;
             default:
                 if (currentSection.startsWith("terrain_layer_")) {
@@ -697,6 +738,216 @@ function parseLightLine(line: string, lights: AreaLight[]) {
     });
 }
 
+const DIALOG_SPEAKER_IDS = new Set<string>(Object.keys(DIALOG_SPEAKERS));
+const DIALOG_MENU_IDS = new Set<AreaDialogMenuId>(["controls", "save_game", "load_game"]);
+
+function isDialogSpeakerId(value: string): value is DialogSpeakerId {
+    return DIALOG_SPEAKER_IDS.has(value);
+}
+
+function sanitizeAreaDialogUiAction(raw: unknown): AreaDialogUiAction | undefined {
+    if (!isRecord(raw)) return undefined;
+    if (raw.type !== "open_menu") return undefined;
+    if (typeof raw.menuId !== "string") return undefined;
+    if (!DIALOG_MENU_IDS.has(raw.menuId as AreaDialogMenuId)) return undefined;
+    return {
+        type: "open_menu",
+        menuId: raw.menuId as AreaDialogMenuId,
+    };
+}
+
+function sanitizeAreaDialogChoice(raw: unknown): AreaDialogChoice | null {
+    if (!isRecord(raw)) return null;
+    if (typeof raw.id !== "string" || raw.id.trim().length === 0) return null;
+    if (typeof raw.label !== "string") return null;
+
+    const nextNodeId = typeof raw.nextNodeId === "string" && raw.nextNodeId.trim().length > 0
+        ? raw.nextNodeId.trim()
+        : undefined;
+    const onDialogEndAction = sanitizeAreaDialogUiAction(raw.onDialogEndAction);
+
+    return {
+        id: raw.id.trim(),
+        label: raw.label,
+        ...(nextNodeId ? { nextNodeId } : {}),
+        ...(onDialogEndAction ? { onDialogEndAction } : {}),
+    };
+}
+
+function sanitizeAreaDialogNode(raw: unknown): AreaDialogNode | null {
+    if (!isRecord(raw)) return null;
+    if (typeof raw.id !== "string" || raw.id.trim().length === 0) return null;
+    if (typeof raw.speakerId !== "string" || !isDialogSpeakerId(raw.speakerId)) return null;
+    if (typeof raw.text !== "string") return null;
+
+    const nextNodeId = typeof raw.nextNodeId === "string" && raw.nextNodeId.trim().length > 0
+        ? raw.nextNodeId.trim()
+        : undefined;
+    const continueLabel = typeof raw.continueLabel === "string" && raw.continueLabel.trim().length > 0
+        ? raw.continueLabel
+        : undefined;
+    const onDialogEndAction = sanitizeAreaDialogUiAction(raw.onDialogEndAction);
+
+    const choices = Array.isArray(raw.choices)
+        ? raw.choices
+            .map(choice => sanitizeAreaDialogChoice(choice))
+            .filter((choice): choice is AreaDialogChoice => choice !== null)
+        : [];
+
+    return {
+        id: raw.id.trim(),
+        speakerId: raw.speakerId,
+        text: raw.text,
+        ...(choices.length > 0 ? { choices } : {}),
+        ...(nextNodeId ? { nextNodeId } : {}),
+        ...(continueLabel ? { continueLabel } : {}),
+        ...(onDialogEndAction ? { onDialogEndAction } : {}),
+    };
+}
+
+function sanitizeAreaDialogDefinition(raw: unknown): AreaDialogDefinition | null {
+    if (!isRecord(raw)) return null;
+    if (typeof raw.id !== "string" || raw.id.trim().length === 0) return null;
+    if (typeof raw.startNodeId !== "string" || raw.startNodeId.trim().length === 0) return null;
+    if (!isRecord(raw.nodes)) return null;
+
+    const nodes: Record<string, AreaDialogNode> = {};
+    for (const nodeRaw of Object.values(raw.nodes)) {
+        const node = sanitizeAreaDialogNode(nodeRaw);
+        if (!node) continue;
+        nodes[node.id] = node;
+    }
+
+    const nodeIds = Object.keys(nodes);
+    if (nodeIds.length === 0) return null;
+
+    const requestedStartNodeId = raw.startNodeId.trim();
+    const startNodeId = nodes[requestedStartNodeId] ? requestedStartNodeId : nodeIds[0];
+
+    return {
+        id: raw.id.trim(),
+        startNodeId,
+        nodes,
+    };
+}
+
+function parseDialogDefinitionLine(line: string, dialogs: AreaDialogDefinition[]): void {
+    try {
+        const parsed = JSON.parse(line) as unknown;
+        const dialogDefinition = sanitizeAreaDialogDefinition(parsed);
+        if (!dialogDefinition) return;
+        dialogs.push(dialogDefinition);
+    } catch {
+        if (import.meta.env.DEV) {
+            console.warn(`[areaTextFormat] Failed to parse dialog definition line: ${line}`);
+        }
+    }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null;
+}
+
+function toOptionalFiniteNumber(value: unknown): number | undefined {
+    if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+    return value;
+}
+
+function toNonNegativeInt(value: unknown): number | null {
+    if (typeof value !== "number" || !Number.isFinite(value)) return null;
+    const rounded = Math.floor(value);
+    return rounded >= 0 ? rounded : null;
+}
+
+function sanitizeDialogTriggerCondition(raw: unknown): AreaDialogTriggerCondition | null {
+    if (!isRecord(raw)) return null;
+    const conditionType = raw.type;
+    if (typeof conditionType !== "string") return null;
+
+    if (conditionType === "on_area_load") {
+        return { type: "on_area_load" };
+    }
+
+    if (conditionType === "enemy_killed") {
+        const spawnIndex = toNonNegativeInt(raw.spawnIndex);
+        if (spawnIndex === null) return null;
+        return { type: "enemy_killed", spawnIndex };
+    }
+
+    if (conditionType === "party_enters_region") {
+        const x = toNonNegativeInt(raw.x);
+        const z = toNonNegativeInt(raw.z);
+        const w = toNonNegativeInt(raw.w);
+        const h = toNonNegativeInt(raw.h);
+        if (x === null || z === null || w === null || h === null) return null;
+        return {
+            type: "party_enters_region",
+            x,
+            z,
+            w: Math.max(1, w),
+            h: Math.max(1, h),
+        };
+    }
+
+    if (conditionType === "unit_seen") {
+        const spawnIndex = toNonNegativeInt(raw.spawnIndex);
+        if (spawnIndex === null) return null;
+        const rawRange = toOptionalFiniteNumber(raw.range);
+        const range = rawRange !== undefined ? Math.max(0.1, rawRange) : undefined;
+        return { type: "unit_seen", spawnIndex, ...(range !== undefined ? { range } : {}) };
+    }
+
+    if (conditionType === "party_out_of_combat_range") {
+        const range = toOptionalFiniteNumber(raw.range);
+        if (range === undefined) return null;
+        return { type: "party_out_of_combat_range", range: Math.max(0.1, range) };
+    }
+
+    if (conditionType === "after_delay") {
+        const ms = toNonNegativeInt(raw.ms);
+        if (ms === null) return null;
+        return { type: "after_delay", ms };
+    }
+
+    return null;
+}
+
+function sanitizeDialogTrigger(raw: unknown): AreaDialogTrigger | null {
+    if (!isRecord(raw)) return null;
+    if (typeof raw.id !== "string" || raw.id.trim().length === 0) return null;
+    if (typeof raw.dialogId !== "string" || raw.dialogId.trim().length === 0) return null;
+    if (!Array.isArray(raw.conditions)) return null;
+
+    const conditions: AreaDialogTriggerCondition[] = raw.conditions
+        .map(condition => sanitizeDialogTriggerCondition(condition))
+        .filter((condition): condition is AreaDialogTriggerCondition => condition !== null);
+    if (conditions.length === 0) return null;
+
+    const once = typeof raw.once === "boolean" ? raw.once : undefined;
+    const priority = toOptionalFiniteNumber(raw.priority);
+
+    return {
+        id: raw.id.trim(),
+        dialogId: raw.dialogId.trim(),
+        ...(once !== undefined ? { once } : {}),
+        ...(priority !== undefined ? { priority } : {}),
+        conditions,
+    };
+}
+
+function parseDialogTriggerLine(line: string, dialogTriggers: AreaDialogTrigger[]): void {
+    try {
+        const parsed = JSON.parse(line) as unknown;
+        const trigger = sanitizeDialogTrigger(parsed);
+        if (!trigger) return;
+        dialogTriggers.push(trigger);
+    } catch {
+        if (import.meta.env.DEV) {
+            console.warn(`[areaTextFormat] Failed to parse dialog trigger line: ${line}`);
+        }
+    }
+}
+
 function parseTintEntryLine(line: string, entries: Array<{ x: number; z: number; tint: number }>): void {
     const [coords, tintRaw] = line.split(":");
     if (!coords || tintRaw === undefined) return;
@@ -791,6 +1042,8 @@ function convertParsedToAreaData(parsed: ParsedArea): AreaData {
         secretDoors: parsed.secretDoors.length > 0 ? parsed.secretDoors : undefined,
         lights: parsed.lights.length > 0 ? parsed.lights : undefined,
         candles: parsed.candles.length > 0 ? parsed.candles : undefined,
+        dialogs: parsed.dialogs.length > 0 ? parsed.dialogs : undefined,
+        dialogTriggers: parsed.dialogTriggers.length > 0 ? parsed.dialogTriggers : undefined,
     };
 }
 

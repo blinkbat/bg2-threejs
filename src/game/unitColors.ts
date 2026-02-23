@@ -18,12 +18,12 @@ export const PLAYER_UNIT_SPRITE_COLORS: Record<number, string> = {
 };
 
 export const PLAYER_UNIT_PORTRAIT_COLORS: Record<number, string> = {
-    1: "#b95c42",
-    2: "#5d7fbf",
-    3: "#4f9b86",
-    4: "#6f68bc",
-    5: "#5b8f6d",
-    6: "#8a6bbd",
+    1: "#ce6f5f",
+    2: "#d4a017",
+    3: "#b275ce",
+    4: "#3498db",
+    5: "#27ae60",
+    6: "#c0c8d0",
     7: "#d7c09a",
     8: "#f6edc2",
     9: "#f6edc2",
@@ -72,7 +72,7 @@ export function getPlayerUnitPortraitColor(unitId: number): string {
 }
 
 export function getPlayerUnitColor(unitId: number): string {
-    return getPlayerUnitSpriteColor(unitId);
+    return getPlayerUnitPortraitColor(unitId);
 }
 
 export function getEnemyUnitColor(enemyType: EnemyType | undefined): string {

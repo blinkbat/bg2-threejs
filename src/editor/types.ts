@@ -2,7 +2,7 @@
 // EDITOR TYPES
 // =============================================================================
 
-import type { AreaId, TreeType } from "../game/areas/types";
+import type { AreaDialogDefinition, AreaDialogTrigger, AreaId, TreeType } from "../game/areas/types";
 import type { EnemyType } from "../core/types";
 
 export type Tool = "paint" | "erase" | "select";
@@ -80,4 +80,6 @@ export interface EditorSnapshot {
     entities: EntityDef[];
     trees: TreeDef[];
     decorations: DecorationDef[];
+    dialogs: AreaDialogDefinition[];
+    dialogTriggers: AreaDialogTrigger[];
 }

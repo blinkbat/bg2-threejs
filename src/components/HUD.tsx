@@ -37,13 +37,13 @@ interface HUDProps {
     devModeEnabled?: boolean;
     onToggleFastMove?: () => void;
     fastMoveEnabled?: boolean;
-    onStartDialogDemo?: () => void;
     lightingTuning?: LightingTuningSettings;
     onUpdateLightingTuning?: (patch: Partial<LightingTuningSettings>) => void;
     onResetLightingTuning?: () => void;
     lightingTuningOutput?: string;
     otherModalOpen?: boolean;
     hasSelection?: boolean;
+    onModalOpenStateChange?: (isOpen: boolean) => void;
 }
 
 export function HUD({
@@ -65,13 +65,13 @@ export function HUD({
     devModeEnabled,
     onToggleFastMove,
     fastMoveEnabled,
-    onStartDialogDemo,
     lightingTuning,
     onUpdateLightingTuning,
     onResetLightingTuning,
     lightingTuningOutput,
     otherModalOpen,
-    hasSelection
+    hasSelection,
+    onModalOpenStateChange
 }: HUDProps) {
     const [menuOpen, setMenuOpen] = useState(false);
     const [debugPanelOpen, setDebugPanelOpen] = useState(false);
@@ -94,7 +94,17 @@ export function HUD({
     }));
 
     const isDefeat = alivePlayers === 0;
-    const anyModalOpen = menuOpen || otherModalOpen;
+    const anyModalOpen = menuOpen || jukeboxOpen || otherModalOpen;
+
+    useEffect(() => {
+        if (!onModalOpenStateChange) return;
+        onModalOpenStateChange(menuOpen || jukeboxOpen);
+    }, [menuOpen, jukeboxOpen, onModalOpenStateChange]);
+
+    useEffect(() => {
+        if (!onModalOpenStateChange) return;
+        return () => onModalOpenStateChange(false);
+    }, [onModalOpenStateChange]);
 
     // Handle opening menu - pause and open
     const handleOpenMenu = useCallback(() => {
@@ -233,14 +243,14 @@ export function HUD({
                                         Speed x10
                                     </button>
                                 )}
-                                {onStartDialogDemo && (
-                                    <button className="btn btn-tiny" onClick={onStartDialogDemo}>
-                                        Dialog Demo
-                                    </button>
-                                )}
                                 <button
                                     className="btn btn-tiny"
-                                    onClick={() => setJukeboxOpen(true)}
+                                    onClick={() => {
+                                        if (!paused) {
+                                            onTogglePause();
+                                        }
+                                        setJukeboxOpen(true);
+                                    }}
                                 >
                                     <Music size={12} />
                                     Jukebox

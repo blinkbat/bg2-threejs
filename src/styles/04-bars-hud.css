@@ -1,0 +1,446 @@
+/* -----------------------------------------------------------------------------
+   BOTTOM BAR (CommandBar + PartyBar wrapper)
+   ----------------------------------------------------------------------------- */
+.bottom-bar-container {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: stretch;
+    gap: 8px;
+    pointer-events: none;
+}
+.bottom-bar-container > * {
+    pointer-events: auto;
+}
+
+/* -----------------------------------------------------------------------------
+   COMMAND BAR
+   ----------------------------------------------------------------------------- */
+.command-bar {
+    display: grid;
+    grid-template-columns: repeat(2, 36px);
+    grid-template-rows: repeat(3, 36px);
+    justify-content: center;
+    align-content: center;
+    gap: 2px;
+    padding: 4px 7px;
+}
+.cmd-btn {
+    width: 36px;
+    height: 36px;
+    border: 1px solid rgba(100, 100, 130, 0.5);
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.35);
+    color: #777;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 0;
+    transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.cmd-btn:hover {
+    border-color: rgba(160, 160, 190, 0.6);
+    background: rgba(255, 255, 255, 0.08);
+    color: #ccc;
+}
+.cmd-btn.cmd-active {
+    border-color: rgba(74, 144, 217, 0.6);
+    background: rgba(74, 144, 217, 0.15);
+    color: #8cc4ff;
+}
+.cmd-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+/* -----------------------------------------------------------------------------
+   PARTY BAR
+   ----------------------------------------------------------------------------- */
+.party-bar {
+    padding: 8px;
+    display: flex;
+    gap: 6px;
+}
+
+.party-bar-stack {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    gap: 6px;
+}
+
+.party-bar-summons {
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 2px;
+    min-width: 44px;
+}
+
+.party-bar-summons-label {
+    font-size: 10px;
+    color: #8f96a8;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+}
+
+.party-bar-summons-list {
+    display: flex;
+    gap: 6px;
+}
+
+.party-bar-hotbar {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-bottom: 20px;
+}
+
+.party-portrait {
+    position: relative;
+    width: 80px;
+    cursor: pointer;
+    border: 2px solid #333;
+    border-radius: 6px;
+    padding: 5px;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.party-portrait-summon {
+    width: 76px;
+}
+
+.party-portrait.selected {
+    background: rgba(0,255,0,0.15);
+    border-color: #00ff00;
+    z-index: 10;  /* Above other portraits so hotbar/selector shows correctly */
+}
+
+.party-portrait.valid-target {
+    background: rgba(34,197,94,0.2);
+    border-color: #22c55e;
+}
+
+.party-portrait.dead {
+    opacity: 0.4;
+    filter: grayscale(100%);
+    cursor: not-allowed;
+}
+
+.party-portrait.targeting {
+    cursor: crosshair;
+}
+
+.party-portrait.dragging {
+    opacity: 0.3;
+    border-style: dashed;
+    border-color: #666;
+}
+
+.drop-spacer {
+    width: 14px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+}
+
+.drop-spacer::after {
+    content: "";
+    width: 3px;
+    background: var(--drop-color, #999);
+    border-radius: 2px;
+}
+
+.formation-context-menu {
+    position: absolute;
+    padding: 4px;
+    display: flex;
+    gap: 3px;
+    z-index: 100;
+    white-space: nowrap;
+}
+
+.formation-ctx-btn {
+    background: rgba(60, 60, 90, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+    color: #ccc;
+    font-size: 11px;
+    padding: 3px 8px;
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.formation-ctx-btn:hover:not(:disabled) {
+    background: rgba(80, 80, 120, 0.7);
+    color: #fff;
+}
+
+.formation-ctx-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.portrait-icon {
+    width: 100%;
+    height: 52px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+    font-weight: 600;
+    color: #fff;
+    text-shadow: 1px 1px 2px #000;
+    position: relative;
+    background-size: cover;
+    background-position: center;
+    background-blend-mode: multiply;
+}
+
+.portrait-fkey {
+    position: absolute;
+    top: 1px;
+    left: 3px;
+    font-size: 11px;
+    color: white;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9), 0 0 6px rgba(0, 0, 0, 0.7);
+    line-height: 1;
+}
+
+.portrait-fkey-summon {
+    left: 4px;
+    font-size: 9px;
+    color: #ffd796;
+    letter-spacing: 0.04em;
+}
+
+.portrait-effects {
+    position: absolute;
+    bottom: 1px;
+    left: 1px;
+    display: flex;
+    gap: 1px;
+}
+
+.portrait-effect-icon {
+    font-size: 14px;
+    line-height: 1;
+    text-shadow: 0 0 3px #000, 0 0 6px #000;
+}
+
+.levelup-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    width: 16px;
+    height: 16px;
+    background: #22c55e;
+    border-radius: 50%;
+    font-size: 12px;
+    font-weight: 600;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-shadow: none;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+.portrait-icon.hold-active {
+    box-shadow: inset 0 0 0 2px rgba(74, 144, 217, 0.8);
+}
+
+.portrait-hp {
+    margin-top: 4px;
+}
+
+.portrait-mana {
+    margin-top: 2px;
+}
+
+.portrait-name {
+    font-size: 10px;
+    color: #aaa;
+    text-align: center;
+    margin-top: 2px;
+}
+
+/* -----------------------------------------------------------------------------
+   HUD
+   ----------------------------------------------------------------------------- */
+.hud {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    padding: 12px 16px;
+    pointer-events: none;  /* Allow drag-select through HUD background */
+}
+
+.hud-buttons,
+.hud-buttons .btn,
+.debug-warp-menu,
+.debug-warp-menu .btn {
+    pointer-events: auto;  /* But buttons remain clickable */
+}
+
+.hud-area {
+    margin-bottom: 10px;
+}
+
+.hud-area-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 2px;
+}
+
+.hud-area-name.defeat {
+    color: #f87171;
+}
+
+.hud-area-flavor {
+    font-size: 12px;
+    font-style: italic;
+    color: #999;
+}
+
+.hud-gold {
+    margin-top: 6px;
+    font-size: 13px;
+    color: #f1c40f;
+    font-weight: 600;
+}
+
+.hud-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.debug-warp-menu {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+    display: flex;
+    flex-wrap: wrap;
+    max-width: 350px;
+    gap: 6px;
+    align-items: center;
+}
+
+.debug-label {
+    font-size: 11px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-right: 4px;
+}
+
+.btn-warp {
+    font-size: 11px;
+    padding: 4px 8px;
+    background: rgba(100, 100, 100, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.btn-warp:hover {
+    background: rgba(120, 120, 120, 0.4);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.btn-warp.active {
+    background: rgba(80, 120, 80, 0.4);
+    border-color: rgba(100, 200, 100, 0.3);
+    color: #9f9;
+}
+
+/* -----------------------------------------------------------------------------
+   FORMATION INDICATOR
+   ----------------------------------------------------------------------------- */
+.formation-indicator {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    padding: 6px 8px;
+    pointer-events: none;
+}
+
+.formation-label {
+    text-align: center;
+    font-size: 9px;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+}
+
+.formation-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 20px);
+    grid-template-rows: repeat(3, 20px);
+    gap: 2px;
+    justify-items: center;
+    align-items: center;
+}
+
+.formation-slot {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 600;
+    color: #fff;
+    text-shadow: 1px 1px 2px #000;
+    border: 1px solid rgba(61, 61, 92, 0.5);
+}
+
+.formation-slot-dead {
+    opacity: 0.3;
+    color: #666;
+}
+
+/* -----------------------------------------------------------------------------
+   COMBAT LOG
+   ----------------------------------------------------------------------------- */
+.combat-log {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    width: 350px;
+    height: 400px;
+    padding: 12px;
+    font-size: 14px;
+    color: #ccc;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    overflow: hidden;
+    /* Fade from 80% opacity at bottom to 10% at top */
+    -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0.125) 0%, rgba(0,0,0,1) 100%);
+    mask-image: linear-gradient(to bottom, rgba(0,0,0,0.125) 0%, rgba(0,0,0,1) 100%);
+    opacity: 1;
+    pointer-events: none;
+}
+
+.combat-log * {
+    pointer-events: none;
+}
+
+.combat-log-inner {
+    overflow-y: auto;
+    max-height: 100%;
+    padding-right: 12px;
+}
+

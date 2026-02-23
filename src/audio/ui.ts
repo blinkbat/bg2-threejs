@@ -7,7 +7,7 @@ import { createNoiseBuffer } from "./noise";
 
 let lastDialogBlipAt = 0;
 const DIALOG_BLIP_COOLDOWN_MS = 28;
-const DIALOG_BLIP_GAIN = 0.24;
+const DIALOG_BLIP_GAIN = 0.62;
 
 export const playDialogBlip = () => {
     if (isMuted()) return;
@@ -151,6 +151,51 @@ export const playLevelUp = () => {
         gain.connect(ctx.destination);
         osc.start(startTime);
         osc.stop(startTime + 0.4);
+    });
+};
+
+let lastGameStartFanfareTime = 0;
+const GAME_START_FANFARE_COOLDOWN = 1000;
+
+// Short title-to-game stinger used by the startup screen
+export const playGameStartFanfare = () => {
+    if (isMuted()) return;
+
+    const now = Date.now();
+    if (now - lastGameStartFanfareTime < GAME_START_FANFARE_COOLDOWN) return;
+    lastGameStartFanfareTime = now;
+
+    const ctx = getAudioCtx();
+    const notes = [
+        { freq: 392, time: 0, gain: 0.11 },   // G4
+        { freq: 523, time: 0.1, gain: 0.12 }, // C5
+        { freq: 659, time: 0.2, gain: 0.13 }, // E5
+        { freq: 784, time: 0.32, gain: 0.12 },// G5
+    ];
+
+    notes.forEach(({ freq, time, gain }) => {
+        const osc = ctx.createOscillator();
+        const vol = ctx.createGain();
+        const filter = ctx.createBiquadFilter();
+        const startTime = ctx.currentTime + time;
+
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(freq, startTime);
+        osc.frequency.linearRampToValueAtTime(freq * 1.01, startTime + 0.06);
+        osc.frequency.linearRampToValueAtTime(freq, startTime + 0.14);
+
+        filter.type = "lowpass";
+        filter.frequency.setValueAtTime(3600, startTime);
+
+        vol.gain.setValueAtTime(0, startTime);
+        vol.gain.linearRampToValueAtTime(gain, startTime + 0.018);
+        vol.gain.exponentialRampToValueAtTime(0.001, startTime + 0.23);
+
+        osc.connect(filter);
+        filter.connect(vol);
+        vol.connect(ctx.destination);
+        osc.start(startTime);
+        osc.stop(startTime + 0.24);
     });
 };
 

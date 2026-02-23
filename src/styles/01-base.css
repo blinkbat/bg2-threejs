@@ -1,0 +1,173 @@
+/* =============================================================================
+   GAME UI STYLES
+   ============================================================================= */
+
+/* -----------------------------------------------------------------------------
+   BASE & RESET
+   ----------------------------------------------------------------------------- */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body, #root {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    font-family: "DM Mono", monospace;
+    font-synthesis: none;
+}
+
+strong, b {
+    font-weight: 600;
+}
+
+:root {
+    --ui-modal-edge-gap: 48px;
+    --ui-modal-default-max-width: 960px;
+    --ui-modal-bg: linear-gradient(180deg, rgba(30,30,46,0.78) 0%, rgba(18,18,26,0.78) 100%);
+    --ui-modal-border: 2px solid rgba(61,61,92,0.5);
+    --ui-modal-radius: 8px;
+    --ui-modal-padding: 24px;
+
+    --ui-dialog-edge-gap: 32px;
+    --ui-dialog-max-width: 720px;
+
+    --ui-help-max-width: 1080px;
+    --ui-help-max-height: 620px;
+
+    --ui-save-load-max-width: 840px;
+    --ui-menu-max-width: 760px;
+    --ui-jukebox-max-width: 980px;
+
+    --ui-startup-card-max-width: 560px;
+}
+
+/* Dark mode scrollbars */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #555 #222;
+}
+
+*::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+    background: #222;
+}
+
+*::-webkit-scrollbar-thumb {
+    background: #555;
+    border-radius: 5px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background: #666;
+}
+
+/* -----------------------------------------------------------------------------
+   COMMON UTILITIES
+   ----------------------------------------------------------------------------- */
+.text-muted {
+    color: #888;
+}
+
+.text-light {
+    color: #aaa;
+}
+
+.text-white {
+    color: #fff;
+}
+
+.text-center {
+    text-align: center;
+}
+
+.uppercase {
+    text-transform: uppercase;
+}
+
+.capitalize {
+    text-transform: capitalize;
+}
+
+.bold {
+    font-weight: 600;
+}
+
+.pointer {
+    cursor: pointer;
+}
+
+.not-allowed {
+    cursor: not-allowed;
+}
+
+.crosshair {
+    cursor: crosshair;
+}
+
+.relative {
+    position: relative;
+}
+
+.absolute {
+    position: absolute;
+}
+
+.fixed {
+    position: fixed;
+}
+
+.flex {
+    display: flex;
+}
+
+.flex-col {
+    flex-direction: column;
+}
+
+.flex-1 {
+    flex: 1;
+}
+
+.items-center {
+    align-items: center;
+}
+
+.justify-center {
+    justify-content: center;
+}
+
+.justify-between {
+    justify-content: space-between;
+}
+
+.gap-6 {
+    gap: 6px;
+}
+
+.gap-8 {
+    gap: 8px;
+}
+
+.gap-10 {
+    gap: 10px;
+}
+
+.gap-12 {
+    gap: 12px;
+}
+
+.float-right {
+    float: right;
+}
+
+.overflow-hidden {
+    overflow: hidden;
+}
+

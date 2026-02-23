@@ -6,12 +6,12 @@ interface DialogModalProps {
     portraitSrc: string;
     portraitTint: string;
     visibleText: string;
-    fullText: string;
     isTyping: boolean;
     choices: DialogChoice[];
     canContinueWithoutChoices: boolean;
     continueLabel: string;
     onSkipTyping: () => void;
+    onSkipDialog: () => void;
     onContinueWithoutChoices: () => void;
     onChoose: (choice: DialogChoice) => void;
 }
@@ -21,29 +21,40 @@ export function DialogModal({
     portraitSrc,
     portraitTint,
     visibleText,
-    fullText,
     isTyping,
     choices,
     canContinueWithoutChoices,
     continueLabel,
     onSkipTyping,
+    onSkipDialog,
     onContinueWithoutChoices,
     onChoose,
 }: DialogModalProps) {
     const hasChoices = choices.length > 0;
+    const keyHintText = isTyping
+        ? "Space / Enter to skip text, Esc to skip dialog"
+        : hasChoices
+            ? "Press 1-9 or click a choice, Esc to skip dialog"
+            : "Space / Enter to continue, Esc to skip dialog";
 
     useEffect(() => {
         const onKeyDownCapture = (event: KeyboardEvent) => {
             const key = event.key;
-            const isSkipKey = key === " " || key === "Enter" || key === "Escape";
+            const isSpaceOrEnter = key === " " || key === "Enter";
+            const isEscape = key === "Escape";
             const isDigit = /^([1-9])$/.test(key);
 
-            if (!isSkipKey && !isDigit) return;
+            if (!isSpaceOrEnter && !isEscape && !isDigit) return;
 
             event.preventDefault();
             event.stopPropagation();
 
-            if (isSkipKey) {
+            if (isEscape) {
+                onSkipDialog();
+                return;
+            }
+
+            if (isSpaceOrEnter) {
                 if (isTyping) {
                     onSkipTyping();
                     return;
@@ -66,7 +77,7 @@ export function DialogModal({
 
         window.addEventListener("keydown", onKeyDownCapture, true);
         return () => window.removeEventListener("keydown", onKeyDownCapture, true);
-    }, [isTyping, canContinueWithoutChoices, choices, onSkipTyping, onContinueWithoutChoices, onChoose]);
+    }, [isTyping, canContinueWithoutChoices, choices, onSkipTyping, onSkipDialog, onContinueWithoutChoices, onChoose]);
 
     return (
         <div className="modal-overlay dialog-overlay">
@@ -78,13 +89,6 @@ export function DialogModal({
                     </div>
                     <div className="dialog-header-text">
                         <div className="dialog-speaker">{speakerName}</div>
-                        <div className="dialog-hint">
-                            {isTyping
-                                ? "Space / Enter / Esc to skip"
-                                : choices.length > 0
-                                    ? "Choose a response"
-                                    : "Space / Enter / Esc to continue"}
-                        </div>
                     </div>
                 </div>
 
@@ -93,23 +97,22 @@ export function DialogModal({
                     {isTyping && <span className="dialog-caret">|</span>}
                 </div>
 
-                <div
-                    className={`dialog-controls ${isTyping ? "hidden" : ""}`}
-                    aria-hidden={isTyping}
-                >
-                    {hasChoices ? (
-                        <div className="dialog-choices">
-                            {choices.map((choice, index) => (
-                                <button
-                                    key={choice.id}
-                                    className="dialog-choice-btn"
-                                    onClick={() => onChoose(choice)}
-                                    disabled={isTyping}
-                                >
-                                    <span className="dialog-choice-index">{index + 1}.</span> {choice.label}
-                                </button>
-                            ))}
-                        </div>
+                <div className="dialog-controls">
+                    {isTyping ? null : hasChoices ? (
+                        <>
+                            <div className="dialog-choices">
+                                {choices.map((choice, index) => (
+                                    <button
+                                        key={choice.id}
+                                        className="dialog-choice-btn"
+                                        onClick={() => onChoose(choice)}
+                                        disabled={isTyping}
+                                    >
+                                        <span className="dialog-choice-index">{index + 1}.</span> {choice.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </>
                     ) : (
                         <div className="dialog-continue-row">
                             <button
@@ -122,10 +125,7 @@ export function DialogModal({
                         </div>
                     )}
                 </div>
-
-                <div className="dialog-progress">
-                    {visibleText.length}/{fullText.length}
-                </div>
+                <div className="dialog-keyhint dialog-keyhint-fixed">{keyHintText}</div>
             </div>
         </div>
     );
