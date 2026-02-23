@@ -12,7 +12,7 @@ import type { Unit, Skill, CombatLogEntry, SelectionBox, CharacterStats, SummonT
 
 // Game Logic
 import { getCurrentArea, getCurrentAreaId, setCurrentArea, AREAS, DEFAULT_STARTING_AREA, type AreaId, type AreaTransition } from "./game/areas";
-import { UNIT_DATA, CORE_PLAYER_IDS, getEffectiveMaxHp, getEffectiveMaxMana, getXpForLevel, isCorePlayerId } from "./game/playerUnits";
+import { UNIT_DATA, CORE_PLAYER_IDS, getEffectiveMaxHp, getEffectiveMaxHpForStats, getEffectiveMaxMana, getEffectiveMaxManaForStats, getStartingPlayerStats, getXpForLevel, isCorePlayerId } from "./game/playerUnits";
 import { LEVEL_UP_HP, LEVEL_UP_MANA, LEVEL_UP_STAT_POINTS, LEVEL_UP_SKILL_POINTS, HP_PER_VITALITY, MP_PER_INTELLIGENCE } from "./game/statBonuses";
 import { ENEMY_STATS } from "./game/enemyStats";
 import { SKILLS } from "./game/skills";
@@ -205,6 +205,7 @@ function Game({
             const persisted = persistedPlayers?.find(p => p.id === id);
             const pos = spawnPositions[i] ?? { x: spawn.x, z: spawn.z };
             const initialExp = persisted?.exp ?? (INITIAL_XP_VALUES[id] ?? 0);
+            const startingStats = persisted?.stats ?? getStartingPlayerStats(id);
             const learnedSkills = playtestUnlockAllSkills
                 ? data.skills.map(s => s.name)
                 : (persisted?.learnedSkills ?? []);
@@ -215,12 +216,12 @@ function Game({
                 id,
                 x: pos.x,
                 z: pos.z,
-                hp: persisted?.hp ?? getEffectiveMaxHp(id),
-                mana: persisted?.mana ?? data.mana,
+                hp: persisted?.hp ?? getEffectiveMaxHpForStats(id, startingStats),
+                mana: persisted?.mana ?? getEffectiveMaxManaForStats(id, startingStats),
                 level: persisted?.level ?? 1,
                 exp: initialExp,
-                stats: persisted?.stats,
-                statPoints: persisted?.statPoints,
+                stats: startingStats,
+                statPoints: persisted?.statPoints ?? 0,
                 skillPoints: persisted?.skillPoints ?? 1,
                 learnedSkills,
                 team: "player" as const,
@@ -508,6 +509,7 @@ function Game({
     const perfSessionIdRef = useRef(`${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`);
     const perfSessionHeaderWrittenRef = useRef(false);
     const lastPerfTriggerAtRef = useRef(0);
+    const playtestStartupLogsWrittenRef = useRef(false);
 
     useEffect(() => {
         const interval = setInterval(() => {
@@ -642,6 +644,19 @@ function Game({
     const addLog = useCallback((text: string, color?: string) => {
         setCombatLog(prev => [...prev.slice(-50), { text, color }]);
     }, []);
+
+    useEffect(() => {
+        if (playtestStartupLogsWrittenRef.current) return;
+        playtestStartupLogsWrittenRef.current = true;
+        addLog(
+            `Debug: Playtest option "Unlock Skills" ${playtestSettings.unlockAllSkills ? "enabled" : "disabled"}.`,
+            playtestSettings.unlockAllSkills ? "#9b59b6" : "#888"
+        );
+        addLog(
+            `Debug: Playtest option "Skip Dialogs" ${playtestSettings.skipDialogs ? "enabled" : "disabled"}.`,
+            playtestSettings.skipDialogs ? "#9b59b6" : "#888"
+        );
+    }, [addLog, playtestSettings.skipDialogs, playtestSettings.unlockAllSkills]);
 
     const flushPerfLogs = useCallback(async () => {
         if (!import.meta.env.DEV) return;

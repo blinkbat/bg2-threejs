@@ -11,6 +11,7 @@ import type {
 import type { EnemyType } from "../../core/types";
 import { DIALOG_SPEAKERS } from "../../dialog/speakers";
 import type { DialogSpeakerId } from "../../dialog/types";
+import { XIcon } from "lucide-react";
 
 interface EnemySpawnOption {
     spawnIndex: number;
@@ -1158,9 +1159,9 @@ export function DialogEditorModal({
                                                 </select>
                                                 <button
                                                     onClick={() => onRemoveDialogCondition(trigger.id, conditionIndex)}
-                                                    style={{ padding: "5px 8px", fontSize: 11, background: "#934", color: "#fff", border: "none", borderRadius: 3, cursor: "pointer" }}
+                                                    style={{ padding: "4px", fontSize: 11, background: "#934", color: "#fff", border: "none", borderRadius: 3, cursor: "pointer" }}
                                                 >
-                                                    Remove
+                                                    <XIcon style={{ width: 12, height: 12 }} />
                                                 </button>
                                             </div>
 
