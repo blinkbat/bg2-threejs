@@ -3,9 +3,9 @@ name: Temple Grounds
 flavor: Crumbling stone and overgrown vines speak of forgotten glory.
 size: 50x50
 background: #44525f
-ground: #3f5638
-ambient: 0.3
-directional: 0.4
+ground: #465841
+ambient: 0.25
+directional: 0.3
 fog: true
 spawn: 3,25
 
@@ -37,8 +37,8 @@ spawn: 3,25
 <..............................................###
 <..............................................###
 <..............................................###
-#####.......................................#..###
-#####.......................................######
+#...........................................#..###
+##..........................................######
 #####........................................#####
 ######.........................................###
 ######..........................................##
@@ -133,17 +133,17 @@ spawn: 3,25
 ..................................................
 ..................................................
 ..................................................
-..................................................
-..................................................
-..................................................
-..................................................
-..................................................
-..................................................
-..................................................
-..................................................
-..................................................
-..................................................
-..................................................
+......................dd......ddd.................
+......................dd........d.................
+..........................dd..d...................
+......................d...dd..dd..................
+......................d...ddd.dd..................
+......................dd..ddd.dd..................
+......................dd...dd.ddd.................
+......................ddd..dd.ddd.................
+......................ddd....dddd.................
+......................ddd....dddd.................
+......................dddd..dd..d.................
 ..................................................
 ..................................................
 ..................................................
@@ -169,6 +169,7 @@ spawn: 3,25
 38.5,11.5:bat
 12.5,12.5:bat
 35.5,25.5:undead_knight
+21.5,35.5:wandering_shade
 12.5,37.5:bat
 38.5,38.5:bat
 
@@ -249,10 +250,12 @@ spawn: 3,25
 11,6:small_fern
 14,6:small_fern
 15,6:small_fern
+35,6:small_mushroom
 37,6:fern
 38,6:fern
 39,6:fern
 42,6:fern
+36,7:small_mushroom
 39,7:fern
 43,7:fern
 44,7:fern
@@ -262,7 +265,9 @@ spawn: 3,25
 16,8:broken_wall,rot=1.571,size=1
 22,8:broken_column,size=1
 34,8:broken_wall,rot=1.571,size=0.9
+42,8:mushroom
 8,9:small_fern
+44,9:mushroom
 14,10:broken_column,size=1
 19,10:rock
 20,10:rock
@@ -280,6 +285,8 @@ spawn: 3,25
 22,11:rock
 23,11:rock
 26,11:small_fern
+43,11:small_mushroom
+45,11:small_mushroom
 46,11:fern
 47,11:fern
 48,11:fern
@@ -287,11 +294,13 @@ spawn: 3,25
 21,12:fern
 36,12:broken_column,size=0.9
 48,12:fern
+11,13:fern
 15,13:small_rock
 29,13:small_fern
 30,13:small_fern
 34,13:small_fern
 45,13:small_rock
+6,14:small_mushroom
 8,14:broken_wall,rot=0.000,size=1
 15,14:small_rock
 29,14:fern
@@ -299,6 +308,7 @@ spawn: 3,25
 42,14:broken_wall,rot=0.000,size=1.1
 46,14:rock
 47,14:rock
+8,15:fern
 16,15:small_rock
 20,15:broken_wall,rot=0.785,size=0.8
 30,15:broken_wall,rot=-0.785,size=0.8
@@ -306,8 +316,11 @@ spawn: 3,25
 45,15:small_rock
 46,15:small_rock
 47,15:small_rock
+5,16:small_mushroom
 47,16:small_rock
 48,16:rock
+7,17:fern
+8,17:fern
 10,17:rock
 19,17:rock
 33,17:small_rock
@@ -318,24 +331,34 @@ spawn: 3,25
 18,18:column,size=1.2
 19,18:small_rock
 20,18:small_rock
+31,18:small_rock
 32,18:column,size=1.2
 33,18:rock
 40,18:column,size=1
 41,18:small_rock
+6,19:fern
 18,19:small_rock
 19,19:small_rock
+25,19:rock
+30,19:small_rock
 37,19:small_fern
 38,19:small_fern
+3,20:small_mushroom
 37,20:small_fern
 38,20:fern
+1,21:mushroom
 9,21:rock
 11,21:small_rock
+21,21:small_rock
 38,21:fern
 39,21:small_rock
+1,22:small_mushroom
+4,22:small_mushroom
 9,22:rock
 10,22:column,size=1
 11,22:small_rock
 15,22:broken_wall,rot=1.047,size=0.7
+31,22:rock
 40,22:column,size=1
 13,24:small_fern
 14,24:fern
@@ -344,18 +367,29 @@ spawn: 3,25
 13,25:small_fern
 39,25:small_rock
 42,25:broken_column,size=1
+4,26:mushroom
 10,26:column,size=1
+32,26:small_rock
 39,26:fern
 40,26:column,size=1
 11,27:rock
 40,27:small_rock
 41,27:small_rock
+5,28:small_mushroom
+6,28:small_mushroom
 10,30:column,size=1
+26,30:rock
+34,30:small_rock
 40,30:column,size=1
+21,31:small_rock
+25,31:small_rock
 31,31:small_rock
+32,31:small_rock
 40,31:rock
 10,32:small_rock
 18,32:column,size=1.2
+21,32:small_rock
+23,32:small_rock
 31,32:fern
 32,32:column,size=1.2
 48,32:fern
@@ -374,6 +408,7 @@ spawn: 3,25
 11,35:small_rock
 32,35:small_fern
 37,35:small_rock
+43,35:mushroom
 8,36:broken_wall,rot=0.000,size=0.9
 37,36:small_rock
 38,36:broken_column,size=0.8
@@ -386,9 +421,13 @@ spawn: 3,25
 12,38:broken_column,size=1.1
 48,38:small_fern
 40,39:small_fern
+43,39:small_mushroom
 24,40:small_rock
+44,40:small_mushroom
+46,40:mushroom
 47,40:fern
 9,41:fern
+34,41:small_mushroom
 39,41:fern
 41,41:small_rock
 44,41:small_rock
@@ -398,7 +437,9 @@ spawn: 3,25
 16,42:broken_wall,rot=1.571,size=1.1
 23,42:small_rock
 28,42:broken_column,size=0.9
+32,42:mushroom
 34,42:broken_wall,rot=1.571,size=1
+35,42:small_mushroom
 44,42:small_rock
 48,42:small_fern
 16,43:rock
@@ -406,6 +447,7 @@ spawn: 3,25
 24,43:small_rock
 30,43:small_fern
 31,43:fern
+33,43:mushroom
 36,43:rock
 40,43:small_fern
 42,43:fern
@@ -426,4 +468,5 @@ spawn: 3,25
 45,44:small_fern
 
 === LIGHTS ===
-9.5,24.5:radius=18,angle=65,tint=#ffd28a,brightness=40,height=10,diffusion=0.55,decay=1
+9.5,24.5:radius=18,angle=65,tint=#d6ff8a,brightness=40,height=10,diffusion=0.55,decay=1
+36.5,26.5:radius=18,angle=65,tint=#ac80a4,brightness=30,height=10,diffusion=0.55,decay=1
