@@ -5,6 +5,7 @@
 
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
+import { hideAll as hideAllTippy } from "tippy.js";
 import type { Unit, Skill, UnitGroup, SelectionBox } from "../core/types";
 import type { SecretDoorMesh } from "../rendering/scene";
 import type { LootBag } from "../core/types";
@@ -209,12 +210,22 @@ export function useInputHandlers({
         staticHoverRaycastRootsRef.current = staticHoverRaycastRoots;
 
         const updateCam = () => updateCamera(camera, gameRefs.current.cameraOffset);
+        const closeAllTooltips = () => {
+            hideAllTippy({ duration: 0 });
+            setters.setHoveredEnemy(null);
+            setters.setHoveredChest(null);
+            setters.setHoveredPlayer(null);
+            setters.setHoveredDoor(null);
+            setters.setHoveredSecretDoor(null);
+            setters.setHoveredLootBag(null);
+        };
 
         // =============================================================================
         // MOUSE DOWN
         // =============================================================================
         const onMouseDown = (e: MouseEvent) => {
             if (e.button === 2) {
+                closeAllTooltips();
                 mutableRefs.isDragging.current = true;
                 mutableRefs.didPan.current = false;
                 mutableRefs.lastMouse.current = { x: e.clientX, y: e.clientY };
