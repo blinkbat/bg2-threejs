@@ -1262,9 +1262,7 @@ function Game({
                     for (const itemId of rolledLoot.items) {
                         const item = getItem(itemId);
                         lootParts.push(item?.name ?? itemId);
-                    }
-                    const enemyName = u.enemyType ? ENEMY_STATS[u.enemyType].name : "Enemy";
-                    addLog(`${enemyName} drops ${lootParts.join(", ")}.`, "#ffd700");
+                    };
                 });
             }
         }
