@@ -15,18 +15,96 @@ interface LiquidTileAnimationData {
     baseEmissiveIntensity: number;
 }
 
-function readLiquidData(value: unknown): LiquidTileAnimationData | null {
-    if (!value || typeof value !== "object") return null;
+interface LavaBubbleGroupAnimationData {
+    liquidType: "lavaBubbles";
+    wavePhase: number;
+    waveSpeed: number;
+    baseOpacity: number;
+    baseScale: number;
+}
 
-    const liquidType = Reflect.get(value, "liquidType");
-    const wavePhase = Reflect.get(value, "wavePhase");
-    const waveSpeed = Reflect.get(value, "waveSpeed");
-    const baseColor = Reflect.get(value, "baseColor");
-    const hotColor = Reflect.get(value, "hotColor");
-    const baseEmissiveIntensity = Reflect.get(value, "baseEmissiveIntensity");
+interface WaterBubbleGroupAnimationData {
+    liquidType: "waterBubbles";
+    wavePhase: number;
+    waveSpeed: number;
+    baseOpacity: number;
+    baseScale: number;
+}
+
+interface LavaBubbleNodeData {
+    phaseOffset: number;
+    baseScale: number;
+    baseY: number;
+    riseAmplitude: number;
+}
+
+type LiquidAnimationData =
+    | LiquidTileAnimationData
+    | LavaBubbleGroupAnimationData
+    | WaterBubbleGroupAnimationData;
+
+interface LiquidBubbleNodeRef {
+    mesh: THREE.Mesh;
+    material: THREE.MeshBasicMaterial;
+    data: LavaBubbleNodeData;
+}
+
+interface LiquidBubbleGroupRef {
+    group: THREE.Object3D;
+    data: LavaBubbleGroupAnimationData | WaterBubbleGroupAnimationData;
+    bubbles: LiquidBubbleNodeRef[];
+}
+
+interface LiquidLavaTileRef {
+    material: THREE.MeshStandardMaterial;
+    data: LiquidTileAnimationData;
+}
+
+interface LiquidSharedLavaRef {
+    material: THREE.MeshStandardMaterial;
+    data: LiquidTileAnimationData;
+}
+
+interface LiquidUpdateCache {
+    sharedLava: LiquidSharedLavaRef | null;
+    lavaTiles: LiquidLavaTileRef[];
+    bubbleGroups: LiquidBubbleGroupRef[];
+}
+
+const liquidUpdateCacheByRoot = new WeakMap<THREE.Object3D, LiquidUpdateCache>();
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+    if (!value || typeof value !== "object") return null;
+    return value as Record<string, unknown>;
+}
+
+function readLiquidData(value: unknown): LiquidAnimationData | null {
+    const record = asRecord(value);
+    if (!record) return null;
+
+    const liquidType = record.liquidType;
+    const wavePhase = record.wavePhase;
+    const waveSpeed = record.waveSpeed;
+    if (typeof wavePhase !== "number" || typeof waveSpeed !== "number") return null;
+
+    if (liquidType === "lavaBubbles" || liquidType === "waterBubbles") {
+        const baseOpacity = record.baseOpacity;
+        const baseScale = record.baseScale;
+        if (typeof baseOpacity !== "number" || typeof baseScale !== "number") return null;
+        return {
+            liquidType,
+            wavePhase,
+            waveSpeed,
+            baseOpacity,
+            baseScale,
+        };
+    }
 
     if (liquidType !== "lava") return null;
-    if (typeof wavePhase !== "number" || typeof waveSpeed !== "number") return null;
+
+    const baseColor = record.baseColor;
+    const hotColor = record.hotColor;
+    const baseEmissiveIntensity = record.baseEmissiveIntensity;
     if (!(baseColor instanceof THREE.Color)) return null;
 
     return {
@@ -37,6 +115,89 @@ function readLiquidData(value: unknown): LiquidTileAnimationData | null {
         hotColor: hotColor instanceof THREE.Color ? hotColor : undefined,
         baseEmissiveIntensity: typeof baseEmissiveIntensity === "number" ? baseEmissiveIntensity : 0.8,
     };
+}
+
+function readLavaBubbleNodeData(value: unknown): LavaBubbleNodeData | null {
+    const record = asRecord(value);
+    if (!record) return null;
+
+    const phaseOffset = record.phaseOffset;
+    const baseScale = record.baseScale;
+    const baseY = record.baseY;
+    const riseAmplitude = record.riseAmplitude;
+    if (typeof phaseOffset !== "number" || typeof baseScale !== "number") return null;
+    if (typeof baseY !== "number" || typeof riseAmplitude !== "number") return null;
+
+    return {
+        phaseOffset,
+        baseScale,
+        baseY,
+        riseAmplitude,
+    };
+}
+
+function getLiquidUpdateCache(waterMesh: THREE.Object3D): LiquidUpdateCache {
+    const cached = liquidUpdateCacheByRoot.get(waterMesh);
+    if (cached) return cached;
+
+    const nextCache: LiquidUpdateCache = {
+        sharedLava: null,
+        lavaTiles: [],
+        bubbleGroups: [],
+    };
+
+    const rootData = asRecord(waterMesh.userData);
+    const sharedLavaData = readLiquidData(rootData?.sharedLava);
+    if (sharedLavaData?.liquidType === "lava") {
+        const sharedLavaRecord = asRecord(rootData?.sharedLava);
+        const sharedMaterial = sharedLavaRecord?.material;
+        if (sharedMaterial instanceof THREE.MeshStandardMaterial) {
+            nextCache.sharedLava = {
+                material: sharedMaterial,
+                data: sharedLavaData,
+            };
+        }
+    }
+
+    waterMesh.traverse((obj: THREE.Object3D) => {
+        const nodeData = asRecord(obj.userData);
+        const liquidData = readLiquidData(nodeData?.liquid);
+        if (!liquidData) return;
+
+        if (liquidData.liquidType === "lavaBubbles" || liquidData.liquidType === "waterBubbles") {
+            const bubbles: LiquidBubbleNodeRef[] = [];
+            for (const child of obj.children) {
+                if (!(child instanceof THREE.Mesh)) continue;
+                const childMaterial = child.material;
+                if (!(childMaterial instanceof THREE.MeshBasicMaterial)) continue;
+                const childDataRecord = asRecord(child.userData);
+                const bubbleData = readLavaBubbleNodeData(childDataRecord?.lavaBubble);
+                if (!bubbleData) continue;
+                bubbles.push({
+                    mesh: child,
+                    material: childMaterial,
+                    data: bubbleData,
+                });
+            }
+            nextCache.bubbleGroups.push({
+                group: obj,
+                data: liquidData,
+                bubbles,
+            });
+            return;
+        }
+
+        if (!(obj instanceof THREE.Mesh)) return;
+        const material = obj.material;
+        if (!(material instanceof THREE.MeshStandardMaterial)) return;
+        nextCache.lavaTiles.push({
+            material,
+            data: liquidData,
+        });
+    });
+
+    liquidUpdateCacheByRoot.set(waterMesh, nextCache);
+    return nextCache;
 }
 
 // =============================================================================
@@ -68,8 +229,26 @@ export function updateCamera(camera: THREE.OrthographicCamera, offset: { x: numb
 // WATER
 // =============================================================================
 
-const LAVA_UPDATE_INTERVAL_MS = 66;
-let lastLavaUpdateTime = 0;
+const LIQUID_UPDATE_INTERVAL_MS = 50;
+const LIQUID_TWO_PI = Math.PI * 2;
+const LIQUID_INV_TWO_PI = 1 / LIQUID_TWO_PI;
+const BUBBLE_FADE_IN_PORTION = 0.82;
+let lastLiquidUpdateTime = 0;
+
+function getCycle01(angle: number): number {
+    const cycle = angle * LIQUID_INV_TWO_PI;
+    return cycle - Math.floor(cycle);
+}
+
+function getAsymmetricBubbleFade(cycle01: number): number {
+    if (cycle01 <= BUBBLE_FADE_IN_PORTION) {
+        const t = cycle01 / BUBBLE_FADE_IN_PORTION;
+        return t * t * (3 - 2 * t);
+    }
+    const t = (cycle01 - BUBBLE_FADE_IN_PORTION) / (1 - BUBBLE_FADE_IN_PORTION);
+    const drop = 1 - t;
+    return drop * drop * drop;
+}
 
 function applyLavaPulse(
     material: THREE.MeshStandardMaterial,
@@ -89,36 +268,54 @@ function applyLavaPulse(
     material.metalness = 0.16;
 }
 
+function applyBubbleGroupPulse(
+    bubbleGroup: LiquidBubbleGroupRef,
+    t: number
+): void {
+    const { group, data: liquidData, bubbles } = bubbleGroup;
+    const groupAngle = t * liquidData.waveSpeed + liquidData.wavePhase;
+    const groupFade = getAsymmetricBubbleFade(getCycle01(groupAngle));
+    const groupScale = liquidData.baseScale * (0.96 + groupFade * 0.08);
+    group.scale.set(groupScale, groupScale, groupScale);
+
+    for (const bubble of bubbles) {
+        const { mesh, material, data: bubbleData } = bubble;
+        const bubbleAngle = t * (liquidData.waveSpeed * 1.45) + liquidData.wavePhase + bubbleData.phaseOffset;
+        const bubbleWave = Math.sin(bubbleAngle);
+        const bubbleRise01 = 0.5 + bubbleWave * 0.5;
+        const bubbleFade = getAsymmetricBubbleFade(getCycle01(bubbleAngle));
+        material.opacity = liquidData.baseOpacity * groupFade * bubbleFade * (0.35 + bubbleRise01 * 0.65);
+        const animatedScale = bubbleData.baseScale * (0.72 + bubbleRise01 * 0.48);
+        mesh.scale.set(animatedScale, animatedScale, animatedScale);
+        mesh.position.y = bubbleData.baseY + bubbleData.riseAmplitude * bubbleRise01;
+    }
+}
+
 /**
- * Update animated liquid tiles (lava only).
+ * Update animated liquid tiles (lava + bubble groups).
  */
-export function updateWater(waterMesh: THREE.Object3D | null, time: number): void {
+export function updateWater(waterMesh: THREE.Object3D | null, time: number, camera?: THREE.Camera | null): void {
     if (!waterMesh) return;
-    if (time - lastLavaUpdateTime < LAVA_UPDATE_INTERVAL_MS) return;
-    lastLavaUpdateTime = time;
+    void camera;
+    if (time - lastLiquidUpdateTime < LIQUID_UPDATE_INTERVAL_MS) return;
+    lastLiquidUpdateTime = time;
 
     const t = time * 0.001;
-    const sharedLiquidData = readLiquidData(Reflect.get(waterMesh.userData, "sharedLava"));
-    if (sharedLiquidData) {
-        const sharedMaterial = Reflect.get(waterMesh.userData, "sharedLava") as { material?: unknown };
-        const mat = sharedMaterial.material;
-        if (mat instanceof THREE.MeshStandardMaterial) {
-            applyLavaPulse(mat, sharedLiquidData, t);
-            return;
+    const cache = getLiquidUpdateCache(waterMesh);
+
+    if (cache.sharedLava) {
+        applyLavaPulse(cache.sharedLava.material, cache.sharedLava.data, t);
+    }
+
+    if (!cache.sharedLava) {
+        for (const lavaTile of cache.lavaTiles) {
+            applyLavaPulse(lavaTile.material, lavaTile.data, t);
         }
     }
 
-    waterMesh.traverse((obj: THREE.Object3D) => {
-        if (!(obj instanceof THREE.Mesh)) return;
-
-        const liquidData = readLiquidData(obj.userData?.liquid);
-        if (!liquidData) return;
-
-        const mat = obj.material;
-        if (!(mat instanceof THREE.MeshStandardMaterial)) return;
-
-        applyLavaPulse(mat, liquidData, t);
-    });
+    for (const bubbleGroup of cache.bubbleGroups) {
+        applyBubbleGroupPulse(bubbleGroup, t);
+    }
 }
 
 // =============================================================================

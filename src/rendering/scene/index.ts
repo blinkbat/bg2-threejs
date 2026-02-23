@@ -344,6 +344,20 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     const WATER_METALNESS = 0.52;
     const WATER_ROUGHNESS = 0.08;
     const WATER_TILE_OPACITY = 0.4;
+    const WATER_BUBBLE_DENSITY = 0.2;
+    const WATER_BUBBLE_GROUP_Y_OFFSET = 0.0048;
+    const WATER_BUBBLE_BASE_OPACITY = 0.26;
+    const WATER_BUBBLE_COLOR = "#ffffff";
+    const WATER_BUBBLE_SCALE_MIN = 0.62;
+    const WATER_BUBBLE_SCALE_MAX = 2.45;
+    const WATER_BUBBLE_SCALE_CURVE = 2.1;
+    const LAVA_BUBBLE_GROUP_Y_OFFSET = 0.0054;
+    const LAVA_BUBBLE_DENSITY = 0.24;
+    const LAVA_BUBBLE_BASE_OPACITY = 0.3;
+    const LAVA_BUBBLE_COLOR = "#7a2a14";
+    const LAVA_BUBBLE_SCALE_MIN = 0.72;
+    const LAVA_BUBBLE_SCALE_MAX = 2.6;
+    const LAVA_BUBBLE_SCALE_CURVE = 2.0;
     const TERRAIN_WATER_COLOR_SHALLOW = "#32718a";
     const TERRAIN_WATER_COLOR_DEEP = "#295f75";
     // Keep floor layers visually flat so they remain below prop/shadow layers.
@@ -356,6 +370,31 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     const floorMatPool: Record<string, THREE.MeshStandardMaterial> = {};
     const waterMatPool: Record<string, THREE.MeshStandardMaterial> = {};
     const lavaMatPool: Record<string, THREE.MeshStandardMaterial> = {};
+    const lavaBubbleGeo = new THREE.RingGeometry(0.042, 0.068, 16);
+    const areaIdUnitRange = hashAreaIdToUnitRange(area.id);
+
+    function isTerrainWater(value: string | undefined): boolean {
+        return value === "w" || value === "W";
+    }
+
+    function isSurroundedByTerrainWater(layer: string[][], x: number, z: number): boolean {
+        return isTerrainWater(layer[z - 1]?.[x])
+            && isTerrainWater(layer[z + 1]?.[x])
+            && isTerrainWater(layer[z]?.[x - 1])
+            && isTerrainWater(layer[z]?.[x + 1]);
+    }
+
+    function isTerrainLava(value: string | undefined): boolean {
+        return value === "~";
+    }
+
+    function isSurroundedByTerrainLava(layer: string[][], x: number, z: number): boolean {
+        return isTerrainLava(layer[z - 1]?.[x])
+            && isTerrainLava(layer[z + 1]?.[x])
+            && isTerrainLava(layer[z]?.[x - 1])
+            && isTerrainLava(layer[z]?.[x + 1]);
+    }
+    const skipRaycast: THREE.Object3D["raycast"] = () => undefined;
     function getFloorMat(color: string): THREE.MeshStandardMaterial {
         if (!floorMatPool[color]) {
             floorMatPool[color] = new THREE.MeshStandardMaterial({
@@ -491,7 +530,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                     setStaticRenderTier(lavaTile, "floor");
                     lavaTile.userData.liquid = {
                         liquidType: "lava",
-                        wavePhase: hashNoise(x, z, hashAreaIdToUnitRange(area.id) * 1000) * Math.PI * 2,
+                        wavePhase: hashNoise(x, z, areaIdUnitRange * 1000) * Math.PI * 2,
                         waveSpeed: 1.7,
                         baseColor: lavaMat.color.clone(),
                         hotColor: new THREE.Color("#ff8a00"),
@@ -499,6 +538,70 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                     };
                     liquidTiles.add(lavaTile);
                     hasLiquidTiles = true;
+
+                    const bubbleSeed = areaIdUnitRange * 1400 + layerIndex * 157;
+                    if (!isSurroundedByTerrainLava(layer, x, z)) {
+                        continue;
+                    }
+                    const bubblePresence = hashNoise(x, z, bubbleSeed + 5);
+                    if (bubblePresence > LAVA_BUBBLE_DENSITY) {
+                        continue;
+                    }
+
+                    const bubbleGroup = new THREE.Group();
+                    bubbleGroup.name = "lavaBubbles";
+                    bubbleGroup.raycast = skipRaycast;
+                    bubbleGroup.position.set(
+                        x + 0.5,
+                        TERRAIN_BASE_Y + layerIndex * TERRAIN_LAYER_HEIGHT_STEP + LAVA_BUBBLE_GROUP_Y_OFFSET,
+                        z + 0.5
+                    );
+                    bubbleGroup.userData.liquid = {
+                        liquidType: "lavaBubbles",
+                        wavePhase: hashNoise(x, z, bubbleSeed + 17) * Math.PI * 2,
+                        waveSpeed: 0.9 + hashNoise(x, z, bubbleSeed + 31) * 0.45,
+                        baseOpacity: LAVA_BUBBLE_BASE_OPACITY,
+                        baseScale: 0.95 + hashNoise(x, z, bubbleSeed + 43) * 0.2,
+                    };
+
+                    const bubbleCount = 2 + Math.floor(hashNoise(x, z, bubbleSeed + 59) * 2);
+                    for (let bubbleIndex = 0; bubbleIndex < bubbleCount; bubbleIndex++) {
+                        const bubbleMat = new THREE.MeshBasicMaterial({
+                            color: LAVA_BUBBLE_COLOR,
+                            transparent: true,
+                            opacity: 0,
+                            depthWrite: false,
+                            toneMapped: false,
+                        });
+                        const bubble = new THREE.Mesh(lavaBubbleGeo, bubbleMat);
+                        const bubbleAngle = hashNoise(x, z, bubbleSeed + 71 + bubbleIndex * 17) * Math.PI * 2;
+                        const bubbleRadius = 0.05 + hashNoise(x, z, bubbleSeed + 83 + bubbleIndex * 19) * 0.14;
+                        const bubbleScaleNoise = hashNoise(x, z, bubbleSeed + 97 + bubbleIndex * 23);
+                        const bubbleScale = THREE.MathUtils.lerp(
+                            LAVA_BUBBLE_SCALE_MIN,
+                            LAVA_BUBBLE_SCALE_MAX,
+                            Math.pow(bubbleScaleNoise, LAVA_BUBBLE_SCALE_CURVE)
+                        );
+                        bubble.position.set(
+                            Math.cos(bubbleAngle) * bubbleRadius,
+                            0,
+                            Math.sin(bubbleAngle) * bubbleRadius
+                        );
+                        bubble.rotation.x = -Math.PI / 2;
+                        bubble.scale.setScalar(bubbleScale);
+                        bubble.name = "lavaBubble";
+                        bubble.raycast = skipRaycast;
+                        setStaticRenderTier(bubble, "floor");
+                        bubble.userData.lavaBubble = {
+                            phaseOffset: hashNoise(x, z, bubbleSeed + 113 + bubbleIndex * 29) * Math.PI * 2,
+                            baseScale: bubbleScale,
+                            baseY: 0,
+                            riseAmplitude: 0.012 + hashNoise(x, z, bubbleSeed + 127 + bubbleIndex * 31) * 0.02,
+                        };
+                        bubbleGroup.add(bubble);
+                    }
+
+                    liquidTiles.add(bubbleGroup);
                     continue;
                 }
 
@@ -534,6 +637,68 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                     setStaticRenderTier(tile, "floor");
                     scene.add(tile);
                     hasLiquidTiles = true;
+
+                    const bubbleSeed = areaIdUnitRange * 1000 + layerIndex * 97;
+                    if (!isSurroundedByTerrainWater(layer, x, z)) {
+                        continue;
+                    }
+                    const bubblePresence = hashNoise(x, z, bubbleSeed + 7);
+                    if (bubblePresence > WATER_BUBBLE_DENSITY) {
+                        continue;
+                    }
+                    const bubbleGroup = new THREE.Group();
+                    bubbleGroup.name = "waterBubbles";
+                    bubbleGroup.raycast = skipRaycast;
+                    bubbleGroup.position.set(
+                        x + 0.5,
+                        TERRAIN_BASE_Y + layerIndex * TERRAIN_LAYER_HEIGHT_STEP + WATER_BUBBLE_GROUP_Y_OFFSET,
+                        z + 0.5
+                    );
+                    bubbleGroup.userData.liquid = {
+                        liquidType: "waterBubbles",
+                        wavePhase: hashNoise(x, z, bubbleSeed + 17) * Math.PI * 2,
+                        waveSpeed: 0.78 + hashNoise(x, z, bubbleSeed + 31) * 0.35,
+                        baseOpacity: WATER_BUBBLE_BASE_OPACITY,
+                        baseScale: 0.9 + hashNoise(x, z, bubbleSeed + 43) * 0.18,
+                    };
+
+                    const bubbleCount = 2 + Math.floor(hashNoise(x, z, bubbleSeed + 59) * 2);
+                    for (let bubbleIndex = 0; bubbleIndex < bubbleCount; bubbleIndex++) {
+                        const bubbleMat = new THREE.MeshBasicMaterial({
+                            color: WATER_BUBBLE_COLOR,
+                            transparent: true,
+                            opacity: 0,
+                            depthWrite: false,
+                            toneMapped: false,
+                        });
+                        const bubble = new THREE.Mesh(lavaBubbleGeo, bubbleMat);
+                        const bubbleAngle = hashNoise(x, z, bubbleSeed + 71 + bubbleIndex * 17) * Math.PI * 2;
+                        const bubbleRadius = 0.04 + hashNoise(x, z, bubbleSeed + 83 + bubbleIndex * 19) * 0.12;
+                        const bubbleScaleNoise = hashNoise(x, z, bubbleSeed + 97 + bubbleIndex * 23);
+                        const bubbleScale = THREE.MathUtils.lerp(
+                            WATER_BUBBLE_SCALE_MIN,
+                            WATER_BUBBLE_SCALE_MAX,
+                            Math.pow(bubbleScaleNoise, WATER_BUBBLE_SCALE_CURVE)
+                        );
+                        bubble.position.set(
+                            Math.cos(bubbleAngle) * bubbleRadius,
+                            0,
+                            Math.sin(bubbleAngle) * bubbleRadius
+                        );
+                        bubble.rotation.x = -Math.PI / 2;
+                        bubble.scale.setScalar(bubbleScale);
+                        bubble.name = "waterBubble";
+                        bubble.raycast = skipRaycast;
+                        setStaticRenderTier(bubble, "floor");
+                        bubble.userData.lavaBubble = {
+                            phaseOffset: hashNoise(x, z, bubbleSeed + 113 + bubbleIndex * 29) * Math.PI * 2,
+                            baseScale: bubbleScale,
+                            baseY: 0,
+                            riseAmplitude: 0.009 + hashNoise(x, z, bubbleSeed + 127 + bubbleIndex * 31) * 0.016,
+                        };
+                        bubbleGroup.add(bubble);
+                    }
+                    liquidTiles.add(bubbleGroup);
                 }
             }
         }

@@ -3,9 +3,9 @@ name: Magma Hollow
 flavor: Heat radiates from rivers of molten rock flowing through the darkness.
 size: 50x50
 background: #120802
-ground: #351d1d
-ambient: 0.45
-directional: 0.4
+ground: #2f1e1e
+ambient: 0.4
+directional: 0.3
 fog: true
 spawn: 46,25
 
@@ -173,7 +173,7 @@ spawn: 46,25
 14.5,28.5:bat
 
 === CHESTS ===
-5.5,28.5:gold=13,items=[smallManaPotion:1]
+2.5,28.5:gold=13
 
 === TRANSITIONS ===
 21,6,1,5:north->tomb@3,12
@@ -257,6 +257,11 @@ spawn: 46,25
 
 === SECRET_DOORS ===
 35,15:blocking=34,15,3,1
+
+=== LIGHTS ===
+48.5,26.5:radius=18,angle=65,tint=#ffd28a,brightness=30,height=10,diffusion=0.55,decay=1
+12.5,32.5:radius=18,angle=65,tint=#ff2929,brightness=30,height=10,diffusion=0.55,decay=1
+12.5,21.5:radius=18,angle=65,tint=#ff2424,brightness=30,height=10,diffusion=0.55,decay=1
 
 === CANDLES ===
 10.85,20:dir=1,0,kind=candle,color=#ffaa44

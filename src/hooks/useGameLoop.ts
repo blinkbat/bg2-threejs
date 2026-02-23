@@ -21,7 +21,7 @@ import { ENEMY_STATS } from "../game/enemyStats";
 import { getEffectiveMaxHp } from "../game/playerUnits";
 import { createLiveUnitsDispatch } from "../core/stateUtils";
 import { publishHpBarOverlayFrame, resetHpBarOverlayFrame } from "./hpBarOverlayStore";
-import { updateCamera, updateWallTransparency, updateTreeFogVisibility, updateFogOccluderVisibility, updateLightLOD, addUnitToScene, updateBillboards } from "../rendering/scene";
+import { updateCamera, updateWater, updateWallTransparency, updateTreeFogVisibility, updateFogOccluderVisibility, updateLightLOD, addUnitToScene, updateBillboards } from "../rendering/scene";
 import { updateDynamicObstacles } from "../ai/pathfinding";
 import { updateAvoidanceCache } from "../ai/unitAI";
 import { updateUnitCache } from "../game/unitQuery";
@@ -488,7 +488,7 @@ export function useGameLoop({
             scene, camera, renderer, flames, candleLights, fogTexture, fogMesh, moveMarker,
             rangeIndicator, unitGroups, selectRings, targetRings, shieldIndicators,
             unitMeshes, unitOriginalColors, maxHp, wallMeshes, treeMeshes, fogOccluderMeshes,
-            columnMeshes, columnGroups, billboards, candleMeshes
+            columnMeshes, columnGroups, billboards, candleMeshes, waterMesh
         } = sceneState;
 
         let animId: number;
@@ -797,6 +797,7 @@ export function useGameLoop({
             sectionStart = performance.now();
             updateMarkerAnimations(moveMarker, refs.moveMarkerStart, targetRings, refs.targetRingTimers, now);
             updateRangeIndicator(stateRefs.targetingModeRef.current, rangeIndicator, unitGroups);
+            updateWater(waterMesh, gameNow, camera);
             visualMs += performance.now() - sectionStart;
 
             // Shared transient effect animations (rings, beams, flash overlays, etc.)
