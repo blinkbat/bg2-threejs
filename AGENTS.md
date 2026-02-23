@@ -21,6 +21,7 @@ This document is intentionally evergreen. It captures stable architecture, invar
 - Inspect usages before changing types, signatures, or data contracts.
 - Prefer explicit complete types.
 - Avoid `any`, type assertions, and non-null assertions unless strictly necessary.
+- Color-change preference: when adjusting colors, edit the source hex values directly by default. Do not use runtime brighten/darken transforms unless explicitly requested.
 - Do not add placeholder/TODO code or speculative utilities.
 - Ask before substantial refactors.
 - Ask clarifying questions only when ambiguity blocks a safe implementation.
@@ -185,5 +186,4 @@ Before finalizing:
 - Prefer stable concepts over volatile specifics.
 - Update this guide when architectural ownership or invariants change.
 - Avoid adding temporary migration notes, dates, or recency language.
-
 

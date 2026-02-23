@@ -284,6 +284,7 @@
     left: 12px;
     padding: 12px 16px;
     pointer-events: none;  /* Allow drag-select through HUD background */
+    z-index: 50; /* above log */
 }
 
 .hud-buttons,

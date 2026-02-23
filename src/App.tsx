@@ -50,7 +50,7 @@ import { CommandBar } from "./components/CommandBar";
 import { UnitPanel } from "./components/UnitPanel";
 import type { HotbarAssignments } from "./hooks/hotbarStorage";
 import { loadHotbarAssignments, saveHotbarAssignments } from "./hooks/hotbarStorage";
-import { loadDevMode, saveDevMode } from "./hooks/localStorage";
+import { loadPlaytestSettings, savePlaytestSettings, type PlaytestSettings } from "./hooks/localStorage";
 import { CombatLog } from "./components/CombatLog";
 import { HUD } from "./components/HUD";
 import { FormationIndicator } from "./components/FormationIndicator";
@@ -182,7 +182,9 @@ function Game({
 
     // Initial camera offset
     const initialCamOffset = useMemo(() => spawnPoint ?? getCurrentArea().defaultSpawn, [spawnPoint]);
-    const [devMode, setDevMode] = useState<boolean>(loadDevMode);
+    const [playtestSettings, setPlaytestSettings] = useState<PlaytestSettings>(loadPlaytestSettings);
+    const playtestUnlockAllSkills = playtestSettings.unlockAllSkills;
+    const playtestSkipDialogs = playtestSettings.skipDialogs;
 
     // Create initial units
     const createUnitsForArea = useCallback((): Unit[] => {
@@ -203,7 +205,7 @@ function Game({
             const persisted = persistedPlayers?.find(p => p.id === id);
             const pos = spawnPositions[i] ?? { x: spawn.x, z: spawn.z };
             const initialExp = persisted?.exp ?? (INITIAL_XP_VALUES[id] ?? 0);
-            const learnedSkills = devMode
+            const learnedSkills = playtestUnlockAllSkills
                 ? data.skills.map(s => s.name)
                 : (persisted?.learnedSkills ?? []);
             const defaultCantripUses = data.skills
@@ -311,7 +313,7 @@ function Game({
         const allUnits = [...players, ...summons, ...enemies];
         initializeUnitIdCounter(allUnits);
         return allUnits;
-    }, [persistedPlayers, spawnPoint, spawnDirection, initialKilledEnemies, devMode]);
+    }, [persistedPlayers, spawnPoint, spawnDirection, initialKilledEnemies, playtestUnlockAllSkills]);
 
     // =============================================================================
     // REACT STATE
@@ -884,7 +886,16 @@ function Game({
         dialogPauseForcedRef.current = false;
     }, [doProcessQueue]);
 
+    useEffect(() => {
+        if (!playtestSkipDialogs || !isDialogOpen) return;
+        closeDialog();
+    }, [playtestSkipDialogs, isDialogOpen, closeDialog]);
+
     const startDialog = useCallback((definition: DialogDefinition) => {
+        if (playtestSkipDialogs) {
+            return;
+        }
+
         if (!definition.nodes[definition.startNodeId]) {
             addLog(`Dialog "${definition.id}" is missing start node "${definition.startNodeId}".`, "#ef4444");
             return;
@@ -906,7 +917,7 @@ function Game({
         setDialogTypedChars(0);
         dialogPreviousTypedCharsRef.current = 0;
         dialogLastBlipAtRef.current = 0;
-    }, [addLog, doProcessQueue]);
+    }, [addLog, doProcessQueue, playtestSkipDialogs]);
 
     const skipDialogTyping = useCallback(() => {
         if (!currentDialogNode) return;
@@ -1539,30 +1550,50 @@ function Game({
         addLog(`Debug: Stat Boost applied (+${STAT_BOOST_AMOUNT} to all stats).`, "#9b59b6");
     }, [addLog]);
 
-    const handleToggleDevMode = useCallback(() => {
-        const next = !devMode;
-        setDevMode(next);
-        saveDevMode(next);
+    const unlockAllPlayerSkills = useCallback(() => {
+        setUnits(prev => prev.map(u => {
+            if (u.team !== "player") return u;
+            const data = UNIT_DATA[u.id];
+            if (!data) return u;
 
-        if (next) {
-            setUnits(prev => prev.map(u => {
-                if (u.team !== "player") return u;
-                const data = UNIT_DATA[u.id];
-                if (!data) return u;
+            const unlockedSkillNames = data.skills.map(s => s.name);
+            const currentSkills = u.learnedSkills ?? [];
+            const alreadyUnlocked = unlockedSkillNames.length === currentSkills.length
+                && unlockedSkillNames.every(name => currentSkills.includes(name));
 
-                const unlockedSkillNames = data.skills.map(s => s.name);
-                const currentSkills = u.learnedSkills ?? [];
-                const alreadyUnlocked = unlockedSkillNames.length === currentSkills.length
-                    && unlockedSkillNames.every(name => currentSkills.includes(name));
+            if (alreadyUnlocked) return u;
+            return { ...u, learnedSkills: unlockedSkillNames };
+        }));
+    }, []);
 
-                if (alreadyUnlocked) return u;
-                return { ...u, learnedSkills: unlockedSkillNames };
-            }));
-            addLog("Debug: Dev Mode enabled (all skills unlocked).", "#9b59b6");
-        } else {
-            addLog("Debug: Dev Mode disabled.", "#888");
+    const updatePlaytestSettings = useCallback((patch: Partial<PlaytestSettings>) => {
+        setPlaytestSettings(prev => {
+            const next = { ...prev, ...patch };
+            savePlaytestSettings(next);
+            return next;
+        });
+    }, []);
+
+    const handleTogglePlaytestUnlockAllSkills = useCallback(() => {
+        const nextValue = !playtestSettings.unlockAllSkills;
+        updatePlaytestSettings({ unlockAllSkills: nextValue });
+        if (nextValue) {
+            unlockAllPlayerSkills();
         }
-    }, [devMode, addLog]);
+        addLog(
+            `Debug: Playtest option "Unlock Skills" ${nextValue ? "enabled" : "disabled"}.`,
+            nextValue ? "#9b59b6" : "#888"
+        );
+    }, [addLog, playtestSettings.unlockAllSkills, updatePlaytestSettings, unlockAllPlayerSkills]);
+
+    const handleTogglePlaytestSkipDialogs = useCallback(() => {
+        const nextValue = !playtestSettings.skipDialogs;
+        updatePlaytestSettings({ skipDialogs: nextValue });
+        addLog(
+            `Debug: Playtest option "Skip Dialogs" ${nextValue ? "enabled" : "disabled"}.`,
+            nextValue ? "#9b59b6" : "#888"
+        );
+    }, [addLog, playtestSettings.skipDialogs, updatePlaytestSettings]);
 
     const handleUpdateLightingTuning = useCallback((patch: Partial<LightingTuningSettings>) => {
         setLightingTuning(prev => ({ ...prev, ...patch }));
@@ -1716,7 +1747,7 @@ function Game({
             <div style={{ position: "absolute", top: 10, right: 10, color: "#888", fontSize: 11, opacity: 0.6 }}>{fps} fps</div>
 
             {/* UI Components */}
-            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onShowHelp={onShowHelp} onRestart={onRestart} onSaveClick={onSaveClick} onLoadClick={onLoadClick} debug={debug} onToggleDebug={() => setDebug(d => !d)} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} onStatBoost={handleStatBoost} onToggleDevMode={handleToggleDevMode} devModeEnabled={devMode} onToggleFastMove={() => setFastMove(f => !f)} fastMoveEnabled={fastMove} lightingTuning={lightingTuning} onUpdateLightingTuning={handleUpdateLightingTuning} onResetLightingTuning={handleResetLightingTuning} lightingTuningOutput={lightingTuningOutput} otherModalOpen={helpOpen || saveLoadOpen || isDialogOpen || hudMenuModalOpen} hasSelection={selectedIds.length > 0} onModalOpenStateChange={setHudMenuModalOpen} />
+            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onShowHelp={onShowHelp} onRestart={onRestart} onSaveClick={onSaveClick} onLoadClick={onLoadClick} debug={debug} onToggleDebug={() => setDebug(d => !d)} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} onStatBoost={handleStatBoost} onTogglePlaytestUnlockAllSkills={handleTogglePlaytestUnlockAllSkills} playtestUnlockAllSkillsEnabled={playtestSettings.unlockAllSkills} onTogglePlaytestSkipDialogs={handleTogglePlaytestSkipDialogs} playtestSkipDialogsEnabled={playtestSettings.skipDialogs} onToggleFastMove={() => setFastMove(f => !f)} fastMoveEnabled={fastMove} lightingTuning={lightingTuning} onUpdateLightingTuning={handleUpdateLightingTuning} onResetLightingTuning={handleResetLightingTuning} lightingTuningOutput={lightingTuningOutput} otherModalOpen={helpOpen || saveLoadOpen || isDialogOpen || hudMenuModalOpen} hasSelection={selectedIds.length > 0} onModalOpenStateChange={setHudMenuModalOpen} />
             <CombatLog log={combatLog} />
             <FormationIndicator units={units} formationOrder={formationOrder} />
             <div className="bottom-bar-container">
@@ -1792,10 +1823,10 @@ function Game({
                         return u;
                     }))}
                     onLearnSkill={(id, skillName) => setUnits(prev => prev.map(u => {
-                        if (u.id === id && !(u.learnedSkills ?? []).includes(skillName) && (devMode || (u.skillPoints ?? 0) > 0)) {
+                        if (u.id === id && !(u.learnedSkills ?? []).includes(skillName) && (playtestUnlockAllSkills || (u.skillPoints ?? 0) > 0)) {
                             return {
                                 ...u,
-                                skillPoints: devMode ? (u.skillPoints ?? 0) : (u.skillPoints ?? 0) - 1,
+                                skillPoints: playtestUnlockAllSkills ? (u.skillPoints ?? 0) : (u.skillPoints ?? 0) - 1,
                                 learnedSkills: [...(u.learnedSkills ?? []), skillName]
                             };
                         }
@@ -1818,7 +1849,12 @@ const STARTUP_SCENE_FADE_IN_DURATION = 1400; // ms for initial black-to-scene fa
 const STARTUP_FANFARE_LEAD_IN_MS = 550;
 type StartupPhase = "title" | "booting" | "running";
 
+function shouldSkipGameIntro(): boolean {
+    return loadPlaytestSettings().skipDialogs;
+}
+
 export default function App() {
+    const [skipIntroByDefault] = useState<boolean>(shouldSkipGameIntro);
     const [gameKey, setGameKey] = useState(0);
     const [showHelp, setShowHelp] = useState(false);
     const [persistedPlayers, setPersistedPlayers] = useState<PersistedPlayer[] | null>(null);
@@ -1832,12 +1868,12 @@ export default function App() {
     const [initialKilledEnemies, setInitialKilledEnemies] = useState<Set<string> | null>(null);
     const [savePreviewState, setSavePreviewState] = useState<SaveSlotData | null>(null);
     const gameStateRef = useRef<(() => SaveableGameState) | null>(null);
-    const [startupPhase, setStartupPhase] = useState<StartupPhase>("title");
-    const [gameMounted, setGameMounted] = useState(false);
-    const [dialogTriggersEnabled, setDialogTriggersEnabled] = useState(false);
+    const [startupPhase, setStartupPhase] = useState<StartupPhase>(skipIntroByDefault ? "running" : "title");
+    const [gameMounted, setGameMounted] = useState(skipIntroByDefault);
+    const [dialogTriggersEnabled, setDialogTriggersEnabled] = useState(skipIntroByDefault);
 
-    // Transition overlay state (starts opaque so initial load fades in from black)
-    const [transitionOpacity, setTransitionOpacity] = useState(1);
+    // Transition overlay state (starts opaque unless intro is skipped)
+    const [transitionOpacity, setTransitionOpacity] = useState(skipIntroByDefault ? 0 : 1);
     const pendingTransition = useRef<{ players: PersistedPlayer[]; targetArea: AreaId; spawn: { x: number; z: number }; direction?: "north" | "south" | "east" | "west" } | null>(null);
     const transitionTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
     const startupBootTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
@@ -1859,6 +1895,8 @@ export default function App() {
     }, [startupPhase]);
 
     const handleFullRestart = () => {
+        const skipIntro = shouldSkipGameIntro();
+
         if (transitionTimeoutRef.current !== null) {
             window.clearTimeout(transitionTimeoutRef.current);
             transitionTimeoutRef.current = null;
@@ -1872,10 +1910,10 @@ export default function App() {
             startupReadyTimeoutRef.current = null;
         }
         pendingTransition.current = null;
-        setStartupPhase("title");
-        setGameMounted(false);
-        setDialogTriggersEnabled(false);
-        setTransitionOpacity(1);
+        setStartupPhase(skipIntro ? "running" : "title");
+        setGameMounted(skipIntro);
+        setDialogTriggersEnabled(skipIntro);
+        setTransitionOpacity(skipIntro ? 0 : 1);
         setShowHelp(false);
         setShowSaveLoad(false);
         setSavePreviewState(null);

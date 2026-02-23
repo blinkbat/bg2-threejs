@@ -45,22 +45,73 @@ export function saveFormationOrder(order: number[]): void {
 }
 
 // -----------------------------------------------------------------------------
-// Dev Mode
+// Playtest Mode
 // -----------------------------------------------------------------------------
 
 const DEV_MODE_STORAGE_KEY = "devModeEnabled";
+const PLAYTEST_SETTINGS_STORAGE_KEY = "playtestSettings";
 
-export function loadDevMode(): boolean {
-    try {
-        const stored = localStorage.getItem(DEV_MODE_STORAGE_KEY);
-        if (stored === null) return false;
-        return JSON.parse(stored) === true;
-    } catch { /* ignore */ }
-    return false;
+export interface PlaytestSettings {
+    unlockAllSkills: boolean;
+    skipDialogs: boolean;
 }
 
-export function saveDevMode(enabled: boolean): void {
+const DEFAULT_PLAYTEST_SETTINGS: PlaytestSettings = {
+    unlockAllSkills: false,
+    skipDialogs: true,
+};
+
+function sanitizePlaytestSettings(raw: unknown): PlaytestSettings | null {
+    if (!raw || typeof raw !== "object") return null;
+    const candidate = raw as Partial<PlaytestSettings> & { enabled?: unknown };
+
+    // Legacy shape migration: flatten previous master toggle into per-option values.
+    if (typeof candidate.enabled === "boolean") {
+        const legacyUnlockAllSkills = typeof candidate.unlockAllSkills === "boolean"
+            ? candidate.unlockAllSkills
+            : DEFAULT_PLAYTEST_SETTINGS.unlockAllSkills;
+        const legacySkipDialogs = typeof candidate.skipDialogs === "boolean"
+            ? candidate.skipDialogs
+            : DEFAULT_PLAYTEST_SETTINGS.skipDialogs;
+        return {
+            unlockAllSkills: candidate.enabled && legacyUnlockAllSkills,
+            skipDialogs: candidate.enabled && legacySkipDialogs,
+        };
+    }
+
+    if (typeof candidate.unlockAllSkills !== "boolean") return null;
+    if (typeof candidate.skipDialogs !== "boolean") return null;
+    return {
+        unlockAllSkills: candidate.unlockAllSkills,
+        skipDialogs: candidate.skipDialogs,
+    };
+}
+
+export function loadPlaytestSettings(): PlaytestSettings {
     try {
-        localStorage.setItem(DEV_MODE_STORAGE_KEY, JSON.stringify(enabled));
+        const storedPlaytest = localStorage.getItem(PLAYTEST_SETTINGS_STORAGE_KEY);
+        if (storedPlaytest !== null) {
+            const parsed = sanitizePlaytestSettings(JSON.parse(storedPlaytest));
+            if (parsed) {
+                return parsed;
+            }
+        }
+
+        // Legacy migration: carry over prior Dev Mode master toggle.
+        const storedDevMode = localStorage.getItem(DEV_MODE_STORAGE_KEY);
+        if (storedDevMode !== null && JSON.parse(storedDevMode) === true) {
+            return {
+                unlockAllSkills: true,
+                skipDialogs: true,
+            };
+        }
+    } catch { /* ignore */ }
+
+    return { ...DEFAULT_PLAYTEST_SETTINGS };
+}
+
+export function savePlaytestSettings(settings: PlaytestSettings): void {
+    try {
+        localStorage.setItem(PLAYTEST_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
     } catch { /* ignore */ }
 }

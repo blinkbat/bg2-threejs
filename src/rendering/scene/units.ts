@@ -151,13 +151,13 @@ interface SpriteConfig {
 function getSpriteConfigs(): Record<number, SpriteConfig> {
     ensureTexturesLoaded();
     return {
-        1: { texture: barbarianTexture, width: 196, height: 195, color: 0xd08a7f, spriteHeight: 1.8, offsetX: -0.1 },  // Barbarian - lighter, lightly desaturated
-        2: { texture: paladinTexture, width: 128, height: 196, color: 0xd8b062, spriteHeight: 1.8 },    // Paladin - lighter, lightly desaturated
-        3: { texture: thiefTexture, width: 128, height: 196, color: 0xb487c0, spriteHeight: 1.8, offsetX: 0.1 },  // Thief - lightly desaturated
-        4: { texture: wizardTexture, width: 110, height: 196, color: 0x68abd7, spriteHeight: 1.8 },     // Wizard - lighter, lightly desaturated
-        5: { texture: monkTexture, width: 128, height: 196, color: 0x59b382, spriteHeight: 1.8, offsetX: -0.1 },  // Monk - lightly desaturated
+        1: { texture: barbarianTexture, width: 196, height: 195, color: 0xdda298, spriteHeight: 1.8, offsetX: -0.1 },  // Barbarian - moderate brighten
+        2: { texture: paladinTexture, width: 128, height: 196, color: 0xe3c07a, spriteHeight: 1.8 },    // Paladin - moderate brighten
+        3: { texture: thiefTexture, width: 128, height: 196, color: 0xc49ccd, spriteHeight: 1.8, offsetX: 0.1 },  // Thief - moderate brighten
+        4: { texture: wizardTexture, width: 110, height: 196, color: 0x84bfdc, spriteHeight: 1.8 },     // Wizard - moderate brighten
+        5: { texture: monkTexture, width: 128, height: 196, color: 0x79c59c, spriteHeight: 1.8, offsetX: -0.1 },  // Monk - moderate brighten
         6: { texture: clericTexture, width: 128, height: 196, color: 0xc4ccd2, spriteHeight: 1.8 },   // Cleric - lightly desaturated
-        7: { texture: barbarianTexture, width: 196, height: 195, color: 0xd4c3aa, spriteHeight: 2.0, offsetX: -0.1, brightness: 0.09, opacity: 0.3 }, // Ancestor summon
+        7: { texture: barbarianTexture, width: 196, height: 195, color: 0xdfcfbb, spriteHeight: 2.0, offsetX: -0.1, brightness: 0.09, opacity: 0.3 }, // Ancestor summon - moderate brighten
     };
 }
 

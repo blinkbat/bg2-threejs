@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Play, Pause, Menu, Bug, Music } from "lucide-react";
+import { Play, Pause, Menu, Bug } from "lucide-react";
 import { MenuModal } from "./MenuModal";
 import { JukeboxModal } from "./JukeboxModal";
 import { AREAS, type AreaId } from "../game/areas";
@@ -33,8 +33,10 @@ interface HUDProps {
     onWarpToArea?: (areaId: AreaId) => void;
     onAddXp?: (amount: number) => void;
     onStatBoost?: () => void;
-    onToggleDevMode?: () => void;
-    devModeEnabled?: boolean;
+    onTogglePlaytestUnlockAllSkills?: () => void;
+    playtestUnlockAllSkillsEnabled?: boolean;
+    onTogglePlaytestSkipDialogs?: () => void;
+    playtestSkipDialogsEnabled?: boolean;
     onToggleFastMove?: () => void;
     fastMoveEnabled?: boolean;
     lightingTuning?: LightingTuningSettings;
@@ -61,8 +63,10 @@ export function HUD({
     onWarpToArea,
     onAddXp,
     onStatBoost,
-    onToggleDevMode,
-    devModeEnabled,
+    onTogglePlaytestUnlockAllSkills,
+    playtestUnlockAllSkillsEnabled,
+    onTogglePlaytestSkipDialogs,
+    playtestSkipDialogsEnabled,
     onToggleFastMove,
     fastMoveEnabled,
     lightingTuning,
@@ -73,6 +77,7 @@ export function HUD({
     hasSelection,
     onModalOpenStateChange
 }: HUDProps) {
+    const TESTING_ROOM_ID = "testing_room" as AreaId;
     const [menuOpen, setMenuOpen] = useState(false);
     const [debugPanelOpen, setDebugPanelOpen] = useState(false);
     const [jukeboxOpen, setJukeboxOpen] = useState(false);
@@ -92,6 +97,7 @@ export function HUD({
         id: id as AreaId,
         name: data.name
     }));
+    const warpAreaList = areaList.filter(area => area.id !== TESTING_ROOM_ID);
 
     const isDefeat = alivePlayers === 0;
     const anyModalOpen = menuOpen || jukeboxOpen || otherModalOpen;
@@ -202,9 +208,49 @@ export function HUD({
                 {debugPanelOpen && (
                     <div className="hud-debug-section">
                         <div className="hud-debug-group">
+                            <div className="hud-debug-label">Playtest Mode</div>
+                            <div className="hud-debug-buttons">
+                                {onTogglePlaytestUnlockAllSkills && (
+                                    <button
+                                        className={`btn btn-tiny ${playtestUnlockAllSkillsEnabled ? "btn-active" : ""}`}
+                                        onClick={onTogglePlaytestUnlockAllSkills}
+                                    >
+                                        Unlock Skills
+                                    </button>
+                                )}
+                                {onTogglePlaytestSkipDialogs && (
+                                    <button
+                                        className={`btn btn-tiny ${playtestSkipDialogsEnabled ? "btn-active" : ""}`}
+                                        onClick={onTogglePlaytestSkipDialogs}
+                                    >
+                                        Skip Dialogs
+                                    </button>
+                                )}
+                                {onWarpToArea && (
+                                    <button
+                                        className={`btn btn-tiny ${areaName === AREAS[TESTING_ROOM_ID].name ? "btn-active" : ""}`}
+                                        onClick={() => onWarpToArea(TESTING_ROOM_ID)}
+                                    >
+                                        Testing Room
+                                    </button>
+                                )}
+                                <button
+                                    className="btn btn-tiny"
+                                    onClick={() => {
+                                        if (!paused) {
+                                            onTogglePause();
+                                        }
+                                        setJukeboxOpen(true);
+                                    }}
+                                >
+                                    Jukebox
+                                </button>
+                            </div>
+                        </div>
+                        <div className="hud-debug-group">
                             <div className="hud-debug-label">Warp</div>
                             <div className="hud-debug-buttons">
-                                {onWarpToArea && areaList.map(area => (
+                                {onWarpToArea && warpAreaList.map(area => (
                                     <button
                                         key={area.id}
                                         className={`btn btn-tiny ${areaName === area.name ? "btn-active" : ""}`}
@@ -227,14 +273,6 @@ export function HUD({
                                 {onStatBoost && (
                                     <button className="btn btn-tiny" onClick={onStatBoost}>+10 Stats</button>
                                 )}
-                                {onToggleDevMode && (
-                                    <button
-                                        className={`btn btn-tiny ${devModeEnabled ? "btn-active" : ""}`}
-                                        onClick={onToggleDevMode}
-                                    >
-                                        Dev Mode
-                                    </button>
-                                )}
                                 {onToggleFastMove && (
                                     <button
                                         className={`btn btn-tiny ${fastMoveEnabled ? "btn-active" : ""}`}
@@ -243,18 +281,6 @@ export function HUD({
                                         Speed x10
                                     </button>
                                 )}
-                                <button
-                                    className="btn btn-tiny"
-                                    onClick={() => {
-                                        if (!paused) {
-                                            onTogglePause();
-                                        }
-                                        setJukeboxOpen(true);
-                                    }}
-                                >
-                                    <Music size={12} />
-                                    Jukebox
-                                </button>
                             </div>
                         </div>
                         {lightingTuning && onUpdateLightingTuning && (

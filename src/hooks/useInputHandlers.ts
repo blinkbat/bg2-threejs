@@ -347,7 +347,7 @@ export function useInputHandlers({
                 if (unitId !== undefined) {
                     const unit = getUnitById(unitId) ?? stateRefs.unitsStateRef.current.find(u => u.id === unitId);
                     if (unit && unit.hp > 0) {
-                        if (unit.team === "enemy") {
+                        if (unit.team === "enemy" || unit.team === "neutral") {
                             const g = unitGroups[unitId];
                             if (g) {
                                 const cx = Math.floor(g.position.x);
