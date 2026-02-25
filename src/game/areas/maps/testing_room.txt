@@ -5,7 +5,7 @@ size: 50x40
 background: #1a1a2e
 ground: #3a3a4e
 ambient: 1
-directional: 0.85
+directional: 0
 fog: false
 spawn: 25,3
 
@@ -166,17 +166,3 @@ spawn: 25,3
 26.5,34.5:undead_knight
 33.5,34.5:wandering_shade
 40.5,34.5:innkeeper
-
-=== LIGHTS ===
-9.5,13.5:radius=18,angle=65,tint=#ffd28a,brightness=30,height=10,diffusion=0.55,decay=1
-17.5,13.5:radius=18,angle=65,tint=#ffd28a,brightness=30,height=10,diffusion=0.55,decay=1
-24.5,13.5:radius=18,angle=65,tint=#ffd28a,brightness=30,height=10,diffusion=0.55,decay=1
-31.5,13.5:radius=18,angle=65,tint=#ffd28a,brightness=30,height=10,diffusion=0.55,decay=1
-31.5,25.5:radius=18,angle=65,tint=#ffd28a,brightness=30,height=10,diffusion=0.55,decay=1
-23.5,25.5:radius=18,angle=65,tint=#ffd28a,brightness=30,height=10,diffusion=0.55,decay=1
-16.5,25.5:radius=18,angle=65,tint=#ffd28a,brightness=30,height=10,diffusion=0.55,decay=1
-9.5,25.5:radius=18,angle=65,tint=#ffd28a,brightness=30,height=10,diffusion=0.55,decay=1
-9.5,36.5:radius=18,angle=65,tint=#ffd28a,brightness=30,height=10,diffusion=0.55,decay=1
-16.5,36.5:radius=18,angle=65,tint=#ffd28a,brightness=30,height=10,diffusion=0.55,decay=1
-31.5,36.5:radius=18,angle=65,tint=#ffd28a,brightness=30,height=10,diffusion=0.55,decay=1
-24.5,36.5:radius=18,angle=65,tint=#ffd28a,brightness=30,height=10,diffusion=0.55,decay=1

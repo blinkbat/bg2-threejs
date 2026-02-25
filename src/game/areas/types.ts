@@ -62,6 +62,14 @@ export interface AreaDialogDefinition {
     nodes: Record<string, AreaDialogNode>;
 }
 
+export interface AreaLocation {
+    id: string;
+    x: number;
+    z: number;
+    w: number;
+    h: number;
+}
+
 export interface DialogTriggerOnAreaLoadCondition {
     type: "on_area_load";
 }
@@ -77,6 +85,11 @@ export interface DialogTriggerPartyEntersRegionCondition {
     z: number;
     w: number;
     h: number;
+}
+
+export interface DialogTriggerPartyEntersLocationCondition {
+    type: "party_enters_location";
+    locationId: string;
 }
 
 export interface DialogTriggerUnitSeenCondition {
@@ -98,14 +111,25 @@ export interface DialogTriggerDelayCondition {
 export type AreaDialogTriggerCondition =
     | DialogTriggerOnAreaLoadCondition
     | DialogTriggerEnemyKilledCondition
+    | DialogTriggerPartyEntersLocationCondition
     | DialogTriggerPartyEntersRegionCondition
     | DialogTriggerUnitSeenCondition
     | DialogTriggerOutOfCombatRangeCondition
     | DialogTriggerDelayCondition;
 
+export interface AreaDialogTriggerStartDialogAction {
+    type: "start_dialog";
+    dialogId: string;
+}
+
+export type AreaDialogTriggerAction =
+    | AreaDialogTriggerStartDialogAction;
+
 export interface AreaDialogTrigger {
     id: string;
-    dialogId: string;
+    dialogId?: string; // Legacy fallback for maps saved before action-based triggers
+    actions?: AreaDialogTriggerAction[];
+    wip?: boolean; // Allows incomplete trigger drafts to be saved intentionally
     once?: boolean;   // Defaults to true
     priority?: number; // Higher runs first when multiple triggers are satisfied
     conditions: AreaDialogTriggerCondition[];
@@ -212,6 +236,7 @@ export interface AreaData {
     invulnerable?: boolean;              // All units immune to damage, enemies don't aggro
     defaultSpawn: { x: number; z: number };  // Default spawn point for debug warps
     dialogs?: AreaDialogDefinition[];
+    locations?: AreaLocation[];
     dialogTriggers?: AreaDialogTrigger[];
 }
 

@@ -15,9 +15,11 @@ import {
     type AreaDialogChoice,
     type AreaDialogDefinition,
     type AreaDialogMenuId,
+    type AreaLocation,
     type AreaDialogNode,
     type AreaDialogUiAction,
     type AreaId,
+    type AreaDialogTriggerAction,
     type AreaDialogTrigger,
     type AreaDialogTriggerCondition,
     type EnemySpawn,
@@ -105,6 +107,9 @@ import { DIALOG_SPEAKERS } from "../dialog/speakers";
 // === DIALOGS ===
 // One JSON object per line (AreaDialogDefinition)
 //
+// === LOCATIONS ===
+// One JSON object per line (AreaLocation)
+//
 // === DIALOG_TRIGGERS ===
 // One JSON object per line (AreaDialogTrigger)
 // =============================================================================
@@ -141,6 +146,7 @@ interface ParsedArea {
     lights: AreaLight[];
     candles: CandlePosition[];
     dialogs: AreaDialogDefinition[];
+    locations: AreaLocation[];
     dialogTriggers: AreaDialogTrigger[];
 }
 
@@ -342,6 +348,14 @@ export function areaDataToText(area: AreaData): string {
         lines.push("");
     }
 
+    if (area.locations && area.locations.length > 0) {
+        lines.push("=== LOCATIONS ===");
+        area.locations.forEach(location => {
+            lines.push(JSON.stringify(location));
+        });
+        lines.push("");
+    }
+
     if (area.dialogTriggers && area.dialogTriggers.length > 0) {
         lines.push("=== DIALOG_TRIGGERS ===");
         area.dialogTriggers.forEach(trigger => {
@@ -398,6 +412,7 @@ function parseTextFormat(text: string): ParsedArea {
         lights: [],
         candles: [],
         dialogs: [],
+        locations: [],
         dialogTriggers: [],
     };
 
@@ -487,6 +502,9 @@ function parseTextFormat(text: string): ParsedArea {
                 break;
             case "dialogs":
                 parseDialogDefinitionLine(line, result.dialogs);
+                break;
+            case "locations":
+                parseLocationLine(line, result.locations);
                 break;
             case "dialog_triggers":
                 parseDialogTriggerLine(line, result.dialogTriggers);
@@ -859,6 +877,36 @@ function toNonNegativeInt(value: unknown): number | null {
     return rounded >= 0 ? rounded : null;
 }
 
+function sanitizeLocation(raw: unknown): AreaLocation | null {
+    if (!isRecord(raw)) return null;
+    if (typeof raw.id !== "string" || raw.id.trim().length === 0) return null;
+    const x = toNonNegativeInt(raw.x);
+    const z = toNonNegativeInt(raw.z);
+    const w = toNonNegativeInt(raw.w);
+    const h = toNonNegativeInt(raw.h);
+    if (x === null || z === null || w === null || h === null) return null;
+    return {
+        id: raw.id.trim(),
+        x,
+        z,
+        w: Math.max(1, w),
+        h: Math.max(1, h),
+    };
+}
+
+function parseLocationLine(line: string, locations: AreaLocation[]): void {
+    try {
+        const parsed = JSON.parse(line) as unknown;
+        const location = sanitizeLocation(parsed);
+        if (!location) return;
+        locations.push(location);
+    } catch {
+        if (import.meta.env.DEV) {
+            console.warn(`[areaTextFormat] Failed to parse location line: ${line}`);
+        }
+    }
+}
+
 function sanitizeDialogTriggerCondition(raw: unknown): AreaDialogTriggerCondition | null {
     if (!isRecord(raw)) return null;
     const conditionType = raw.type;
@@ -872,6 +920,14 @@ function sanitizeDialogTriggerCondition(raw: unknown): AreaDialogTriggerConditio
         const spawnIndex = toNonNegativeInt(raw.spawnIndex);
         if (spawnIndex === null) return null;
         return { type: "enemy_killed", spawnIndex };
+    }
+
+    if (conditionType === "party_enters_location") {
+        if (typeof raw.locationId !== "string" || raw.locationId.trim().length === 0) return null;
+        return {
+            type: "party_enters_location",
+            locationId: raw.locationId.trim(),
+        };
     }
 
     if (conditionType === "party_enters_region") {
@@ -912,23 +968,44 @@ function sanitizeDialogTriggerCondition(raw: unknown): AreaDialogTriggerConditio
     return null;
 }
 
+function sanitizeDialogTriggerAction(raw: unknown): AreaDialogTriggerAction | null {
+    if (!isRecord(raw)) return null;
+    if (raw.type !== "start_dialog") return null;
+    if (typeof raw.dialogId !== "string") return null;
+    const dialogId = raw.dialogId.trim();
+    if (dialogId.length === 0) return null;
+    return {
+        type: "start_dialog",
+        dialogId,
+    };
+}
+
 function sanitizeDialogTrigger(raw: unknown): AreaDialogTrigger | null {
     if (!isRecord(raw)) return null;
     if (typeof raw.id !== "string" || raw.id.trim().length === 0) return null;
-    if (typeof raw.dialogId !== "string" || raw.dialogId.trim().length === 0) return null;
-    if (!Array.isArray(raw.conditions)) return null;
+    const conditionsSource = Array.isArray(raw.conditions) ? raw.conditions : [];
+    const actionsSource = Array.isArray(raw.actions) ? raw.actions : [];
 
-    const conditions: AreaDialogTriggerCondition[] = raw.conditions
+    const conditions: AreaDialogTriggerCondition[] = conditionsSource
         .map(condition => sanitizeDialogTriggerCondition(condition))
         .filter((condition): condition is AreaDialogTriggerCondition => condition !== null);
-    if (conditions.length === 0) return null;
+    const actions: AreaDialogTriggerAction[] = actionsSource
+        .map(action => sanitizeDialogTriggerAction(action))
+        .filter((action): action is AreaDialogTriggerAction => action !== null);
+
+    const dialogId = typeof raw.dialogId === "string" && raw.dialogId.trim().length > 0
+        ? raw.dialogId.trim()
+        : undefined;
+    const wip = raw.wip === true ? true : undefined;
 
     const once = typeof raw.once === "boolean" ? raw.once : undefined;
     const priority = toOptionalFiniteNumber(raw.priority);
 
     return {
         id: raw.id.trim(),
-        dialogId: raw.dialogId.trim(),
+        ...(dialogId ? { dialogId } : {}),
+        ...(actions.length > 0 ? { actions } : {}),
+        ...(wip ? { wip } : {}),
         ...(once !== undefined ? { once } : {}),
         ...(priority !== undefined ? { priority } : {}),
         conditions,
@@ -940,6 +1017,12 @@ function parseDialogTriggerLine(line: string, dialogTriggers: AreaDialogTrigger[
         const parsed = JSON.parse(line) as unknown;
         const trigger = sanitizeDialogTrigger(parsed);
         if (!trigger) return;
+        if (dialogTriggers.some(existing => existing.id === trigger.id)) {
+            if (import.meta.env.DEV) {
+                console.warn(`[areaTextFormat] Duplicate dialog trigger id "${trigger.id}" was ignored.`);
+            }
+            return;
+        }
         dialogTriggers.push(trigger);
     } catch {
         if (import.meta.env.DEV) {
@@ -1043,6 +1126,7 @@ function convertParsedToAreaData(parsed: ParsedArea): AreaData {
         lights: parsed.lights.length > 0 ? parsed.lights : undefined,
         candles: parsed.candles.length > 0 ? parsed.candles : undefined,
         dialogs: parsed.dialogs.length > 0 ? parsed.dialogs : undefined,
+        locations: parsed.locations.length > 0 ? parsed.locations : undefined,
         dialogTriggers: parsed.dialogTriggers.length > 0 ? parsed.dialogTriggers : undefined,
     };
 }

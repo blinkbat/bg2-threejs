@@ -1656,24 +1656,87 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 const frameWidth = 0.95 * size;
                 const frameDepth = 0.28 * size;
                 const frameHeight = 1.9 * size;
-                const frame = new THREE.Mesh(
-                    new THREE.BoxGeometry(frameWidth, frameHeight, frameDepth),
-                    new THREE.MeshStandardMaterial({ color: "#6f4b2d", metalness: 0.06, roughness: 0.92, transparent: true, opacity: 1 })
+                const sideWidth = 0.08 * size;
+                const boardHeight = 0.08 * size;
+                const shelfThickness = 0.05 * size;
+                const innerWidth = frameWidth - sideWidth * 2;
+                const sideMaterial = new THREE.MeshStandardMaterial({ color: "#6f4b2d", metalness: 0.06, roughness: 0.92 });
+                const boardMaterial = new THREE.MeshStandardMaterial({ color: "#845834", metalness: 0.05, roughness: 0.9 });
+                const backMaterial = new THREE.MeshStandardMaterial({ color: "#5e3e24", metalness: 0.03, roughness: 0.95 });
+
+                const leftSide = new THREE.Mesh(
+                    new THREE.BoxGeometry(sideWidth, frameHeight, frameDepth),
+                    sideMaterial
                 );
-                frame.position.y = frameHeight / 2;
-                frame.name = "decoration";
-                shelfGroup.add(frame);
-                columnMeshes.push(frame);
-                registerFogOccluderMesh(frame, dec.x, dec.z, 0, frameHeight);
+                leftSide.position.set(-frameWidth * 0.5 + sideWidth * 0.5, frameHeight / 2, 0);
+                leftSide.name = "decoration";
+                shelfGroup.add(leftSide);
+                columnMeshes.push(leftSide);
+
+                const rightSide = new THREE.Mesh(
+                    new THREE.BoxGeometry(sideWidth, frameHeight, frameDepth),
+                    sideMaterial.clone()
+                );
+                rightSide.position.set(frameWidth * 0.5 - sideWidth * 0.5, frameHeight / 2, 0);
+                shelfGroup.add(rightSide);
+                columnMeshes.push(rightSide);
+
+                const topBoard = new THREE.Mesh(
+                    new THREE.BoxGeometry(frameWidth, boardHeight, frameDepth),
+                    boardMaterial
+                );
+                topBoard.position.y = frameHeight - boardHeight * 0.5;
+                shelfGroup.add(topBoard);
+                columnMeshes.push(topBoard);
+
+                const bottomBoard = new THREE.Mesh(
+                    new THREE.BoxGeometry(frameWidth, boardHeight, frameDepth),
+                    boardMaterial.clone()
+                );
+                bottomBoard.position.y = boardHeight * 0.5;
+                shelfGroup.add(bottomBoard);
+                columnMeshes.push(bottomBoard);
+
+                const backPanel = new THREE.Mesh(
+                    new THREE.BoxGeometry(innerWidth, frameHeight - boardHeight * 1.2, frameDepth * 0.16),
+                    backMaterial
+                );
+                backPanel.position.set(0, frameHeight * 0.5, -frameDepth * 0.34);
+                shelfGroup.add(backPanel);
+                columnMeshes.push(backPanel);
+                registerFogOccluderMesh(backPanel, dec.x, dec.z, 0, frameHeight);
 
                 for (let shelfIndex = 0; shelfIndex < 4; shelfIndex++) {
                     const shelf = new THREE.Mesh(
-                        new THREE.BoxGeometry(frameWidth * 0.9, 0.05 * size, frameDepth * 0.92),
-                        new THREE.MeshStandardMaterial({ color: "#88603b", metalness: 0.04, roughness: 0.9, transparent: true, opacity: 1 })
+                        new THREE.BoxGeometry(innerWidth * 0.98, shelfThickness, frameDepth * 0.88),
+                        boardMaterial.clone()
                     );
                     shelf.position.y = 0.28 * size + shelfIndex * 0.4 * size;
                     shelfGroup.add(shelf);
                     columnMeshes.push(shelf);
+
+                    const bookColors = ["#6f3d2c", "#30506a", "#5c6b34", "#7c5b2f", "#503a6c", "#7a2f37"];
+                    let cursorX = -innerWidth * 0.46;
+                    while (cursorX < innerWidth * 0.4) {
+                        const bookWidth = (0.06 + Math.random() * 0.06) * size;
+                        const bookHeight = (0.2 + Math.random() * 0.18) * size;
+                        const book = new THREE.Mesh(
+                            new THREE.BoxGeometry(bookWidth, bookHeight, frameDepth * 0.26),
+                            new THREE.MeshStandardMaterial({
+                                color: bookColors[Math.floor(Math.random() * bookColors.length)],
+                                metalness: 0.01,
+                                roughness: 0.88
+                            })
+                        );
+                        book.position.set(
+                            cursorX + bookWidth * 0.5,
+                            shelf.position.y + shelfThickness * 0.5 + bookHeight * 0.5,
+                            frameDepth * 0.12
+                        );
+                        shelfGroup.add(book);
+                        columnMeshes.push(book);
+                        cursorX += bookWidth + (0.01 + Math.random() * 0.03) * size;
+                    }
                 }
             } else if (dec.type === "bar") {
                 const barGroup = new THREE.Group();

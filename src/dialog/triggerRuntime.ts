@@ -1,5 +1,5 @@
 import type { Unit } from "../core/types";
-import type { AreaData, AreaDialogTrigger } from "../game/areas/types";
+import type { AreaData, AreaDialogTrigger, AreaDialogTriggerStartDialogAction } from "../game/areas/types";
 import { distance } from "../game/geometry";
 
 const DEFAULT_UNIT_SEEN_RANGE = 12;
@@ -66,6 +66,32 @@ export function getDialogTriggerPriority(trigger: AreaDialogTrigger): number {
     return trigger.priority ?? 0;
 }
 
+export function getTriggerStartDialogAction(trigger: AreaDialogTrigger): AreaDialogTriggerStartDialogAction | null {
+    const explicitAction = trigger.actions?.find(action => action.type === "start_dialog");
+    if (explicitAction) {
+        return explicitAction;
+    }
+
+    if (typeof trigger.dialogId === "string") {
+        const dialogId = trigger.dialogId.trim();
+        if (dialogId.length > 0) {
+            return {
+                type: "start_dialog",
+                dialogId,
+            };
+        }
+    }
+
+    return null;
+}
+
+export function getTriggerStartDialogId(trigger: AreaDialogTrigger): string | null {
+    const action = getTriggerStartDialogAction(trigger);
+    if (!action) return null;
+    const dialogId = action.dialogId.trim();
+    return dialogId.length > 0 ? dialogId : null;
+}
+
 export function isDialogTriggerSatisfied(context: DialogTriggerEvaluationContext): boolean {
     const { trigger, area, units, killedEnemies, now, areaLoadedAt, runtimeState } = context;
     if (trigger.conditions.length === 0) return false;
@@ -96,6 +122,24 @@ export function isDialogTriggerSatisfied(context: DialogTriggerEvaluationContext
                 continue;
             }
             const isInside = isAnyPlayerInsideRegion(units, condition.x, condition.z, condition.w, condition.h);
+            const wasInside = runtimeState.previousRegionInsideByConditionKey.get(conditionKey) ?? false;
+            runtimeState.previousRegionInsideByConditionKey.set(conditionKey, isInside);
+            if (isInside && !wasInside) {
+                runtimeState.stickySatisfiedConditionKeys.add(conditionKey);
+                continue;
+            }
+            return false;
+        }
+
+        if (condition.type === "party_enters_location") {
+            if (alreadySatisfied) {
+                continue;
+            }
+            const location = area.locations?.find(candidate => candidate.id === condition.locationId);
+            if (!location) {
+                return false;
+            }
+            const isInside = isAnyPlayerInsideRegion(units, location.x, location.z, location.w, location.h);
             const wasInside = runtimeState.previousRegionInsideByConditionKey.get(conditionKey) ?? false;
             runtimeState.previousRegionInsideByConditionKey.set(conditionKey, isInside);
             if (isInside && !wasInside) {

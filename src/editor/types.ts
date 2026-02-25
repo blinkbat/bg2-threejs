@@ -2,11 +2,11 @@
 // EDITOR TYPES
 // =============================================================================
 
-import type { AreaDialogDefinition, AreaDialogTrigger, AreaId, TreeType } from "../game/areas/types";
+import type { AreaDialogDefinition, AreaDialogTrigger, AreaId, AreaLocation, TreeType } from "../game/areas/types";
 import type { EnemyType } from "../core/types";
 
 export type Tool = "paint" | "erase" | "select";
-export type Layer = "geometry" | "terrain" | "floor" | "props" | "entities";
+export type Layer = "geometry" | "terrain" | "floor" | "props" | "entities" | "locations";
 
 export interface MapMetadata {
     id: string;
@@ -29,6 +29,7 @@ export interface EntityDef {
     z: number;
     type: "enemy" | "chest" | "transition" | "candle" | "torch" | "light" | "secret_door";
     enemyType?: EnemyType;
+    enemySpawnIndex?: number;
     chestGold?: number;
     chestItems?: string;
     chestLocked?: string;
@@ -81,5 +82,6 @@ export interface EditorSnapshot {
     trees: TreeDef[];
     decorations: DecorationDef[];
     dialogs: AreaDialogDefinition[];
+    locations: AreaLocation[];
     dialogTriggers: AreaDialogTrigger[];
 }

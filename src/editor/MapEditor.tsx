@@ -13,7 +13,9 @@ import {
     type AreaDialogDefinition,
     type AreaDialogNode,
     type AreaDialogTrigger,
+    type AreaDialogTriggerAction,
     type AreaDialogTriggerCondition,
+    type AreaLocation,
     type AreaId,
     type AreaData,
     type EnemySpawn,
@@ -32,7 +34,7 @@ import { getDialogDefinitionIds } from "../dialog/registry";
 import type { Tool, Layer, MapMetadata, EntityDef, TreeDef, DecorationDef, EditorSnapshot } from "./types";
 import { getAvailableAreaIds, BASE_CELL_SIZE, MAX_HISTORY, LAYER_BRUSHES, PROP_TYPE_TO_CHAR, PROP_TREE_TYPE_TO_CHAR } from "./constants";
 import { registerAreaFromText } from "../game/areas";
-import { EntityEditPopup, TreeEditPopup, DecorationEditPopup } from "./popups";
+import { EntityEditPopup, TreeEditPopup, DecorationEditPopup, LocationEditPopup } from "./popups";
 import { ConnectionsPanel } from "./panels";
 import { DialogEditorModal } from "./components";
 import {
@@ -69,6 +71,7 @@ import {
     normalizeTintLayerStack,
     TILE_EMPTY,
 } from "../game/areas/tileLayers";
+import "./editor.css";
 
 type EditorClipboard =
     | { kind: "entity"; entity: EntityDef }
@@ -83,16 +86,13 @@ interface EditorContextMenuState {
     entity: EntityDef | null;
     tree: { value: TreeDef; index: number } | null;
     decoration: { value: DecorationDef; index: number } | null;
+    location: AreaLocation | null;
 }
 
 type DragEntityBrush = "D" | "S";
 
-interface DialogConditionPickerState {
-    triggerId: string;
-    conditionIndex: number;
-}
-
-interface DialogRegionDragState extends DialogConditionPickerState {
+interface DialogRegionDragState {
+    locationId: string;
     startX: number;
     startZ: number;
     endX: number;
@@ -100,7 +100,33 @@ interface DialogRegionDragState extends DialogConditionPickerState {
 }
 
 function createDialogTriggerId(): string {
-    return `dialog_trigger_${Date.now()}`;
+    return `dialog_trigger_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+}
+
+function createDialogLocationId(existingLocations: AreaLocation[]): string {
+    const existingIds = new Set(existingLocations.map(location => location.id));
+    let index = 1;
+    while (existingIds.has(`location_${index}`)) {
+        index += 1;
+    }
+    return `location_${index}`;
+}
+
+function cloneDialogLocation(location: AreaLocation): AreaLocation {
+    return {
+        id: location.id,
+        x: location.x,
+        z: location.z,
+        w: location.w,
+        h: location.h,
+    };
+}
+
+function locationContainsCell(location: AreaLocation, x: number, z: number): boolean {
+    return x >= location.x
+        && x < location.x + location.w
+        && z >= location.z
+        && z < location.z + location.h;
 }
 
 function cloneDialogCondition(condition: AreaDialogTriggerCondition): AreaDialogTriggerCondition {
@@ -109,6 +135,9 @@ function cloneDialogCondition(condition: AreaDialogTriggerCondition): AreaDialog
     }
     if (condition.type === "enemy_killed") {
         return { type: "enemy_killed", spawnIndex: condition.spawnIndex };
+    }
+    if (condition.type === "party_enters_location") {
+        return { type: "party_enters_location", locationId: condition.locationId };
     }
     if (condition.type === "party_enters_region") {
         return {
@@ -132,10 +161,23 @@ function cloneDialogCondition(condition: AreaDialogTriggerCondition): AreaDialog
     return { type: "after_delay", ms: condition.ms };
 }
 
+function cloneDialogTriggerAction(action: AreaDialogTriggerAction): AreaDialogTriggerAction {
+    if (action.type === "start_dialog") {
+        return {
+            type: "start_dialog",
+            dialogId: action.dialogId,
+        };
+    }
+    return action;
+}
+
+
 function cloneDialogTrigger(trigger: AreaDialogTrigger): AreaDialogTrigger {
     return {
         id: trigger.id,
-        dialogId: trigger.dialogId,
+        ...(trigger.dialogId ? { dialogId: trigger.dialogId } : {}),
+        ...(trigger.actions && trigger.actions.length > 0 ? { actions: trigger.actions.map(cloneDialogTriggerAction) } : {}),
+        ...(trigger.wip ? { wip: true } : {}),
         ...(trigger.once !== undefined ? { once: trigger.once } : {}),
         ...(trigger.priority !== undefined ? { priority: trigger.priority } : {}),
         conditions: trigger.conditions.map(cloneDialogCondition),
@@ -178,6 +220,81 @@ function cloneDialogDefinition(dialog: AreaDialogDefinition): AreaDialogDefiniti
 
 function createDefaultDialogCondition(): AreaDialogTriggerCondition {
     return { type: "on_area_load" };
+}
+
+function mapTriggerDialogId(dialogId: string, dialogIdRemap: Record<string, string>): string {
+    return dialogIdRemap[dialogId] ?? dialogId;
+}
+
+function remapTriggerDialogTargets(trigger: AreaDialogTrigger, dialogIdRemap: Record<string, string>): AreaDialogTrigger {
+    let didChange = false;
+    const nextDialogId = trigger.dialogId
+        ? mapTriggerDialogId(trigger.dialogId, dialogIdRemap)
+        : undefined;
+    if (nextDialogId !== trigger.dialogId) {
+        didChange = true;
+    }
+    const nextActions = trigger.actions?.map(action => {
+        if (action.type !== "start_dialog") return action;
+        const remappedDialogId = mapTriggerDialogId(action.dialogId, dialogIdRemap);
+        if (remappedDialogId === action.dialogId) return action;
+        didChange = true;
+        return {
+            ...action,
+            dialogId: remappedDialogId,
+        };
+    });
+    if (!didChange) return trigger;
+    return {
+        ...trigger,
+        ...(nextDialogId !== undefined ? { dialogId: nextDialogId } : { dialogId: undefined }),
+        ...(nextActions ? { actions: nextActions } : {}),
+    };
+}
+
+function remapTriggerDialogTargetsInList(triggers: AreaDialogTrigger[], dialogIdRemap: Record<string, string>): AreaDialogTrigger[] {
+    return triggers.map(trigger => remapTriggerDialogTargets(trigger, dialogIdRemap));
+}
+
+function getNormalizedEnemySpawnOrderIndex(entity: EntityDef): number | null {
+    if (typeof entity.enemySpawnIndex !== "number" || !Number.isFinite(entity.enemySpawnIndex)) {
+        return null;
+    }
+    return Math.max(0, Math.floor(entity.enemySpawnIndex));
+}
+
+function getOrderedEnemyEntities(entities: EntityDef[]): EntityDef[] {
+    const enemies = entities.filter(entity => entity.type === "enemy");
+    return [...enemies].sort((a, b) => {
+        const aIndex = getNormalizedEnemySpawnOrderIndex(a);
+        const bIndex = getNormalizedEnemySpawnOrderIndex(b);
+        const aHasIndex = aIndex !== null;
+        const bHasIndex = bIndex !== null;
+        if (aHasIndex && bHasIndex && aIndex !== bIndex) {
+            return aIndex - bIndex;
+        }
+        if (aHasIndex !== bHasIndex) {
+            return aHasIndex ? -1 : 1;
+        }
+        const az = Math.floor(a.z);
+        const bz = Math.floor(b.z);
+        if (az !== bz) return az - bz;
+        const ax = Math.floor(a.x);
+        const bx = Math.floor(b.x);
+        if (ax !== bx) return ax - bx;
+        return a.id.localeCompare(b.id);
+    });
+}
+
+function getNextEnemySpawnIndex(entities: EntityDef[]): number {
+    let maxSpawnIndex = -1;
+    entities.forEach(entity => {
+        if (entity.type !== "enemy") return;
+        const spawnIndex = getNormalizedEnemySpawnOrderIndex(entity);
+        if (spawnIndex === null) return;
+        maxSpawnIndex = Math.max(maxSpawnIndex, spawnIndex);
+    });
+    return maxSpawnIndex + 1;
 }
 
 function clampGridCoord(value: number, maxExclusive: number): number {
@@ -243,6 +360,7 @@ export function MapEditor() {
     const [trees, setTrees] = useState<TreeDef[]>([]);
     const [decorations, setDecorations] = useState<DecorationDef[]>([]);
     const [dialogs, setDialogs] = useState<AreaDialogDefinition[]>([]);
+    const [dialogLocations, setDialogLocations] = useState<AreaLocation[]>([]);
     const [dialogTriggers, setDialogTriggers] = useState<AreaDialogTrigger[]>([]);
 
     // Editor state
@@ -257,7 +375,9 @@ export function MapEditor() {
         floor: true,
         props: true,
         entities: true,
+        locations: true,
     });
+    const [selectedDialogLocationId, setSelectedDialogLocationId] = useState<string | null>(null);
 
     // Canvas refs
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -269,9 +389,11 @@ export function MapEditor() {
 
     // Door/secret-door drag state for click-drag placement
     const [doorDrag, setDoorDrag] = useState<{ brush: DragEntityBrush; startX: number; startZ: number; endX: number; endZ: number } | null>(null);
-    const [dialogConditionPicker, setDialogConditionPicker] = useState<DialogConditionPickerState | null>(null);
     const [dialogRegionDrag, setDialogRegionDrag] = useState<DialogRegionDragState | null>(null);
+    const dialogRegionDragRef = useRef<DialogRegionDragState | null>(null);
+    const [dialogTriggersDraft, setDialogTriggersDraft] = useState<AreaDialogTrigger[] | null>(null);
     const [dialogEditorOpen, setDialogEditorOpen] = useState(false);
+    const activeDialogTriggers = dialogTriggersDraft ?? dialogTriggers;
 
     const composedTerrainLayer = useMemo(
         () => composeTileLayers(terrainLayers, metadata.width, metadata.height, TILE_EMPTY),
@@ -301,15 +423,24 @@ export function MapEditor() {
         return Array.from(ids).sort((a, b) => a.localeCompare(b));
     }, [dialogs, registryDialogIds]);
     const availableDialogIdSet = useMemo(() => new Set(availableDialogIds), [availableDialogIds]);
-    const missingDialogTriggerCount = useMemo(
-        () => dialogTriggers.filter(trigger => !availableDialogIdSet.has(trigger.dialogId)).length,
-        [dialogTriggers, availableDialogIdSet]
-    );
+
+    useEffect(() => {
+        if (dialogLocations.length === 0) {
+            if (selectedDialogLocationId !== null) {
+                setSelectedDialogLocationId(null);
+            }
+            return;
+        }
+        if (!selectedDialogLocationId || !dialogLocations.some(location => location.id === selectedDialogLocationId)) {
+            setSelectedDialogLocationId(dialogLocations[0].id);
+        }
+    }, [dialogLocations, selectedDialogLocationId]);
 
     // Entity editor popup
     const [editingEntity, setEditingEntity] = useState<{ entity: EntityDef; screenX: number; screenY: number } | null>(null);
     const [editingTree, setEditingTree] = useState<{ tree: TreeDef; index: number; screenX: number; screenY: number } | null>(null);
     const [editingDecoration, setEditingDecoration] = useState<{ decoration: DecorationDef; index: number; screenX: number; screenY: number } | null>(null);
+    const [editingLocation, setEditingLocation] = useState<{ location: AreaLocation; screenX: number; screenY: number } | null>(null);
     const [clipboard, setClipboard] = useState<EditorClipboard | null>(null);
     const [contextMenu, setContextMenu] = useState<EditorContextMenuState | null>(null);
 
@@ -329,8 +460,9 @@ export function MapEditor() {
         trees: trees.map(t => ({ ...t })),
         decorations: decorations.map(d => ({ ...d })),
         dialogs: dialogs.map(cloneDialogDefinition),
+        locations: dialogLocations.map(cloneDialogLocation),
         dialogTriggers: dialogTriggers.map(cloneDialogTrigger),
-    }), [geometryLayer, terrainLayers, floorLayers, terrainTintLayers, floorTintLayers, propsLayer, entitiesLayer, entities, trees, decorations, dialogs, dialogTriggers]);
+    }), [geometryLayer, terrainLayers, floorLayers, terrainTintLayers, floorTintLayers, propsLayer, entitiesLayer, entities, trees, decorations, dialogs, dialogLocations, dialogTriggers]);
 
     const pushHistory = useCallback(() => {
         const snapshot = createSnapshot();
@@ -357,10 +489,14 @@ export function MapEditor() {
         setTrees(snapshot.trees.map(t => ({ ...t })));
         setDecorations(snapshot.decorations.map(d => ({ ...d })));
         setDialogs(snapshot.dialogs.map(cloneDialogDefinition));
+        setDialogLocations(snapshot.locations.map(cloneDialogLocation));
+        setSelectedDialogLocationId(snapshot.locations[0]?.id ?? null);
         setDialogTriggers(snapshot.dialogTriggers.map(cloneDialogTrigger));
-        setDialogConditionPicker(null);
+        setDialogTriggersDraft(null);
         setDialogRegionDrag(null);
         setDialogEditorOpen(false);
+        setEditingLocation(null);
+        setContextMenu(null);
     }, []);
 
     const undo = useCallback(() => {
@@ -406,6 +542,10 @@ export function MapEditor() {
     useEffect(() => {
         setFloorLayer(composedFloorLayer);
     }, [composedFloorLayer]);
+
+    useEffect(() => {
+        dialogRegionDragRef.current = dialogRegionDrag;
+    }, [dialogRegionDrag]);
 
     useEffect(() => {
         setActiveTerrainPaintLayer(prev => Math.max(0, Math.min(prev, terrainLayers.length - 1)));
@@ -604,25 +744,47 @@ export function MapEditor() {
             }
         }
 
+        // Draw named locations
+        if (layerVisibility.locations) {
+            for (const location of dialogLocations) {
+                const isSelected = selectedDialogLocationId === location.id;
+                const drawX = location.x * CELL_SIZE;
+                const drawZ = location.z * CELL_SIZE;
+                const drawW = location.w * CELL_SIZE;
+                const drawH = location.h * CELL_SIZE;
+
+                ctx.fillStyle = isSelected ? "rgba(221, 188, 255, 0.24)" : "rgba(185, 140, 255, 0.14)";
+                ctx.fillRect(drawX, drawZ, drawW, drawH);
+
+                ctx.strokeStyle = isSelected ? "#ddbcff" : "#b98cff";
+                ctx.lineWidth = isSelected ? 3 : 2;
+                ctx.strokeRect(drawX, drawZ, drawW, drawH);
+
+                ctx.fillStyle = isSelected ? "#f0e0ff" : "#d7c0ff";
+                ctx.font = "600 10px \"DM Mono\", monospace";
+                ctx.textAlign = "left";
+                ctx.textBaseline = "top";
+                ctx.fillText(`loc:${location.id}`, drawX + 3, drawZ + 3);
+            }
+        }
+
         // Draw dialog trigger regions
-        for (const trigger of dialogTriggers) {
-            trigger.conditions.forEach((condition, conditionIndex) => {
+        for (const trigger of activeDialogTriggers) {
+            trigger.conditions.forEach((condition) => {
                 if (condition.type !== "party_enters_region") return;
-                const isPicking = dialogConditionPicker?.triggerId === trigger.id
-                    && dialogConditionPicker.conditionIndex === conditionIndex;
                 const drawX = condition.x * CELL_SIZE;
                 const drawZ = condition.z * CELL_SIZE;
                 const drawW = condition.w * CELL_SIZE;
                 const drawH = condition.h * CELL_SIZE;
 
-                ctx.fillStyle = isPicking ? "rgba(255, 214, 102, 0.24)" : "rgba(126, 233, 255, 0.16)";
+                ctx.fillStyle = "rgba(126, 233, 255, 0.16)";
                 ctx.fillRect(drawX, drawZ, drawW, drawH);
 
-                ctx.strokeStyle = isPicking ? "#ffd666" : "#7ee9ff";
-                ctx.lineWidth = isPicking ? 3 : 2;
+                ctx.strokeStyle = "#7ee9ff";
+                ctx.lineWidth = 2;
                 ctx.strokeRect(drawX, drawZ, drawW, drawH);
 
-                ctx.fillStyle = isPicking ? "#ffe2a6" : "#9af2ff";
+                ctx.fillStyle = "#9af2ff";
                 ctx.font = "600 10px \"DM Mono\", monospace";
                 ctx.textAlign = "left";
                 ctx.textBaseline = "top";
@@ -648,7 +810,7 @@ export function MapEditor() {
             ctx.strokeRect(drawX, drawZ, drawW, drawH);
         }
 
-    }, [geometryLayer, terrainLayer, floorLayer, propsLayer, entitiesLayer, metadata, showGrid, layerVisibility, activeLayer, CELL_SIZE, doorDrag, entities, dialogTriggers, dialogConditionPicker, dialogRegionDrag, composedFloorTintLayer, composedTerrainTintLayer]);
+    }, [geometryLayer, terrainLayer, floorLayer, propsLayer, entitiesLayer, metadata, showGrid, layerVisibility, activeLayer, CELL_SIZE, doorDrag, entities, dialogLocations, selectedDialogLocationId, activeDialogTriggers, dialogRegionDrag, composedFloorTintLayer, composedTerrainTintLayer]);
 
     const getActiveLayer = useCallback((): string[][] => {
         switch (activeLayer) {
@@ -657,6 +819,7 @@ export function MapEditor() {
             case "floor": return floorLayers[activeFloorPaintLayer] ?? createEmptyLayer(metadata.width, metadata.height, TILE_EMPTY);
             case "props": return propsLayer;
             case "entities": return entitiesLayer;
+            case "locations": return createEmptyLayer(metadata.width, metadata.height, ".");
         }
     }, [
         activeLayer,
@@ -682,6 +845,7 @@ export function MapEditor() {
                 break;
             case "props": setPropsLayer(newLayer); break;
             case "entities": setEntitiesLayer(newLayer); break;
+            case "locations": break;
         }
     }, [activeLayer, activeTerrainPaintLayer, activeFloorPaintLayer]);
 
@@ -918,7 +1082,12 @@ export function MapEditor() {
                     setEntities(prev => [...prev, secretDoor]);
                 } else if (activeBrush === "E") {
                     setEntities(prev => [...prev, {
-                        id: entityId, x, z, type: "enemy", enemyType: "skeleton_warrior"
+                        id: entityId,
+                        x,
+                        z,
+                        type: "enemy",
+                        enemyType: "skeleton_warrior",
+                        enemySpawnIndex: getNextEnemySpawnIndex(prev),
                     }]);
                 } else if (activeBrush === "X") {
                     setEntities(prev => [...prev, {
@@ -944,6 +1113,82 @@ export function MapEditor() {
         setSpawnPoint
     ]);
 
+    const updateDialogRegionDragEndpoint = useCallback((clientX: number, clientY: number): void => {
+        const rect = canvasRef.current?.getBoundingClientRect();
+        if (!rect) return;
+
+        const { x, z } = transformMouseCoords(clientX, clientY, rect);
+        const clampedX = clampGridCoord(x, metadata.width);
+        const clampedZ = clampGridCoord(z, metadata.height);
+        setDialogRegionDrag(prev => prev ? { ...prev, endX: clampedX, endZ: clampedZ } : null);
+    }, [metadata.width, metadata.height, transformMouseCoords]);
+
+    const applyDialogRegionDrag = useCallback((dragState: DialogRegionDragState, clientX: number, clientY: number): void => {
+        const rect = canvasRef.current?.getBoundingClientRect();
+        if (!rect) {
+            dialogRegionDragRef.current = null;
+            setDialogRegionDrag(null);
+                return;
+        }
+
+        const { x, z } = transformMouseCoords(clientX, clientY, rect);
+        const endX = clampGridCoord(x, metadata.width);
+        const endZ = clampGridCoord(z, metadata.height);
+        const minX = Math.min(dragState.startX, endX);
+        const maxX = Math.max(dragState.startX, endX);
+        const minZ = Math.min(dragState.startZ, endZ);
+        const maxZ = Math.max(dragState.startZ, endZ);
+        const w = maxX - minX + 1;
+        const h = maxZ - minZ + 1;
+
+        const { locationId } = dragState;
+        const targetLocation = dialogLocations.find(location => location.id === locationId);
+        if (targetLocation) {
+            const didChange = targetLocation.x !== minX
+                || targetLocation.z !== minZ
+                || targetLocation.w !== w
+                || targetLocation.h !== h;
+            if (didChange) {
+                pushHistory();
+            }
+            setDialogLocations(prev => prev.map(location => {
+                if (location.id !== locationId) return location;
+                return {
+                    ...location,
+                    x: minX,
+                    z: minZ,
+                    w,
+                    h
+                };
+            }));
+        }
+
+        dialogRegionDragRef.current = null;
+        setDialogRegionDrag(null);
+    }, [dialogLocations, metadata.width, metadata.height, pushHistory, transformMouseCoords]);
+
+    const isDialogRegionDragging = dialogRegionDrag !== null;
+
+    useEffect(() => {
+        if (!isDialogRegionDragging) return;
+
+        const handleWindowMouseMove = (event: MouseEvent) => {
+            updateDialogRegionDragEndpoint(event.clientX, event.clientY);
+        };
+        const handleWindowMouseUp = (event: MouseEvent) => {
+            const activeDrag = dialogRegionDragRef.current;
+            if (!activeDrag) return;
+            applyDialogRegionDrag(activeDrag, event.clientX, event.clientY);
+        };
+
+        window.addEventListener("mousemove", handleWindowMouseMove);
+        window.addEventListener("mouseup", handleWindowMouseUp);
+        return () => {
+            window.removeEventListener("mousemove", handleWindowMouseMove);
+            window.removeEventListener("mouseup", handleWindowMouseUp);
+        };
+    }, [applyDialogRegionDrag, isDialogRegionDragging, updateDialogRegionDragEndpoint]);
+
     const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
         // Ignore right-click (handled by onContextMenu)
         if (e.button !== 0) return;
@@ -956,17 +1201,38 @@ export function MapEditor() {
         const { x, z } = transformMouseCoords(e.clientX, e.clientY, rect);
         if (x < 0 || z < 0 || x >= metadata.width || z >= metadata.height) return;
 
-        if (dialogConditionPicker) {
+        if (activeLayer === "locations") {
             const clampedX = clampGridCoord(x, metadata.width);
             const clampedZ = clampGridCoord(z, metadata.height);
-            setDialogRegionDrag({
-                triggerId: dialogConditionPicker.triggerId,
-                conditionIndex: dialogConditionPicker.conditionIndex,
+            const locationAtPointer = [...dialogLocations]
+                .reverse()
+                .find(location => locationContainsCell(location, clampedX, clampedZ));
+
+            if (activeTool === "erase") {
+                if (locationAtPointer) {
+                    removeDialogLocation(locationAtPointer.id);
+                }
+                return;
+            }
+
+            let targetLocationId = locationAtPointer?.id ?? null;
+            if (!targetLocationId) {
+                const nextLocationId = createDialogLocationId(dialogLocations);
+                targetLocationId = nextLocationId;
+                pushHistory();
+                setDialogLocations(prev => [...prev, { id: nextLocationId, x: clampedX, z: clampedZ, w: 1, h: 1 }]);
+            }
+
+            setSelectedDialogLocationId(targetLocationId);
+            const nextDragState: DialogRegionDragState = {
+                locationId: targetLocationId,
                 startX: clampedX,
                 startZ: clampedZ,
                 endX: clampedX,
                 endZ: clampedZ,
-            });
+            };
+            dialogRegionDragRef.current = nextDragState;
+            setDialogRegionDrag(nextDragState);
             return;
         }
 
@@ -990,9 +1256,7 @@ export function MapEditor() {
         const { x, z } = transformMouseCoords(e.clientX, e.clientY, rect);
 
         if (dialogRegionDrag) {
-            const clampedX = clampGridCoord(x, metadata.width);
-            const clampedZ = clampGridCoord(z, metadata.height);
-            setDialogRegionDrag(prev => prev ? { ...prev, endX: clampedX, endZ: clampedZ } : null);
+            updateDialogRegionDragEndpoint(e.clientX, e.clientY);
             return;
         }
 
@@ -1008,32 +1272,6 @@ export function MapEditor() {
 
     const handleCanvasMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
         if (dialogRegionDrag) {
-            const rect = canvasRef.current?.getBoundingClientRect();
-            if (rect) {
-                const { x, z } = transformMouseCoords(e.clientX, e.clientY, rect);
-                const endX = clampGridCoord(x, metadata.width);
-                const endZ = clampGridCoord(z, metadata.height);
-                const minX = Math.min(dialogRegionDrag.startX, endX);
-                const maxX = Math.max(dialogRegionDrag.startX, endX);
-                const minZ = Math.min(dialogRegionDrag.startZ, endZ);
-                const maxZ = Math.max(dialogRegionDrag.startZ, endZ);
-                const w = maxX - minX + 1;
-                const h = maxZ - minZ + 1;
-
-                pushHistory();
-                updateDialogTriggerCondition(dialogRegionDrag.triggerId, dialogRegionDrag.conditionIndex, condition => {
-                    if (condition.type !== "party_enters_region") return condition;
-                    return {
-                        ...condition,
-                        x: minX,
-                        z: minZ,
-                        w,
-                        h
-                    };
-                });
-            }
-            setDialogRegionDrag(null);
-            setDialogConditionPicker(null);
             return;
         }
 
@@ -1091,10 +1329,19 @@ export function MapEditor() {
     };
 
     const openPropertiesPopup = useCallback((menu: EditorContextMenuState) => {
+        if (menu.location && activeLayer === "locations") {
+            setEditingLocation({ location: menu.location, screenX: menu.screenX, screenY: menu.screenY });
+            setSelectedDialogLocationId(menu.location.id);
+            setEditingEntity(null);
+            setEditingTree(null);
+            setEditingDecoration(null);
+            return;
+        }
         if (menu.entity) {
             setEditingEntity({ entity: menu.entity, screenX: menu.screenX, screenY: menu.screenY });
             setEditingTree(null);
             setEditingDecoration(null);
+            setEditingLocation(null);
             return;
         }
         if (menu.tree) {
@@ -1106,6 +1353,7 @@ export function MapEditor() {
             });
             setEditingEntity(null);
             setEditingDecoration(null);
+            setEditingLocation(null);
             return;
         }
         if (menu.decoration) {
@@ -1117,8 +1365,17 @@ export function MapEditor() {
             });
             setEditingEntity(null);
             setEditingTree(null);
+            setEditingLocation(null);
+            return;
         }
-    }, []);
+        if (menu.location) {
+            setEditingLocation({ location: menu.location, screenX: menu.screenX, screenY: menu.screenY });
+            setSelectedDialogLocationId(menu.location.id);
+            setEditingEntity(null);
+            setEditingTree(null);
+            setEditingDecoration(null);
+        }
+    }, [activeLayer]);
 
     const copyFromContextMenu = useCallback((menu: EditorContextMenuState) => {
         if (menu.entity) {
@@ -1169,9 +1426,14 @@ export function MapEditor() {
                 && cellZ >= pasteFootprint.z
                 && cellZ < pasteFootprint.z + pasteFootprint.h;
 
-            const nextEntities = entities
-                .filter(ent => !footprintsOverlap(getEntityFootprint(ent), pasteFootprint))
-                .concat(pasted);
+            const baseEntities = entities.filter(ent => !footprintsOverlap(getEntityFootprint(ent), pasteFootprint));
+            if (pasted.type === "enemy") {
+                pasted = {
+                    ...pasted,
+                    enemySpawnIndex: getNextEnemySpawnIndex(baseEntities),
+                };
+            }
+            const nextEntities = baseEntities.concat(pasted);
 
             setEntities(nextEntities);
             setEntitiesLayer(buildEntitiesLayerFromDefs(nextEntities));
@@ -1252,6 +1514,9 @@ export function MapEditor() {
         const entity = entities.find(ent => entityOccupiesCell(ent, x, z));
         const treeIndex = trees.findIndex(t => Math.floor(t.x) === x && Math.floor(t.z) === z);
         const decIndex = decorations.findIndex(d => Math.floor(d.x) === x && Math.floor(d.z) === z);
+        const location = [...dialogLocations]
+            .reverse()
+            .find(entry => locationContainsCell(entry, x, z));
         const tree = treeIndex >= 0 ? { value: { ...trees[treeIndex] }, index: treeIndex } : null;
         const decoration = decIndex >= 0 ? { value: { ...decorations[decIndex] }, index: decIndex } : null;
 
@@ -1266,7 +1531,8 @@ export function MapEditor() {
             tileZ: z,
             entity: entity ? { ...entity } : null,
             tree,
-            decoration
+            decoration,
+            location: location ? cloneDialogLocation(location) : null,
         };
 
         // Shift + right-click keeps the existing edit popup behavior.
@@ -1324,14 +1590,25 @@ export function MapEditor() {
         setEditingDecoration(null);
     };
 
+    const setEditableDialogTriggers = useCallback(
+        (updater: (prev: AreaDialogTrigger[]) => AreaDialogTrigger[]) => {
+            if (dialogTriggersDraft !== null) {
+                setDialogTriggersDraft(prev => prev ? updater(prev) : prev);
+                return;
+            }
+            setDialogTriggers(prev => updater(prev));
+        },
+        [dialogTriggersDraft]
+    );
+
     const updateDialogTrigger = useCallback(
         (triggerId: string, updater: (trigger: AreaDialogTrigger) => AreaDialogTrigger) => {
-            setDialogTriggers(prev => prev.map(trigger => {
+            setEditableDialogTriggers(prev => prev.map(trigger => {
                 if (trigger.id !== triggerId) return trigger;
                 return updater(trigger);
             }));
         },
-        []
+        [setEditableDialogTriggers]
     );
 
     const updateDialogTriggerCondition = useCallback(
@@ -1351,36 +1628,112 @@ export function MapEditor() {
         [updateDialogTrigger]
     );
 
-    const addDialogTrigger = useCallback(() => {
-        pushHistory();
-        const defaultDialogId = availableDialogIds[0] ?? "dialog_id";
-        const nextTrigger: AreaDialogTrigger = {
-            id: createDialogTriggerId(),
-            dialogId: defaultDialogId,
-            once: true,
-            priority: 0,
-            conditions: [createDefaultDialogCondition()]
-        };
-        setDialogTriggers(prev => [...prev, nextTrigger]);
-    }, [availableDialogIds, pushHistory]);
+    const saveDialogLocation = useCallback((locationId: string, draft: AreaLocation): boolean => {
+        const currentLocation = dialogLocations.find(location => location.id === locationId);
+        if (!currentLocation) return false;
 
-    const removeDialogTrigger = useCallback((triggerId: string) => {
+        const nextId = draft.id.trim();
+        if (nextId.length === 0) return false;
+        const idAlreadyUsed = dialogLocations.some(location => location.id === nextId && location.id !== locationId);
+        if (idAlreadyUsed) return false;
+
+        const clampedX = clampGridCoord(draft.x, metadata.width);
+        const clampedZ = clampGridCoord(draft.z, metadata.height);
+        const maxWidth = Math.max(1, metadata.width - clampedX);
+        const maxHeight = Math.max(1, metadata.height - clampedZ);
+        const rawWidth = Number.isFinite(draft.w) ? Math.floor(draft.w) : 1;
+        const rawHeight = Number.isFinite(draft.h) ? Math.floor(draft.h) : 1;
+        const normalized: AreaLocation = {
+            id: nextId,
+            x: clampedX,
+            z: clampedZ,
+            w: Math.max(1, Math.min(rawWidth, maxWidth)),
+            h: Math.max(1, Math.min(rawHeight, maxHeight)),
+        };
+        const changed = normalized.id !== currentLocation.id
+            || normalized.x !== currentLocation.x
+            || normalized.z !== currentLocation.z
+            || normalized.w !== currentLocation.w
+            || normalized.h !== currentLocation.h;
+
+        if (changed) {
+            pushHistory();
+            setDialogLocations(prev => prev.map(location => location.id === locationId ? normalized : location));
+            if (normalized.id !== currentLocation.id) {
+                const remapLocationInTriggers = (triggers: AreaDialogTrigger[]): AreaDialogTrigger[] => (
+                    triggers.map(trigger => ({
+                        ...trigger,
+                        conditions: trigger.conditions.map(condition => {
+                            if (condition.type !== "party_enters_location") return condition;
+                            if (condition.locationId !== currentLocation.id) return condition;
+                            return {
+                                ...condition,
+                                locationId: normalized.id,
+                            };
+                        })
+                    }))
+                );
+                setDialogTriggers(prev => remapLocationInTriggers(prev));
+                setDialogTriggersDraft(prev => prev ? remapLocationInTriggers(prev) : prev);
+            }
+        }
+
+        setSelectedDialogLocationId(normalized.id);
+        return true;
+    }, [dialogLocations, metadata.width, metadata.height, pushHistory]);
+
+    const removeDialogLocation = useCallback((locationId: string) => {
         pushHistory();
-        setDialogTriggers(prev => prev.filter(trigger => trigger.id !== triggerId));
-        setDialogConditionPicker(prev => prev?.triggerId === triggerId ? null : prev);
-        setDialogRegionDrag(prev => prev?.triggerId === triggerId ? null : prev);
+        setDialogLocations(prev => prev.filter(location => location.id !== locationId));
+        setSelectedDialogLocationId(prev => prev === locationId ? null : prev);
+        setEditingLocation(prev => prev?.location.id === locationId ? null : prev);
+        setContextMenu(prev => prev?.location?.id === locationId ? null : prev);
+        setDialogRegionDrag(prev =>
+            prev && prev.locationId === locationId ? null : prev
+        );
     }, [pushHistory]);
 
+    const addDialogTrigger = useCallback(() => {
+        if (dialogTriggersDraft === null) {
+            pushHistory();
+        }
+        const existingTriggerIds = new Set(activeDialogTriggers.map(trigger => trigger.id));
+        let nextTriggerId = createDialogTriggerId();
+        while (existingTriggerIds.has(nextTriggerId)) {
+            nextTriggerId = createDialogTriggerId();
+        }
+        const nextTrigger: AreaDialogTrigger = {
+            id: nextTriggerId,
+            wip: true,
+            once: true,
+            priority: 0,
+            conditions: [createDefaultDialogCondition()],
+            actions: []
+        };
+        setEditableDialogTriggers(prev => [...prev, nextTrigger]);
+    }, [activeDialogTriggers, dialogTriggersDraft, pushHistory, setEditableDialogTriggers]);
+
+    const removeDialogTrigger = useCallback((triggerId: string) => {
+        if (dialogTriggersDraft === null) {
+            pushHistory();
+        }
+        setEditableDialogTriggers(prev => prev.filter(trigger => trigger.id !== triggerId));
+    }, [dialogTriggersDraft, pushHistory, setEditableDialogTriggers]);
+
     const addDialogCondition = useCallback((triggerId: string) => {
-        pushHistory();
+        if (dialogTriggersDraft === null) {
+            pushHistory();
+        }
         updateDialogTrigger(triggerId, trigger => ({
             ...trigger,
             conditions: [...trigger.conditions, createDefaultDialogCondition()]
         }));
-    }, [pushHistory, updateDialogTrigger]);
+    }, [dialogTriggersDraft, pushHistory, updateDialogTrigger]);
 
     const removeDialogCondition = useCallback((triggerId: string, conditionIndex: number) => {
-        pushHistory();
+        if (dialogTriggersDraft === null) {
+            pushHistory();
+        }
         updateDialogTrigger(triggerId, trigger => {
             const nextConditions = trigger.conditions.filter((_, index) => index !== conditionIndex);
             return {
@@ -1388,34 +1741,22 @@ export function MapEditor() {
                 conditions: nextConditions.length > 0 ? nextConditions : [createDefaultDialogCondition()]
             };
         });
-        setDialogConditionPicker(prev =>
-            prev && prev.triggerId === triggerId && prev.conditionIndex === conditionIndex ? null : prev
-        );
-        setDialogRegionDrag(prev =>
-            prev && prev.triggerId === triggerId && prev.conditionIndex === conditionIndex ? null : prev
-        );
-    }, [pushHistory, updateDialogTrigger]);
+    }, [dialogTriggersDraft, pushHistory, updateDialogTrigger]);
 
-    const toggleDialogRegionPicker = useCallback((triggerId: string, conditionIndex: number) => {
-        setDialogRegionDrag(null);
-        setDialogConditionPicker(prev => {
-            const isCurrent = prev?.triggerId === triggerId && prev.conditionIndex === conditionIndex;
-            if (isCurrent) return null;
-            return { triggerId, conditionIndex };
-        });
-    }, []);
-
-    const cancelDialogRegionPicker = useCallback(() => {
-        setDialogConditionPicker(null);
-        setDialogRegionDrag(null);
-    }, []);
-
-    const saveDialogsFromModal = useCallback((nextDialogs: AreaDialogDefinition[]) => {
+    const saveDialogsFromModal = useCallback((nextDialogs: AreaDialogDefinition[], dialogIdRemap?: Record<string, string>) => {
         pushHistory();
         setDialogs(nextDialogs.map(cloneDialogDefinition));
-        setDialogConditionPicker(null);
-        setDialogRegionDrag(null);
-        setDialogEditorOpen(false);
+        if (dialogIdRemap && Object.keys(dialogIdRemap).length > 0) {
+            setDialogTriggers(prev => remapTriggerDialogTargetsInList(prev, dialogIdRemap));
+            setDialogTriggersDraft(prev => prev ? remapTriggerDialogTargetsInList(prev, dialogIdRemap) : prev);
+        }
+    }, [pushHistory]);
+
+    const saveTriggersFromModal = useCallback((nextTriggers: AreaDialogTrigger[]) => {
+        pushHistory();
+        const persistedTriggers = nextTriggers.map(cloneDialogTrigger);
+        setDialogTriggers(persistedTriggers);
+        setDialogTriggersDraft(persistedTriggers.map(cloneDialogTrigger));
     }, [pushHistory]);
 
     const loadArea = (areaId: AreaId) => {
@@ -1477,8 +1818,15 @@ export function MapEditor() {
         // Build entity definitions
         const entityDefs: EntityDef[] = [];
         let entityId = 0;
-        area.enemySpawns.forEach(e => {
-            entityDefs.push({ id: `e${entityId++}`, x: e.x, z: e.z, type: "enemy", enemyType: e.type });
+        area.enemySpawns.forEach((e, spawnIndex) => {
+            entityDefs.push({
+                id: `e${entityId++}`,
+                x: e.x,
+                z: e.z,
+                type: "enemy",
+                enemyType: e.type,
+                enemySpawnIndex: spawnIndex,
+            });
         });
         area.chests.forEach(c => {
             const items = c.contents.map(i => `${i.itemId}:${i.quantity}`).join(",");
@@ -1533,10 +1881,15 @@ export function MapEditor() {
         });
         setEntities(entityDefs);
         setDialogs((area.dialogs ?? []).map(cloneDialogDefinition));
+        const loadedLocations = (area.locations ?? []).map(cloneDialogLocation);
+        setDialogLocations(loadedLocations);
+        setSelectedDialogLocationId(loadedLocations[0]?.id ?? null);
         setDialogTriggers((area.dialogTriggers ?? []).map(cloneDialogTrigger));
-        setDialogConditionPicker(null);
+        setDialogTriggersDraft(null);
         setDialogRegionDrag(null);
         setDialogEditorOpen(false);
+        setEditingLocation(null);
+        setContextMenu(null);
     };
 
     const createNewArea = () => {
@@ -1579,10 +1932,14 @@ export function MapEditor() {
         setTrees([]);
         setDecorations([]);
         setDialogs([]);
+        setDialogLocations([]);
+        setSelectedDialogLocationId(null);
         setDialogTriggers([]);
-        setDialogConditionPicker(null);
+        setDialogTriggersDraft(null);
         setDialogRegionDrag(null);
         setDialogEditorOpen(false);
+        setEditingLocation(null);
+        setContextMenu(null);
 
         // Reset history for new area
         historyRef.current = [];
@@ -1651,21 +2008,16 @@ export function MapEditor() {
     }, []);
 
     const enemySpawnOptions = useMemo(() => {
-        const gridEntities = extractEntitiesFromGrid(entitiesLayer);
-        return gridEntities.enemies.map((enemyCell, index) => {
-            const stateEnemy = entities.find(entity =>
-                entity.type === "enemy"
-                && Math.floor(entity.x) === enemyCell.x
-                && Math.floor(entity.z) === enemyCell.z
-            );
+        const orderedEnemies = getOrderedEnemyEntities(entities);
+        return orderedEnemies.map((enemy, index) => {
             return {
                 spawnIndex: index,
-                x: enemyCell.x,
-                z: enemyCell.z,
-                enemyType: stateEnemy?.enemyType ?? "skeleton_warrior",
+                x: Math.floor(enemy.x),
+                z: Math.floor(enemy.z),
+                enemyType: enemy.enemyType ?? "skeleton_warrior",
             };
         });
-    }, [entitiesLayer, entities]);
+    }, [entities]);
 
     const buildAreaDataFromEditor = (): AreaData => {
         const normalizedTerrainLayers = normalizeTileLayerStack(terrainLayers, metadata.width, metadata.height, TILE_EMPTY);
@@ -1695,12 +2047,17 @@ export function MapEditor() {
             return stateDec ? { ...stateDec } : { x: gd.x, z: gd.z, type: gd.type };
         });
 
-        // Extract enemies and chests from entities layer, merging with detailed state
-        const gridEntities = extractEntitiesFromGrid(entitiesLayer);
-        const rawEnemySpawns: EnemySpawn[] = gridEntities.enemies.map(ge => {
-            const stateEnemy = entities.find(e => e.type === "enemy" && Math.floor(e.x) === ge.x && Math.floor(e.z) === ge.z);
-            return { x: ge.x + 0.5, z: ge.z + 0.5, type: stateEnemy?.enemyType ?? "skeleton_warrior" };
+        // Extract enemies from detailed state so trigger spawnIndex ordering remains stable.
+        const orderedEnemies = getOrderedEnemyEntities(entities);
+        const rawEnemySpawns: EnemySpawn[] = orderedEnemies.map(enemy => {
+            return {
+                x: Math.floor(enemy.x) + 0.5,
+                z: Math.floor(enemy.z) + 0.5,
+                type: enemy.enemyType ?? "skeleton_warrior",
+            };
         });
+        // Extract chests from entities layer, merging with detailed state.
+        const gridEntities = extractEntitiesFromGrid(entitiesLayer);
         const enemySpawns = sanitizeEnemySpawns(
             rawEnemySpawns,
             geometryLayer,
@@ -1816,6 +2173,7 @@ export function MapEditor() {
             lights: lightList.length > 0 ? lightList : undefined,
             secretDoors: secretDoorList.length > 0 ? secretDoorList : undefined,
             dialogs: dialogs.length > 0 ? dialogs.map(cloneDialogDefinition) : undefined,
+            locations: dialogLocations.length > 0 ? dialogLocations.map(cloneDialogLocation) : undefined,
             dialogTriggers: dialogTriggers.length > 0 ? dialogTriggers.map(cloneDialogTrigger) : undefined,
         };
     };
@@ -1938,7 +2296,7 @@ export function MapEditor() {
                 {/* Layer Selection */}
                 <div>
                     <h3 style={{ margin: "0 0 12px", fontSize: 16 }}>Layers</h3>
-                    {(["geometry", "terrain", "floor", "props", "entities"] as Layer[]).map(layer => (
+                    {(["geometry", "terrain", "floor", "props", "entities", "locations"] as Layer[]).map(layer => (
                         <div key={layer} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
                             <input
                                 type="checkbox"
@@ -2161,7 +2519,7 @@ export function MapEditor() {
                         onMouseDown={handleCanvasMouseDown}
                         onMouseMove={handleCanvasMouseMove}
                         onMouseUp={handleCanvasMouseUp}
-                        onMouseLeave={() => { setIsPainting(false); setDoorDrag(null); setDialogRegionDrag(null); }}
+                        onMouseLeave={() => { setIsPainting(false); setDoorDrag(null); }}
                         onContextMenu={handleCanvasContextMenu}
                         style={{
                             border: "1px solid #333",
@@ -2198,7 +2556,7 @@ export function MapEditor() {
                                 openPropertiesPopup(contextMenu);
                                 setContextMenu(null);
                             }}
-                            disabled={!contextMenu.entity && !contextMenu.tree && !contextMenu.decoration}
+                            disabled={!contextMenu.entity && !contextMenu.tree && !contextMenu.decoration && !contextMenu.location}
                             style={{
                                 textAlign: "left",
                                 padding: "8px 10px",
@@ -2207,8 +2565,8 @@ export function MapEditor() {
                                 border: "1px solid #414655",
                                 background: "#2a3040",
                                 color: "#fff",
-                                cursor: contextMenu.entity || contextMenu.tree || contextMenu.decoration ? "pointer" : "not-allowed",
-                                opacity: contextMenu.entity || contextMenu.tree || contextMenu.decoration ? 1 : 0.45,
+                                cursor: contextMenu.entity || contextMenu.tree || contextMenu.decoration || contextMenu.location ? "pointer" : "not-allowed",
+                                opacity: contextMenu.entity || contextMenu.tree || contextMenu.decoration || contextMenu.location ? 1 : 0.45,
                             }}
                         >
                             Properties
@@ -2290,6 +2648,28 @@ export function MapEditor() {
                         screenY={editingDecoration.screenY}
                         onSave={(d) => updateDecoration(editingDecoration.index, d)}
                         onClose={() => setEditingDecoration(null)}
+                    />
+                )}
+
+                {/* Location Edit Popup */}
+                {editingLocation && (
+                    <LocationEditPopup
+                        location={editingLocation.location}
+                        screenX={editingLocation.screenX}
+                        screenY={editingLocation.screenY}
+                        mapWidth={metadata.width}
+                        mapHeight={metadata.height}
+                        onSave={(nextLocation) => {
+                            const didSave = saveDialogLocation(editingLocation.location.id, nextLocation);
+                            if (didSave) {
+                                setEditingLocation(null);
+                            }
+                        }}
+                        onDelete={() => {
+                            removeDialogLocation(editingLocation.location.id);
+                            setEditingLocation(null);
+                        }}
+                        onClose={() => setEditingLocation(null)}
                     />
                 )}
             </div>
@@ -2405,29 +2785,48 @@ export function MapEditor() {
                     Fog of War
                 </label>
 
-                <div style={{ display: "flex", gap: 12 }}>
-                    <label style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
-                        <span style={{ fontSize: 13 }}>Spawn X</span>
-                        <input
-                            type="number"
-                            value={metadata.spawnX}
-                            onChange={e => setSpawnPoint(parseInt(e.target.value) || 0, metadata.spawnZ)}
-                            style={{ padding: 8, fontSize: 14, background: "#333", border: "1px solid #555", borderRadius: 4, color: "#fff" }}
-                        />
-                    </label>
-                    <label style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
-                        <span style={{ fontSize: 13 }}>Spawn Z</span>
-                        <input
-                            type="number"
-                            value={metadata.spawnZ}
-                            onChange={e => setSpawnPoint(metadata.spawnX, parseInt(e.target.value) || 0)}
-                            style={{ padding: 8, fontSize: 14, background: "#333", border: "1px solid #555", borderRadius: 4, color: "#fff" }}
-                        />
-                    </label>
+                {/* Trigger Studio */}
+                <div className="editor-trigger-studio">
+                    <div className="editor-trigger-studio-header">
+                        <h3 className="editor-trigger-studio-title">Triggers</h3>
+                        <button
+                            onClick={() => {
+                                setDialogTriggersDraft(dialogTriggers.map(cloneDialogTrigger));
+                                setDialogEditorOpen(true);
+                            }}
+                            className="editor-btn editor-btn--primary editor-btn--small"
+                        >
+                            Open Trigger Studio
+                        </button>
+                    </div>
+                    <div className="editor-trigger-studio-summary">
+                        {activeDialogTriggers.length === 0
+                            ? "0 triggers"
+                            : `${activeDialogTriggers.length} trigger${activeDialogTriggers.length === 1 ? "" : "s"} configured.`}
+                    </div>
+                    {dialogs.length > 0 && (
+                        <div className="editor-trigger-studio-dialog-list">
+                            {dialogs.map(dialog => (
+                                <div
+                                    key={`dialog-summary-${dialog.id}`}
+                                    className="editor-trigger-studio-dialog-item"
+                                >
+                                    <span>{dialog.id}</span>
+                                    <span className="editor-trigger-studio-dialog-nodes">{Object.keys(dialog.nodes).length} nodes</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                <div style={{ borderTop: "1px solid #444", paddingTop: 12, marginTop: 2, fontSize: 12, color: "#8fa0c5" }}>
+                    {dialogs.length === 0
+                        ? "0 dialog payloads"
+                        : `${dialogs.length} dialog payload${dialogs.length === 1 ? "" : "s"}`}
                 </div>
 
                 {/* Connections Panel */}
-                <div style={{ borderTop: "1px solid #444", paddingTop: 16, marginTop: 8 }}>
+                <div style={{ borderTop: "1px solid #444", paddingTop: 16, marginTop: 2 }}>
                     <ConnectionsPanel
                         currentAreaId={metadata.id}
                         entities={entities}
@@ -2437,79 +2836,30 @@ export function MapEditor() {
                         onNavigate={loadArea}
                     />
                 </div>
-
-                {/* Dialog And Trigger Studio */}
-                <div style={{ borderTop: "1px solid #444", paddingTop: 16, marginTop: 8, display: "flex", flexDirection: "column", gap: 10 }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                        <h3 style={{ margin: 0, fontSize: 16 }}>Dialogs And Triggers</h3>
-                        <button
-                            onClick={() => setDialogEditorOpen(true)}
-                            style={{ padding: "6px 10px", fontSize: 12, background: "#3568b8", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
-                        >
-                            Open Studio
-                        </button>
-                    </div>
-                    <div style={{ fontSize: 12, color: "#a8b2cc" }}>
-                        {dialogs.length === 0
-                            ? "No dialogs in this area."
-                            : `${dialogs.length} dialog${dialogs.length === 1 ? "" : "s"} defined.`}
-                    </div>
-                    {dialogs.length > 0 && (
-                        <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 116, overflowY: "auto", paddingRight: 2 }}>
-                            {dialogs.map(dialog => (
-                                <div
-                                    key={`dialog-summary-${dialog.id}`}
-                                    style={{
-                                        fontSize: 12,
-                                        color: "#d7def1",
-                                        background: "#2a2f3f",
-                                        border: "1px solid #4b5165",
-                                        borderRadius: 6,
-                                        padding: "6px 8px",
-                                        display: "flex",
-                                        justifyContent: "space-between",
-                                        gap: 8,
-                                    }}
-                                >
-                                    <span>{dialog.id}</span>
-                                    <span style={{ color: "#9fb5dc" }}>{Object.keys(dialog.nodes).length} nodes</span>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                <div style={{ borderTop: "1px solid #444", paddingTop: 12, marginTop: 2, fontSize: 12, color: "#8fa0c5" }}>
-                    {dialogTriggers.length === 0
-                        ? "No dialog triggers yet. Add them inside the studio modal."
-                        : `${dialogTriggers.length} dialog trigger${dialogTriggers.length === 1 ? "" : "s"} configured.`}
-                </div>
             </div>
 
             {dialogEditorOpen && (
                 <DialogEditorModal
                     dialogs={dialogs}
-                    dialogTriggers={dialogTriggers}
+                    dialogLocations={dialogLocations}
+                    dialogTriggers={activeDialogTriggers}
                     availableDialogIds={availableDialogIds}
                     availableDialogIdSet={availableDialogIdSet}
-                    missingDialogTriggerCount={missingDialogTriggerCount}
                     enemySpawnOptions={enemySpawnOptions}
                     mapWidth={metadata.width}
                     mapHeight={metadata.height}
-                    dialogConditionPicker={dialogConditionPicker}
                     onAddDialogTrigger={addDialogTrigger}
                     onRemoveDialogTrigger={removeDialogTrigger}
                     onUpdateDialogTrigger={updateDialogTrigger}
                     onUpdateDialogTriggerCondition={updateDialogTriggerCondition}
                     onAddDialogCondition={addDialogCondition}
                     onRemoveDialogCondition={removeDialogCondition}
-                    onToggleRegionPicker={toggleDialogRegionPicker}
-                    onCancelRegionPicker={cancelDialogRegionPicker}
                     onClose={() => {
-                        cancelDialogRegionPicker();
                         setDialogEditorOpen(false);
+                        setDialogTriggersDraft(null);
                     }}
-                    onSave={saveDialogsFromModal}
+                    onSaveDialogs={saveDialogsFromModal}
+                    onSaveTriggers={saveTriggersFromModal}
                 />
             )}
         </div>

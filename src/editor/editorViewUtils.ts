@@ -14,6 +14,7 @@ export function getLayerColor(layer: Layer): string {
         case "floor": return "#a86";
         case "props": return "#4a4";
         case "entities": return "#f44";
+        case "locations": return "#b98cff";
     }
 }
 

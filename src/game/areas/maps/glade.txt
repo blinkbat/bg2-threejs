@@ -2,7 +2,7 @@
 name: Windward Glade
 flavor: Somehow, this idyllic glade feels safe and serene.
 size: 30x50
-background: #2e251a
+background: #322110
 ground: #768560
 ambient: 0.5
 directional: 0.7
@@ -391,17 +391,36 @@ ww............................
 27,32:small_fern
 5,34:small_fern
 26,35:small_fern
+28,35:mushroom
 27,36:fern
 4,37:fern
 5,37:fern
+9,37:fern
+10,37:small_fern
+11,37:small_fern
+12,37:fern
+13,37:small_weeds
+22,37:fern
+23,37:small_fern
+24,37:small_weeds
+26,37:small_mushroom
+28,37:small_weeds
 3,39:small_fern
 4,39:fern
+28,39:small_mushroom
 3,41:fern
 6,42:small_fern
 3,43:small_fern
 8,43:small_fern
 7,46:fern
+27,46:small_mushroom
+28,46:mushroom
 9,47:fern
+22,47:small_mushroom
+26,47:small_mushroom
+19,48:small_mushroom
+20,48:small_mushroom
+24,48:small_mushroom
 
 === LIGHTS ===
 19.5,45.5:radius=18,angle=65,tint=#f5ae3d,brightness=30,height=10,diffusion=0.55,decay=1
@@ -416,3 +435,12 @@ ww............................
 23,23:dir=0,1,kind=torch,color=#ff8844
 13,21:dir=0,1,kind=torch,color=#ff8844
 19,21:dir=0,1,kind=torch,color=#ff8844
+
+=== DIALOGS ===
+{"id":"dialog","startNodeId":"node_1","nodes":{"node_1":{"id":"node_1","speakerId":"innkeeper","text":"Ah -- break's over, I suppose...","nextNodeId":"node_2","continueLabel":"Continue"},"node_2":{"id":"node_2","speakerId":"cleric","text":"This looks like an... inn?","nextNodeId":"node_3","continueLabel":"Continue"},"node_3":{"id":"node_3","speakerId":"innkeeper","text":"It's more of a bed and breakfast... Hells, who am I kidding? With the roads like this, we haven't had fruits for breakfast in a fortnight.","continueLabel":"Continue"}}}
+
+=== LOCATIONS ===
+{"id":"innkeeper_init","x":9,"z":31,"w":16,"h":5}
+
+=== DIALOG_TRIGGERS ===
+{"id":"innkeeper_init","dialogId":"dialog","actions":[{"type":"start_dialog","dialogId":"dialog"}],"once":true,"priority":0,"conditions":[{"type":"party_enters_location","locationId":"innkeeper_init"}]}

@@ -94,6 +94,10 @@ export const ENTITY_BRUSHES: BrushDef[] = [
     { char: "S", label: "Secret Door", color: "#4aa" },
 ];
 
+export const LOCATION_BRUSHES: BrushDef[] = [
+    { char: "L", label: "Location", color: "#b98cff" },
+];
+
 // =============================================================================
 // DERIVED LOOKUP MAPS (built from registries above)
 // =============================================================================
@@ -113,6 +117,7 @@ export const LAYER_COLORS: Record<Layer, Map<string, string>> = {
     floor: buildColorMap(FLOOR_BRUSHES),
     props: buildColorMap(PROP_BRUSHES),
     entities: buildColorMap(ENTITY_BRUSHES),
+    locations: buildColorMap(LOCATION_BRUSHES),
 };
 
 /** Per-layer brush palettes for the toolbar */
@@ -122,6 +127,7 @@ export const LAYER_BRUSHES: Record<Layer, BrushDef[]> = {
     floor: FLOOR_BRUSHES,
     props: PROP_BRUSHES,
     entities: ENTITY_BRUSHES,
+    locations: LOCATION_BRUSHES,
 };
 
 /** Prop layer: decoration type → grid char (for loading area data into editor) */

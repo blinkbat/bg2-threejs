@@ -63,7 +63,12 @@ import { type SaveSlotData, SAVE_VERSION, saveGame, loadGame } from "./game/save
 import { clearFogVisibilityMemory } from "./game/fogMemory";
 import { buildAreaDialogDefinitionMap } from "./dialog/areaDialogs";
 import { getDialogDefinitionById } from "./dialog/registry";
-import { getDialogTriggerPriority, isDialogTriggerSatisfied, type DialogTriggerRuntimeState } from "./dialog/triggerRuntime";
+import {
+    getDialogTriggerPriority,
+    getTriggerStartDialogId,
+    isDialogTriggerSatisfied,
+    type DialogTriggerRuntimeState
+} from "./dialog/triggerRuntime";
 import type { DialogChoice, DialogDefinition, DialogNode, DialogSpeaker, DialogState, DialogUiAction } from "./dialog/types";
 import {
     formatPerfLogLine,
@@ -381,6 +386,7 @@ function Game({
     const dialogTriggerAreaLoadedAtRef = useRef(Date.now());
     const firedDialogTriggerIdsRef = useRef<Set<string>>(new Set());
     const dialogTriggerLastFiredAtRef = useRef<Map<string, number>>(new Map());
+    const skippedDialogTriggerLogIdsRef = useRef<Set<string>>(new Set());
     const dialogTriggerRuntimeStateRef = useRef<DialogTriggerRuntimeState>({
         stickySatisfiedConditionKeys: new Set(),
         previousRegionInsideByConditionKey: new Map()
@@ -401,10 +407,6 @@ function Game({
     useEffect(() => { commandModeRef.current = commandMode; }, [commandMode]);
 
     const currentAreaId = getCurrentAreaId();
-    const currentAreaDialogDefinitionsById = useMemo(
-        () => buildAreaDialogDefinitionMap(AREAS[currentAreaId]?.dialogs),
-        [currentAreaId]
-    );
 
     const currentDialogNode = useMemo<DialogNode | null>(() => {
         if (!dialogState) return null;
@@ -431,6 +433,7 @@ function Game({
         dialogTriggerAreaLoadedAtRef.current = Date.now();
         firedDialogTriggerIdsRef.current = new Set();
         dialogTriggerLastFiredAtRef.current = new Map();
+        skippedDialogTriggerLogIdsRef.current = new Set();
         dialogTriggerRuntimeStateRef.current = {
             stickySatisfiedConditionKeys: new Set(),
             previousRegionInsideByConditionKey: new Map()
@@ -903,11 +906,13 @@ function Game({
 
     useEffect(() => {
         if (!playtestSkipDialogs || !isDialogOpen) return;
+        addLog(`Skipped active dialog "${dialogState?.definition.id ?? "unknown"}" (Skip Dialogs enabled).`, "#9b59b6");
         closeDialog();
-    }, [playtestSkipDialogs, isDialogOpen, closeDialog]);
+    }, [addLog, closeDialog, dialogState, isDialogOpen, playtestSkipDialogs]);
 
     const startDialog = useCallback((definition: DialogDefinition) => {
         if (playtestSkipDialogs) {
+            addLog(`Skipped dialog "${definition.id}" (Skip Dialogs enabled).`, "#9b59b6");
             return;
         }
 
@@ -989,58 +994,107 @@ function Game({
 
     useEffect(() => {
         if (!dialogTriggersEnabled) return;
-        if (isDialogOpen) return;
 
-        const area = getCurrentArea();
-        const triggers = area.dialogTriggers ?? [];
-        if (triggers.length === 0) return;
+        const evaluateDialogTriggers = () => {
+            if (isDialogOpen) return;
 
-        const now = Date.now();
-        const firedIds = firedDialogTriggerIdsRef.current;
-        const lastFiredAtByTriggerId = dialogTriggerLastFiredAtRef.current;
-        const runtimeState = dialogTriggerRuntimeStateRef.current;
-        const sortedTriggers = [...triggers].sort((a, b) => getDialogTriggerPriority(b) - getDialogTriggerPriority(a));
+            const area = getCurrentArea();
+            const triggers = area.dialogTriggers ?? [];
+            if (triggers.length === 0) return;
+            const areaDialogDefinitionsById = buildAreaDialogDefinitionMap(area.dialogs);
 
-        for (const trigger of sortedTriggers) {
-            const once = trigger.once !== false;
-            if (once && firedIds.has(trigger.id)) {
-                continue;
-            }
+            // Trigger conditions that depend on position must read live scene transforms,
+            // not potentially stale React unit coordinates.
+            const triggerUnits = units.map(unit => {
+                const group = sceneState.unitGroups[unit.id];
+                if (!group) return unit;
+                return {
+                    ...unit,
+                    x: group.position.x,
+                    z: group.position.z,
+                };
+            });
 
-            if (!once) {
-                const lastFiredAt = lastFiredAtByTriggerId.get(trigger.id) ?? 0;
-                if (now - lastFiredAt < DIALOG_TRIGGER_REPEAT_GUARD_MS) {
+            const now = Date.now();
+            const firedIds = firedDialogTriggerIdsRef.current;
+            const lastFiredAtByTriggerId = dialogTriggerLastFiredAtRef.current;
+            const runtimeState = dialogTriggerRuntimeStateRef.current;
+            const sortedTriggers = [...triggers].sort((a, b) => getDialogTriggerPriority(b) - getDialogTriggerPriority(a));
+
+            for (const trigger of sortedTriggers) {
+                if (trigger.wip) {
                     continue;
                 }
-            }
 
-            const satisfied = isDialogTriggerSatisfied({
-                trigger,
-                area,
-                units,
-                killedEnemies,
-                now,
-                areaLoadedAt: dialogTriggerAreaLoadedAtRef.current,
-                runtimeState
-            });
-            if (!satisfied) {
-                continue;
-            }
+                const once = trigger.once !== false;
+                if (once && firedIds.has(trigger.id)) {
+                    continue;
+                }
 
-            const definition = currentAreaDialogDefinitionsById.get(trigger.dialogId) ?? getDialogDefinitionById(trigger.dialogId);
-            if (!definition) {
-                addLog(`Dialog trigger "${trigger.id}" references unknown dialog "${trigger.dialogId}".`, "#ef4444");
+                if (!once) {
+                    const lastFiredAt = lastFiredAtByTriggerId.get(trigger.id) ?? 0;
+                    if (now - lastFiredAt < DIALOG_TRIGGER_REPEAT_GUARD_MS) {
+                        continue;
+                    }
+                }
+
+                const satisfied = isDialogTriggerSatisfied({
+                    trigger,
+                    area,
+                    units: triggerUnits,
+                    killedEnemies,
+                    now,
+                    areaLoadedAt: dialogTriggerAreaLoadedAtRef.current,
+                    runtimeState
+                });
+                if (!satisfied) {
+                    continue;
+                }
+
+                const targetDialogId = getTriggerStartDialogId(trigger);
+                if (!targetDialogId) {
+                    addLog(`Trigger "${trigger.id}" has no executable action.`, "#ef4444");
+                    if (once) {
+                        firedIds.add(trigger.id);
+                    }
+                    lastFiredAtByTriggerId.set(trigger.id, now);
+                    continue;
+                }
+
+                const definition = areaDialogDefinitionsById.get(targetDialogId) ?? getDialogDefinitionById(targetDialogId);
+                if (!definition) {
+                    addLog(`Trigger "${trigger.id}" references unknown dialog "${targetDialogId}".`, "#ef4444");
+                    if (once) {
+                        firedIds.add(trigger.id);
+                    }
+                    lastFiredAtByTriggerId.set(trigger.id, now);
+                    continue;
+                }
+
+                // Keep trigger state progression while skip-dialog mode is enabled,
+                // but do not consume one-shot triggers.
+                if (playtestSkipDialogs) {
+                    if (!skippedDialogTriggerLogIdsRef.current.has(trigger.id)) {
+                        addLog(
+                            `Skipped dialog "${targetDialogId}" from trigger "${trigger.id}" (Skip Dialogs enabled).`,
+                            "#9b59b6"
+                        );
+                        skippedDialogTriggerLogIdsRef.current.add(trigger.id);
+                    }
+                    continue;
+                }
+
                 firedIds.add(trigger.id);
                 lastFiredAtByTriggerId.set(trigger.id, now);
-                continue;
+                startDialog(definition);
+                break;
             }
+        };
 
-            firedIds.add(trigger.id);
-            lastFiredAtByTriggerId.set(trigger.id, now);
-            startDialog(definition);
-            break;
-        }
-    }, [addLog, currentAreaDialogDefinitionsById, dialogTriggersEnabled, isDialogOpen, killedEnemies, startDialog, units]);
+        evaluateDialogTriggers();
+        const intervalId = window.setInterval(evaluateDialogTriggers, DIALOG_TRIGGER_POLL_MS);
+        return () => window.clearInterval(intervalId);
+    }, [addLog, dialogTriggersEnabled, isDialogOpen, killedEnemies, playtestSkipDialogs, sceneState.unitGroups, startDialog, units]);
 
     const buildPersistedPlayers = useCallback((allUnits: Unit[]): PersistedPlayer[] => {
         const players = allUnits.filter(u => u.team === "player");
@@ -1860,6 +1914,7 @@ function Game({
 const AREA_FADE_DURATION = 300; // ms for area transition fade in/out
 const STARTUP_SCENE_FADE_IN_DURATION = 1400; // ms for initial black-to-scene fade
 const STARTUP_FANFARE_LEAD_IN_MS = 550;
+const DIALOG_TRIGGER_POLL_MS = 120;
 type StartupPhase = "title" | "booting" | "running";
 
 function shouldSkipGameIntro(): boolean {

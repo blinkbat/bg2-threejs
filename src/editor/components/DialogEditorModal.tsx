@@ -1,17 +1,27 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
     AreaDialogChoice,
     AreaDialogDefinition,
     AreaDialogMenuId,
     AreaDialogNode,
+    AreaLocation,
     AreaDialogTrigger,
+    AreaDialogTriggerAction,
     AreaDialogTriggerCondition,
     AreaDialogUiAction,
 } from "../../game/areas/types";
 import type { EnemyType } from "../../core/types";
 import { DIALOG_SPEAKERS } from "../../dialog/speakers";
 import type { DialogSpeakerId } from "../../dialog/types";
-import { XIcon } from "lucide-react";
+import {
+    AlertTriangleIcon,
+    CheckIcon,
+    ChevronRightIcon,
+    MessageSquareIcon,
+    PlusIcon,
+    SaveIcon,
+    XIcon,
+} from "lucide-react";
 
 interface EnemySpawnOption {
     spawnIndex: number;
@@ -20,21 +30,15 @@ interface EnemySpawnOption {
     enemyType: EnemyType;
 }
 
-interface DialogConditionPickerState {
-    triggerId: string;
-    conditionIndex: number;
-}
-
 interface DialogEditorModalProps {
     dialogs: AreaDialogDefinition[];
+    dialogLocations: AreaLocation[];
     dialogTriggers: AreaDialogTrigger[];
     availableDialogIds: string[];
     availableDialogIdSet: Set<string>;
-    missingDialogTriggerCount: number;
     enemySpawnOptions: EnemySpawnOption[];
     mapWidth: number;
     mapHeight: number;
-    dialogConditionPicker: DialogConditionPickerState | null;
     onAddDialogTrigger: () => void;
     onRemoveDialogTrigger: (triggerId: string) => void;
     onUpdateDialogTrigger: (triggerId: string, updater: (trigger: AreaDialogTrigger) => AreaDialogTrigger) => void;
@@ -45,10 +49,9 @@ interface DialogEditorModalProps {
     ) => void;
     onAddDialogCondition: (triggerId: string) => void;
     onRemoveDialogCondition: (triggerId: string, conditionIndex: number) => void;
-    onToggleRegionPicker: (triggerId: string, conditionIndex: number) => void;
-    onCancelRegionPicker: () => void;
     onClose: () => void;
-    onSave: (dialogs: AreaDialogDefinition[]) => void;
+    onSaveDialogs: (dialogs: AreaDialogDefinition[], dialogIdRemap?: Record<string, string>) => void;
+    onSaveTriggers: (triggers: AreaDialogTrigger[]) => void;
 }
 
 function cloneDialogChoice(choice: AreaDialogChoice): AreaDialogChoice {
@@ -120,6 +123,7 @@ const DIALOG_END_MENU_OPTIONS: Array<{ value: AreaDialogMenuId; label: string }>
     { value: "save_game", label: "Save Menu" },
     { value: "load_game", label: "Load Menu" },
 ];
+const SAVE_FEEDBACK_MS = 2500;
 
 function toDialogEndAction(menuId: string): AreaDialogUiAction | undefined {
     if (menuId === "") return undefined;
@@ -135,12 +139,15 @@ function toDialogEndActionMenuId(action: AreaDialogUiAction | undefined): string
     return action.menuId;
 }
 
-function createConditionByType(conditionType: AreaDialogTriggerCondition["type"]): AreaDialogTriggerCondition {
+function createConditionByType(conditionType: AreaDialogTriggerCondition["type"], defaultLocationId: string): AreaDialogTriggerCondition {
     if (conditionType === "on_area_load") {
         return { type: "on_area_load" };
     }
     if (conditionType === "enemy_killed") {
         return { type: "enemy_killed", spawnIndex: 0 };
+    }
+    if (conditionType === "party_enters_location") {
+        return { type: "party_enters_location", locationId: defaultLocationId };
     }
     if (conditionType === "party_enters_region") {
         return { type: "party_enters_region", x: 0, z: 0, w: 1, h: 1 };
@@ -152,6 +159,111 @@ function createConditionByType(conditionType: AreaDialogTriggerCondition["type"]
         return { type: "party_out_of_combat_range", range: 12 };
     }
     return { type: "after_delay", ms: 1000 };
+}
+
+function cloneDialogTriggerAction(action: AreaDialogTriggerAction): AreaDialogTriggerAction {
+    if (action.type === "start_dialog") {
+        return {
+            type: "start_dialog",
+            dialogId: action.dialogId,
+        };
+    }
+    return action;
+}
+
+function cloneDialogCondition(condition: AreaDialogTriggerCondition): AreaDialogTriggerCondition {
+    if (condition.type === "on_area_load") {
+        return { type: "on_area_load" };
+    }
+    if (condition.type === "enemy_killed") {
+        return { type: "enemy_killed", spawnIndex: condition.spawnIndex };
+    }
+    if (condition.type === "party_enters_location") {
+        return { type: "party_enters_location", locationId: condition.locationId };
+    }
+    if (condition.type === "party_enters_region") {
+        return {
+            type: "party_enters_region",
+            x: condition.x,
+            z: condition.z,
+            w: condition.w,
+            h: condition.h,
+        };
+    }
+    if (condition.type === "unit_seen") {
+        return {
+            type: "unit_seen",
+            spawnIndex: condition.spawnIndex,
+            ...(condition.range !== undefined ? { range: condition.range } : {}),
+        };
+    }
+    if (condition.type === "party_out_of_combat_range") {
+        return { type: "party_out_of_combat_range", range: condition.range };
+    }
+    return { type: "after_delay", ms: condition.ms };
+}
+
+function cloneDialogTrigger(trigger: AreaDialogTrigger): AreaDialogTrigger {
+    return {
+        id: trigger.id,
+        ...(trigger.dialogId ? { dialogId: trigger.dialogId } : {}),
+        ...(trigger.actions && trigger.actions.length > 0
+            ? { actions: trigger.actions.map(cloneDialogTriggerAction) }
+            : {}),
+        ...(trigger.wip ? { wip: true } : {}),
+        ...(trigger.once !== undefined ? { once: trigger.once } : {}),
+        ...(trigger.priority !== undefined ? { priority: trigger.priority } : {}),
+        conditions: trigger.conditions.map(cloneDialogCondition),
+    };
+}
+
+function getTriggerStartDialogId(trigger: AreaDialogTrigger): string {
+    const action = trigger.actions?.find(candidate => candidate.type === "start_dialog");
+    if (action) return action.dialogId;
+    return trigger.dialogId ?? "";
+}
+
+function isDialogConditionValid(
+    condition: AreaDialogTriggerCondition,
+    enemySpawnOptions: EnemySpawnOption[],
+    dialogLocations: AreaLocation[],
+    mapWidth: number,
+    mapHeight: number
+): boolean {
+    if (condition.type === "on_area_load") return true;
+    if (condition.type === "enemy_killed") {
+        return enemySpawnOptions.some(spawn => spawn.spawnIndex === condition.spawnIndex);
+    }
+    if (condition.type === "party_enters_location") {
+        const locationId = condition.locationId.trim();
+        if (locationId.length === 0) return false;
+        return dialogLocations.some(location => location.id === locationId);
+    }
+    if (condition.type === "party_enters_region") {
+        return condition.w >= 1
+            && condition.h >= 1
+            && condition.x >= 0
+            && condition.z >= 0
+            && condition.x < mapWidth
+            && condition.z < mapHeight;
+    }
+    if (condition.type === "unit_seen") {
+        return enemySpawnOptions.some(spawn => spawn.spawnIndex === condition.spawnIndex)
+            && (condition.range ?? 12) > 0;
+    }
+    if (condition.type === "party_out_of_combat_range") {
+        return condition.range > 0;
+    }
+    return condition.ms >= 0;
+}
+
+interface TriggerValidationState {
+    conditionStepValid: boolean;
+    actionStepValid: boolean;
+    isValid: boolean;
+    hasHardBlockingIssue: boolean;
+    targetDialogId: string;
+    issues: string[];
 }
 
 function clampGridCoord(value: number, maxExclusive: number): number {
@@ -260,46 +372,148 @@ function getNodePreview(text: string): string {
     return `${compact.slice(0, 43)}...`;
 }
 
+type TriggerListFilter = "all" | "needs_fix" | "ready" | "wip";
+
+const TRIGGER_CONDITION_OPTIONS: Array<{ value: AreaDialogTriggerCondition["type"]; label: string }> = [
+    { value: "on_area_load", label: "When Area Loads" },
+    { value: "enemy_killed", label: "When Specific Enemy Dies" },
+    { value: "party_enters_location", label: "When Party Enters Named Location" },
+    { value: "party_enters_region", label: "When Party Enters Region" },
+    { value: "unit_seen", label: "When Party Sees Enemy" },
+    { value: "party_out_of_combat_range", label: "When Party Is Out Of Combat Range" },
+    { value: "after_delay", label: "After Delay" },
+];
+
+const TRIGGER_FILTER_OPTIONS: Array<{ value: TriggerListFilter; label: string }> = [
+    { value: "all", label: "All Triggers" },
+    { value: "needs_fix", label: "Needs Fix" },
+    { value: "ready", label: "Ready" },
+    { value: "wip", label: "WIP" },
+];
+
+
+function getTriggerConditionTypeLabel(conditionType: AreaDialogTriggerCondition["type"]): string {
+    if (conditionType === "on_area_load") return "When Area Loads";
+    if (conditionType === "enemy_killed") return "When Specific Enemy Dies";
+    if (conditionType === "party_enters_location") return "When Party Enters Named Location";
+    if (conditionType === "party_enters_region") return "When Party Enters Region";
+    if (conditionType === "unit_seen") return "When Party Sees Enemy";
+    if (conditionType === "party_out_of_combat_range") return "When Party Is Out Of Combat Range";
+    return "After Delay";
+}
+
+function describeTriggerCondition(
+    condition: AreaDialogTriggerCondition,
+    spawnLabelByIndex: Map<number, string>,
+    locationLabelById: Map<string, string>
+): string {
+    if (condition.type === "on_area_load") {
+        return "Fires immediately after this area loads.";
+    }
+    if (condition.type === "enemy_killed") {
+        const spawnLabel = spawnLabelByIndex.get(condition.spawnIndex) ?? `#${condition.spawnIndex} (missing spawn)`;
+        return `Enemy is killed: ${spawnLabel}.`;
+    }
+    if (condition.type === "party_enters_location") {
+        const locationLabel = locationLabelById.get(condition.locationId) ?? `${condition.locationId} (missing location)`;
+        return `Party enters location: ${locationLabel}.`;
+    }
+    if (condition.type === "party_enters_region") {
+        return `Party enters region at (${condition.x}, ${condition.z}) sized ${condition.w}x${condition.h}.`;
+    }
+    if (condition.type === "unit_seen") {
+        const spawnLabel = spawnLabelByIndex.get(condition.spawnIndex) ?? `#${condition.spawnIndex} (missing spawn)`;
+        return `Party sees enemy ${spawnLabel} within ${condition.range ?? 12} range.`;
+    }
+    if (condition.type === "party_out_of_combat_range") {
+        return `No living enemy is within ${condition.range} range of the party.`;
+    }
+    return `Wait ${condition.ms}ms after area load.`;
+}
+
 export function DialogEditorModal({
     dialogs,
+    dialogLocations,
     dialogTriggers,
     availableDialogIds,
     availableDialogIdSet,
-    missingDialogTriggerCount,
     enemySpawnOptions,
     mapWidth,
     mapHeight,
-    dialogConditionPicker,
     onAddDialogTrigger,
     onRemoveDialogTrigger,
     onUpdateDialogTrigger,
     onUpdateDialogTriggerCondition,
     onAddDialogCondition,
     onRemoveDialogCondition,
-    onToggleRegionPicker,
-    onCancelRegionPicker,
     onClose,
-    onSave,
+    onSaveDialogs,
+    onSaveTriggers,
 }: DialogEditorModalProps) {
     const [draftDialogs, setDraftDialogs] = useState<AreaDialogDefinition[]>(() => dialogs.map(cloneDialogDefinition));
+    const [selectedTriggerId, setSelectedTriggerId] = useState<string | null>(() => dialogTriggers[0]?.id ?? null);
     const [selectedDialogId, setSelectedDialogId] = useState<string | null>(() => dialogs[0]?.id ?? null);
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(() => {
         const firstDialog = dialogs[0];
         if (!firstDialog) return null;
         return listNodeIds(firstDialog)[0] ?? null;
     });
+    const [dialogsSaved, setDialogsSaved] = useState(false);
+    const [triggersSaved, setTriggersSaved] = useState(false);
+    const [editorView, setEditorView] = useState<"list" | "trigger" | "dialog">("list");
+    const [triggerTab, setTriggerTab] = useState<"conditions" | "actions">("conditions");
+    const [triggerSearchText, setTriggerSearchText] = useState("");
+    const [triggerFilter, setTriggerFilter] = useState<TriggerListFilter>("all");
+    const dialogsSavedTimeoutRef = useRef<number | null>(null);
+    const triggersSavedTimeoutRef = useRef<number | null>(null);
+    const knownTriggerIdsRef = useRef<Set<string>>(new Set(dialogTriggers.map(trigger => trigger.id)));
+    const initialDialogIdsRef = useRef<Set<string>>(new Set(dialogs.map(dialog => dialog.id)));
+    const dialogIdRemapRef = useRef<Map<string, string>>(new Map());
 
     useEffect(() => {
         const onKeyDownCapture = (event: KeyboardEvent) => {
             if (event.key !== "Escape") return;
             event.preventDefault();
             event.stopPropagation();
+            if (editorView === "dialog") {
+                setEditorView("trigger");
+                return;
+            }
+            if (editorView === "trigger") {
+                setEditorView("list");
+                return;
+            }
             onClose();
         };
 
         window.addEventListener("keydown", onKeyDownCapture, true);
         return () => window.removeEventListener("keydown", onKeyDownCapture, true);
-    }, [onClose]);
+    }, [onClose, editorView]);
+
+    useEffect(() => {
+        return () => {
+            if (dialogsSavedTimeoutRef.current !== null) {
+                window.clearTimeout(dialogsSavedTimeoutRef.current);
+                dialogsSavedTimeoutRef.current = null;
+            }
+            if (triggersSavedTimeoutRef.current !== null) {
+                window.clearTimeout(triggersSavedTimeoutRef.current);
+                triggersSavedTimeoutRef.current = null;
+            }
+        };
+    }, []);
+
+    useEffect(() => {
+        const previousIds = knownTriggerIdsRef.current;
+        const nextIds = new Set(dialogTriggers.map(trigger => trigger.id));
+        const newestTrigger = dialogTriggers.find(trigger => !previousIds.has(trigger.id));
+        if (newestTrigger) {
+            setSelectedTriggerId(newestTrigger.id);
+        } else if (selectedTriggerId && !nextIds.has(selectedTriggerId)) {
+            setSelectedTriggerId(dialogTriggers[0]?.id ?? null);
+        }
+        knownTriggerIdsRef.current = nextIds;
+    }, [dialogTriggers, selectedTriggerId]);
 
     const selectedDialog = useMemo(() => {
         if (draftDialogs.length === 0) return null;
@@ -318,12 +532,122 @@ export function DialogEditorModal({
     }, [selectedDialog, selectedNodeId]);
     const resolvedSelectedNodeId = selectedNode?.id ?? null;
 
+    const selectedTrigger = useMemo(() => {
+        if (dialogTriggers.length === 0) return null;
+        if (!selectedTriggerId) return dialogTriggers[0];
+        return dialogTriggers.find(trigger => trigger.id === selectedTriggerId) ?? dialogTriggers[0];
+    }, [dialogTriggers, selectedTriggerId]);
+
     const nodeIds = useMemo(() => listNodeIds(selectedDialog), [selectedDialog]);
     const speakerOptions = useMemo(
         () => Object.values(DIALOG_SPEAKERS).sort((a, b) => a.name.localeCompare(b.name)),
         []
     );
     const validationErrors = useMemo(() => buildValidationErrors(draftDialogs), [draftDialogs]);
+    const triggerValidationById = useMemo(() => {
+        const next = new Map<string, TriggerValidationState>();
+        const triggerIdCounts = new Map<string, number>();
+        dialogTriggers.forEach(trigger => {
+            const count = triggerIdCounts.get(trigger.id) ?? 0;
+            triggerIdCounts.set(trigger.id, count + 1);
+        });
+        dialogTriggers.forEach(trigger => {
+            const issues: string[] = [];
+            const duplicateTriggerId = (triggerIdCounts.get(trigger.id) ?? 0) > 1;
+            if (duplicateTriggerId) {
+                issues.push(`Trigger ID "${trigger.id}" is duplicated. Trigger IDs must be unique.`);
+            }
+            const conditionStepValid = trigger.conditions.length > 0
+                && trigger.conditions.every(condition => isDialogConditionValid(
+                    condition,
+                    enemySpawnOptions,
+                    dialogLocations,
+                    mapWidth,
+                    mapHeight
+                ));
+            if (!conditionStepValid) {
+                issues.push("Step 1 is incomplete. Add at least one valid condition.");
+            }
+
+            const targetDialogId = getTriggerStartDialogId(trigger).trim();
+            const hasTargetDialogId = targetDialogId.length > 0;
+            if (!hasTargetDialogId) {
+                issues.push("Step 2 is incomplete. Choose a dialog action target.");
+            }
+            const targetDialogExists = hasTargetDialogId && availableDialogIdSet.has(targetDialogId);
+            if (hasTargetDialogId && !targetDialogExists) {
+                issues.push(`Dialog "${targetDialogId}" is not defined in this area.`);
+            }
+
+            const actionStepValid = hasTargetDialogId && targetDialogExists;
+            next.set(trigger.id, {
+                conditionStepValid,
+                actionStepValid,
+                isValid: conditionStepValid && actionStepValid && !duplicateTriggerId,
+                hasHardBlockingIssue: duplicateTriggerId,
+                targetDialogId,
+                issues,
+            });
+        });
+        return next;
+    }, [availableDialogIdSet, dialogLocations, dialogTriggers, enemySpawnOptions, mapHeight, mapWidth]);
+    const blockingTriggerIssues = useMemo(() => {
+        return dialogTriggers.filter(trigger => {
+            const validation = triggerValidationById.get(trigger.id);
+            if (!validation) return false;
+            if (validation.hasHardBlockingIssue) return true;
+            return !validation.isValid && !trigger.wip;
+        }).length;
+    }, [dialogTriggers, triggerValidationById]);
+    const canSaveTriggers = blockingTriggerIssues === 0;
+    const spawnLabelByIndex = useMemo(() => {
+        const next = new Map<number, string>();
+        enemySpawnOptions.forEach(spawn => {
+            next.set(spawn.spawnIndex, `#${spawn.spawnIndex}: ${spawn.enemyType} (${spawn.x},${spawn.z})`);
+        });
+        return next;
+    }, [enemySpawnOptions]);
+    const locationLabelById = useMemo(() => {
+        const next = new Map<string, string>();
+        dialogLocations.forEach(location => {
+            next.set(location.id, `${location.id} (${location.x},${location.z},${location.w}x${location.h})`);
+        });
+        return next;
+    }, [dialogLocations]);
+    const normalizedTriggerSearch = triggerSearchText.trim().toLowerCase();
+    const filteredDialogTriggers = useMemo(() => {
+        return dialogTriggers.filter(trigger => {
+            const validation = triggerValidationById.get(trigger.id);
+            const targetDialogId = getTriggerStartDialogId(trigger).trim();
+            const matchesFilter = (() => {
+                if (triggerFilter === "all") return true;
+                if (triggerFilter === "needs_fix") {
+                    return Boolean(validation && !validation.isValid && !trigger.wip);
+                }
+                if (triggerFilter === "ready") {
+                    return Boolean(validation?.isValid);
+                }
+                return trigger.wip === true;
+            })();
+            if (!matchesFilter) return false;
+            if (normalizedTriggerSearch.length === 0) return true;
+            const conditionSummaries = trigger.conditions
+                .map(condition => describeTriggerCondition(condition, spawnLabelByIndex, locationLabelById))
+                .join(" ");
+            const conditionLabels = trigger.conditions
+                .map(condition => getTriggerConditionTypeLabel(condition.type))
+                .join(" ");
+            const haystack = `${trigger.id} ${targetDialogId} ${conditionLabels} ${conditionSummaries}`.toLowerCase();
+            return haystack.includes(normalizedTriggerSearch);
+        });
+    }, [
+        dialogTriggers,
+        locationLabelById,
+        normalizedTriggerSearch,
+        spawnLabelByIndex,
+        triggerFilter,
+        triggerValidationById,
+    ]);
 
     const updateDialogById = (dialogId: string, updater: (dialog: AreaDialogDefinition) => AreaDialogDefinition): void => {
         setDraftDialogs(prevDialogs => prevDialogs.map(dialog => {
@@ -345,6 +669,67 @@ export function DialogEditorModal({
                 },
             };
         });
+    };
+
+    const updateTriggerStartDialogAction = (triggerId: string, nextDialogIdRaw: string): void => {
+        const nextDialogId = nextDialogIdRaw.trim();
+        onUpdateDialogTrigger(triggerId, current => {
+            const nextActions = nextDialogId.length > 0
+                ? [{ type: "start_dialog", dialogId: nextDialogId } as AreaDialogTriggerAction]
+                : [];
+            return {
+                ...current,
+                actions: nextActions.map(cloneDialogTriggerAction),
+                ...(nextDialogId.length > 0 ? { dialogId: nextDialogId } : { dialogId: undefined }),
+            };
+        });
+    };
+
+    const recordDialogIdRename = (currentDialogId: string, nextDialogId: string): void => {
+        if (currentDialogId === nextDialogId) return;
+
+        const nextRemap = new Map(dialogIdRemapRef.current);
+        let didUpdateExistingMapping = false;
+        nextRemap.forEach((mappedDialogId, originalDialogId) => {
+            if (mappedDialogId !== currentDialogId) return;
+            nextRemap.set(originalDialogId, nextDialogId);
+            didUpdateExistingMapping = true;
+        });
+
+        if (!didUpdateExistingMapping && initialDialogIdsRef.current.has(currentDialogId)) {
+            nextRemap.set(currentDialogId, nextDialogId);
+        }
+
+        for (const [originalDialogId, mappedDialogId] of Array.from(nextRemap.entries())) {
+            if (originalDialogId === mappedDialogId) {
+                nextRemap.delete(originalDialogId);
+            }
+        }
+
+        dialogIdRemapRef.current = nextRemap;
+    };
+
+    const upsertDraftDialog = (dialogIdRaw: string): string => {
+        const requestedId = dialogIdRaw.trim();
+        const allKnownIds = new Set([
+            ...draftDialogs.map(dialog => dialog.id),
+            ...availableDialogIds,
+        ]);
+        const nextDialogId = requestedId.length > 0
+            ? requestedId
+            : createUniqueId("dialog", allKnownIds);
+        const existingDialog = draftDialogs.find(dialog => dialog.id === nextDialogId);
+        if (!existingDialog) {
+            const created = createDefaultDialog(nextDialogId);
+            setDraftDialogs(prevDialogs => [...prevDialogs, created]);
+            setSelectedDialogId(nextDialogId);
+            setSelectedNodeId(created.startNodeId);
+            return nextDialogId;
+        }
+
+        setSelectedDialogId(existingDialog.id);
+        setSelectedNodeId(listNodeIds(existingDialog)[0] ?? null);
+        return existingDialog.id;
     };
 
     const addDialog = (): void => {
@@ -387,6 +772,12 @@ export function DialogEditorModal({
         if (nextDialogId.length === 0 || nextDialogId === selectedDialog.id) return;
         if (draftDialogs.some(dialog => dialog.id === nextDialogId)) return;
 
+        recordDialogIdRename(selectedDialog.id, nextDialogId);
+        dialogTriggers.forEach(trigger => {
+            const triggerDialogId = getTriggerStartDialogId(trigger).trim();
+            if (triggerDialogId !== selectedDialog.id) return;
+            updateTriggerStartDialogAction(trigger.id, nextDialogId);
+        });
         updateDialogById(selectedDialog.id, dialog => ({ ...dialog, id: nextDialogId }));
         setSelectedDialogId(nextDialogId);
     };
@@ -593,769 +984,659 @@ export function DialogEditorModal({
 
     const saveDraftDialogs = (): void => {
         if (validationErrors.length > 0) return;
-        onSave(draftDialogs.map(cloneDialogDefinition));
+        const remapEntries = Array.from(dialogIdRemapRef.current.entries());
+        const dialogIdRemap = remapEntries.length > 0
+            ? Object.fromEntries(remapEntries)
+            : undefined;
+        onSaveDialogs(draftDialogs.map(cloneDialogDefinition), dialogIdRemap);
+        dialogIdRemapRef.current = new Map();
+        initialDialogIdsRef.current = new Set(draftDialogs.map(dialog => dialog.id));
+        setDialogsSaved(true);
+        if (dialogsSavedTimeoutRef.current !== null) {
+            window.clearTimeout(dialogsSavedTimeoutRef.current);
+        }
+        dialogsSavedTimeoutRef.current = window.setTimeout(() => {
+            setDialogsSaved(false);
+            dialogsSavedTimeoutRef.current = null;
+        }, SAVE_FEEDBACK_MS);
     };
 
+    const saveDraftTriggers = (): void => {
+        if (!canSaveTriggers) return;
+        onSaveTriggers(dialogTriggers.map(cloneDialogTrigger));
+        setTriggersSaved(true);
+        if (triggersSavedTimeoutRef.current !== null) {
+            window.clearTimeout(triggersSavedTimeoutRef.current);
+        }
+        triggersSavedTimeoutRef.current = window.setTimeout(() => {
+            setTriggersSaved(false);
+            triggersSavedTimeoutRef.current = null;
+        }, SAVE_FEEDBACK_MS);
+    };
+
+    const commitTriggerIdDraft = (currentTriggerId: string, nextValueRaw: string): void => {
+        const requestedId = nextValueRaw.trim();
+        const existingIds = new Set(dialogTriggers.map(trigger => trigger.id));
+        existingIds.delete(currentTriggerId);
+        const nextTriggerId = requestedId.length > 0 ? createUniqueId(requestedId, existingIds) : currentTriggerId;
+
+        if (nextTriggerId !== currentTriggerId) {
+            onUpdateDialogTrigger(currentTriggerId, current => ({ ...current, id: nextTriggerId }));
+            if (selectedTriggerId === currentTriggerId) {
+                setSelectedTriggerId(nextTriggerId);
+            }
+        }
+    };
+
+    const commitDialogIdDraft = (nextValueRaw: string): void => {
+        if (!selectedDialog) return;
+        const requestedId = nextValueRaw.trim();
+        if (requestedId.length === 0) {
+            return;
+        }
+        const existingIds = new Set(draftDialogs.map(dialog => dialog.id));
+        existingIds.delete(selectedDialog.id);
+        const nextDialogId = createUniqueId(requestedId, existingIds);
+        renameSelectedDialog(nextDialogId);
+    };
+
+    const commitNodeIdDraft = (nextValueRaw: string): void => {
+        if (!selectedDialog || !selectedNode) return;
+        const requestedId = nextValueRaw.trim();
+        if (requestedId.length === 0) {
+            return;
+        }
+        const existingIds = new Set(Object.keys(selectedDialog.nodes));
+        existingIds.delete(selectedNode.id);
+        const nextNodeId = createUniqueId(requestedId, existingIds);
+        renameSelectedNode(nextNodeId);
+    };
+
+    const modalShellClassName = editorView === "dialog"
+        ? "editor-dialog-shell editor-dialog-shell--wide"
+        : "editor-dialog-shell";
+
     return (
-        <div
-            style={{
-                position: "fixed",
-                inset: 0,
-                background: "rgba(0, 0, 0, 0.68)",
-                zIndex: 2600,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: 20,
-                pointerEvents: dialogConditionPicker ? "none" : "auto",
-            }}
-        >
-            <div
-                style={{
-                    width: "min(1520px, calc(100vw - 40px))",
-                    maxHeight: "calc(100vh - 40px)",
-                    background: "#1f2433",
-                    border: "1px solid #495064",
-                    borderRadius: 10,
-                    boxShadow: "0 18px 40px rgba(0, 0, 0, 0.45)",
-                    color: "#f3f4f6",
-                    display: "flex",
-                    flexDirection: "column",
-                    overflow: "hidden",
-                    pointerEvents: "auto",
-                }}
-            >
-                <div style={{ padding: "14px 16px", borderBottom: "1px solid #3e4558", display: "flex", alignItems: "center", gap: 10 }}>
-                    <div style={{ fontSize: 18, fontWeight: 700 }}>Dialog And Trigger Studio</div>
-                    <div style={{ color: "#a7b2cd", fontSize: 12 }}>Compose dialog trees and wire map trigger conditions in one place.</div>
-                    <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+        <div className="editor-dialog-overlay">
+            <div className={modalShellClassName}>
+                {/* ── Header ── */}
+                <div className="editor-dialog-header">
+                    {editorView !== "list" && (
                         <button
-                            onClick={onClose}
-                            style={{ padding: "8px 10px", background: "#444b60", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12 }}
+                            title="Back"
+                            onClick={() => setEditorView(editorView === "dialog" ? "trigger" : "list")}
+                            className="editor-btn editor-btn--muted editor-btn--small"
                         >
-                            Cancel
+                            <ChevronRightIcon size={14} style={{ transform: "rotate(180deg)" }} />
+                            Back
                         </button>
+                    )}
+                    <div className="editor-dialog-title">
+                        {editorView === "list" && "Triggers"}
+                        {editorView === "trigger" && (selectedTrigger?.id ?? "Trigger")}
+                        {editorView === "dialog" && (selectedDialog ? `Dialog: ${selectedDialog.id}` : "Dialog Editor")}
+                    </div>
+                    <div className="editor-dialog-header-actions">
+                        {editorView === "list" && (
+                            <button
+                                title="Create trigger"
+                                onClick={() => onAddDialogTrigger()}
+                                className="editor-btn editor-btn--success"
+                            >
+                                <span className="editor-btn-label">
+                                    <PlusIcon size={14} />
+                                    New Trigger
+                                </span>
+                            </button>
+                        )}
+                        {editorView === "dialog" && (
+                            <button
+                                title={validationErrors.length > 0 ? "Resolve errors before saving" : "Save dialog payloads"}
+                                onClick={saveDraftDialogs}
+                                disabled={validationErrors.length > 0}
+                                className="editor-btn editor-btn--success"
+                                style={{
+                                    background: validationErrors.length > 0 ? "#5b6276" : (dialogsSaved ? "#238a57" : "#2f9f63"),
+                                    cursor: validationErrors.length > 0 ? "not-allowed" : "pointer",
+                                    opacity: validationErrors.length > 0 ? 0.75 : 1,
+                                }}
+                            >
+                                <span className="editor-btn-label">
+                                    {dialogsSaved ? <CheckIcon size={14} /> : <SaveIcon size={14} />}
+                                    {dialogsSaved ? "Saved" : "Save Dialogs"}
+                                </span>
+                            </button>
+                        )}
                         <button
-                            onClick={saveDraftDialogs}
-                            disabled={validationErrors.length > 0}
+                            title={canSaveTriggers ? "Save triggers" : "Fix or mark WIP before saving triggers"}
+                            onClick={saveDraftTriggers}
+                            disabled={!canSaveTriggers}
+                            className="editor-btn editor-btn--primary"
                             style={{
-                                padding: "8px 12px",
-                                background: validationErrors.length > 0 ? "#5b6276" : "#2f9f63",
-                                color: "#fff",
-                                border: "none",
-                                borderRadius: 6,
-                                cursor: validationErrors.length > 0 ? "not-allowed" : "pointer",
-                                fontSize: 12,
-                                opacity: validationErrors.length > 0 ? 0.7 : 1,
+                                background: !canSaveTriggers ? "#5b6276" : (triggersSaved ? "#2f7ea8" : "#3d67ad"),
+                                cursor: canSaveTriggers ? "pointer" : "not-allowed",
+                                opacity: canSaveTriggers ? 1 : 0.75,
                             }}
                         >
-                            Save Dialogs
+                            <span className="editor-btn-label">
+                                {triggersSaved ? <CheckIcon size={14} /> : <SaveIcon size={14} />}
+                                {triggersSaved ? "Saved" : "Save Triggers"}
+                            </span>
+                        </button>
+                        <button
+                            title="Close"
+                            onClick={onClose}
+                            className="editor-btn editor-btn--muted"
+                        >
+                            <XIcon size={14} />
                         </button>
                     </div>
                 </div>
 
-                {dialogConditionPicker && (
-                    <div style={{ padding: "8px 12px", borderBottom: "1px solid #7f6b2e", background: "rgba(210, 170, 66, 0.2)", display: "flex", alignItems: "center", gap: 8 }}>
-                        <span style={{ flex: 1, fontSize: 12, color: "#ffe2a6" }}>
-                            Region picker active for {dialogConditionPicker.triggerId}. Drag on map canvas to set region.
-                        </span>
-                        <button
-                            onClick={onCancelRegionPicker}
-                            style={{ padding: "5px 9px", fontSize: 11, background: "#6b4a00", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
-                        >
-                            Cancel Picker
-                        </button>
-                    </div>
-                )}
+                {/* ── Body ── */}
+                <div className="editor-dialog-body">
 
-                <div style={{ padding: 14, overflow: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
-                    <div style={{ display: "grid", gridTemplateColumns: "260px 300px 1fr", gap: 12, minHeight: 420 }}>
-                    <div style={{ border: "1px solid #3f475b", borderRadius: 8, background: "#252b3c", padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                            <div style={{ fontSize: 13, fontWeight: 700 }}>Dialogs</div>
-                            <button
-                                onClick={addDialog}
-                                style={{ padding: "4px 8px", fontSize: 11, background: "#3484d0", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
-                            >
-                                + Dialog
-                            </button>
-                        </div>
-
-                        <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 280, overflowY: "auto" }}>
-                            {draftDialogs.length === 0 && (
-                                <div style={{ fontSize: 12, color: "#9aa6c5", padding: "6px 2px" }}>No dialogs yet.</div>
-                            )}
-                            {draftDialogs.map(dialog => (
-                                <button
-                                    key={dialog.id}
-                                    onClick={() => {
-                                        setSelectedDialogId(dialog.id);
-                                        setSelectedNodeId(listNodeIds(dialog)[0] ?? null);
-                                    }}
-                                    style={{
-                                        textAlign: "left",
-                                        padding: "8px 10px",
-                                        borderRadius: 6,
-                                        border: resolvedSelectedDialogId === dialog.id ? "1px solid #5ea5ff" : "1px solid #4b5369",
-                                        background: resolvedSelectedDialogId === dialog.id ? "#2d3d5c" : "#2a3041",
-                                        color: "#fff",
-                                        cursor: "pointer",
-                                        display: "flex",
-                                        flexDirection: "column",
-                                        gap: 3,
-                                    }}
+                {/* ── View: Trigger List ── */}
+                {editorView === "list" && (
+                    <div className="editor-trigger-list-view">
+                        {dialogTriggers.length > 3 && (
+                            <div className="editor-trigger-list-controls">
+                                <input
+                                    value={triggerSearchText}
+                                    onChange={event => setTriggerSearchText(event.target.value)}
+                                    placeholder="Search triggers..."
+                                    className="editor-trigger-input editor-trigger-input--search"
+                                />
+                                <select
+                                    value={triggerFilter}
+                                    onChange={event => setTriggerFilter(event.target.value as TriggerListFilter)}
+                                    className="editor-trigger-input editor-trigger-input--filter"
                                 >
-                                    <span style={{ fontSize: 12, fontWeight: 600 }}>{dialog.id}</span>
-                                    <span style={{ fontSize: 11, color: "#b9c4de" }}>{Object.keys(dialog.nodes).length} nodes</span>
-                                </button>
-                            ))}
-                        </div>
-
-                        {selectedDialog && (
-                            <>
-                                <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                                    <span style={{ fontSize: 12, color: "#b8c2d9" }}>Dialog ID</span>
-                                    <input
-                                        value={selectedDialog.id}
-                                        onChange={event => renameSelectedDialog(event.target.value)}
-                                        style={{ padding: 6, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 12 }}
-                                    />
-                                </label>
-                                <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                                    <span style={{ fontSize: 12, color: "#b8c2d9" }}>Start Node</span>
-                                    <select
-                                        value={selectedDialog.startNodeId}
-                                        onChange={event => {
-                                            const nextStartNodeId = event.target.value;
-                                            updateDialogById(selectedDialog.id, dialog => ({
-                                                ...dialog,
-                                                startNodeId: nextStartNodeId,
-                                            }));
-                                        }}
-                                        style={{ padding: 6, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 12 }}
-                                    >
-                                        {nodeIds.map(nodeId => (
-                                            <option key={`start-${nodeId}`} value={nodeId}>{nodeId}</option>
-                                        ))}
-                                    </select>
-                                </label>
-
-                                <div style={{ display: "flex", gap: 6 }}>
-                                    <button
-                                        onClick={duplicateSelectedDialog}
-                                        style={{ flex: 1, padding: "6px 8px", fontSize: 11, background: "#4d5d96", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
-                                    >
-                                        Duplicate
-                                    </button>
-                                    <button
-                                        onClick={removeSelectedDialog}
-                                        style={{ flex: 1, padding: "6px 8px", fontSize: 11, background: "#9d4040", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
-                                    >
-                                        Delete
-                                    </button>
-                                </div>
-                            </>
-                        )}
-                    </div>
-
-                    <div style={{ border: "1px solid #3f475b", borderRadius: 8, background: "#252b3c", padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                            <div style={{ fontSize: 13, fontWeight: 700 }}>Nodes</div>
-                            <button
-                                onClick={addNodeToSelectedDialog}
-                                disabled={!selectedDialog}
-                                style={{
-                                    padding: "4px 8px",
-                                    fontSize: 11,
-                                    background: selectedDialog ? "#3484d0" : "#5b6276",
-                                    color: "#fff",
-                                    border: "none",
-                                    borderRadius: 4,
-                                    cursor: selectedDialog ? "pointer" : "not-allowed",
-                                }}
-                            >
-                                + Node
-                            </button>
-                        </div>
-
-                        <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 520, overflowY: "auto" }}>
-                            {!selectedDialog && (
-                                <div style={{ fontSize: 12, color: "#9aa6c5", padding: "6px 2px" }}>Select a dialog to edit nodes.</div>
-                            )}
-                            {selectedDialog && nodeIds.map(nodeId => {
-                                const node = selectedDialog.nodes[nodeId];
-                                const preview = node.text.trim().length > 0 ? getNodePreview(node.text) : "(empty)";
-                                return (
-                                    <button
-                                        key={`${selectedDialog.id}-${node.id}`}
-                                        onClick={() => setSelectedNodeId(node.id)}
-                                        style={{
-                                            textAlign: "left",
-                                            padding: "8px 10px",
-                                            borderRadius: 6,
-                                            border: resolvedSelectedNodeId === node.id ? "1px solid #5ea5ff" : "1px solid #4b5369",
-                                            background: resolvedSelectedNodeId === node.id ? "#2d3d5c" : "#2a3041",
-                                            color: "#fff",
-                                            cursor: "pointer",
-                                            display: "flex",
-                                            flexDirection: "column",
-                                            gap: 3,
-                                        }}
-                                    >
-                                        <span style={{ fontSize: 12, fontWeight: 600 }}>{node.id}</span>
-                                        <span style={{ fontSize: 11, color: "#b9c4de" }}>{DIALOG_SPEAKERS[node.speakerId].name}</span>
-                                        <span style={{ fontSize: 11, color: "#a7b3d2" }}>{preview}</span>
-                                    </button>
-                                );
-                            })}
-                        </div>
-
-                        {selectedNode && (
-                            <div style={{ display: "flex", gap: 6 }}>
-                                <button
-                                    onClick={duplicateSelectedNode}
-                                    style={{ flex: 1, padding: "6px 8px", fontSize: 11, background: "#4d5d96", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
-                                >
-                                    Duplicate
-                                </button>
-                                <button
-                                    onClick={removeSelectedNode}
-                                    disabled={nodeIds.length <= 1}
-                                    style={{
-                                        flex: 1,
-                                        padding: "6px 8px",
-                                        fontSize: 11,
-                                        background: nodeIds.length <= 1 ? "#5b6276" : "#9d4040",
-                                        color: "#fff",
-                                        border: "none",
-                                        borderRadius: 4,
-                                        cursor: nodeIds.length <= 1 ? "not-allowed" : "pointer",
-                                    }}
-                                >
-                                    Delete
-                                </button>
-                            </div>
-                        )}
-                    </div>
-
-                    <div style={{ border: "1px solid #3f475b", borderRadius: 8, background: "#252b3c", padding: 10, display: "flex", flexDirection: "column", gap: 10 }}>
-                        {!selectedNode && (
-                            <div style={{ fontSize: 13, color: "#9aa6c5" }}>Select a node to edit dialog text and choices.</div>
-                        )}
-
-                        {selectedNode && selectedDialog && (
-                            <>
-                                <div style={{ display: "flex", gap: 8 }}>
-                                    <label style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
-                                        <span style={{ fontSize: 12, color: "#b8c2d9" }}>Node ID</span>
-                                        <input
-                                            value={selectedNode.id}
-                                            onChange={event => renameSelectedNode(event.target.value)}
-                                            style={{ padding: 6, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 12 }}
-                                        />
-                                    </label>
-                                    <label style={{ width: 220, display: "flex", flexDirection: "column", gap: 4 }}>
-                                        <span style={{ fontSize: 12, color: "#b8c2d9" }}>Speaker</span>
-                                        <select
-                                            value={selectedNode.speakerId}
-                                            onChange={event => {
-                                                const nextSpeakerId = event.target.value;
-                                                if (!isDialogSpeakerId(nextSpeakerId)) return;
-                                                updateSelectedNode(node => ({ ...node, speakerId: nextSpeakerId }));
-                                            }}
-                                            style={{ padding: 6, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 12 }}
-                                        >
-                                            {speakerOptions.map(speaker => (
-                                                <option key={`speaker-${speaker.id}`} value={speaker.id}>{speaker.name}</option>
-                                            ))}
-                                        </select>
-                                    </label>
-                                </div>
-
-                                <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                                    <span style={{ fontSize: 12, color: "#b8c2d9" }}>Dialog Text</span>
-                                    <textarea
-                                        value={selectedNode.text}
-                                        onChange={event => updateSelectedNode(node => ({ ...node, text: event.target.value }))}
-                                        rows={7}
-                                        style={{ padding: 8, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 13, resize: "vertical", lineHeight: 1.45 }}
-                                    />
-                                </label>
-
-                                <div style={{ display: "flex", gap: 8 }}>
-                                    <label style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
-                                        <span style={{ fontSize: 12, color: "#b8c2d9" }}>Next Node (no choices)</span>
-                                        <select
-                                            value={selectedNode.nextNodeId ?? ""}
-                                            onChange={event => {
-                                                const nextNodeId = event.target.value;
-                                                updateSelectedNode(node => ({
-                                                    ...node,
-                                                    ...(nextNodeId ? { nextNodeId } : { nextNodeId: undefined }),
-                                                }));
-                                            }}
-                                            style={{ padding: 6, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 12 }}
-                                        >
-                                            <option value="">(end dialog)</option>
-                                            {nodeIds.map(nodeId => (
-                                                <option key={`next-node-${nodeId}`} value={nodeId}>{nodeId}</option>
-                                            ))}
-                                        </select>
-                                    </label>
-                                    <label style={{ width: 220, display: "flex", flexDirection: "column", gap: 4 }}>
-                                        <span style={{ fontSize: 12, color: "#b8c2d9" }}>Continue Button Label</span>
-                                        <input
-                                            value={selectedNode.continueLabel ?? ""}
-                                            onChange={event => updateSelectedNode(node => ({
-                                                ...node,
-                                                ...(event.target.value.trim().length > 0
-                                                    ? { continueLabel: event.target.value }
-                                                    : { continueLabel: undefined }),
-                                            }))}
-                                            placeholder="Continue"
-                                            style={{ padding: 6, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 12 }}
-                                        />
-                                    </label>
-                                    <label style={{ width: 220, display: "flex", flexDirection: "column", gap: 4 }}>
-                                        <span style={{ fontSize: 12, color: "#b8c2d9" }}>After Dialog Ends</span>
-                                        <select
-                                            value={toDialogEndActionMenuId(selectedNode.onDialogEndAction)}
-                                            onChange={event => updateSelectedNode(node => {
-                                                const nextAction = toDialogEndAction(event.target.value);
-                                                return {
-                                                    ...node,
-                                                    ...(nextAction ? { onDialogEndAction: nextAction } : { onDialogEndAction: undefined }),
-                                                };
-                                            })}
-                                            style={{ padding: 6, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 12 }}
-                                        >
-                                            <option value="">(none)</option>
-                                            {DIALOG_END_MENU_OPTIONS.map(option => (
-                                                <option key={`dialog-end-action-${option.value}`} value={option.value}>{option.label}</option>
-                                            ))}
-                                        </select>
-                                    </label>
-                                </div>
-
-                                <div style={{ borderTop: "1px solid #3d465b", paddingTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
-                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                                        <div style={{ fontSize: 13, fontWeight: 700 }}>Choices</div>
-                                        <button
-                                            onClick={addChoiceToSelectedNode}
-                                            style={{ padding: "4px 8px", fontSize: 11, background: "#3484d0", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
-                                        >
-                                            + Choice
-                                        </button>
-                                    </div>
-
-                                    {(selectedNode.choices ?? []).length === 0 && (
-                                        <div style={{ fontSize: 12, color: "#9aa6c5" }}>
-                                            No choices. Node advances using "Next Node" + continue key/button.
-                                        </div>
-                                    )}
-
-                                    {(selectedNode.choices ?? []).map(choice => (
-                                        <div
-                                            key={`${selectedNode.id}-${choice.id}`}
-                                            style={{
-                                                border: "1px solid #4b5369",
-                                                borderRadius: 6,
-                                                padding: 8,
-                                                background: "#2a3041",
-                                                display: "grid",
-                                                gridTemplateColumns: "160px 1fr 170px 170px 70px",
-                                                gap: 8,
-                                                alignItems: "center",
-                                            }}
-                                        >
-                                            <input
-                                                value={choice.id}
-                                                onChange={event => renameChoice(choice.id, event.target.value)}
-                                                style={{ padding: 6, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 12 }}
-                                            />
-                                            <input
-                                                value={choice.label}
-                                                onChange={event => updateChoiceLabel(choice.id, event.target.value)}
-                                                placeholder="Choice label"
-                                                style={{ padding: 6, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 12 }}
-                                            />
-                                            <select
-                                                value={choice.nextNodeId ?? ""}
-                                                onChange={event => updateChoiceNextNodeId(choice.id, event.target.value)}
-                                                style={{ padding: 6, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 12 }}
-                                            >
-                                                <option value="">(end dialog)</option>
-                                                {nodeIds.map(nodeId => (
-                                                    <option key={`choice-next-${choice.id}-${nodeId}`} value={nodeId}>{nodeId}</option>
-                                                ))}
-                                            </select>
-                                            <select
-                                                value={toDialogEndActionMenuId(choice.onDialogEndAction)}
-                                                onChange={event => updateChoiceDialogEndAction(choice.id, event.target.value)}
-                                                style={{ padding: 6, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 12 }}
-                                            >
-                                                <option value="">(no end action)</option>
-                                                {DIALOG_END_MENU_OPTIONS.map(option => (
-                                                    <option key={`choice-end-action-${choice.id}-${option.value}`} value={option.value}>{option.label}</option>
-                                                ))}
-                                            </select>
-                                            <button
-                                                onClick={() => removeChoice(choice.id)}
-                                                style={{ padding: "6px 8px", fontSize: 11, background: "#9d4040", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
-                                            >
-                                                Remove
-                                            </button>
-                                        </div>
+                                    {TRIGGER_FILTER_OPTIONS.map(option => (
+                                        <option key={option.value} value={option.value}>{option.label}</option>
                                     ))}
-                                </div>
-                            </>
-                        )}
-                    </div>
-
-                    <div style={{ border: "1px solid #3f475b", borderRadius: 8, background: "#252b3c", padding: 10, display: "flex", flexDirection: "column", gap: 10 }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                            <h3 style={{ margin: 0, fontSize: 16 }}>Dialog Triggers</h3>
-                            <button
-                                onClick={onAddDialogTrigger}
-                                style={{ padding: "6px 10px", fontSize: 12, background: "#2f5", color: "#111", border: "none", borderRadius: 4, cursor: "pointer" }}
-                            >
-                                + Trigger
-                            </button>
-                        </div>
-
-                        {missingDialogTriggerCount > 0 && (
-                            <div style={{ fontSize: 12, color: "#ffb4b4", background: "rgba(154, 62, 62, 0.2)", border: "1px solid #8f4747", borderRadius: 6, padding: "6px 8px" }}>
-                                {missingDialogTriggerCount} trigger{missingDialogTriggerCount === 1 ? "" : "s"} reference dialog IDs that are not defined.
+                                </select>
+                                {triggerSearchText.trim().length > 0 && (
+                                    <button title="Clear search" onClick={() => setTriggerSearchText("")} className="editor-btn editor-btn--muted editor-btn--small">
+                                        <XIcon size={12} />
+                                    </button>
+                                )}
                             </div>
                         )}
 
                         {dialogTriggers.length === 0 && (
-                            <div style={{ fontSize: 12, color: "#888" }}>No dialog triggers in this area.</div>
+                            <div className="editor-trigger-empty">
+                                No triggers yet. Click "New Trigger" to create one.
+                            </div>
                         )}
 
-                        {dialogTriggers.map((trigger, triggerIndex) => {
-                            const isMissingDialogId = !availableDialogIdSet.has(trigger.dialogId);
-                            const dialogIdOptions = isMissingDialogId
-                                ? [trigger.dialogId, ...availableDialogIds]
-                                : availableDialogIds;
+                        {dialogTriggers.length > 0 && filteredDialogTriggers.length === 0 && (
+                            <div className="editor-trigger-empty editor-trigger-empty--small">
+                                No triggers match the current search/filter.
+                            </div>
+                        )}
+
+                        {filteredDialogTriggers.map(trigger => {
+                            const validation = triggerValidationById.get(trigger.id);
+                            const targetDialogId = getTriggerStartDialogId(trigger).trim();
+                            const conditionPreview = trigger.conditions.length > 0
+                                ? trigger.conditions.slice(0, 2)
+                                    .map(condition => describeTriggerCondition(condition, spawnLabelByIndex, locationLabelById))
+                                    .join(" ")
+                                : "No conditions.";
+                            const hasMore = trigger.conditions.length > 2;
+                            const statusLabel = validation?.isValid ? "Ready" : (trigger.wip ? "WIP" : "Needs setup");
+                            const statusColor = validation?.isValid ? "#9be4bd" : (trigger.wip ? "#ffd18a" : "#f4c2a3");
 
                             return (
                                 <div
                                     key={trigger.id}
-                                    style={{
-                                        border: isMissingDialogId ? "1px solid #a05f5f" : "1px solid #4b5165",
-                                        background: "#2a2f3f",
-                                        borderRadius: 8,
-                                        padding: 10,
-                                        display: "flex",
-                                        flexDirection: "column",
-                                        gap: 8
+                                    onClick={() => {
+                                        setSelectedTriggerId(trigger.id);
+                                        setEditorView("trigger");
+                                        setTriggerTab("conditions");
+                                        const linkedDialogId = getTriggerStartDialogId(trigger).trim();
+                                        if (linkedDialogId.length === 0) return;
+                                        const linkedDialog = draftDialogs.find(dialog => dialog.id === linkedDialogId);
+                                        if (!linkedDialog) return;
+                                        setSelectedDialogId(linkedDialog.id);
+                                        setSelectedNodeId(listNodeIds(linkedDialog)[0] ?? null);
                                     }}
+                                    className="editor-trigger-card"
                                 >
-                                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                        <span style={{ fontSize: 12, color: "#9fb5dc" }}>Trigger {triggerIndex + 1}</span>
+                                    <div className="editor-trigger-card-top">
+                                        <span className="editor-trigger-id">{trigger.id}</span>
+                                        {trigger.wip && (
+                                            <span className="editor-trigger-wip">WIP</span>
+                                        )}
+                                        <span className="editor-trigger-status" style={{ color: statusColor }}>{statusLabel}</span>
                                         <button
-                                            onClick={() => onRemoveDialogTrigger(trigger.id)}
-                                            style={{ marginLeft: "auto", padding: "4px 8px", fontSize: 11, background: "#a44", color: "#fff", border: "none", borderRadius: 3, cursor: "pointer" }}
+                                            title="Remove trigger"
+                                            onClick={event => { event.stopPropagation(); onRemoveDialogTrigger(trigger.id); }}
+                                            className="editor-btn editor-btn--danger editor-btn--tiny"
                                         >
-                                            Remove
+                                            <XIcon size={12} />
                                         </button>
                                     </div>
-
-                                    <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                                        <span style={{ fontSize: 12 }}>ID</span>
-                                        <input
-                                            value={trigger.id}
-                                            onChange={event => {
-                                                const nextId = event.target.value.trim();
-                                                if (!nextId) return;
-                                                onUpdateDialogTrigger(trigger.id, current => ({ ...current, id: nextId }));
-                                            }}
-                                            style={{ padding: 6, fontSize: 12, background: "#1f2433", border: "1px solid #555d73", borderRadius: 4, color: "#fff" }}
-                                        />
-                                    </label>
-
-                                    <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                                        <span style={{ fontSize: 12 }}>Dialog ID</span>
-                                        {dialogIdOptions.length > 0 ? (
-                                            <select
-                                                value={trigger.dialogId}
-                                                onChange={event => onUpdateDialogTrigger(trigger.id, current => ({ ...current, dialogId: event.target.value }))}
-                                                style={{
-                                                    padding: 6,
-                                                    fontSize: 12,
-                                                    background: "#1f2433",
-                                                    border: isMissingDialogId ? "1px solid #9b5d5d" : "1px solid #555d73",
-                                                    borderRadius: 4,
-                                                    color: "#fff"
-                                                }}
-                                            >
-                                                {dialogIdOptions.map(dialogId => (
-                                                    <option key={dialogId} value={dialogId}>{dialogId}</option>
-                                                ))}
-                                            </select>
-                                        ) : (
-                                            <input
-                                                value={trigger.dialogId}
-                                                onChange={event => onUpdateDialogTrigger(trigger.id, current => ({ ...current, dialogId: event.target.value }))}
-                                                style={{
-                                                    padding: 6,
-                                                    fontSize: 12,
-                                                    background: "#1f2433",
-                                                    border: isMissingDialogId ? "1px solid #9b5d5d" : "1px solid #555d73",
-                                                    borderRadius: 4,
-                                                    color: "#fff"
-                                                }}
-                                            />
-                                        )}
-                                        {isMissingDialogId && (
-                                            <span style={{ fontSize: 11, color: "#ffb4b4" }}>
-                                                Missing dialog definition for "{trigger.dialogId}".
-                                            </span>
-                                        )}
-                                    </label>
-
-                                    <div style={{ display: "flex", gap: 8 }}>
-                                        <label style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
-                                            <span style={{ fontSize: 12 }}>Priority</span>
-                                            <input
-                                                type="number"
-                                                value={trigger.priority ?? 0}
-                                                onChange={event => onUpdateDialogTrigger(trigger.id, current => ({ ...current, priority: Number(event.target.value) || 0 }))}
-                                                style={{ padding: 6, fontSize: 12, background: "#1f2433", border: "1px solid #555d73", borderRadius: 4, color: "#fff" }}
-                                            />
-                                        </label>
-                                        <label style={{ width: 130, display: "flex", alignItems: "center", gap: 8, fontSize: 12, marginTop: 20 }}>
-                                            <input
-                                                type="checkbox"
-                                                checked={trigger.once !== false}
-                                                onChange={event => onUpdateDialogTrigger(trigger.id, current => ({ ...current, once: event.target.checked }))}
-                                            />
-                                            Once per visit
-                                        </label>
+                                    <div className="editor-trigger-card-meta">
+                                        <span>{trigger.conditions.length} condition{trigger.conditions.length === 1 ? "" : "s"}</span>
+                                        <span className="editor-trigger-action-label">
+                                            {targetDialogId.length > 0 ? `Start Dialog (${targetDialogId})` : "No action"}
+                                        </span>
+                                        <span className="editor-trigger-chevron">
+                                            <ChevronRightIcon size={14} />
+                                        </span>
                                     </div>
-
-                                    <div style={{ fontSize: 12, color: "#a8b2cc", marginTop: 2 }}>Conditions (all must be true)</div>
-                                    {trigger.conditions.map((condition, conditionIndex) => (
-                                        <div key={`${trigger.id}-condition-${conditionIndex}`} style={{ border: "1px solid #475067", borderRadius: 6, padding: 8, background: "#23293a", display: "flex", flexDirection: "column", gap: 8 }}>
-                                            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                                                <select
-                                                    value={condition.type}
-                                                    onChange={event => {
-                                                        const nextType = event.target.value as AreaDialogTriggerCondition["type"];
-                                                        onUpdateDialogTriggerCondition(trigger.id, conditionIndex, () => createConditionByType(nextType));
-                                                        if (nextType !== "party_enters_region") {
-                                                            onCancelRegionPicker();
-                                                        }
-                                                    }}
-                                                    style={{ flex: 1, padding: 6, fontSize: 12, background: "#1f2433", border: "1px solid #555d73", borderRadius: 4, color: "#fff" }}
-                                                >
-                                                    <option value="on_area_load">Load Into Map</option>
-                                                    <option value="enemy_killed">Specific Unit Killed</option>
-                                                    <option value="party_enters_region">Enter Dragged Region</option>
-                                                    <option value="unit_seen">Unit Seen</option>
-                                                    <option value="party_out_of_combat_range">Out Of Combat Range</option>
-                                                    <option value="after_delay">Delay After Load</option>
-                                                </select>
-                                                <button
-                                                    onClick={() => onRemoveDialogCondition(trigger.id, conditionIndex)}
-                                                    style={{ padding: "4px", fontSize: 11, background: "#934", color: "#fff", border: "none", borderRadius: 3, cursor: "pointer" }}
-                                                >
-                                                    <XIcon style={{ width: 12, height: 12 }} />
-                                                </button>
-                                            </div>
-
-                                            {condition.type === "enemy_killed" && (
-                                                <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                                                    <span style={{ fontSize: 12 }}>Enemy Spawn</span>
-                                                    <select
-                                                        value={condition.spawnIndex}
-                                                        onChange={event => onUpdateDialogTriggerCondition(trigger.id, conditionIndex, current => {
-                                                            if (current.type !== "enemy_killed") return current;
-                                                            return { ...current, spawnIndex: parseInt(event.target.value, 10) || 0 };
-                                                        })}
-                                                        style={{ padding: 6, fontSize: 12, background: "#1f2433", border: "1px solid #555d73", borderRadius: 4, color: "#fff" }}
-                                                    >
-                                                        {enemySpawnOptions.map(spawn => (
-                                                            <option key={`enemy-killed-${spawn.spawnIndex}`} value={spawn.spawnIndex}>
-                                                                #{spawn.spawnIndex}: {spawn.enemyType} ({spawn.x},{spawn.z})
-                                                            </option>
-                                                        ))}
-                                                        {enemySpawnOptions.length === 0 && <option value={0}>No enemy spawns</option>}
-                                                    </select>
-                                                </label>
-                                            )}
-
-                                            {condition.type === "unit_seen" && (
-                                                <div style={{ display: "flex", gap: 8 }}>
-                                                    <label style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
-                                                        <span style={{ fontSize: 12 }}>Enemy Spawn</span>
-                                                        <select
-                                                            value={condition.spawnIndex}
-                                                            onChange={event => onUpdateDialogTriggerCondition(trigger.id, conditionIndex, current => {
-                                                                if (current.type !== "unit_seen") return current;
-                                                                return { ...current, spawnIndex: parseInt(event.target.value, 10) || 0 };
-                                                            })}
-                                                            style={{ padding: 6, fontSize: 12, background: "#1f2433", border: "1px solid #555d73", borderRadius: 4, color: "#fff" }}
-                                                        >
-                                                            {enemySpawnOptions.map(spawn => (
-                                                                <option key={`unit-seen-${spawn.spawnIndex}`} value={spawn.spawnIndex}>
-                                                                    #{spawn.spawnIndex}: {spawn.enemyType} ({spawn.x},{spawn.z})
-                                                                </option>
-                                                            ))}
-                                                            {enemySpawnOptions.length === 0 && <option value={0}>No enemy spawns</option>}
-                                                        </select>
-                                                    </label>
-                                                    <label style={{ width: 120, display: "flex", flexDirection: "column", gap: 4 }}>
-                                                        <span style={{ fontSize: 12 }}>Range</span>
-                                                        <input
-                                                            type="number"
-                                                            min={0.1}
-                                                            step={0.1}
-                                                            value={condition.range ?? 12}
-                                                            onChange={event => onUpdateDialogTriggerCondition(trigger.id, conditionIndex, current => {
-                                                                if (current.type !== "unit_seen") return current;
-                                                                return { ...current, range: Math.max(0.1, Number(event.target.value) || 12) };
-                                                            })}
-                                                            style={{ padding: 6, fontSize: 12, background: "#1f2433", border: "1px solid #555d73", borderRadius: 4, color: "#fff" }}
-                                                        />
-                                                    </label>
-                                                </div>
-                                            )}
-
-                                            {condition.type === "party_enters_region" && (
-                                                <>
-                                                    <div style={{ display: "flex", gap: 8 }}>
-                                                        <label style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
-                                                            <span style={{ fontSize: 12 }}>X</span>
-                                                            <input
-                                                                type="number"
-                                                                value={condition.x}
-                                                                onChange={event => onUpdateDialogTriggerCondition(trigger.id, conditionIndex, current => {
-                                                                    if (current.type !== "party_enters_region") return current;
-                                                                    return { ...current, x: clampGridCoord(Number(event.target.value), mapWidth) };
-                                                                })}
-                                                                style={{ padding: 6, fontSize: 12, background: "#1f2433", border: "1px solid #555d73", borderRadius: 4, color: "#fff" }}
-                                                            />
-                                                        </label>
-                                                        <label style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
-                                                            <span style={{ fontSize: 12 }}>Z</span>
-                                                            <input
-                                                                type="number"
-                                                                value={condition.z}
-                                                                onChange={event => onUpdateDialogTriggerCondition(trigger.id, conditionIndex, current => {
-                                                                    if (current.type !== "party_enters_region") return current;
-                                                                    return { ...current, z: clampGridCoord(Number(event.target.value), mapHeight) };
-                                                                })}
-                                                                style={{ padding: 6, fontSize: 12, background: "#1f2433", border: "1px solid #555d73", borderRadius: 4, color: "#fff" }}
-                                                            />
-                                                        </label>
-                                                        <label style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
-                                                            <span style={{ fontSize: 12 }}>W</span>
-                                                            <input
-                                                                type="number"
-                                                                min={1}
-                                                                value={condition.w}
-                                                                onChange={event => onUpdateDialogTriggerCondition(trigger.id, conditionIndex, current => {
-                                                                    if (current.type !== "party_enters_region") return current;
-                                                                    return { ...current, w: Math.max(1, parseInt(event.target.value, 10) || 1) };
-                                                                })}
-                                                                style={{ padding: 6, fontSize: 12, background: "#1f2433", border: "1px solid #555d73", borderRadius: 4, color: "#fff" }}
-                                                            />
-                                                        </label>
-                                                        <label style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
-                                                            <span style={{ fontSize: 12 }}>H</span>
-                                                            <input
-                                                                type="number"
-                                                                min={1}
-                                                                value={condition.h}
-                                                                onChange={event => onUpdateDialogTriggerCondition(trigger.id, conditionIndex, current => {
-                                                                    if (current.type !== "party_enters_region") return current;
-                                                                    return { ...current, h: Math.max(1, parseInt(event.target.value, 10) || 1) };
-                                                                })}
-                                                                style={{ padding: 6, fontSize: 12, background: "#1f2433", border: "1px solid #555d73", borderRadius: 4, color: "#fff" }}
-                                                            />
-                                                        </label>
-                                                    </div>
-                                                    <button
-                                                        onClick={() => onToggleRegionPicker(trigger.id, conditionIndex)}
-                                                        style={{
-                                                            padding: "6px 8px",
-                                                            fontSize: 11,
-                                                            background: dialogConditionPicker?.triggerId === trigger.id && dialogConditionPicker.conditionIndex === conditionIndex ? "#b8860b" : "#555",
-                                                            color: "#fff",
-                                                            border: "none",
-                                                            borderRadius: 4,
-                                                            cursor: "pointer"
-                                                        }}
-                                                    >
-                                                        {dialogConditionPicker?.triggerId === trigger.id && dialogConditionPicker.conditionIndex === conditionIndex ? "Cancel Region Pick" : "Pick Region By Drag"}
-                                                    </button>
-                                                </>
-                                            )}
-
-                                            {condition.type === "party_out_of_combat_range" && (
-                                                <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                                                    <span style={{ fontSize: 12 }}>Range</span>
-                                                    <input
-                                                        type="number"
-                                                        min={0.1}
-                                                        step={0.1}
-                                                        value={condition.range}
-                                                        onChange={event => onUpdateDialogTriggerCondition(trigger.id, conditionIndex, current => {
-                                                            if (current.type !== "party_out_of_combat_range") return current;
-                                                            return { ...current, range: Math.max(0.1, Number(event.target.value) || 12) };
-                                                        })}
-                                                        style={{ padding: 6, fontSize: 12, background: "#1f2433", border: "1px solid #555d73", borderRadius: 4, color: "#fff" }}
-                                                    />
-                                                </label>
-                                            )}
-
-                                            {condition.type === "after_delay" && (
-                                                <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                                                    <span style={{ fontSize: 12 }}>Delay (ms)</span>
-                                                    <input
-                                                        type="number"
-                                                        min={0}
-                                                        step={100}
-                                                        value={condition.ms}
-                                                        onChange={event => onUpdateDialogTriggerCondition(trigger.id, conditionIndex, current => {
-                                                            if (current.type !== "after_delay") return current;
-                                                            return { ...current, ms: Math.max(0, parseInt(event.target.value, 10) || 0) };
-                                                        })}
-                                                        style={{ padding: 6, fontSize: 12, background: "#1f2433", border: "1px solid #555d73", borderRadius: 4, color: "#fff" }}
-                                                    />
-                                                </label>
-                                            )}
-                                        </div>
-                                    ))}
-
-                                    <button
-                                        onClick={() => onAddDialogCondition(trigger.id)}
-                                        style={{ alignSelf: "flex-start", padding: "6px 10px", fontSize: 11, background: "#355eaa", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
-                                    >
-                                        + Condition
-                                    </button>
+                                    <div className="editor-trigger-preview">
+                                        {conditionPreview}{hasMore ? " ..." : ""}
+                                    </div>
                                 </div>
                             );
                         })}
                     </div>
-                </div>
-                </div>
+                )}
 
-                <div style={{ borderTop: "1px solid #3e4558", padding: "10px 14px", background: "#202637" }}>
-                    {validationErrors.length === 0 ? (
-                        <div style={{ color: "#71d7a2", fontSize: 12 }}>Dialog data is valid.</div>
-                    ) : (
-                        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                            <div style={{ color: "#ffb7b7", fontSize: 12, fontWeight: 700 }}>Resolve these issues before saving:</div>
-                            <div style={{ color: "#ffd6d6", fontSize: 12, maxHeight: 86, overflowY: "auto", lineHeight: 1.4 }}>
-                                {validationErrors.map(error => (
-                                    <div key={error}>- {error}</div>
+                {/* ── View: Trigger Editor ── */}
+                {editorView === "trigger" && selectedTrigger && (() => {
+                    const trigger = selectedTrigger;
+                    const validation = triggerValidationById.get(trigger.id);
+                    const targetDialogId = getTriggerStartDialogId(trigger).trim();
+                    const isMissingDialogId = targetDialogId.length > 0 && !availableDialogIdSet.has(targetDialogId);
+                    const dialogIdOptions = isMissingDialogId ? [targetDialogId, ...availableDialogIds] : availableDialogIds;
+
+                    return (
+                        <div className="editor-trigger-editor-view">
+                            {/* Trigger settings row */}
+                            <div className="editor-trigger-settings-row">
+                                <label style={{ flex: 1, minWidth: 160, display: "flex", flexDirection: "column", gap: 4 }}>
+                                    <span style={{ fontSize: 14 }}>ID</span>
+                                    <input
+                                        key={`trigger-id-${trigger.id}`}
+                                        defaultValue={trigger.id}
+                                        onBlur={event => commitTriggerIdDraft(trigger.id, event.currentTarget.value)}
+                                        onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }}
+                                        style={{ padding: 8, fontSize: 14, background: "#1f2433", border: "1px solid #555d73", borderRadius: 4, color: "#fff" }}
+                                    />
+                                </label>
+                                <label style={{ width: 100, display: "flex", flexDirection: "column", gap: 4 }}>
+                                    <span style={{ fontSize: 14 }}>Priority</span>
+                                    <input
+                                        type="number"
+                                        value={trigger.priority ?? 0}
+                                        onChange={event => onUpdateDialogTrigger(trigger.id, current => ({ ...current, priority: Number(event.target.value) || 0 }))}
+                                        style={{ padding: 8, fontSize: 14, background: "#1f2433", border: "1px solid #555d73", borderRadius: 4, color: "#fff" }}
+                                    />
+                                </label>
+                                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, padding: "6px 0" }}>
+                                    <input type="checkbox" checked={trigger.once !== false} onChange={event => onUpdateDialogTrigger(trigger.id, current => ({ ...current, once: event.target.checked }))} />
+                                    Once
+                                </label>
+                                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, padding: "6px 0" }}>
+                                    <input type="checkbox" checked={trigger.wip === true} onChange={event => onUpdateDialogTrigger(trigger.id, current => ({ ...current, wip: event.target.checked ? true : undefined }))} />
+                                    WIP
+                                </label>
+                            </div>
+
+                            {/* Validation issues */}
+                            {validation && !validation.isValid && (
+                                <div style={{ fontSize: 13, color: trigger.wip ? "#ffe3b2" : "#ffd6d6", background: trigger.wip ? "rgba(122, 90, 36, 0.18)" : "rgba(154, 62, 62, 0.2)", border: trigger.wip ? "1px solid #86632d" : "1px solid #8f4747", borderRadius: 6, padding: "6px 8px", display: "flex", flexDirection: "column", gap: 3 }}>
+                                    {validation.issues.map(issue => (
+                                        <span key={`${trigger.id}-${issue}`}>{issue}</span>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Tabs */}
+                            <div className="editor-trigger-tabs">
+                                {(["conditions", "actions"] as const).map(tab => {
+                                    const isActive = triggerTab === tab;
+                                    const tabValid = tab === "conditions" ? validation?.conditionStepValid : validation?.actionStepValid;
+                                    return (
+                                        <button
+                                            key={tab}
+                                            onClick={() => setTriggerTab(tab)}
+                                            className={`editor-trigger-tab${isActive ? " editor-trigger-tab--active" : ""}`}
+                                        >
+                                            {tab === "conditions" ? "Conditions" : "Actions"}
+                                            {tabValid !== undefined && (
+                                                <span style={{ color: tabValid ? "#9be4bd" : "#f4c2a3", display: "inline-flex", alignItems: "center" }}>
+                                                    {tabValid ? <CheckIcon size={12} /> : <AlertTriangleIcon size={12} />}
+                                                </span>
+                                            )}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Conditions tab */}
+                            {triggerTab === "conditions" && (
+                                <div className="editor-trigger-conditions">
+                                    {trigger.conditions.length === 0 && (
+                                        <div style={{ fontSize: 14, color: "#9aa6c5", padding: 6 }}>No conditions yet.</div>
+                                    )}
+                                    {trigger.conditions.map((condition, conditionIndex) => {
+                                        const conditionValid = isDialogConditionValid(condition, enemySpawnOptions, dialogLocations, mapWidth, mapHeight);
+                                        const conditionSummary = describeTriggerCondition(condition, spawnLabelByIndex, locationLabelById);
+                                        return (
+                                            <div key={`${trigger.id}-condition-${conditionIndex}`} style={{ border: "1px solid #475067", borderRadius: 6, padding: 12, background: "#23293a", display: "flex", flexDirection: "column", gap: 8 }}>
+                                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                                                    <select
+                                                        value={condition.type}
+                                                        onChange={event => {
+                                                            const nextType = event.target.value as AreaDialogTriggerCondition["type"];
+                                                            const defaultLocationId = dialogLocations[0]?.id ?? "location_1";
+                                                            onUpdateDialogTriggerCondition(trigger.id, conditionIndex, () => createConditionByType(nextType, defaultLocationId));
+                                                        }}
+                                                        style={{ flex: 1, padding: 8, fontSize: 14, background: "#1f2433", border: "1px solid #555d73", borderRadius: 4, color: "#fff" }}
+                                                    >
+                                                        {TRIGGER_CONDITION_OPTIONS.map(option => (
+                                                            <option key={`condition-type-${trigger.id}-${conditionIndex}-${option.value}`} value={option.value}>{option.label}</option>
+                                                        ))}
+                                                    </select>
+                                                    <span style={{ fontSize: 13, color: conditionValid ? "#9be4bd" : "#f4c2a3", display: "inline-flex", alignItems: "center" }}>
+                                                        {conditionValid ? <CheckIcon size={12} /> : <AlertTriangleIcon size={12} />}
+                                                    </span>
+                                                    <button
+                                                        title="Remove condition"
+                                                        onClick={() => onRemoveDialogCondition(trigger.id, conditionIndex)}
+                                                        style={{ padding: "4px", fontSize: 13, background: "#934", color: "#fff", border: "none", borderRadius: 3, cursor: "pointer" }}
+                                                    >
+                                                        <XIcon style={{ width: 12, height: 12 }} />
+                                                    </button>
+                                                </div>
+                                                <div style={{ fontSize: 13, color: "#9fb3d8" }}>{conditionSummary}</div>
+
+                                                {condition.type === "enemy_killed" && (
+                                                    <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                                        <span style={{ fontSize: 14 }}>Enemy Spawn</span>
+                                                        <select value={condition.spawnIndex} onChange={event => onUpdateDialogTriggerCondition(trigger.id, conditionIndex, current => { if (current.type !== "enemy_killed") return current; return { ...current, spawnIndex: parseInt(event.target.value, 10) || 0 }; })} style={{ padding: 8, fontSize: 14, background: "#1f2433", border: "1px solid #555d73", borderRadius: 4, color: "#fff" }}>
+                                                            {enemySpawnOptions.map(spawn => (<option key={`enemy-killed-${spawn.spawnIndex}`} value={spawn.spawnIndex}>#{spawn.spawnIndex}: {spawn.enemyType} ({spawn.x},{spawn.z})</option>))}
+                                                            {enemySpawnOptions.length === 0 && <option value={0}>No enemy spawns</option>}
+                                                        </select>
+                                                    </label>
+                                                )}
+                                                {condition.type === "unit_seen" && (
+                                                    <div style={{ display: "flex", gap: 8 }}>
+                                                        <label style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
+                                                            <span style={{ fontSize: 14 }}>Enemy Spawn</span>
+                                                            <select value={condition.spawnIndex} onChange={event => onUpdateDialogTriggerCondition(trigger.id, conditionIndex, current => { if (current.type !== "unit_seen") return current; return { ...current, spawnIndex: parseInt(event.target.value, 10) || 0 }; })} style={{ padding: 8, fontSize: 14, background: "#1f2433", border: "1px solid #555d73", borderRadius: 4, color: "#fff" }}>
+                                                                {enemySpawnOptions.map(spawn => (<option key={`unit-seen-${spawn.spawnIndex}`} value={spawn.spawnIndex}>#{spawn.spawnIndex}: {spawn.enemyType} ({spawn.x},{spawn.z})</option>))}
+                                                                {enemySpawnOptions.length === 0 && <option value={0}>No enemy spawns</option>}
+                                                            </select>
+                                                        </label>
+                                                        <label style={{ width: 120, display: "flex", flexDirection: "column", gap: 4 }}>
+                                                            <span style={{ fontSize: 14 }}>Range</span>
+                                                            <input type="number" min={0.1} step={0.1} value={condition.range ?? 12} onChange={event => onUpdateDialogTriggerCondition(trigger.id, conditionIndex, current => { if (current.type !== "unit_seen") return current; return { ...current, range: Math.max(0.1, Number(event.target.value) || 12) }; })} style={{ padding: 8, fontSize: 14, background: "#1f2433", border: "1px solid #555d73", borderRadius: 4, color: "#fff" }} />
+                                                        </label>
+                                                    </div>
+                                                )}
+                                                {condition.type === "party_enters_location" && (
+                                                    <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                                        <span style={{ fontSize: 14 }}>Location</span>
+                                                        <select value={condition.locationId} onChange={event => onUpdateDialogTriggerCondition(trigger.id, conditionIndex, current => { if (current.type !== "party_enters_location") return current; return { ...current, locationId: event.target.value }; })} style={{ padding: 8, fontSize: 14, background: "#1f2433", border: "1px solid #555d73", borderRadius: 4, color: "#fff" }}>
+                                                            {!dialogLocations.some(location => location.id === condition.locationId) && condition.locationId.trim().length > 0 && (
+                                                                <option value={condition.locationId}>Missing: {condition.locationId}</option>
+                                                            )}
+                                                            {dialogLocations.map(location => (
+                                                                <option key={`condition-location-${trigger.id}-${conditionIndex}-${location.id}`} value={location.id}>{location.id} ({location.x},{location.z},{location.w}x{location.h})</option>
+                                                            ))}
+                                                            {dialogLocations.length === 0 && <option value="">No locations defined</option>}
+                                                        </select>
+                                                        {dialogLocations.length > 0 && !dialogLocations.some(location => location.id === condition.locationId) && (
+                                                            <span style={{ fontSize: 13, color: "#ffb4b4" }}>Missing location "{condition.locationId}".</span>
+                                                        )}
+                                                    </label>
+                                                )}
+                                                {condition.type === "party_enters_region" && (
+                                                    <>
+                                                        <div style={{ display: "flex", gap: 8 }}>
+                                                            <label style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}><span style={{ fontSize: 14 }}>X</span><input type="number" value={condition.x} onChange={event => onUpdateDialogTriggerCondition(trigger.id, conditionIndex, current => { if (current.type !== "party_enters_region") return current; return { ...current, x: clampGridCoord(Number(event.target.value), mapWidth) }; })} style={{ padding: 8, fontSize: 14, background: "#1f2433", border: "1px solid #555d73", borderRadius: 4, color: "#fff" }} /></label>
+                                                            <label style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}><span style={{ fontSize: 14 }}>Z</span><input type="number" value={condition.z} onChange={event => onUpdateDialogTriggerCondition(trigger.id, conditionIndex, current => { if (current.type !== "party_enters_region") return current; return { ...current, z: clampGridCoord(Number(event.target.value), mapHeight) }; })} style={{ padding: 8, fontSize: 14, background: "#1f2433", border: "1px solid #555d73", borderRadius: 4, color: "#fff" }} /></label>
+                                                            <label style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}><span style={{ fontSize: 14 }}>W</span><input type="number" min={1} value={condition.w} onChange={event => onUpdateDialogTriggerCondition(trigger.id, conditionIndex, current => { if (current.type !== "party_enters_region") return current; return { ...current, w: Math.max(1, parseInt(event.target.value, 10) || 1) }; })} style={{ padding: 8, fontSize: 14, background: "#1f2433", border: "1px solid #555d73", borderRadius: 4, color: "#fff" }} /></label>
+                                                            <label style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}><span style={{ fontSize: 14 }}>H</span><input type="number" min={1} value={condition.h} onChange={event => onUpdateDialogTriggerCondition(trigger.id, conditionIndex, current => { if (current.type !== "party_enters_region") return current; return { ...current, h: Math.max(1, parseInt(event.target.value, 10) || 1) }; })} style={{ padding: 8, fontSize: 14, background: "#1f2433", border: "1px solid #555d73", borderRadius: 4, color: "#fff" }} /></label>
+                                                        </div>
+                                                    </>
+                                                )}
+                                                {condition.type === "party_out_of_combat_range" && (
+                                                    <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                                        <span style={{ fontSize: 14 }}>Range</span>
+                                                        <input type="number" min={0.1} step={0.1} value={condition.range} onChange={event => onUpdateDialogTriggerCondition(trigger.id, conditionIndex, current => { if (current.type !== "party_out_of_combat_range") return current; return { ...current, range: Math.max(0.1, Number(event.target.value) || 12) }; })} style={{ padding: 8, fontSize: 14, background: "#1f2433", border: "1px solid #555d73", borderRadius: 4, color: "#fff" }} />
+                                                    </label>
+                                                )}
+                                                {condition.type === "after_delay" && (
+                                                    <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                                        <span style={{ fontSize: 14 }}>Delay (ms)</span>
+                                                        <input type="number" min={0} step={100} value={condition.ms} onChange={event => onUpdateDialogTriggerCondition(trigger.id, conditionIndex, current => { if (current.type !== "after_delay") return current; return { ...current, ms: Math.max(0, parseInt(event.target.value, 10) || 0) }; })} style={{ padding: 8, fontSize: 14, background: "#1f2433", border: "1px solid #555d73", borderRadius: 4, color: "#fff" }} />
+                                                    </label>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                    <button
+                                        title="Add condition"
+                                        onClick={() => onAddDialogCondition(trigger.id)}
+                                        style={{ alignSelf: "flex-start", padding: "6px 10px", fontSize: 13, background: "#355eaa", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
+                                    >
+                                        <PlusIcon size={12} />
+                                        Add Condition
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* Actions tab */}
+                            {triggerTab === "actions" && (
+                                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                                    <div style={{ border: "1px solid #475067", borderRadius: 6, padding: 14, background: "#23293a", display: "flex", flexDirection: "column", gap: 8 }}>
+                                        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                            <span style={{ fontSize: 14 }}>Action Type</span>
+                                            <select
+                                                value={targetDialogId.length > 0 ? "start_dialog" : ""}
+                                                onChange={event => {
+                                                    if (event.target.value !== "start_dialog") {
+                                                        updateTriggerStartDialogAction(trigger.id, "");
+                                                        return;
+                                                    }
+                                                    const defaultDialogId = targetDialogId || selectedDialog?.id || availableDialogIds[0] || "dialog";
+                                                    updateTriggerStartDialogAction(trigger.id, defaultDialogId);
+                                                }}
+                                                style={{ padding: 8, fontSize: 14, background: "#1f2433", border: "1px solid #555d73", borderRadius: 4, color: "#fff" }}
+                                            >
+                                                <option value="">(no action)</option>
+                                                <option value="start_dialog">Start Dialog</option>
+                                            </select>
+                                        </label>
+
+                                        {targetDialogId.length > 0 && (
+                                            <>
+                                                <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                                    <span style={{ fontSize: 14 }}>Target Dialog</span>
+                                                    {dialogIdOptions.length > 0 ? (
+                                                        <select
+                                                            value={targetDialogId}
+                                                            onChange={event => updateTriggerStartDialogAction(trigger.id, event.target.value)}
+                                                            style={{ padding: 8, fontSize: 14, background: "#1f2433", border: isMissingDialogId ? "1px solid #9b5d5d" : "1px solid #555d73", borderRadius: 4, color: "#fff" }}
+                                                        >
+                                                            {dialogIdOptions.map(dialogId => (<option key={dialogId} value={dialogId}>{dialogId}</option>))}
+                                                        </select>
+                                                    ) : (
+                                                        <input
+                                                            value={targetDialogId}
+                                                            onChange={event => updateTriggerStartDialogAction(trigger.id, event.target.value)}
+                                                            style={{ padding: 8, fontSize: 14, background: "#1f2433", border: isMissingDialogId ? "1px solid #9b5d5d" : "1px solid #555d73", borderRadius: 4, color: "#fff" }}
+                                                        />
+                                                    )}
+                                                    {isMissingDialogId && (
+                                                        <span style={{ fontSize: 13, color: "#ffb4b4" }}>Missing dialog: "{targetDialogId}".</span>
+                                                    )}
+                                                </label>
+                                                <button
+                                                    title={isMissingDialogId ? "Create dialog payload" : "Edit dialog payload"}
+                                                    onClick={() => {
+                                                        const dialogId = upsertDraftDialog(targetDialogId);
+                                                        updateTriggerStartDialogAction(trigger.id, dialogId);
+                                                        setEditorView("dialog");
+                                                    }}
+                                                    style={{ alignSelf: "flex-start", padding: "6px 10px", fontSize: 13, background: "#4269b8", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}
+                                                >
+                                                    <MessageSquareIcon size={12} />
+                                                    {isMissingDialogId ? "Create Dialog" : "Edit Dialog"}
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    );
+                })()}
+
+                {/* ── View: Dialog Editor ── */}
+                {editorView === "dialog" && (
+                    <div style={{ display: "grid", gridTemplateColumns: "220px 260px minmax(0, 1fr)", gap: 12, minHeight: 420 }}>
+                        {/* Dialog Payloads */}
+                        <div style={{ border: "1px solid #3f475b", borderRadius: 8, background: "#252b3c", padding: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                <div style={{ fontSize: 15, fontWeight: 700 }}>Dialogs</div>
+                                <button title="Create dialog" onClick={addDialog} style={{ padding: "4px 8px", fontSize: 13, background: "#3484d0", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}>
+                                    <PlusIcon size={13} />
+                                </button>
+                            </div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 280, overflowY: "auto" }}>
+                                {draftDialogs.length === 0 && (
+                                    <div style={{ fontSize: 14, color: "#9aa6c5", padding: "6px 2px" }}>No dialogs yet.</div>
+                                )}
+                                {draftDialogs.map(dialog => (
+                                    <button
+                                        key={dialog.id}
+                                        onClick={() => { setSelectedDialogId(dialog.id); setSelectedNodeId(listNodeIds(dialog)[0] ?? null); }}
+                                        style={{ textAlign: "left", padding: "10px 14px", borderRadius: 6, border: resolvedSelectedDialogId === dialog.id ? "1px solid #5ea5ff" : "1px solid #4b5369", background: resolvedSelectedDialogId === dialog.id ? "#2d3d5c" : "#2a3041", color: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", gap: 3 }}
+                                    >
+                                        <span style={{ fontSize: 14, fontWeight: 600 }}>{dialog.id}</span>
+                                        <span style={{ fontSize: 13, color: "#b9c4de" }}>{Object.keys(dialog.nodes).length} nodes</span>
+                                    </button>
                                 ))}
                             </div>
+                            {selectedDialog && (
+                                <>
+                                    <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                        <span style={{ fontSize: 14, color: "#b8c2d9" }}>Dialog ID</span>
+                                        <input key={`dialog-id-${selectedDialog.id}`} defaultValue={selectedDialog.id} onBlur={event => commitDialogIdDraft(event.currentTarget.value)} onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }} style={{ padding: 8, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 14 }} />
+                                    </label>
+                                    <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                        <span style={{ fontSize: 14, color: "#b8c2d9" }}>Start Node</span>
+                                        <select value={selectedDialog.startNodeId} onChange={event => updateDialogById(selectedDialog.id, dialog => ({ ...dialog, startNodeId: event.target.value }))} style={{ padding: 8, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 14 }}>
+                                            {nodeIds.map(nodeId => (<option key={`start-${nodeId}`} value={nodeId}>{nodeId}</option>))}
+                                        </select>
+                                    </label>
+                                    <div style={{ display: "flex", gap: 6 }}>
+                                        <button onClick={duplicateSelectedDialog} style={{ flex: 1, padding: "6px 8px", fontSize: 13, background: "#4d5d96", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}>Duplicate</button>
+                                        <button onClick={removeSelectedDialog} style={{ flex: 1, padding: "6px 8px", fontSize: 13, background: "#9d4040", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}>Delete</button>
+                                    </div>
+                                </>
+                            )}
                         </div>
-                    )}
+
+                        {/* Nodes */}
+                        <div style={{ border: "1px solid #3f475b", borderRadius: 8, background: "#252b3c", padding: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                <div style={{ fontSize: 15, fontWeight: 700 }}>Nodes</div>
+                                <button title="Create node" onClick={addNodeToSelectedDialog} disabled={!selectedDialog} style={{ padding: "4px 8px", fontSize: 13, background: selectedDialog ? "#3484d0" : "#5b6276", color: "#fff", border: "none", borderRadius: 4, cursor: selectedDialog ? "pointer" : "not-allowed" }}>
+                                    <PlusIcon size={13} />
+                                </button>
+                            </div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 520, overflowY: "auto" }}>
+                                {!selectedDialog && <div style={{ fontSize: 14, color: "#9aa6c5", padding: "6px 2px" }}>Select a dialog.</div>}
+                                {selectedDialog && nodeIds.map(nodeId => {
+                                    const node = selectedDialog.nodes[nodeId];
+                                    const preview = node.text.trim().length > 0 ? getNodePreview(node.text) : "(empty)";
+                                    return (
+                                        <button key={`${selectedDialog.id}-${node.id}`} onClick={() => setSelectedNodeId(node.id)} style={{ textAlign: "left", padding: "10px 14px", borderRadius: 6, border: resolvedSelectedNodeId === node.id ? "1px solid #5ea5ff" : "1px solid #4b5369", background: resolvedSelectedNodeId === node.id ? "#2d3d5c" : "#2a3041", color: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", gap: 3 }}>
+                                            <span style={{ fontSize: 14, fontWeight: 600 }}>{node.id}</span>
+                                            <span style={{ fontSize: 13, color: "#b9c4de" }}>{DIALOG_SPEAKERS[node.speakerId].name}</span>
+                                            <span style={{ fontSize: 13, color: "#a7b3d2" }}>{preview}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            {selectedNode && (
+                                <div style={{ display: "flex", gap: 6 }}>
+                                    <button onClick={duplicateSelectedNode} style={{ flex: 1, padding: "6px 8px", fontSize: 13, background: "#4d5d96", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}>Duplicate</button>
+                                    <button onClick={removeSelectedNode} disabled={nodeIds.length <= 1} style={{ flex: 1, padding: "6px 8px", fontSize: 13, background: nodeIds.length <= 1 ? "#5b6276" : "#9d4040", color: "#fff", border: "none", borderRadius: 4, cursor: nodeIds.length <= 1 ? "not-allowed" : "pointer" }}>Delete</button>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Node Editor */}
+                        <div style={{ border: "1px solid #3f475b", borderRadius: 8, background: "#252b3c", padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+                            {!selectedNode && <div style={{ fontSize: 15, color: "#9aa6c5", padding: 6 }}>Select a node to edit.</div>}
+                            {selectedNode && selectedDialog && (
+                                <>
+                                    <div style={{ display: "flex", gap: 8 }}>
+                                        <label style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
+                                            <span style={{ fontSize: 14, color: "#b8c2d9" }}>Node ID</span>
+                                            <input key={`node-id-${selectedNode.id}`} defaultValue={selectedNode.id} onBlur={event => commitNodeIdDraft(event.currentTarget.value)} onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }} style={{ padding: 8, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 14 }} />
+                                        </label>
+                                        <label style={{ width: 220, display: "flex", flexDirection: "column", gap: 4 }}>
+                                            <span style={{ fontSize: 14, color: "#b8c2d9" }}>Speaker</span>
+                                            <select value={selectedNode.speakerId} onChange={event => { const nextSpeakerId = event.target.value; if (!isDialogSpeakerId(nextSpeakerId)) return; updateSelectedNode(node => ({ ...node, speakerId: nextSpeakerId })); }} style={{ padding: 8, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 14 }}>
+                                                {speakerOptions.map(speaker => (<option key={`speaker-${speaker.id}`} value={speaker.id}>{speaker.name}</option>))}
+                                            </select>
+                                        </label>
+                                    </div>
+                                    <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                        <span style={{ fontSize: 14, color: "#b8c2d9" }}>Dialog Text</span>
+                                        <textarea value={selectedNode.text} onChange={event => updateSelectedNode(node => ({ ...node, text: event.target.value }))} rows={7} style={{ padding: 8, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 15, resize: "vertical", lineHeight: 1.45 }} />
+                                    </label>
+                                    <div style={{ display: "flex", gap: 8 }}>
+                                        <label style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
+                                            <span style={{ fontSize: 14, color: "#b8c2d9" }}>Next Node (no choices)</span>
+                                            <select value={selectedNode.nextNodeId ?? ""} onChange={event => { const nextNodeId = event.target.value; updateSelectedNode(node => ({ ...node, ...(nextNodeId ? { nextNodeId } : { nextNodeId: undefined }) })); }} style={{ padding: 8, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 14 }}>
+                                                <option value="">(end dialog)</option>
+                                                {nodeIds.map(nodeId => (<option key={`next-node-${nodeId}`} value={nodeId}>{nodeId}</option>))}
+                                            </select>
+                                        </label>
+                                        <label style={{ width: 220, display: "flex", flexDirection: "column", gap: 4 }}>
+                                            <span style={{ fontSize: 14, color: "#b8c2d9" }}>Continue Button Label</span>
+                                            <input value={selectedNode.continueLabel ?? ""} onChange={event => updateSelectedNode(node => ({ ...node, ...(event.target.value.trim().length > 0 ? { continueLabel: event.target.value } : { continueLabel: undefined }) }))} placeholder="Continue" style={{ padding: 8, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 14 }} />
+                                        </label>
+                                        <label style={{ width: 220, display: "flex", flexDirection: "column", gap: 4 }}>
+                                            <span style={{ fontSize: 14, color: "#b8c2d9" }}>After Dialog Ends</span>
+                                            <select value={toDialogEndActionMenuId(selectedNode.onDialogEndAction)} onChange={event => updateSelectedNode(node => { const nextAction = toDialogEndAction(event.target.value); return { ...node, ...(nextAction ? { onDialogEndAction: nextAction } : { onDialogEndAction: undefined }) }; })} style={{ padding: 8, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 14 }}>
+                                                <option value="">(none)</option>
+                                                {DIALOG_END_MENU_OPTIONS.map(option => (<option key={`dialog-end-action-${option.value}`} value={option.value}>{option.label}</option>))}
+                                            </select>
+                                        </label>
+                                    </div>
+                                    <div style={{ borderTop: "1px solid #3d465b", paddingTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+                                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                            <div style={{ fontSize: 15, fontWeight: 700 }}>Choices</div>
+                                            <button onClick={addChoiceToSelectedNode} style={{ padding: "4px 8px", fontSize: 13, background: "#3484d0", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}>+ Choice</button>
+                                        </div>
+                                        {(selectedNode.choices ?? []).length === 0 && (
+                                            <div style={{ fontSize: 14, color: "#9aa6c5" }}>No choices. Node advances using "Next Node" + continue button.</div>
+                                        )}
+                                        {(selectedNode.choices ?? []).map(choice => (
+                                            <div key={`${selectedNode.id}-${choice.id}`} style={{ border: "1px solid #4b5369", borderRadius: 6, padding: 8, background: "#2a3041", display: "grid", gridTemplateColumns: "160px 1fr 170px 170px 70px", gap: 8, alignItems: "center" }}>
+                                                <input value={choice.id} onChange={event => renameChoice(choice.id, event.target.value)} style={{ padding: 8, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 14 }} />
+                                                <input value={choice.label} onChange={event => updateChoiceLabel(choice.id, event.target.value)} placeholder="Choice label" style={{ padding: 8, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 14 }} />
+                                                <select value={choice.nextNodeId ?? ""} onChange={event => updateChoiceNextNodeId(choice.id, event.target.value)} style={{ padding: 8, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 14 }}>
+                                                    <option value="">(end dialog)</option>
+                                                    {nodeIds.map(nodeId => (<option key={`choice-next-${choice.id}-${nodeId}`} value={nodeId}>{nodeId}</option>))}
+                                                </select>
+                                                <select value={toDialogEndActionMenuId(choice.onDialogEndAction)} onChange={event => updateChoiceDialogEndAction(choice.id, event.target.value)} style={{ padding: 8, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 14 }}>
+                                                    <option value="">(no end action)</option>
+                                                    {DIALOG_END_MENU_OPTIONS.map(option => (<option key={`choice-end-action-${choice.id}-${option.value}`} value={option.value}>{option.label}</option>))}
+                                                </select>
+                                                <button onClick={() => removeChoice(choice.id)} style={{ padding: "6px 8px", fontSize: 13, background: "#9d4040", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}>Remove</button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                )}
+
                 </div>
             </div>
         </div>
