@@ -85,7 +85,7 @@ import {
     type EditorClipboard,
     type EditorContextMenuState,
 } from "./mapEditorHelpers";
-import "./editor.css";
+import "../styles/07-map-editor.css";
 
 // =============================================================================
 // COMPONENT
