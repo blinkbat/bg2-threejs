@@ -8,11 +8,11 @@ import * as THREE from "three";
 
 // Constants & Types
 import { BUFF_TICK_INTERVAL, getSkillTextColor, setDebugSpeedMultiplier } from "./core/constants";
-import type { Unit, Skill, CombatLogEntry, SelectionBox, CharacterStats, SummonType, StatusEffect } from "./core/types";
+import type { Unit, Skill, CombatLogEntry, SelectionBox, CharacterStats, StatusEffect } from "./core/types";
 
 // Game Logic
 import { getCurrentArea, getCurrentAreaId, setCurrentArea, AREAS, DEFAULT_STARTING_AREA, type AreaId, type AreaTransition } from "./game/areas";
-import { UNIT_DATA, CORE_PLAYER_IDS, getEffectiveMaxHp, getEffectiveMaxHpForStats, getEffectiveMaxMana, getEffectiveMaxManaForStats, getStartingPlayerStats, getXpForLevel, isCorePlayerId } from "./game/playerUnits";
+import { UNIT_DATA, CORE_PLAYER_IDS, getEffectiveMaxHp, getEffectiveMaxMana, getXpForLevel, isCorePlayerId } from "./game/playerUnits";
 import { LEVEL_UP_HP, LEVEL_UP_MANA, LEVEL_UP_STAT_POINTS, LEVEL_UP_SKILL_POINTS, HP_PER_VITALITY, MP_PER_INTELLIGENCE } from "./game/statBonuses";
 import { ENEMY_STATS } from "./game/enemyStats";
 import { SKILLS } from "./game/skills";
@@ -23,15 +23,15 @@ import { getItem } from "./game/items";
 import { isConsumable } from "./core/types";
 import { updateChestStates } from "./rendering/scene";
 import { soundFns } from "./audio";
-import { findNearestPassable, findSpawnPositions } from "./ai/pathfinding";
 import { updateUnit, updateUnitWith, createLiveUnitsDispatch } from "./core/stateUtils";
+import { createUnitsForArea as createAreaUnits, type PersistedPlayer } from "./app/gameSetup";
 
 // Extracted modules
 import { executeSkill, type SkillExecutionContext } from "./combat/skills";
 import { applyPoison, applyStatusEffect } from "./combat/combatMath";
 import { setupTargetingMode } from "./input";
 import { createLightningPillar } from "./combat/damageEffects";
-import { initializeUnitIdCounter, spawnLootBag } from "./gameLoop";
+import { spawnLootBag } from "./gameLoop";
 import {
     togglePause,
     processActionQueue,
@@ -72,7 +72,6 @@ import {
 import type { DialogChoice, DialogDefinition, DialogNode, DialogSpeaker, DialogState, DialogUiAction } from "./dialog/types";
 import {
     formatPerfLogLine,
-    getForwardVectorForDirection,
     PERF_LOG_BUFFER_LIMIT,
     PERF_LOG_ENDPOINT,
     PERF_LOG_FLUSH_INTERVAL_MS,
@@ -94,22 +93,6 @@ const PORTRAIT_URLS = [monkPortrait, barbarianPortrait, wizardPortrait, paladinP
 // =============================================================================
 // TYPES
 // =============================================================================
-
-interface PersistedPlayer {
-    id: number;
-    hp: number;
-    mana?: number;
-    level?: number;
-    exp?: number;
-    stats?: CharacterStats;
-    statPoints?: number;
-    skillPoints?: number;
-    learnedSkills?: string[];
-    statusEffects?: Unit["statusEffects"];
-    cantripUses?: Record<string, number>;
-    summonType?: SummonType;
-    summonedBy?: number;
-}
 
 interface GameProps {
     onRestart: () => void;
@@ -192,134 +175,16 @@ function Game({
     const playtestSkipDialogs = playtestSettings.skipDialogs;
 
     // Create initial units
-    const createUnitsForArea = useCallback((): Unit[] => {
-        const area = getCurrentArea();
-        const spawn = spawnPoint ?? area.defaultSpawn;
-        // Sort player IDs by formation order so slot 0 (tip) goes to the right unit
-        const fOrder = loadFormationOrder();
-        const playerIds = [...CORE_PLAYER_IDS].sort((a, b) => {
-            const ai = fOrder.indexOf(a);
-            const bi = fOrder.indexOf(b);
-            return (ai === -1 ? 100 + a : ai) - (bi === -1 ? 100 + b : bi);
-        });
-        const spawnPositions = findSpawnPositions(spawn.x, spawn.z, playerIds.length, spawnDirection ?? "north");
-        const INITIAL_XP_VALUES = [0, 10, 15, 20, 25, 30];
-
-        const players: Unit[] = playerIds.map((id, i) => {
-            const data = UNIT_DATA[id];
-            const persisted = persistedPlayers?.find(p => p.id === id);
-            const pos = spawnPositions[i] ?? { x: spawn.x, z: spawn.z };
-            const initialExp = persisted?.exp ?? (INITIAL_XP_VALUES[id] ?? 0);
-            const startingStats = persisted?.stats ?? getStartingPlayerStats(id);
-            const learnedSkills = playtestUnlockAllSkills
-                ? data.skills.map(s => s.name)
-                : (persisted?.learnedSkills ?? []);
-            const defaultCantripUses = data.skills
-                .filter(s => s.isCantrip && s.maxUses)
-                .reduce<Record<string, number>>((acc, s) => ({ ...acc, [s.name]: s.maxUses! }), {});
-            return {
-                id,
-                x: pos.x,
-                z: pos.z,
-                hp: persisted?.hp ?? getEffectiveMaxHpForStats(id, startingStats),
-                mana: persisted?.mana ?? getEffectiveMaxManaForStats(id, startingStats),
-                level: persisted?.level ?? 1,
-                exp: initialExp,
-                stats: startingStats,
-                statPoints: persisted?.statPoints ?? 0,
-                skillPoints: persisted?.skillPoints ?? 1,
-                learnedSkills,
-                team: "player" as const,
-                target: null,
-                aiEnabled: true,
-                statusEffects: persisted?.statusEffects,
-                cantripUses: { ...defaultCantripUses, ...(persisted?.cantripUses ?? {}) }
-            };
-        });
-
-        const summonPersisted = (persistedPlayers ?? [])
-            .filter(p => p.summonType === "ancestor_warrior" && p.hp > 0)
-            .slice(0, 1);
-        const forward = getForwardVectorForDirection(spawnDirection);
-        const side = { x: -forward.z, z: forward.x };
-        const summons: Unit[] = [];
-        summonPersisted.forEach((persisted, i) => {
-            const data = UNIT_DATA[persisted.id];
-            if (!data) return;
-            const rank = Math.floor(i / 2);
-            const lane = i % 2 === 0 ? -1 : 1;
-            const desiredX = spawn.x - forward.x * (3.3 + rank * 1.2) + side.x * lane * 1.2;
-            const desiredZ = spawn.z - forward.z * (3.3 + rank * 1.2) + side.z * lane * 1.2;
-            const pos = findNearestPassable(desiredX, desiredZ, 5) ?? { x: spawn.x, z: spawn.z };
-            summons.push({
-                id: persisted.id,
-                x: pos.x,
-                z: pos.z,
-                hp: persisted.hp,
-                mana: persisted.mana ?? data.mana,
-                level: persisted.level ?? 1,
-                exp: persisted.exp ?? 0,
-                stats: persisted.stats,
-                statPoints: persisted.statPoints ?? 0,
-                skillPoints: persisted.skillPoints ?? 0,
-                learnedSkills: persisted.learnedSkills ?? [],
-                team: "player" as const,
-                target: null,
-                aiEnabled: true,
-                statusEffects: persisted.statusEffects,
-                cantripUses: persisted.cantripUses,
-                summonType: persisted.summonType,
-                summonedBy: persisted.summonedBy
-            });
-        });
-
-        const areaId = getCurrentAreaId();
-        const killedSet = initialKilledEnemies ?? new Set<string>();
-        const enemies: Unit[] = [];
-        const invulnerableStatus = {
-            type: "invul" as const,
-            duration: Number.MAX_SAFE_INTEGER,
-            tickInterval: 1000,
-            timeSinceTick: 0,
-            lastUpdateTime: Date.now(),
-            damagePerTick: 0,
-            sourceId: -1
-        };
-        area.enemySpawns.forEach((spawn, i) => {
-            const enemyKey = `${areaId}-${i}`;
-            if (killedSet.has(enemyKey)) return;
-            const stats = ENEMY_STATS[spawn.type];
-            if (spawn.type === "innkeeper") {
-                enemies.push({
-                    id: 100 + i,
-                    x: spawn.x,
-                    z: spawn.z,
-                    hp: stats.maxHp,
-                    team: "neutral" as const,
-                    enemyType: spawn.type,
-                    target: null,
-                    aiEnabled: false,
-                    statusEffects: [invulnerableStatus],
-                });
-                return;
-            }
-            enemies.push({
-                id: 100 + i,
-                x: spawn.x,
-                z: spawn.z,
-                hp: stats.maxHp,
-                team: "enemy" as const,
-                enemyType: spawn.type,
-                target: null,
-                aiEnabled: true,
-                ...(stats.frontShield && { facing: 0 })
-            });
-        });
-
-        const allUnits = [...players, ...summons, ...enemies];
-        initializeUnitIdCounter(allUnits);
-        return allUnits;
-    }, [persistedPlayers, spawnPoint, spawnDirection, initialKilledEnemies, playtestUnlockAllSkills]);
+    const createUnitsForArea = useCallback(
+        () => createAreaUnits({
+            persistedPlayers,
+            spawnPoint,
+            spawnDirection,
+            initialKilledEnemies,
+            playtestUnlockAllSkills,
+        }),
+        [persistedPlayers, spawnPoint, spawnDirection, initialKilledEnemies, playtestUnlockAllSkills]
+    );
 
     // =============================================================================
     // REACT STATE

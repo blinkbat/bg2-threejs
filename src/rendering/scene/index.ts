@@ -38,6 +38,20 @@ import {
     normalizeHexColor,
     type CandleLightSource,
 } from "./lightUtils";
+import {
+    applyShadowDefaults,
+    applyStaticRenderOrder,
+    buildFogFootprintFromBounds,
+    createSkyTexture,
+    DIRECTIONAL_SHADOW_MAP_SIZE,
+    ENABLE_DOOR_POINT_LIGHTS,
+    hashAreaIdToUnitRange,
+    MAX_AREA_LIGHTS,
+    MAX_FLAME_CLUSTER_LIGHTS,
+    RENDER_ORDER_FOG,
+    RENDERER_MAX_PIXEL_RATIO,
+    setStaticRenderTier,
+} from "./sceneSetupHelpers";
 
 // Re-export types
 export type { DoorMesh, SecretDoorMesh, ChestMeshData, SceneRefs } from "./types";
@@ -59,118 +73,6 @@ export {
 export { getEffectiveSize, addUnitToScene, createUnitSceneGroup, ensureTexturesLoaded } from "./units";
 import { createUnitSceneGroup, ensureTexturesLoaded } from "./units";
 
-function hashAreaIdToUnitRange(areaId: string): number {
-    let hash = 0;
-    for (let i = 0; i < areaId.length; i++) {
-        hash = ((hash << 5) - hash) + areaId.charCodeAt(i);
-        hash |= 0;
-    }
-    const normalized = Math.abs(hash % 1000) / 1000;
-    return normalized;
-}
-
-function hasLitMaterial(material: THREE.Material | THREE.Material[]): boolean {
-    const materials = Array.isArray(material) ? material : [material];
-    return materials.some(mat =>
-        mat instanceof THREE.MeshStandardMaterial ||
-        mat instanceof THREE.MeshPhysicalMaterial ||
-        mat instanceof THREE.MeshLambertMaterial ||
-        mat instanceof THREE.MeshPhongMaterial ||
-        mat instanceof THREE.MeshToonMaterial
-    );
-}
-
-function applyShadowDefaults(scene: THREE.Scene): void {
-    scene.traverse((object: THREE.Object3D) => {
-        if (!(object instanceof THREE.Mesh)) return;
-        if (!hasLitMaterial(object.material)) return;
-
-        if (object.userData?.liquid) {
-            object.castShadow = false;
-            object.receiveShadow = false;
-            return;
-        }
-
-        if (object.name === "ground") {
-            object.castShadow = false;
-            object.receiveShadow = true;
-            return;
-        }
-
-        if (object.name === "lava") {
-            object.castShadow = false;
-            object.receiveShadow = false;
-            return;
-        }
-
-        if (typeof object.userData?.unitId === "number") {
-            object.castShadow = false;
-            object.receiveShadow = false;
-            return;
-        }
-
-        if (object.name === "obstacle") {
-            object.castShadow = true;
-            object.receiveShadow = true;
-            return;
-        }
-
-        if (object.name === "chest" || object.name === "decoration") {
-            object.castShadow = false;
-            object.receiveShadow = true;
-            return;
-        }
-    });
-}
-
-const DIRECTIONAL_SHADOW_MAP_SIZE = 512;
-const MAX_FLAME_CLUSTER_LIGHTS = 2;
-const MAX_AREA_LIGHTS = 6;
-const ENABLE_DOOR_POINT_LIGHTS = false;
-const RENDERER_MAX_PIXEL_RATIO = 1.25;
-const RENDER_ORDER_GROUND = 0;
-const RENDER_ORDER_FLOOR = 10;
-const RENDER_ORDER_GRID = 20;
-const RENDER_ORDER_PROP = 30;
-const RENDER_ORDER_FOG = 1100;
-
-type StaticRenderTier = "ground" | "floor" | "grid";
-
-function isSceneRenderable(object: THREE.Object3D): boolean {
-    return object instanceof THREE.Mesh || object instanceof THREE.Line || object instanceof THREE.Points || object instanceof THREE.Sprite;
-}
-
-function readStaticRenderTier(value: unknown): StaticRenderTier | null {
-    if (value === "ground" || value === "floor" || value === "grid") {
-        return value;
-    }
-    return null;
-}
-
-function setStaticRenderTier(object: THREE.Object3D, tier: StaticRenderTier): void {
-    object.userData.staticRenderTier = tier;
-}
-
-function applyStaticRenderOrder(scene: THREE.Scene): void {
-    scene.traverse((object: THREE.Object3D) => {
-        if (!isSceneRenderable(object)) return;
-        const tier = readStaticRenderTier(object.userData.staticRenderTier);
-        if (tier === "ground") {
-            object.renderOrder = RENDER_ORDER_GROUND;
-            return;
-        }
-        if (tier === "floor") {
-            object.renderOrder = RENDER_ORDER_FLOOR;
-            return;
-        }
-        if (tier === "grid") {
-            object.renderOrder = RENDER_ORDER_GRID;
-            return;
-        }
-        object.renderOrder = RENDER_ORDER_PROP;
-    });
-}
-
 // =============================================================================
 // MAIN SCENE CREATION
 // =============================================================================
@@ -183,80 +85,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     const computed = getComputedAreaData();
 
     const scene = new THREE.Scene();
-
-    interface FogFootprintCell {
-        x: number;
-        z: number;
-    }
-
-    interface FogFootprintData {
-        centerX: number;
-        centerZ: number;
-        radius: number;
-        cells: FogFootprintCell[];
-    }
-
-    const buildFogFootprintCells = (
-        centerX: number,
-        centerZ: number,
-        radius: number
-    ): FogFootprintCell[] => {
-        const paddedRadius = Math.max(0.25, radius);
-        const radiusSq = paddedRadius * paddedRadius;
-        const minX = Math.max(0, Math.floor(centerX - paddedRadius - 1));
-        const maxX = Math.min(area.gridWidth - 1, Math.ceil(centerX + paddedRadius + 1));
-        const minZ = Math.max(0, Math.floor(centerZ - paddedRadius - 1));
-        const maxZ = Math.min(area.gridHeight - 1, Math.ceil(centerZ + paddedRadius + 1));
-        const cells: FogFootprintCell[] = [];
-
-        for (let x = minX; x <= maxX; x++) {
-            for (let z = minZ; z <= maxZ; z++) {
-                const cellCenterX = x + 0.5;
-                const cellCenterZ = z + 0.5;
-                const dx = cellCenterX - centerX;
-                const dz = cellCenterZ - centerZ;
-                if (dx * dx + dz * dz <= radiusSq) {
-                    cells.push({ x, z });
-                }
-            }
-        }
-
-        if (cells.length === 0) {
-            const fallbackX = THREE.MathUtils.clamp(Math.floor(centerX), 0, area.gridWidth - 1);
-            const fallbackZ = THREE.MathUtils.clamp(Math.floor(centerZ), 0, area.gridHeight - 1);
-            cells.push({ x: fallbackX, z: fallbackZ });
-        }
-
-        return cells;
-    };
-
-    const buildFogFootprintFromBounds = (bounds: THREE.Box3, padding: number): FogFootprintData => {
-        const centerX = (bounds.min.x + bounds.max.x) / 2;
-        const centerZ = (bounds.min.z + bounds.max.z) / 2;
-        const halfWidthX = Math.max(0, (bounds.max.x - bounds.min.x) / 2);
-        const halfWidthZ = Math.max(0, (bounds.max.z - bounds.min.z) / 2);
-        const radius = Math.max(0.3, Math.hypot(halfWidthX, halfWidthZ) + padding);
-        const cells = buildFogFootprintCells(centerX, centerZ, radius);
-        return { centerX, centerZ, radius, cells };
-    };
-
-    // Create sky background - derived from area background color.
-    const canvas = document.createElement("canvas");
-    canvas.width = 2;
-    canvas.height = 256;
-    const ctx = canvas.getContext("2d")!;
-    const gradient = ctx.createLinearGradient(0, 0, 0, 256);
-    const backgroundBase = new THREE.Color(area.backgroundColor);
-    const topColor = backgroundBase.clone().lerp(new THREE.Color("#000000"), area.id === "forest" ? 0.72 : 0.82);
-    const midColor = backgroundBase.clone().lerp(new THREE.Color("#000000"), area.id === "forest" ? 0.52 : 0.68);
-    const bottomColor = backgroundBase.clone().lerp(new THREE.Color("#000000"), area.id === "forest" ? 0.28 : 0.5);
-    gradient.addColorStop(0, `#${topColor.getHexString()}`);
-    gradient.addColorStop(0.5, `#${midColor.getHexString()}`);
-    gradient.addColorStop(1, `#${bottomColor.getHexString()}`);
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 2, 256);
-    const skyTexture = new THREE.CanvasTexture(canvas);
-    scene.background = skyTexture;
+    scene.background = createSkyTexture(area.backgroundColor, area.id === "forest");
 
     const aspect = container.clientWidth / container.clientHeight;
     const camera = new THREE.OrthographicCamera(-15 * aspect, 15 * aspect, 15, -15, 0.1, 1000);
@@ -939,7 +768,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     ): void => {
         if (fullHeight <= 0) return;
         const bounds = new THREE.Box3().setFromObject(mesh);
-        const footprint = buildFogFootprintFromBounds(bounds, 0.18);
+        const footprint = buildFogFootprintFromBounds(bounds, 0.18, area.gridWidth, area.gridHeight);
 
         mesh.userData.fogClipX = footprint.centerX;
         mesh.userData.fogClipZ = footprint.centerZ;
@@ -1133,7 +962,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 treeBounds.union(partBounds);
             }
 
-            const treeFootprint = buildFogFootprintFromBounds(treeBounds, 0.16);
+            const treeFootprint = buildFogFootprintFromBounds(treeBounds, 0.16, area.gridWidth, area.gridHeight);
             const treeObjectId = `tree-${i}`;
             for (const part of treePartMeshes) {
                 part.userData.fogObjectId = treeObjectId;
