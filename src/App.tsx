@@ -281,7 +281,10 @@ function Game({
     useEffect(() => { formationOrderRef.current = formationOrder; }, [formationOrder]);
     useEffect(() => { commandModeRef.current = commandMode; }, [commandMode]);
     useEffect(() => {
-        if (showPanel && selectedIds.length === 1) return;
+        if (showPanel && selectedIds.length === 1 && isCorePlayerId(selectedIds[0])) {
+            setEquipmentModalUnitId(prev => prev !== null ? selectedIds[0] : null);
+            return;
+        }
         setEquipmentModalUnitId(null);
     }, [showPanel, selectedIds]);
 
@@ -1652,7 +1655,7 @@ function Game({
     const areaData = getCurrentArea();
 
     return (
-        <div style={{ width: "100%", height: "100vh", position: "relative", cursor: (targetingMode || consumableTargetingMode || commandMode === "attackMove") ? "crosshair" : "default" }}>
+        <div className={equipmentModalOpen ? "equip-modal-active" : undefined} style={{ width: "100%", height: "100vh", position: "relative", cursor: (targetingMode || consumableTargetingMode || commandMode === "attackMove") ? "crosshair" : "default" }}>
             <div ref={containerRef} style={{ width: "100%", height: "100%", filter: paused ? "saturate(0.4) brightness(0.85)" : "none", transition: "filter 0.2s" }} />
             {selBox && <div style={{ position: "absolute", left: selBox.left, top: selBox.top, width: selBox.width, height: selBox.height, border: "1px solid #00ff00", backgroundColor: "rgba(0,255,0,0.1)", pointerEvents: "none" }} />}
             <HpBarsOverlay />
@@ -1784,6 +1787,7 @@ function Game({
                 onCastSkill={handleCastSkill} skillCooldowns={skillCooldowns} paused={paused}
                 formationOrder={formationOrder}
                 onReorderFormation={(newOrder) => { setFormationOrder(newOrder); saveFormationOrder(newOrder); }}
+                hideHotbar={equipmentModalOpen}
             />
             </div>
             {showPanel && selectedIds.length === 1 && (
@@ -1830,6 +1834,8 @@ function Game({
                     onClose={() => setEquipmentModalUnitId(null)}
                     onEquipItem={handleEquipItem}
                     onUnequipItem={handleUnequipItem}
+                    onChangeUnit={(id) => { setEquipmentModalUnitId(id); setSelectedIds([id]); }}
+                    formationOrder={formationOrder}
                 />
             )}
         </div>

@@ -74,6 +74,7 @@ interface PartyBarProps {
     // Formation reorder
     formationOrder?: number[];
     onReorderFormation?: (newOrder: number[]) => void;
+    hideHotbar?: boolean;
 }
 
 export function PartyBar({
@@ -89,7 +90,8 @@ export function PartyBar({
     skillCooldowns = {},
     paused = false,
     formationOrder = [],
-    onReorderFormation
+    onReorderFormation,
+    hideHotbar = false,
 }: PartyBarProps) {
     const playerUnits = useMemo(() => units.filter((u: Unit) => u.team === "player"), [units]);
     const corePlayerUnits = useMemo(() => playerUnits.filter(u => isCorePlayerId(u.id)), [playerUnits]);
@@ -266,7 +268,7 @@ export function PartyBar({
         ].filter(Boolean).join(" ");
 
         const hasUnspentPoints = (unit.statPoints ?? 0) > 0 || (unit.skillPoints ?? 0) > 0;
-        const showHotbar = isSelected && selectedIds.length === 1 && onAssignSkill;
+        const showHotbar = isSelected && selectedIds.length === 1 && onAssignSkill && !hideHotbar;
 
         elements.push(
             <div

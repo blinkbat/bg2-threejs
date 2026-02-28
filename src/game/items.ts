@@ -30,7 +30,7 @@ export const WEAPONS: Record<string, WeaponItem> = {
     tarnishedChime: {
         id: "tarnishedChime",
         name: "Tarnished Chime",
-        description: "A holy chime, tarnished by age but still resonant. Channels holy bolts.",
+        description: "A resonant chime, tarnished by age. Channels holy bolts.",
         category: "weapon",
         grip: "oneHand",
         damage: [2, 4],
