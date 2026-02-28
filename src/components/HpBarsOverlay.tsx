@@ -3,12 +3,7 @@ import {
     getHpBarOverlaySnapshot,
     subscribeHpBarOverlay
 } from "../hooks/hpBarOverlayStore";
-
-function getHpColor(pct: number): string {
-    if (pct > 0.5) return "#22c55e";
-    if (pct > 0.25) return "#eab308";
-    return "#ef4444";
-}
+import { getHpColor } from "../combat/combatMath";
 
 export function HpBarsOverlay() {
     const snapshot = useSyncExternalStore(
@@ -26,7 +21,7 @@ export function HpBarsOverlay() {
                 if (!bar.visible) return null;
                 const maxHp = Math.max(1, bar.maxHp);
                 const pct = Math.max(0, Math.min(1, bar.hp / maxHp));
-                const color = getHpColor(pct);
+                const color = getHpColor(pct * 100);
                 const x = bar.x - barWidth * 0.5;
                 const y = bar.y - barHeight * 0.5;
 

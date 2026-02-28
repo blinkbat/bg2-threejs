@@ -24,7 +24,8 @@ import {
     getAllEquipment,
     setAllEquipment,
     equipItemForCharacter,
-    unequipItemForCharacter
+    unequipItemForCharacter,
+    moveEquippedItemForCharacter
 } from "./game/equipmentState";
 import { removeFromInventory } from "./game/equipment";
 import { getItem } from "./game/items";
@@ -1410,6 +1411,22 @@ function Game({
         }
     }, [addLog, clampUnitToEffectiveCaps]);
 
+    const handleMoveEquippedItem = useCallback((unitId: number, fromSlot: EquipmentSlot, toSlot: EquipmentSlot) => {
+        const transaction = moveEquippedItemForCharacter(unitId, fromSlot, toSlot);
+        if (!transaction) return;
+
+        clampUnitToEffectiveCaps(unitId);
+
+        const movedItemId = transaction.previousEquipment[fromSlot];
+        const movedItem = movedItemId ? getItem(movedItemId) : undefined;
+        if (movedItem) {
+            addLog(
+                `${UNIT_DATA[unitId].name} moves ${movedItem.name} (${fromSlot} -> ${toSlot}).`,
+                "#58a6ff"
+            );
+        }
+    }, [addLog, clampUnitToEffectiveCaps]);
+
     const handleUseConsumable = useCallback((itemId: string, userId: number) => {
         const item = getItem(itemId);
         if (!item || !isConsumable(item)) return;
@@ -1830,10 +1847,12 @@ function Game({
             )}
             {equipmentModalUnitId !== null && (
                 <EquipmentModal
+                    key={equipmentModalUnitId}
                     unitId={equipmentModalUnitId}
                     onClose={() => setEquipmentModalUnitId(null)}
                     onEquipItem={handleEquipItem}
                     onUnequipItem={handleUnequipItem}
+                    onMoveEquippedItem={handleMoveEquippedItem}
                     onChangeUnit={(id) => { setEquipmentModalUnitId(id); setSelectedIds([id]); }}
                     formationOrder={formationOrder}
                 />

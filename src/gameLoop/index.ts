@@ -24,7 +24,7 @@ import { isEnemyKiting, clearEnemyKiting } from "../game/enemyState";
 // Re-export from split modules
 export { updateDamageTexts, updateHitFlash, updatePoisonVisuals, updateEnergyShieldVisuals, updateFogOfWar, resetFogCache, updateSpriteFacing, updateAncestorGhostVisuals, resetSpriteFacing } from "./visuals";
 export { processStatusEffects } from "./statusEffects";
-export { updateProjectiles } from "./projectiles";
+export { updateProjectiles, pruneStaleVolleys } from "./projectiles";
 export { spawnSwingIndicator, updateSwingAnimations } from "./swingAnimations";
 export { processAcidTiles, createAcidTile, createAcidPool, clearAcidTiles } from "./acidTiles";
 export { processSanctuaryTiles, createSanctuaryTile, clearSanctuaryTiles } from "./sanctuaryTiles";

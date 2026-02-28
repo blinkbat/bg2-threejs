@@ -86,6 +86,7 @@ export function trySpawnTentacle(ctx: TentacleContext): boolean {
     const dx = targetG.position.x - g.position.x;
     const dz = targetG.position.z - g.position.z;
     const dist = Math.hypot(dx, dz);
+    if (dist < 0.01) return false;
     const dirX = dx / dist;
     const dirZ = dz / dist;
 

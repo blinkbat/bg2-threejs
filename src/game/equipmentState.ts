@@ -19,6 +19,8 @@ import {
     getMainHandWeapon,
     unequipItem
 } from "./equipment";
+export type { EffectivePlayerEquipmentStats } from "./equipment";
+import type { EffectivePlayerEquipmentStats } from "./equipment";
 
 // =============================================================================
 // STATE STORAGE
@@ -36,20 +38,6 @@ let isInitialized = false;
 // =============================================================================
 // TYPES
 // =============================================================================
-
-export interface EffectivePlayerEquipmentStats {
-    damage: [number, number];
-    damageType: DamageType;
-    armor: number;
-    range: number | undefined;
-    projectileColor: string | undefined;
-    attackCooldown: number | undefined;
-    bonusMaxHp: number;
-    bonusMagicDamage: number;
-    hpRegen: { amount: number; interval: number } | null;
-    aggroMultiplier: number;
-    moveSpeedMultiplier: number;
-}
 
 export interface EquipmentTransactionResult {
     unitId: number;
@@ -316,6 +304,47 @@ export function unequipItemForCharacter(unitId: number, slot: EquipmentSlot): Eq
         nextEquipment: cloneEquipment(unequipped.equipment),
         previousInventory,
         nextInventory: cloneInventory(unequipped.inventory),
+        previousStats: cloneStats(previousStats),
+        nextStats: cloneStats(nextStats),
+        bonusMaxHpDelta: nextStats.bonusMaxHp - previousStats.bonusMaxHp,
+    };
+}
+
+/** Move an already-equipped item to another slot and atomically update equipment + inventory. */
+export function moveEquippedItemForCharacter(unitId: number, fromSlot: EquipmentSlot, toSlot: EquipmentSlot): EquipmentTransactionResult | null {
+    ensureInitialized();
+
+    if (fromSlot === toSlot) {
+        return null;
+    }
+
+    const previousEquipment = getCharacterEquipment(unitId);
+    const movingItemId = previousEquipment[fromSlot];
+    if (!movingItemId) {
+        return null;
+    }
+
+    const previousInventory = getPartyInventory();
+
+    // Build next state on local copies first, then commit once to avoid partial updates.
+    const afterUnequip = unequipItem(previousEquipment, previousInventory, fromSlot);
+    const afterMove = equipItem(afterUnequip.equipment, afterUnequip.inventory, movingItemId, toSlot);
+    if (!afterMove) {
+        return null;
+    }
+
+    const previousStats = getEffectivePlayerEquipmentStatsFor(unitId, previousEquipment);
+    const nextStats = getEffectivePlayerEquipmentStatsFor(unitId, afterMove.equipment);
+
+    equipmentState[unitId] = cloneEquipment(afterMove.equipment);
+    inventoryState = cloneInventory(afterMove.inventory);
+
+    return {
+        unitId,
+        previousEquipment,
+        nextEquipment: cloneEquipment(afterMove.equipment),
+        previousInventory,
+        nextInventory: cloneInventory(afterMove.inventory),
         previousStats: cloneStats(previousStats),
         nextStats: cloneStats(nextStats),
         bonusMaxHpDelta: nextStats.bonusMaxHp - previousStats.bonusMaxHp,

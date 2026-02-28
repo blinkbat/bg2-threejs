@@ -812,7 +812,7 @@ function handleChestClick(
         return;
     }
 
-    const chestRange = 2.5;
+    const chestRange = 3.5;
     const alivePlayers = stateRefs.unitsStateRef.current.filter(u => u.team === "player" && u.hp > 0);
     const playerNearby = alivePlayers.some(player => {
         const playerG = unitGroups[player.id];
@@ -887,7 +887,7 @@ function handleLootBagClick(
     const bagIndex = gameRefs.current.lootBags.findIndex(b => b.id === lootBagId);
     if (bagIndex === -1) return;
 
-    const lootRange = 2.5;
+    const lootRange = 3.5;
     const alivePlayers = stateRefs.unitsStateRef.current.filter(u => u.team === "player" && u.hp > 0);
     const playerNearby = alivePlayers.some(player => {
         const playerG = unitGroups[player.id];
@@ -954,7 +954,7 @@ function handleSecretDoorClick(
         return;
     }
 
-    const doorRange = 2.5;
+    const doorRange = 3.5;
     const crackTileX = secretDoor.blockingWall.x + Math.floor((secretDoor.blockingWall.w - 1) / 2);
     const crackTileZ = secretDoor.blockingWall.z + Math.floor((secretDoor.blockingWall.h - 1) / 2);
     const crackCenterX = crackTileX + 0.5;

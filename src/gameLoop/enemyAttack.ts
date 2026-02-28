@@ -6,7 +6,7 @@ import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, Projectile, EnemyStats, SwingAnimation, FireballProjectile } from "../core/types";
 import { BUFF_TICK_INTERVAL, COLORS } from "../core/constants";
 import { getUnitStats } from "../game/units";
-import { calculateDamageWithCrit, rollHit, rollChance, rollDamage, getEffectiveArmor, getEffectiveDamage, shouldApplyPoison, shouldApplySlow, logHit, logLifestealHit, logMiss, logPoisoned, logSlowed, applyStatusEffect, logStunned, hasStatusEffect } from "../combat/combatMath";
+import { calculateDamageWithCrit, rollHit, rollChance, rollDamage, getEffectiveArmor, getEffectiveDamage, shouldApplyPoison, shouldApplySlow, logHit, logLifestealHit, logMiss, logPoisoned, logSlowed, applyStatusEffect, logStunned, hasStatusEffect, applyArmor } from "../combat/combatMath";
 import { createProjectile, getProjectileSpeed, applyDamageToUnit, applyLifesteal, type DamageContext } from "../combat/damageEffects";
 import { CRIT_MULTIPLIER } from "../game/statBonuses";
 import { soundFns } from "../audio";
@@ -170,7 +170,7 @@ export function executeEnemyMeleeAttack(ctx: EnemyAttackContext): void {
             const rawDmg = rollDamage(effectiveDamage[0], effectiveDamage[1]);
             isCrit = rollChance(attackerStats.biteCrit);
             const critDmg = isCrit ? Math.floor(rawDmg * CRIT_MULTIPLIER) : rawDmg;
-            dmg = Math.max(1, critDmg - getEffectiveArmor(target, targetData.armor));
+            dmg = applyArmor(critDmg, getEffectiveArmor(target, targetData.armor), "physical");
         } else {
             ({ damage: dmg, isCrit } = calculateDamageWithCrit(effectiveDamage[0], effectiveDamage[1], getEffectiveArmor(target, targetData.armor), "physical", attacker));
         }

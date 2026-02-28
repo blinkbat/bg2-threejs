@@ -32,6 +32,7 @@ import {
     updateDamageTexts,
     updateHitFlash,
     updateProjectiles,
+    pruneStaleVolleys,
     updateFogOfWar,
     updateUnitAI,
     updateHpBarPositions,
@@ -441,11 +442,8 @@ function processEnemyDeathAcidPools(
     };
 
     const previousHpById = previousHpByIdRef.current;
-    const nextHpById = new Map<number, number>();
 
     for (const unit of units) {
-        nextHpById.set(unit.id, unit.hp);
-
         const previousHp = previousHpById.get(unit.id);
         const diedThisFrame = previousHp !== undefined && previousHp > 0 && unit.hp <= 0;
         if (!diedThisFrame) continue;
@@ -487,7 +485,11 @@ function processEnemyDeathAcidPools(
         }
     }
 
-    previousHpByIdRef.current = nextHpById;
+    // Update the map in-place for next frame
+    previousHpById.clear();
+    for (const unit of units) {
+        previousHpById.set(unit.id, unit.hp);
+    }
 }
 
 function expireVishasEyeSummons(
@@ -640,6 +642,7 @@ export function useGameLoop({
                     defeatedThisFrame
                 );
                 projectilesMs = performance.now() - sectionStart;
+                pruneStaleVolleys(now);
 
                 // Process status effects
                 sectionStart = performance.now();

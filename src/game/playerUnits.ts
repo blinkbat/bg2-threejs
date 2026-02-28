@@ -143,8 +143,8 @@ export function getEffectiveMaxMana(unitId: number, unit?: Unit): number {
     return getEffectiveMaxManaForStats(unitId, unit?.stats);
 }
 
-/** Get effective armor for a player (from equipment) */
-export function getEffectiveArmor(unitId: number): number {
+/** Get effective base armor for a player (from equipment). Not status-adjusted. */
+export function getBaseArmor(unitId: number): number {
     if (!usesEquipmentForUnit(unitId)) {
         return UNIT_DATA[unitId].armor;
     }

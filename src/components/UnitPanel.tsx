@@ -10,24 +10,7 @@ import { COLORS, getDamageTypeColor, getSkillTextColor, getSkillBorderColor } fr
 import { getPartyInventory } from "../game/equipmentState";
 import { getItem } from "../game/items";
 import { useDisplayTime } from "../hooks/useDisplayTime";
-import monkPortrait from "../assets/monk-portrait.png";
-import barbarianPortrait from "../assets/barbarian-portrait.png";
-import wizardPortrait from "../assets/wizard-portrait.png";
-import paladinPortrait from "../assets/paladin-portrait.png";
-import thiefPortrait from "../assets/thief-portrait.png";
-import clericPortrait from "../assets/cleric-portrait.png";
-
-const CLASS_PORTRAITS: Record<string, string> = {
-    Barbarian: barbarianPortrait,
-    Wizard: wizardPortrait,
-    Paladin: paladinPortrait,
-    Thief: thiefPortrait,
-    Cleric: clericPortrait,
-    Monk: monkPortrait,
-    Ancestor: barbarianPortrait,
-    "Visha Orb": clericPortrait,
-};
-const getPortrait = (className: string) => CLASS_PORTRAITS[className] ?? monkPortrait;
+import { getPortrait } from "./portraitRegistry";
 
 const PORTRAIT_POS: Record<string, string> = {
     Cleric: "35% bottom",
@@ -323,7 +306,7 @@ function StatusTab({ unit, effectiveData, onToggleAI, unitId, onIncrementStat, d
             <EffectsDisplay unit={unit} displayTime={displayTime} />
 
             <div className="level-exp-section">
-                <div className="level-badge">Lv {level}</div>
+                <div className="level-badge">Level {level}</div>
                 <div className="exp-bar-container">
                     <div className="exp-bar">
                         <div className="exp-fill" style={{ width: `${xpPct}%` }} />
@@ -382,7 +365,7 @@ function StatusTab({ unit, effectiveData, onToggleAI, unitId, onIncrementStat, d
                                         </div>
                                     </div>
                                 }
-                                placement="right"
+                                placement="bottom"
                                 delay={[150, 0]}
                             >
                                 <div className={`stat-row ${canIncrement ? "has-points" : ""}`}>

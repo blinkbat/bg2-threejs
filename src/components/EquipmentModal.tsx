@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Tippy from "@tippyjs/react";
 import { ChevronLeft, ChevronRight, Circle, Shield, Square, Swords, X } from "lucide-react";
 import type { EquipmentSlot, Item, ItemCategory } from "../core/types";
@@ -10,18 +10,14 @@ import { getCharacterEquipment, getPartyInventory } from "../game/equipmentState
 import { canEquipInSlot, isOffHandDisabled } from "../game/equipment";
 import { getItem } from "../game/items";
 import { getPlayerUnitColor } from "../game/unitColors";
-import monkPortrait from "../assets/monk-portrait.png";
-import barbarianPortrait from "../assets/barbarian-portrait.png";
-import wizardPortrait from "../assets/wizard-portrait.png";
-import paladinPortrait from "../assets/paladin-portrait.png";
-import thiefPortrait from "../assets/thief-portrait.png";
-import clericPortrait from "../assets/cleric-portrait.png";
+import { getPortrait } from "./portraitRegistry";
 
 interface EquipmentModalProps {
     unitId: number;
     onClose: () => void;
     onEquipItem?: (unitId: number, itemId: string, slot: EquipmentSlot) => void;
     onUnequipItem?: (unitId: number, slot: EquipmentSlot) => void;
+    onMoveEquippedItem?: (unitId: number, fromSlot: EquipmentSlot, toSlot: EquipmentSlot) => void;
     onChangeUnit?: (unitId: number) => void;
     formationOrder?: number[];
 }
@@ -42,18 +38,6 @@ const SLOT_ROWS: SlotMeta[][] = [
         { key: "accessory2", label: "Accessory 2" },
     ],
 ];
-
-const CLASS_PORTRAITS: Record<string, string> = {
-    Barbarian: barbarianPortrait,
-    Wizard: wizardPortrait,
-    Paladin: paladinPortrait,
-    Thief: thiefPortrait,
-    Cleric: clericPortrait,
-    Monk: monkPortrait,
-    Ancestor: barbarianPortrait,
-    "Visha Orb": clericPortrait,
-};
-const getPortrait = (className: string) => CLASS_PORTRAITS[className] ?? monkPortrait;
 
 const SLOT_LABELS: Record<EquipmentSlot, string> = {
     armor: "Armor",
@@ -82,7 +66,7 @@ function getItemTooltipLines(item: Item): TooltipLine[] {
     const lines: TooltipLine[] = [];
     if (isWeapon(item)) {
         const dmgColor = getDamageTypeColor(item.damageType);
-        lines.push({ label: "Damage", value: `${item.damage[0]}–${item.damage[1]}`, color: dmgColor });
+        lines.push({ label: "Damage", value: `${item.damage[0]}-${item.damage[1]}`, color: dmgColor });
         lines.push({ label: "Type", value: item.damageType[0].toUpperCase() + item.damageType.slice(1), color: dmgColor });
         if (item.grip === "twoHand") lines.push({ label: "Grip", value: "Two-handed" });
         if (item.range) lines.push({ label: "Range", value: `${item.range}` });
@@ -96,7 +80,7 @@ function getItemTooltipLines(item: Item): TooltipLine[] {
         if (item.bonusMagicDamage) lines.push({ label: "Magic Dmg", value: `+${item.bonusMagicDamage}`, color: "#9b59b6" });
         if (item.bonusArmor) lines.push({ label: "Armor", value: `+${item.bonusArmor}`, color: COLORS.shieldedText });
         if (item.hpRegen && item.hpRegenInterval) lines.push({ label: "Regen", value: `+${item.hpRegen} / ${item.hpRegenInterval / 1000}s`, color: COLORS.hpHigh });
-        if (item.aggroReduction) lines.push({ label: "Aggro", value: `−${Math.round(item.aggroReduction * 100)}%`, color: "#f59e0b" });
+        if (item.aggroReduction) lines.push({ label: "Aggro", value: `-${Math.round(item.aggroReduction * 100)}%`, color: "#f59e0b" });
         if (item.bonusMoveSpeed) lines.push({ label: "Speed", value: `+${Math.round(item.bonusMoveSpeed * 100)}%`, color: "#58a6ff" });
     }
     return lines;
@@ -132,17 +116,15 @@ export function EquipmentModal({
     onClose,
     onEquipItem,
     onUnequipItem,
+    onMoveEquippedItem,
     onChangeUnit,
     formationOrder = [],
 }: EquipmentModalProps) {
     const [selectedSlot, setSelectedSlot] = useState<EquipmentSlot | null>(null);
     const [dragData, setDragData] = useState<DragInfo | null>(null);
     const [dropTarget, setDropTarget] = useState<EquipmentSlot | "unequip" | null>(null);
-
-    useEffect(() => { setSelectedSlot(null); }, [unitId]);
-
-    const equipment = getCharacterEquipment(unitId);
-    const inventory = getPartyInventory();
+    const [equipment, setEquipment] = useState(() => getCharacterEquipment(unitId));
+    const [inventory, setInventory] = useState(() => getPartyInventory());
     const offHandDisabled = isOffHandDisabled(equipment);
     const unitData = UNIT_DATA[unitId];
     const unitName = unitData?.name ?? "Character";
@@ -167,6 +149,32 @@ export function EquipmentModal({
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
     }, [onClose]);
+
+    const refreshEquipmentState = useCallback(() => {
+        setEquipment(getCharacterEquipment(unitId));
+        setInventory(getPartyInventory());
+    }, [unitId]);
+
+    const applyEquip = useCallback((itemId: string, slot: EquipmentSlot) => {
+        onEquipItem?.(unitId, itemId, slot);
+        refreshEquipmentState();
+    }, [onEquipItem, refreshEquipmentState, unitId]);
+
+    const applyUnequip = useCallback((slot: EquipmentSlot) => {
+        onUnequipItem?.(unitId, slot);
+        refreshEquipmentState();
+    }, [onUnequipItem, refreshEquipmentState, unitId]);
+
+    const applyMove = useCallback((itemId: string, fromSlot: EquipmentSlot, toSlot: EquipmentSlot) => {
+        if (onMoveEquippedItem) {
+            onMoveEquippedItem(unitId, fromSlot, toSlot);
+        } else {
+            // Fallback sequence for older callers that don't pass atomic move.
+            onUnequipItem?.(unitId, fromSlot);
+            onEquipItem?.(unitId, itemId, toSlot);
+        }
+        refreshEquipmentState();
+    }, [onEquipItem, onMoveEquippedItem, onUnequipItem, refreshEquipmentState, unitId]);
 
     // -- Drag & drop helpers --------------------------------------------------
 
@@ -195,7 +203,7 @@ export function EquipmentModal({
         if (!canDropOnSlot(dragData.itemId, slot)) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
-        setDropTarget(slot);
+        setDropTarget(prev => prev === slot ? prev : slot);
     }
 
     function handleSlotDrop(e: React.DragEvent, slot: EquipmentSlot) {
@@ -203,11 +211,10 @@ export function EquipmentModal({
         if (!dragData) return;
         if (dragData.source === "slot" && dragData.sourceSlot) {
             if (dragData.sourceSlot !== slot) {
-                onUnequipItem?.(unitId, dragData.sourceSlot);
-                onEquipItem?.(unitId, dragData.itemId, slot);
+                applyMove(dragData.itemId, dragData.sourceSlot, slot);
             }
         } else {
-            onEquipItem?.(unitId, dragData.itemId, slot);
+            applyEquip(dragData.itemId, slot);
         }
         setSelectedSlot(slot);
         setDragData(null);
@@ -218,13 +225,13 @@ export function EquipmentModal({
         if (!dragData || dragData.source !== "slot") return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
-        setDropTarget("unequip");
+        setDropTarget(prev => prev === "unequip" ? prev : "unequip");
     }
 
     function handleSideDrop(e: React.DragEvent) {
         e.preventDefault();
         if (!dragData || dragData.source !== "slot" || !dragData.sourceSlot) return;
-        onUnequipItem?.(unitId, dragData.sourceSlot);
+        applyUnequip(dragData.sourceSlot);
         setDragData(null);
         setDropTarget(null);
     }
@@ -339,7 +346,7 @@ export function EquipmentModal({
                                                 <span className="equipment-modal-slot-icon">{getSlotIcon(slotMeta.key)}</span>
                                                 <span className="equipment-modal-slot-name">{slotMeta.label}</span>
                                                 <span className="equipment-modal-slot-item">
-                                                    {disabled ? "Disabled (2H)" : item ? item.name : "— empty —"}
+                                                    {disabled ? "Disabled (2H)" : item ? item.name : "-- empty --"}
                                                 </span>
                                             </button>
                                         );
@@ -385,7 +392,7 @@ export function EquipmentModal({
                                         type="button"
                                         className="equipment-modal-option"
                                         disabled={!selectedItem || selectedSlotDisabled}
-                                        onClick={() => onUnequipItem?.(unitId, selectedSlot)}
+                                        onClick={() => applyUnequip(selectedSlot)}
                                     >
                                         <span className="equipment-modal-option-icon"><X size={15} /></span>
                                         <span className="equipment-modal-option-name">
@@ -423,7 +430,7 @@ export function EquipmentModal({
                                                         ? (e) => handleItemDragStart(e, entry.itemId)
                                                         : undefined}
                                                     onDragEnd={handleDragEnd}
-                                                    onClick={() => onEquipItem?.(unitId, entry.itemId, selectedSlot)}
+                                                    onClick={() => applyEquip(entry.itemId, selectedSlot)}
                                                 >
                                                     <span className="equipment-modal-option-icon">{getItemIcon(item.category)}</span>
                                                     <span className="equipment-modal-option-name">

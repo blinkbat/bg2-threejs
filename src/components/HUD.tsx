@@ -190,7 +190,7 @@ export function HUD({
                     <button
                         className="btn btn-with-icon"
                         onClick={handleOpenMenu}
-                        title="Menu (Esc to close)"
+                        title="Menu (Esc)"
                     >
                         <Menu size={16} />
                         <span>Menu</span>

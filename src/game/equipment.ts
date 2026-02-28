@@ -241,7 +241,7 @@ export function getEquipmentBonusMagicDamage(equipment: CharacterEquipment): num
 // COMPUTED STATS FROM EQUIPMENT
 // =============================================================================
 
-export interface ComputedCombatStats {
+export interface EffectivePlayerEquipmentStats {
     damage: [number, number];
     damageType: DamageType;
     armor: number;
@@ -256,7 +256,7 @@ export interface ComputedCombatStats {
 }
 
 /** Get computed combat stats from equipment */
-export function getComputedStats(equipment: CharacterEquipment): ComputedCombatStats {
+export function getComputedStats(equipment: CharacterEquipment): EffectivePlayerEquipmentStats {
     const weapon = getMainHandWeapon(equipment);
 
     return {

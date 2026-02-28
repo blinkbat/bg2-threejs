@@ -3,9 +3,10 @@
 ## Equipment Mechanics Guardrails
 
 - Equipment-derived combat/runtime effects are centralized in `src/game/equipmentState.ts`.
-- Equip/unequip state changes must use transactional APIs:
+- Gear state changes must use transactional APIs:
   - `equipItemForCharacter(unitId, itemId, slot)`
   - `unequipItemForCharacter(unitId, slot)`
+  - `moveEquippedItemForCharacter(unitId, fromSlot, toSlot)`
 - After gear changes, clamp player HP/MP with effective caps:
   - `getEffectiveMaxHp(unit.id, unit)`
   - `getEffectiveMaxMana(unit.id, unit)`
@@ -82,4 +83,3 @@ export default defineConfig([
   },
 ])
 ```
-"# bg2-threejs" 

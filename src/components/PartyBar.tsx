@@ -13,24 +13,7 @@ import { getHpPercentage, getHpColor } from "../combat/combatMath";
 import { SkillHotbar } from "./SkillHotbar";
 import type { HotbarAssignments } from "../hooks/hotbarStorage";
 import { buildEffectiveFormationOrder } from "../game/formationOrder";
-import monkPortrait from "../assets/monk-portrait.png";
-import barbarianPortrait from "../assets/barbarian-portrait.png";
-import wizardPortrait from "../assets/wizard-portrait.png";
-import paladinPortrait from "../assets/paladin-portrait.png";
-import thiefPortrait from "../assets/thief-portrait.png";
-import clericPortrait from "../assets/cleric-portrait.png";
-
-const CLASS_PORTRAITS: Record<string, string> = {
-    Barbarian: barbarianPortrait,
-    Wizard: wizardPortrait,
-    Paladin: paladinPortrait,
-    Thief: thiefPortrait,
-    Cleric: clericPortrait,
-    Monk: monkPortrait,
-    Ancestor: barbarianPortrait,
-    "Visha Orb": clericPortrait,
-};
-const getPortrait = (className: string) => CLASS_PORTRAITS[className] ?? monkPortrait;
+import { getPortrait } from "./portraitRegistry";
 
 const EFFECT_ICONS: Record<StatusEffectType, { icon: string; color: string }> = {
     poison: { icon: "☠", color: COLORS.poisonText },
@@ -183,6 +166,33 @@ export function PartyBar({
         onReorderFormation?.(newOrder);
     }, [insertIdx, onReorderFormation]);
 
+    const handlePortraitClick = useCallback((e: React.MouseEvent, unit: Unit) => {
+        e.stopPropagation();
+
+        const isTargetingAlly = targetingMode?.skill.targetType === "ally";
+        const isTargetingUnit = targetingMode?.skill.targetType === "unit";
+        const isReviveSkill = targetingMode?.skill.type === "revive";
+        const isTargetingDeadAlly = consumableTargetingMode !== null && consumableTargetingMode !== undefined;
+
+        if (isTargetingDeadAlly && unit.hp <= 0 && onTargetUnit) {
+            onTargetUnit(unit.id);
+            return;
+        }
+        if (targetingMode && (isTargetingAlly || isTargetingUnit) && isReviveSkill && unit.hp <= 0 && onTargetUnit) {
+            onTargetUnit(unit.id);
+            return;
+        }
+        if (unit.hp <= 0) return;
+        if (targetingMode && (isTargetingAlly || isTargetingUnit) && onTargetUnit) {
+            onTargetUnit(unit.id);
+            return;
+        }
+        onSelect(e.shiftKey
+            ? (prev: number[]) => prev.includes(unit.id) ? prev.filter((i: number) => i !== unit.id) : [...prev, unit.id]
+            : [unit.id]
+        );
+    }, [consumableTargetingMode, onSelect, onTargetUnit, targetingMode]);
+
     // Sort playerUnits by effective formation order for rendering.
     const sortedUnits = useMemo(() => {
         const ordered = [...corePlayerUnits];
@@ -208,6 +218,16 @@ export function PartyBar({
         />
     );
 
+    // Targeting state (computed once, shared by portraits + summon chips)
+    const isTargetingAlly = targetingMode?.skill.targetType === "ally";
+    const isTargetingUnit = targetingMode?.skill.targetType === "unit";
+    const isReviveSkill = targetingMode?.skill.type === "revive";
+    const isTargetingDeadAlly = consumableTargetingMode !== null && consumableTargetingMode !== undefined;
+    const isAnyTargeting = !!(isTargetingAlly || isTargetingUnit || isTargetingDeadAlly);
+    const getIsValidTarget = (unit: Unit) =>
+        (targetingMode && (isTargetingAlly || isTargetingUnit) && (isReviveSkill ? unit.hp <= 0 : unit.hp > 0)) ||
+        (isTargetingDeadAlly && unit.hp <= 0 && unit.team === "player");
+
     // Build elements array with spacer inserted at the active gap
     const elements: React.ReactNode[] = [];
     sortedUnits.forEach((unit: Unit, renderIndex: number) => {
@@ -224,30 +244,7 @@ export function PartyBar({
         const hasMana = effectiveMaxMana > 0;
         const manaPct = hasMana ? getHpPercentage(unit.mana ?? 0, effectiveMaxMana) : 0;
 
-        const isTargetingAlly = targetingMode?.skill.targetType === "ally";
-        const isTargetingUnit = targetingMode?.skill.targetType === "unit";
-        const isReviveSkill = targetingMode?.skill.type === "revive";
-        const isTargetingDeadAlly = consumableTargetingMode !== null && consumableTargetingMode !== undefined;
-        const isValidTarget = (targetingMode && (isTargetingAlly || isTargetingUnit) && (isReviveSkill ? unit.hp <= 0 : unit.hp > 0)) ||
-            (isTargetingDeadAlly && unit.hp <= 0 && unit.team === "player");
-
-        const handleClick = (e: React.MouseEvent) => {
-            e.stopPropagation();
-            if (isTargetingDeadAlly && unit.hp <= 0 && onTargetUnit) {
-                onTargetUnit(unit.id);
-                return;
-            }
-            if (targetingMode && (isTargetingAlly || isTargetingUnit) && isReviveSkill && unit.hp <= 0 && onTargetUnit) {
-                onTargetUnit(unit.id);
-                return;
-            }
-            if (unit.hp <= 0) return;
-            if (targetingMode && (isTargetingAlly || isTargetingUnit) && onTargetUnit) {
-                onTargetUnit(unit.id);
-                return;
-            }
-            onSelect(e.shiftKey ? (prev: number[]) => prev.includes(unit.id) ? prev.filter((i: number) => i !== unit.id) : [...prev, unit.id] : [unit.id]);
-        };
+        const isValidTarget = getIsValidTarget(unit);
 
         const handleContextMenu = (e: React.MouseEvent) => {
             e.preventDefault();
@@ -263,7 +260,7 @@ export function PartyBar({
             isSelected ? "selected" : "",
             isValidTarget ? "valid-target" : "",
             unit.hp <= 0 ? "dead" : "",
-            (isTargetingAlly || isTargetingUnit || isTargetingDeadAlly) ? "targeting" : "",
+            isAnyTargeting ? "targeting" : "",
             isDragSource ? "dragging" : ""
         ].filter(Boolean).join(" ");
 
@@ -274,7 +271,7 @@ export function PartyBar({
             <div
                 key={unit.id}
                 className={portraitClass}
-                onClick={handleClick}
+                onClick={(e) => handlePortraitClick(e, unit)}
                 onContextMenu={handleContextMenu}
                 draggable={unit.hp > 0}
                 onDragStart={(e) => {
@@ -407,37 +404,14 @@ export function PartyBar({
                         const hpPct = getHpPercentage(unit.hp, effectiveMaxHp);
                         const hpColor = getHpColor(hpPct);
 
-                        const isTargetingAlly = targetingMode?.skill.targetType === "ally";
-                        const isTargetingUnit = targetingMode?.skill.targetType === "unit";
-                        const isReviveSkill = targetingMode?.skill.type === "revive";
-                        const isTargetingDeadAlly = consumableTargetingMode !== null && consumableTargetingMode !== undefined;
-                        const isValidTarget = (targetingMode && (isTargetingAlly || isTargetingUnit) && (isReviveSkill ? unit.hp <= 0 : unit.hp > 0)) ||
-                            (isTargetingDeadAlly && unit.hp <= 0 && unit.team === "player");
-
-                        const handleClick = (e: React.MouseEvent) => {
-                            e.stopPropagation();
-                            if (isTargetingDeadAlly && unit.hp <= 0 && onTargetUnit) {
-                                onTargetUnit(unit.id);
-                                return;
-                            }
-                            if (targetingMode && (isTargetingAlly || isTargetingUnit) && isReviveSkill && unit.hp <= 0 && onTargetUnit) {
-                                onTargetUnit(unit.id);
-                                return;
-                            }
-                            if (unit.hp <= 0) return;
-                            if (targetingMode && (isTargetingAlly || isTargetingUnit) && onTargetUnit) {
-                                onTargetUnit(unit.id);
-                                return;
-                            }
-                            onSelect(e.shiftKey ? (prev: number[]) => prev.includes(unit.id) ? prev.filter((i: number) => i !== unit.id) : [...prev, unit.id] : [unit.id]);
-                        };
+                        const isValidTarget = getIsValidTarget(unit);
 
                         const chipClass = [
                             "summon-chip",
                             isSelected ? "selected" : "",
                             isValidTarget ? "valid-target" : "",
                             unit.hp <= 0 ? "dead" : "",
-                            (isTargetingAlly || isTargetingUnit || isTargetingDeadAlly) ? "targeting" : ""
+                            isAnyTargeting ? "targeting" : ""
                         ].filter(Boolean).join(" ");
 
                         return (
@@ -455,7 +429,7 @@ export function PartyBar({
                             >
                                 <button
                                     className={chipClass}
-                                    onClick={handleClick}
+                                    onClick={(e) => handlePortraitClick(e, unit)}
                                     type="button"
                                 >
                                     <span className="summon-chip-letter">{summonInfo.letter}</span>

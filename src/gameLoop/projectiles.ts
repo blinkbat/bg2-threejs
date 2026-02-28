@@ -47,6 +47,16 @@ interface VolleyStats {
     attackerName: string;
 }
 const magicWaveVolleys: Map<number, VolleyStats> = new Map();
+const VOLLEY_TIMEOUT_MS = 30_000;
+
+/** Remove stale volley entries that were never fully resolved (e.g., caster died mid-volley). */
+export function pruneStaleVolleys(now: number): void {
+    for (const [id] of magicWaveVolleys) {
+        if (now - id > VOLLEY_TIMEOUT_MS) {
+            magicWaveVolleys.delete(id);
+        }
+    }
+}
 
 function getOrCreateMagicWaveVolley(
     volleyId: number,

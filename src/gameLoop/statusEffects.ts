@@ -10,6 +10,7 @@ import { getEffectiveMaxHp } from "../game/playerUnits";
 import { getUnitRadius, isInRange } from "../rendering/range";
 import { applyDamageToUnit, buildDamageContext, handleUnitDefeat, showDamageVisual, spawnDamageNumber } from "../combat/damageEffects";
 import { hasStatusEffect, isUnitAlive, rollChance, applyStatusEffect } from "../combat/combatMath";
+import { getUnitById } from "../game/unitQuery";
 
 // =============================================================================
 // DOT VISUAL CONFIG (for effects that deal damage)
@@ -228,7 +229,7 @@ export function processStatusEffects(
 
     // Phase 3: Handle defeats and deferred side effects
     for (const [unitId, mut] of mutations) {
-        const unit = unitsState.find(u => u.id === unitId);
+        const unit = getUnitById(unitId);
         if (!unit) continue;
         const predictedHp = mut.doom ? 0 : Math.max(0, unit.hp + mut.hpDelta);
         if (predictedHp <= 0 && unit.hp > 0) {

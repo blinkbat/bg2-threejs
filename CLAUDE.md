@@ -40,7 +40,10 @@ This document is intentionally evergreen. It captures stable architecture, invar
   - `getEffectiveMaxHp(unit.id, unit)` and `getEffectiveMaxMana(unit.id, unit)`.
 - Equipment centralization:
   - Use `src/game/equipmentState.ts` as the single source of truth for equipment-derived combat stats/effects.
-  - Equip/unequip must go through `equipItemForCharacter()` / `unequipItemForCharacter()` transactions.
+  - Gear state changes must go through equipment transactions:
+  - `equipItemForCharacter(unitId, itemId, slot)`
+  - `unequipItemForCharacter(unitId, slot)`
+  - `moveEquippedItemForCharacter(unitId, fromSlot, toSlot)`
   - Do not directly mutate equipment + inventory in separate calls for gear changes.
   - After gear changes, always clamp live unit HP/MP with effective caps in the same state update flow.
   - Combat/AI/movement systems must consume centralized derived stats/effects, not raw slot/item reads.
