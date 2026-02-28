@@ -58,9 +58,9 @@ const getPortrait = (className: string) => CLASS_PORTRAITS[className] ?? monkPor
 const SLOT_LABELS: Record<EquipmentSlot, string> = {
     armor: "Armor",
     leftHand: "Main Hand",
-    rightHand: "Off Hand",
-    accessory1: "Accessory 1",
-    accessory2: "Accessory 2",
+    rightHand: "Off-Hand",
+    accessory1: "Accessory",
+    accessory2: "Accessory",
 };
 
 function getSlotIcon(slot: EquipmentSlot) {
@@ -377,8 +377,7 @@ export function EquipmentModal({
                         {selectedSlot && (
                             <>
                                 <div className="equipment-modal-side-header">
-                                    <span>{SLOT_LABELS[selectedSlot]} Options</span>
-                                    <span>{selectedSlotDisabled ? "Disabled" : `${equippableItems.length} items`}</span>
+                                    <span>{SLOT_LABELS[selectedSlot]}</span>
                                 </div>
 
                                 <div className="equipment-modal-options">
