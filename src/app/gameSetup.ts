@@ -59,6 +59,8 @@ export function createUnitsForArea(options: CreateUnitsForAreaOptions): Unit[] {
         const pos = spawnPositions[index] ?? { x: spawn.x, z: spawn.z };
         const initialExp = persisted?.exp ?? (INITIAL_XP_VALUES[id] ?? 0);
         const startingStats = persisted?.stats ?? getStartingPlayerStats(id);
+        const effectiveMaxHp = getEffectiveMaxHpForStats(id, startingStats);
+        const effectiveMaxMana = getEffectiveMaxManaForStats(id, startingStats);
         const learnedSkills = playtestUnlockAllSkills
             ? data.skills.map(skill => skill.name)
             : (persisted?.learnedSkills ?? []);
@@ -69,8 +71,8 @@ export function createUnitsForArea(options: CreateUnitsForAreaOptions): Unit[] {
             id,
             x: pos.x,
             z: pos.z,
-            hp: persisted?.hp ?? getEffectiveMaxHpForStats(id, startingStats),
-            mana: persisted?.mana ?? getEffectiveMaxManaForStats(id, startingStats),
+            hp: persisted ? Math.max(0, Math.min(persisted.hp, effectiveMaxHp)) : effectiveMaxHp,
+            mana: persisted ? Math.max(0, Math.min(persisted.mana ?? 0, effectiveMaxMana)) : effectiveMaxMana,
             level: persisted?.level ?? 1,
             exp: initialExp,
             stats: startingStats,

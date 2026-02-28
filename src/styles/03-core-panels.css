@@ -82,6 +82,21 @@
     border: 1px solid #333;
 }
 
+.equipment-slot.selectable {
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.equipment-slot.selectable:hover {
+    border-color: #3b82f6;
+    background: #1a2232;
+}
+
+.equipment-slot.selected {
+    border-color: #22c55e;
+    background: #1a2a1a;
+}
+
 .equipment-slot.empty {
     border-color: #222;
 }
@@ -109,6 +124,28 @@
 .equipment-slot.disabled .equipment-slot-item {
     color: #555;
     font-style: italic;
+}
+
+.equipment-actions {
+    display: flex;
+    justify-content: flex-start;
+}
+
+.equipment-action-button {
+    background: #1e293b;
+    color: #dbeafe;
+    border: 1px solid #334155;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 10px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.equipment-action-button:hover {
+    border-color: #60a5fa;
+    background: #1e3a5f;
 }
 
 /* Inventory Panel */
@@ -336,6 +373,23 @@
 .inventory-item-row .inventory-item-qty {
     color: #666;
     font-size: 11px;
+}
+
+.inventory-item-row.equipment-choice {
+    border-color: #3b82f6;
+}
+
+.inventory-item-row.equipment-choice:hover:not(.disabled) {
+    border-color: #60a5fa;
+    background: #1a2232;
+}
+
+.inventory-item-row.equipment-choice .inventory-item-name {
+    color: #dbeafe;
+}
+
+.inventory-item-row.equipment-choice.disabled .inventory-item-name {
+    color: #888;
 }
 
 /* -----------------------------------------------------------------------------

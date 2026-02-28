@@ -1,12 +1,7 @@
 import type { UnitData, Skill, Unit, CharacterStats } from "../core/types";
 import { SKILLS } from "./skills";
 import {
-    getEffectivePlayerDamage,
-    getEffectivePlayerDamageType,
-    getEffectivePlayerRange,
-    getEffectivePlayerProjectileColor,
-    getEffectivePlayerArmor,
-    getEffectivePlayerBonusMaxHp,
+    getEffectivePlayerEquipmentStats,
 } from "./equipmentState";
 import {
     HP_PER_VITALITY,
@@ -103,15 +98,17 @@ export function getBasicAttackSkill(unitId: number): Skill {
     const data = UNIT_DATA[unitId];
 
     const usesEquipment = usesEquipmentForUnit(unitId);
-    const damage = usesEquipment ? getEffectivePlayerDamage(unitId) : data.damage;
-    const damageType = usesEquipment ? getEffectivePlayerDamageType(unitId) : (data.basicDamageType ?? "physical");
-    const range = usesEquipment ? getEffectivePlayerRange(unitId) : data.range;
-    const projectileColor = usesEquipment ? getEffectivePlayerProjectileColor(unitId) : data.projectileColor;
+    const equipmentStats = usesEquipment ? getEffectivePlayerEquipmentStats(unitId) : null;
+    const damage = equipmentStats?.damage ?? data.damage;
+    const damageType = equipmentStats?.damageType ?? (data.basicDamageType ?? "physical");
+    const range = equipmentStats?.range ?? data.range;
+    const projectileColor = equipmentStats?.projectileColor ?? data.projectileColor;
+    const attackCooldown = equipmentStats?.attackCooldown ?? data.attackCooldown;
 
     return {
         name: "Attack",
         manaCost: 0,
-        cooldown: data.attackCooldown,
+        cooldown: attackCooldown,
         type: "damage",
         targetType: "enemy",
         range: range ?? 1.8,
@@ -125,7 +122,7 @@ export function getEffectiveMaxHpForStats(unitId: number, stats?: CharacterStats
     const data = UNIT_DATA[unitId];
     const resolvedStats = resolveStats(unitId, stats);
     const vitalityBonus = resolvedStats.vitality * HP_PER_VITALITY;
-    const bonusMaxHp = usesEquipmentForUnit(unitId) ? getEffectivePlayerBonusMaxHp(unitId) : 0;
+    const bonusMaxHp = usesEquipmentForUnit(unitId) ? getEffectivePlayerEquipmentStats(unitId).bonusMaxHp : 0;
     return data.maxHp + bonusMaxHp + vitalityBonus;
 }
 
@@ -151,7 +148,7 @@ export function getEffectiveArmor(unitId: number): number {
     if (!usesEquipmentForUnit(unitId)) {
         return UNIT_DATA[unitId].armor;
     }
-    return getEffectivePlayerArmor(unitId);
+    return getEffectivePlayerEquipmentStats(unitId).armor;
 }
 
 /** Get all learned skills for a unit (basic attack + learned special skills) */
@@ -174,12 +171,14 @@ export function getAvailableSkills(unitId: number): Skill[] {
 export function getEffectiveUnitData(unitId: number, unit?: Unit): UnitData {
     const data = UNIT_DATA[unitId];
     const usesEquipment = usesEquipmentForUnit(unitId);
-    const baseDamage = usesEquipment ? getEffectivePlayerDamage(unitId) : data.damage;
-    const damageType = usesEquipment ? getEffectivePlayerDamageType(unitId) : "physical";
-    const range = usesEquipment ? getEffectivePlayerRange(unitId) : data.range;
-    const projectileColor = usesEquipment ? getEffectivePlayerProjectileColor(unitId) : data.projectileColor;
-    const armor = usesEquipment ? getEffectivePlayerArmor(unitId) : data.armor;
-    const bonusMaxHp = usesEquipment ? getEffectivePlayerBonusMaxHp(unitId) : 0;
+    const equipmentStats = usesEquipment ? getEffectivePlayerEquipmentStats(unitId) : null;
+    const baseDamage = equipmentStats?.damage ?? data.damage;
+    const damageType = equipmentStats?.damageType ?? (data.basicDamageType ?? "physical");
+    const range = equipmentStats?.range ?? data.range;
+    const projectileColor = equipmentStats?.projectileColor ?? data.projectileColor;
+    const armor = equipmentStats?.armor ?? data.armor;
+    const bonusMaxHp = equipmentStats?.bonusMaxHp ?? 0;
+    const attackCooldown = equipmentStats?.attackCooldown ?? data.attackCooldown;
 
     // Apply stat bonuses
     const resolvedStats = resolveStats(unitId, unit?.stats);
@@ -199,5 +198,7 @@ export function getEffectiveUnitData(unitId: number, unit?: Unit): UnitData {
         maxMana: (data.maxMana ?? 0) + intelligenceBonus,
         range,
         projectileColor,
+        attackCooldown,
+        basicDamageType: damageType,
     };
 }

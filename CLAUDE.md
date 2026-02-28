@@ -38,6 +38,12 @@ This document is intentionally evergreen. It captures stable architecture, invar
 - Resource caps:
   - HP/MP clamping and restoration must use live-unit effective caps:
   - `getEffectiveMaxHp(unit.id, unit)` and `getEffectiveMaxMana(unit.id, unit)`.
+- Equipment centralization:
+  - Use `src/game/equipmentState.ts` as the single source of truth for equipment-derived combat stats/effects.
+  - Equip/unequip must go through `equipItemForCharacter()` / `unequipItemForCharacter()` transactions.
+  - Do not directly mutate equipment + inventory in separate calls for gear changes.
+  - After gear changes, always clamp live unit HP/MP with effective caps in the same state update flow.
+  - Combat/AI/movement systems must consume centralized derived stats/effects, not raw slot/item reads.
 - Basic attacks:
   - Do not pre-bake stat bonuses into basic attack payload damage ranges.
   - Stat bonuses are applied in combat/projectile runtime logic.
@@ -71,6 +77,8 @@ This document is intentionally evergreen. It captures stable architecture, invar
   - `src/game/enemyStats.ts`
   - `src/game/units.ts`
   - `src/game/statBonuses.ts`
+  - `src/game/equipment.ts`
+  - `src/game/equipmentState.ts`
 - Map editor:
   - `src/editor/MapEditor.tsx`
   - `src/editor/areaConversion.ts`
@@ -172,6 +180,7 @@ Before finalizing:
 2. Invariants preserved (ordering, caps, IDs, range checks, behavior patterns).
 3. Module ownership respected (scene vs updates vs helpers, editor UI vs conversion helpers).
 4. Verification commands completed and results noted.
+5. Equipment-derived effects (damage type/range/cooldown/bonuses/regen/aggro/move speed) flow through centralized helpers only.
 
 ## Anti-Patterns to Avoid
 

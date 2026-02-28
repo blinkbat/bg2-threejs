@@ -19,6 +19,7 @@ import { getCurrentArea } from "../game/areas";
 import type { Unit, UnitGroup } from "../core/types";
 import { ENEMY_STATS } from "../game/enemyStats";
 import { getEffectiveMaxHp } from "../game/playerUnits";
+import { getEffectivePlayerHpRegen } from "../game/equipmentState";
 import { createLiveUnitsDispatch } from "../core/stateUtils";
 import { publishHpBarOverlayFrame, resetHpBarOverlayFrame } from "./hpBarOverlayStore";
 import { updateCamera, updateWater, updateWallTransparency, updateTreeFogVisibility, updateFogOccluderVisibility, updateLightLOD, addUnitToScene, updateBillboards } from "../rendering/scene";
@@ -306,6 +307,67 @@ function updateAncestorAuraBonuses(
     }));
 }
 
+function processEquipmentHpRegen(
+    units: Unit[],
+    unitGroups: Record<number, UnitGroup>,
+    setUnits: React.Dispatch<React.SetStateAction<Unit[]>>,
+    now: number
+): void {
+    const healingById = new Map<number, number>();
+
+    for (const unit of units) {
+        if (unit.team !== "player" || unit.hp <= 0) continue;
+
+        const unitGroup = unitGroups[unit.id];
+        if (!unitGroup) continue;
+        const regenState = unitGroup.userData as typeof unitGroup.userData & {
+            equipmentRegenNextTick?: number;
+            equipmentRegenSignature?: string;
+        };
+
+        const regen = getEffectivePlayerHpRegen(unit.id);
+        if (!regen) {
+            delete regenState.equipmentRegenNextTick;
+            delete regenState.equipmentRegenSignature;
+            continue;
+        }
+
+        const signature = `${regen.amount}:${regen.interval}`;
+        if (regenState.equipmentRegenSignature !== signature) {
+            regenState.equipmentRegenSignature = signature;
+            regenState.equipmentRegenNextTick = now + regen.interval;
+            continue;
+        }
+
+        const nextTick = regenState.equipmentRegenNextTick;
+        if (nextTick === undefined) {
+            regenState.equipmentRegenNextTick = now + regen.interval;
+            continue;
+        }
+
+        const maxHp = getEffectiveMaxHp(unit.id, unit);
+        if (unit.hp >= maxHp) {
+            regenState.equipmentRegenNextTick = now + regen.interval;
+            continue;
+        }
+
+        if (now >= nextTick) {
+            healingById.set(unit.id, regen.amount);
+            regenState.equipmentRegenNextTick = nextTick + regen.interval;
+        }
+    }
+
+    if (healingById.size === 0) return;
+
+    setUnits(prev => prev.map(unit => {
+        const healAmount = healingById.get(unit.id);
+        if (!healAmount || unit.hp <= 0) return unit;
+        const maxHp = getEffectiveMaxHp(unit.id, unit);
+        if (unit.hp >= maxHp) return unit;
+        return { ...unit, hp: Math.min(maxHp, unit.hp + healAmount) };
+    }));
+}
+
 function processEnemyDeathAcidPools(
     units: Unit[],
     previousHpByIdRef: React.MutableRefObject<Map<number, number>>,
@@ -561,6 +623,7 @@ export function useGameLoop({
             if (!isPaused) {
                 const combatStart = performance.now();
                 updateAncestorAuraBonuses(currentUnits, unitGroups, setUnitsLive);
+                processEquipmentHpRegen(currentUnits, unitGroups, setUnitsLive, now);
 
                 // Update projectiles
                 sectionStart = performance.now();

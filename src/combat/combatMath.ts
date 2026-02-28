@@ -5,6 +5,7 @@
 import type { Unit, UnitData, EnemyStats, StatusEffect, StatusEffectType, DamageType } from "../core/types";
 import { POISON_DURATION, POISON_TICK_INTERVAL, POISON_DAMAGE_PER_TICK, SLOW_DURATION, BUFF_TICK_INTERVAL, COLORS, SLOW_COOLDOWN_MULT, SLOW_MOVE_MULT, DEFIANCE_COOLDOWN_MULT, SLEEP_MIN_DURATION, SLEEP_MAX_DURATION, CHILLED_DURATION, CHILLED_COOLDOWN_MULT, CHILLED_MOVE_MULT, WEAKENED_COOLDOWN_MULT, HAMSTRUNG_MOVE_MULT, BLIND_ACCURACY_MULT } from "../core/constants";
 import { getStrengthDamageBonus, getIntelligenceMagicDamageBonus, getFaithHolyDamageBonus, getDexterityCritChance, CRIT_MULTIPLIER } from "../game/statBonuses";
+import { getEffectivePlayerBonusMagicDamage, getEffectivePlayerMoveSpeedMultiplier } from "../game/equipmentState";
 import { normalizeAngle } from "../game/geometry";
 
 // =============================================================================
@@ -125,14 +126,18 @@ export function rollDamageWithCrit(
 export function calculateStatBonus(unit: Unit | undefined, damageType: DamageType): number {
     if (!unit) return 0;
     const auraBonus = unit.auraDamageBonus ?? 0;
+    const equipmentMagicBonus = unit.team === "player"
+        ? getEffectivePlayerBonusMagicDamage(unit.id)
+        : 0;
     if (damageType === "physical") {
         return getStrengthDamageBonus(unit) + auraBonus;
-    } else if (damageType === "fire" || damageType === "cold" || damageType === "lightning" || damageType === "chaos") {
-        return getIntelligenceMagicDamageBonus(unit) + auraBonus;
     } else if (damageType === "holy") {
-        return getFaithHolyDamageBonus(unit) + auraBonus;
+        return getFaithHolyDamageBonus(unit) + equipmentMagicBonus + auraBonus;
+    } else if (damageType === "fire" || damageType === "cold" || damageType === "lightning" || damageType === "chaos") {
+        return getIntelligenceMagicDamageBonus(unit) + equipmentMagicBonus + auraBonus;
     }
-    return auraBonus;
+    // Remaining non-physical types (for example poison) still benefit from flat non-physical gear bonuses.
+    return equipmentMagicBonus + auraBonus;
 }
 
 /**
@@ -463,13 +468,18 @@ export function getEffectiveDamage(unit: Unit, baseDamage: [number, number], dam
  */
 export function getEffectiveSpeedMultiplier(unit: Unit, data: EnemyStats | UnitData): number {
     if (hasStatusEffect(unit, "pinned")) return 0;
-    const base = "moveSpeed" in data ? (data as EnemyStats).moveSpeed ?? 1 : 1;
+    const baseMoveSpeed = "moveSpeed" in data && typeof data.moveSpeed === "number"
+        ? data.moveSpeed
+        : 1;
+    const equipmentMoveSpeed = unit.team === "player"
+        ? getEffectivePlayerMoveSpeedMultiplier(unit.id)
+        : 1;
     const slow = hasStatusEffect(unit, "slowed") ? SLOW_MOVE_MULT : 1;
     const chill = hasStatusEffect(unit, "chilled") ? CHILLED_MOVE_MULT : 1;
     const hamstrung = hasStatusEffect(unit, "hamstrung") ? HAMSTRUNG_MOVE_MULT : 1;
     const enraged = hasStatusEffect(unit, "enraged") && "enrage" in data && (data as EnemyStats).enrage
         ? (data as EnemyStats).enrage!.speedMultiplier : 1;
-    return base * slow * chill * hamstrung * enraged;
+    return baseMoveSpeed * equipmentMoveSpeed * slow * chill * hamstrung * enraged;
 }
 
 /**

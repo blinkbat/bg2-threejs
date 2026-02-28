@@ -268,13 +268,19 @@ export function useInputHandlers({
                 updateCam();
             } else if (mutableRefs.isBoxSel.current) {
                 mutableRefs.boxEnd.current = { x: e.clientX, y: e.clientY };
-                const rect = renderer.domElement.getBoundingClientRect();
-                setters.setSelBox({
-                    left: Math.min(mutableRefs.boxStart.current.x, mutableRefs.boxEnd.current.x) - rect.left,
-                    top: Math.min(mutableRefs.boxStart.current.y, mutableRefs.boxEnd.current.y) - rect.top,
-                    width: Math.abs(mutableRefs.boxEnd.current.x - mutableRefs.boxStart.current.x),
-                    height: Math.abs(mutableRefs.boxEnd.current.y - mutableRefs.boxStart.current.y)
-                });
+                const bw = Math.abs(mutableRefs.boxEnd.current.x - mutableRefs.boxStart.current.x);
+                const bh = Math.abs(mutableRefs.boxEnd.current.y - mutableRefs.boxStart.current.y);
+                if (bw > 12 || bh > 12) {
+                    const rect = renderer.domElement.getBoundingClientRect();
+                    setters.setSelBox({
+                        left: Math.min(mutableRefs.boxStart.current.x, mutableRefs.boxEnd.current.x) - rect.left,
+                        top: Math.min(mutableRefs.boxStart.current.y, mutableRefs.boxEnd.current.y) - rect.top,
+                        width: bw,
+                        height: bh
+                    });
+                } else {
+                    setters.setSelBox(null);
+                }
             }
 
             if (mutableRefs.isDragging.current || mutableRefs.isBoxSel.current) {
@@ -411,7 +417,7 @@ export function useInputHandlers({
             if (mutableRefs.isBoxSel.current && !stateRefs.targetingModeRef.current) {
                 const dx = Math.abs(mutableRefs.boxEnd.current.x - mutableRefs.boxStart.current.x);
                 const dy = Math.abs(mutableRefs.boxEnd.current.y - mutableRefs.boxStart.current.y);
-                if (dx > 5 || dy > 5) {
+                if (dx > 12 || dy > 12) {
                     const rect = renderer.domElement.getBoundingClientRect();
                     const inBox = getUnitsInBox(
                         unitGroups, stateRefs.unitsStateRef.current, camera, rect,

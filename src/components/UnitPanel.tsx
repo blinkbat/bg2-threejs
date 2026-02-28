@@ -1,15 +1,14 @@
 import { useState } from "react";
 import Tippy from "@tippyjs/react";
-import type { Unit, Skill, StatusEffect, DamageType, Item, CharacterStats } from "../core/types";
-import { isConsumable, isWeapon, isShield, isArmor, isAccessory } from "../core/types";
+import type { Unit, Skill, StatusEffect, DamageType, CharacterStats } from "../core/types";
+import { isConsumable } from "../core/types";
 import { UNIT_DATA, getAllSkills, getAvailableSkills, getEffectiveUnitData, getEffectiveMaxHp, getEffectiveMaxMana, getXpForLevel } from "../game/playerUnits";
 import { getPlayerUnitColor } from "../game/unitColors";
 import { getHpPercentage, getHpColor, getMana, hasStatusEffect, getEffectiveArmor } from "../combat/combatMath";
 import { getDexterityCritChance } from "../game/statBonuses";
 import { COLORS, getDamageTypeColor, getSkillTextColor, getSkillBorderColor } from "../core/constants";
-import { getCharacterEquipment, getPartyInventory } from "../game/equipmentState";
+import { getPartyInventory } from "../game/equipmentState";
 import { getItem } from "../game/items";
-import { isOffHandDisabled } from "../game/equipment";
 import { useDisplayTime } from "../hooks/useDisplayTime";
 import monkPortrait from "../assets/monk-portrait.png";
 import barbarianPortrait from "../assets/barbarian-portrait.png";
@@ -50,12 +49,28 @@ interface UnitPanelProps {
     queuedSkills?: string[];
     onUseConsumable?: (itemId: string, targetUnitId: number) => void;
     consumableCooldownEnd?: number;
+    onOpenEquipment?: (unitId: number) => void;
     onIncrementStat?: (unitId: number, stat: keyof CharacterStats) => void;
     onLearnSkill?: (unitId: number, skillName: string) => void;
     gold?: number;
 }
 
-export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, skillCooldowns = {}, paused = false, queuedSkills = [], onUseConsumable, consumableCooldownEnd = 0, onIncrementStat, onLearnSkill, gold = 0 }: UnitPanelProps) {
+export function UnitPanel({
+    unitId,
+    units,
+    onClose,
+    onToggleAI,
+    onCastSkill,
+    skillCooldowns = {},
+    paused = false,
+    queuedSkills = [],
+    onUseConsumable,
+    consumableCooldownEnd = 0,
+    onOpenEquipment,
+    onIncrementStat,
+    onLearnSkill,
+    gold = 0
+}: UnitPanelProps) {
     const displayTime = useDisplayTime(paused, 16);
     const [tab, setTab] = useState("status");
     const data = UNIT_DATA[unitId];
@@ -103,7 +118,13 @@ export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, ski
                         <div
                             key={t}
                             className={`tab ${tab === t ? "active" : ""}`}
-                            onClick={() => setTab(t)}
+                            onClick={() => {
+                                if (t === "equipment") {
+                                    onOpenEquipment?.(unitId);
+                                    return;
+                                }
+                                setTab(t);
+                            }}
                         >
                             {t}{showDot && <span className="tab-dot" />}
                         </div>
@@ -125,7 +146,6 @@ export function UnitPanel({ unitId, units, onClose, onToggleAI, onCastSkill, ski
                         onLearnSkill={onLearnSkill}
                     />
                 )}
-                {tab === "equipment" && <EquipmentTab unitId={unitId} />}
                 {tab === "inventory" && (
                     <InventoryTab
                         unit={unit}
@@ -826,156 +846,6 @@ function SkillsTab({
                     ))}
                 </>
             )}
-        </div>
-    );
-}
-
-const SLOT_LABELS: Record<string, string> = {
-    armor: "Armor",
-    leftHand: "Main Hand",
-    rightHand: "Off Hand",
-    accessory1: "Accessory",
-    accessory2: "Accessory",
-};
-
-const DAMAGE_TYPE_COLORS: Record<string, string> = {
-    physical: "#aaa",
-    holy: "#ffffff",
-    chaos: "#ff6600",
-    fire: "#ff4444",
-    poison: "#44ff44",
-};
-
-function EquipmentTooltip({ item }: { item: Item }) {
-    return (
-        <div className="equipment-tooltip">
-            <div className="equipment-tooltip-desc">{item.description}</div>
-            {isWeapon(item) && (
-                <div className="equipment-tooltip-stats">
-                    <div className="equipment-tooltip-row">
-                        <span className="equipment-tooltip-label">Damage</span>
-                        <span className="equipment-tooltip-value">{item.damage[0]}-{item.damage[1]}</span>
-                    </div>
-                    <div className="equipment-tooltip-row">
-                        <span className="equipment-tooltip-label">Type</span>
-                        <span className="equipment-tooltip-value" style={{ color: DAMAGE_TYPE_COLORS[item.damageType] || "#aaa" }}>
-                            {item.damageType}
-                        </span>
-                    </div>
-                    <div className="equipment-tooltip-row">
-                        <span className="equipment-tooltip-label">Grip</span>
-                        <span className="equipment-tooltip-value">{item.grip === "twoHand" ? "Two-Handed" : "One-Handed"}</span>
-                    </div>
-                    {item.range && (
-                        <div className="equipment-tooltip-row">
-                            <span className="equipment-tooltip-label">Range</span>
-                            <span className="equipment-tooltip-value">{item.range}</span>
-                        </div>
-                    )}
-                </div>
-            )}
-            {isShield(item) && (
-                <div className="equipment-tooltip-stats">
-                    <div className="equipment-tooltip-row">
-                        <span className="equipment-tooltip-label">Armor</span>
-                        <span className="equipment-tooltip-value" style={{ color: "#8bf" }}>+{item.armor}</span>
-                    </div>
-                </div>
-            )}
-            {isArmor(item) && (
-                <div className="equipment-tooltip-stats">
-                    <div className="equipment-tooltip-row">
-                        <span className="equipment-tooltip-label">Armor</span>
-                        <span className="equipment-tooltip-value" style={{ color: "#8bf" }}>+{item.armor}</span>
-                    </div>
-                </div>
-            )}
-            {isAccessory(item) && (
-                <div className="equipment-tooltip-stats">
-                    {item.bonusMaxHp && (
-                        <div className="equipment-tooltip-row">
-                            <span className="equipment-tooltip-label">Max HP</span>
-                            <span className="equipment-tooltip-value" style={{ color: COLORS.hpHigh }}>+{item.bonusMaxHp}</span>
-                        </div>
-                    )}
-                    {item.bonusMagicDamage && (
-                        <div className="equipment-tooltip-row">
-                            <span className="equipment-tooltip-label">Magic Damage</span>
-                            <span className="equipment-tooltip-value" style={{ color: "#ff6600" }}>+{item.bonusMagicDamage}</span>
-                        </div>
-                    )}
-                    {item.bonusArmor && (
-                        <div className="equipment-tooltip-row">
-                            <span className="equipment-tooltip-label">Armor</span>
-                            <span className="equipment-tooltip-value" style={{ color: "#8bf" }}>+{item.bonusArmor}</span>
-                        </div>
-                    )}
-                    {item.hpRegen && item.hpRegenInterval && (
-                        <div className="equipment-tooltip-row">
-                            <span className="equipment-tooltip-label">HP Regen</span>
-                            <span className="equipment-tooltip-value" style={{ color: COLORS.hpHigh }}>
-                                +{item.hpRegen} / {item.hpRegenInterval / 1000}s
-                            </span>
-                        </div>
-                    )}
-                    {item.aggroReduction && (
-                        <div className="equipment-tooltip-row">
-                            <span className="equipment-tooltip-label">Aggro</span>
-                            <span className="equipment-tooltip-value" style={{ color: "#aaf" }}>
-                                -{Math.round(item.aggroReduction * 100)}%
-                            </span>
-                        </div>
-                    )}
-                </div>
-            )}
-        </div>
-    );
-}
-
-function EquipmentTab({ unitId }: { unitId: number }) {
-    const equipment = getCharacterEquipment(unitId);
-    const offHandDisabled = isOffHandDisabled(equipment);
-
-    const slots: Array<{ key: string; label: string; itemId: string | null; disabled?: boolean }> = [
-        { key: "armor", label: SLOT_LABELS.armor, itemId: equipment.armor },
-        { key: "leftHand", label: SLOT_LABELS.leftHand, itemId: equipment.leftHand },
-        { key: "rightHand", label: SLOT_LABELS.rightHand, itemId: equipment.rightHand, disabled: offHandDisabled },
-        { key: "accessory1", label: SLOT_LABELS.accessory1, itemId: equipment.accessory1 },
-        { key: "accessory2", label: SLOT_LABELS.accessory2, itemId: equipment.accessory2 },
-    ];
-
-    return (
-        <div className="flex flex-col gap-8">
-            {slots.map(({ key, label, itemId, disabled }) => {
-                const item = itemId ? getItem(itemId) : null;
-                const isEmpty = !item;
-                const slotClass = disabled ? "equipment-slot disabled" : isEmpty ? "equipment-slot empty" : "equipment-slot";
-
-                const slotContent = (
-                    <div key={key} className={slotClass}>
-                        <span className="equipment-slot-label">{label}</span>
-                        <span className="equipment-slot-item">
-                            {disabled ? "(2H weapon)" : item ? item.name : "Empty"}
-                        </span>
-                    </div>
-                );
-
-                // Wrap in tooltip if item exists
-                if (item) {
-                    return (
-                        <Tippy
-                            key={key}
-                            content={<EquipmentTooltip item={item} />}
-                            placement="left"
-                            delay={[200, 0]}
-                        >
-                            {slotContent}
-                        </Tippy>
-                    );
-                }
-
-                return slotContent;
-            })}
         </div>
     );
 }

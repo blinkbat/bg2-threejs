@@ -169,8 +169,9 @@ export function executeTargetedDamageSkill(
             speed: getProjectileSpeed("ranged")
         };
 
-        // Preserve existing basic-attack projectile behavior unless this is a named skill shot.
-        if (skill.name !== "Attack" && skill.damageRange) {
+        // Route all ranged attacks through the same runtime damage pipeline so
+        // equipment/attribute scaling stays consistent (including basic attacks).
+        if (skill.damageRange) {
             basicProjectile.skillName = skill.name;
             basicProjectile.skillDamage = skill.damageRange;
             basicProjectile.skillDamageType = skill.damageType;

@@ -134,6 +134,17 @@ export function getEquipmentArmor(equipment: CharacterEquipment): number {
         }
     }
 
+    // Accessory armor bonuses
+    const slots: (keyof CharacterEquipment)[] = ["accessory1", "accessory2"];
+    for (const slot of slots) {
+        const itemId = equipment[slot];
+        if (!itemId) continue;
+        const item = getItem(itemId);
+        if (item && isAccessory(item) && item.bonusArmor) {
+            total += item.bonusArmor;
+        }
+    }
+
     return total;
 }
 
@@ -190,6 +201,24 @@ export function getEquipmentAggroReduction(equipment: CharacterEquipment): numbe
     return multiplier;
 }
 
+/** Get move speed multiplier from accessories (stacks multiplicatively) */
+export function getEquipmentMoveSpeedMultiplier(equipment: CharacterEquipment): number {
+    let multiplier = 1;
+    const slots: (keyof CharacterEquipment)[] = ["accessory1", "accessory2"];
+
+    for (const slot of slots) {
+        const itemId = equipment[slot];
+        if (itemId) {
+            const item = getItem(itemId);
+            if (item && isAccessory(item) && item.bonusMoveSpeed) {
+                multiplier *= (1 + item.bonusMoveSpeed);
+            }
+        }
+    }
+
+    return multiplier;
+}
+
 /** Get bonus magic damage from accessories */
 export function getEquipmentBonusMagicDamage(equipment: CharacterEquipment): number {
     let total = 0;
@@ -221,6 +250,9 @@ export interface ComputedCombatStats {
     attackCooldown: number | undefined;  // Only if weapon overrides it
     bonusMaxHp: number;
     bonusMagicDamage: number;
+    hpRegen: { amount: number; interval: number } | null;
+    aggroMultiplier: number;
+    moveSpeedMultiplier: number;
 }
 
 /** Get computed combat stats from equipment */
@@ -236,6 +268,9 @@ export function getComputedStats(equipment: CharacterEquipment): ComputedCombatS
         attackCooldown: weapon.attackCooldown,
         bonusMaxHp: getEquipmentBonusMaxHp(equipment),
         bonusMagicDamage: getEquipmentBonusMagicDamage(equipment),
+        hpRegen: getEquipmentHpRegen(equipment),
+        aggroMultiplier: getEquipmentAggroReduction(equipment),
+        moveSpeedMultiplier: getEquipmentMoveSpeedMultiplier(equipment),
     };
 }
 
@@ -303,7 +338,7 @@ export function canEquipInSlot(item: Item, slot: EquipmentSlot): boolean {
         case "leftHand":
             return isWeapon(item);
         case "rightHand":
-            return isWeapon(item) || isShield(item);
+            return isShield(item) || (isWeapon(item) && item.grip === "oneHand");
         case "accessory1":
         case "accessory2":
             return isAccessory(item);
@@ -321,6 +356,11 @@ export function equipItem(
 ): { equipment: CharacterEquipment; inventory: PartyInventory } | null {
     const item = getItem(itemId);
     if (!item || !canEquipInSlot(item, slot)) {
+        return null;
+    }
+
+    // Off-hand cannot be used while main hand has a two-handed weapon.
+    if (slot === "rightHand" && isOffHandDisabled(equipment)) {
         return null;
     }
 

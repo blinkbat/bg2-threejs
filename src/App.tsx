@@ -8,7 +8,7 @@ import * as THREE from "three";
 
 // Constants & Types
 import { BUFF_TICK_INTERVAL, getSkillTextColor, setDebugSpeedMultiplier } from "./core/constants";
-import type { Unit, Skill, CombatLogEntry, SelectionBox, CharacterStats, StatusEffect } from "./core/types";
+import type { Unit, Skill, CombatLogEntry, SelectionBox, CharacterStats, StatusEffect, EquipmentSlot } from "./core/types";
 
 // Game Logic
 import { getCurrentArea, getCurrentAreaId, setCurrentArea, AREAS, DEFAULT_STARTING_AREA, type AreaId, type AreaTransition } from "./game/areas";
@@ -17,7 +17,15 @@ import { LEVEL_UP_HP, LEVEL_UP_MANA, LEVEL_UP_STAT_POINTS, LEVEL_UP_SKILL_POINTS
 import { ENEMY_STATS } from "./game/enemyStats";
 import { SKILLS } from "./game/skills";
 import { rollEnemyLoot } from "./game/enemyLoot";
-import { initializeEquipmentState, getPartyInventory, setPartyInventory, getAllEquipment, setAllEquipment } from "./game/equipmentState";
+import {
+    initializeEquipmentState,
+    getPartyInventory,
+    setPartyInventory,
+    getAllEquipment,
+    setAllEquipment,
+    equipItemForCharacter,
+    unequipItemForCharacter
+} from "./game/equipmentState";
 import { removeFromInventory } from "./game/equipment";
 import { getItem } from "./game/items";
 import { isConsumable } from "./core/types";
@@ -48,6 +56,7 @@ import { useThreeScene, useGameLoop, useInputHandlers, type InitializedSceneStat
 import { PartyBar } from "./components/PartyBar";
 import { CommandBar } from "./components/CommandBar";
 import { UnitPanel } from "./components/UnitPanel";
+import { EquipmentModal } from "./components/EquipmentModal";
 import type { HotbarAssignments } from "./hooks/hotbarStorage";
 import { loadHotbarAssignments, saveHotbarAssignments } from "./hooks/hotbarStorage";
 import { loadPlaytestSettings, savePlaytestSettings, type PlaytestSettings } from "./hooks/localStorage";
@@ -225,6 +234,7 @@ function Game({
     const [dialogState, setDialogState] = useState<DialogState | null>(null);
     const [dialogTypedChars, setDialogTypedChars] = useState(0);
     const [hudMenuModalOpen, setHudMenuModalOpen] = useState(false);
+    const [equipmentModalUnitId, setEquipmentModalUnitId] = useState<number | null>(null);
 
     // =============================================================================
     // STATE SYNC REFS
@@ -270,6 +280,10 @@ function Game({
     useEffect(() => { hotbarAssignmentsRef.current = hotbarAssignments; }, [hotbarAssignments]);
     useEffect(() => { formationOrderRef.current = formationOrder; }, [formationOrder]);
     useEffect(() => { commandModeRef.current = commandMode; }, [commandMode]);
+    useEffect(() => {
+        if (showPanel && selectedIds.length === 1) return;
+        setEquipmentModalUnitId(null);
+    }, [showPanel, selectedIds]);
 
     const currentAreaId = getCurrentAreaId();
 
@@ -285,10 +299,11 @@ function Game({
 
     const dialogChoices = currentDialogNode?.choices ?? [];
     const isDialogOpen = dialogState !== null;
+    const equipmentModalOpen = equipmentModalUnitId !== null;
     const isDialogTyping = currentDialogNode !== null && dialogTypedChars < currentDialogNode.text.length;
     const dialogVisibleText = currentDialogNode ? currentDialogNode.text.slice(0, dialogTypedChars) : "";
     const canContinueWithoutChoices = !isDialogTyping && dialogChoices.length === 0 && currentDialogNode !== null;
-    const anyMenuOpen = isDialogOpen || helpOpen || saveLoadOpen || hudMenuModalOpen;
+    const anyMenuOpen = isDialogOpen || helpOpen || saveLoadOpen || hudMenuModalOpen || equipmentModalOpen;
 
     useEffect(() => {
         pauseToggleLockedRef.current = anyMenuOpen;
@@ -1351,6 +1366,47 @@ function Game({
         );
     }, [doProcessQueue]);
 
+    const clampUnitToEffectiveCaps = useCallback((unitId: number) => {
+        setUnits(prev => prev.map(u => {
+            if (u.id !== unitId) {
+                return u;
+            }
+
+            const nextHpCap = getEffectiveMaxHp(u.id, u);
+            const nextManaCap = getEffectiveMaxMana(u.id, u);
+            return {
+                ...u,
+                hp: Math.min(u.hp, nextHpCap),
+                mana: u.mana === undefined ? undefined : Math.min(u.mana, nextManaCap),
+            };
+        }));
+    }, []);
+
+    const handleEquipItem = useCallback((unitId: number, itemId: string, slot: EquipmentSlot) => {
+        const transaction = equipItemForCharacter(unitId, itemId, slot);
+        if (!transaction) return;
+
+        clampUnitToEffectiveCaps(unitId);
+
+        const item = getItem(itemId);
+        if (item) {
+            addLog(`${UNIT_DATA[unitId].name} equips ${item.name}.`, "#58a6ff");
+        }
+    }, [addLog, clampUnitToEffectiveCaps]);
+
+    const handleUnequipItem = useCallback((unitId: number, slot: EquipmentSlot) => {
+        const transaction = unequipItemForCharacter(unitId, slot);
+        if (!transaction) return;
+
+        clampUnitToEffectiveCaps(unitId);
+
+        const itemId = transaction.previousEquipment[slot];
+        const item = itemId ? getItem(itemId) : undefined;
+        if (item) {
+            addLog(`${UNIT_DATA[unitId].name} unequips ${item.name}.`, "#58a6ff");
+        }
+    }, [addLog, clampUnitToEffectiveCaps]);
+
     const handleUseConsumable = useCallback((itemId: string, userId: number) => {
         const item = getItem(itemId);
         if (!item || !isConsumable(item)) return;
@@ -1679,7 +1735,7 @@ function Game({
             <div style={{ position: "absolute", top: 10, right: 10, color: "#888", fontSize: 11, opacity: 0.6 }}>{fps} fps</div>
 
             {/* UI Components */}
-            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onShowHelp={onShowHelp} onRestart={onRestart} onSaveClick={onSaveClick} onLoadClick={onLoadClick} debug={debug} onToggleDebug={() => setDebug(d => !d)} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} onStatBoost={handleStatBoost} onTogglePlaytestUnlockAllSkills={handleTogglePlaytestUnlockAllSkills} playtestUnlockAllSkillsEnabled={playtestSettings.unlockAllSkills} onTogglePlaytestSkipDialogs={handleTogglePlaytestSkipDialogs} playtestSkipDialogsEnabled={playtestSettings.skipDialogs} onToggleFastMove={() => setFastMove(f => !f)} fastMoveEnabled={fastMove} lightingTuning={lightingTuning} onUpdateLightingTuning={handleUpdateLightingTuning} onResetLightingTuning={handleResetLightingTuning} lightingTuningOutput={lightingTuningOutput} otherModalOpen={helpOpen || saveLoadOpen || isDialogOpen || hudMenuModalOpen} hasSelection={selectedIds.length > 0} onModalOpenStateChange={setHudMenuModalOpen} />
+            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onShowHelp={onShowHelp} onRestart={onRestart} onSaveClick={onSaveClick} onLoadClick={onLoadClick} debug={debug} onToggleDebug={() => setDebug(d => !d)} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} onStatBoost={handleStatBoost} onTogglePlaytestUnlockAllSkills={handleTogglePlaytestUnlockAllSkills} playtestUnlockAllSkillsEnabled={playtestSettings.unlockAllSkills} onTogglePlaytestSkipDialogs={handleTogglePlaytestSkipDialogs} playtestSkipDialogsEnabled={playtestSettings.skipDialogs} onToggleFastMove={() => setFastMove(f => !f)} fastMoveEnabled={fastMove} lightingTuning={lightingTuning} onUpdateLightingTuning={handleUpdateLightingTuning} onResetLightingTuning={handleResetLightingTuning} lightingTuningOutput={lightingTuningOutput} otherModalOpen={helpOpen || saveLoadOpen || isDialogOpen || hudMenuModalOpen || equipmentModalOpen} hasSelection={selectedIds.length > 0} onModalOpenStateChange={setHudMenuModalOpen} />
             <CombatLog log={combatLog} />
             <FormationIndicator units={units} formationOrder={formationOrder} />
             <div className="bottom-bar-container">
@@ -1737,6 +1793,7 @@ function Game({
                     onCastSkill={handleCastSkill} skillCooldowns={skillCooldowns} paused={paused}
                     queuedSkills={queuedActions.filter(q => q.unitId === selectedIds[0]).map(q => q.skillName)}
                     onUseConsumable={handleUseConsumable} consumableCooldownEnd={selectedConsumableCooldownEnd}
+                    onOpenEquipment={setEquipmentModalUnitId}
                     onIncrementStat={(id, stat) => setUnits(prev => prev.map(u => {
                         if (u.id === id && (u.statPoints ?? 0) > 0) {
                             const currentStats = u.stats ?? { strength: 0, dexterity: 0, vitality: 0, intelligence: 0, faith: 0 };
@@ -1765,6 +1822,14 @@ function Game({
                         return u;
                     }))}
                     gold={gold}
+                />
+            )}
+            {equipmentModalUnitId !== null && (
+                <EquipmentModal
+                    unitId={equipmentModalUnitId}
+                    onClose={() => setEquipmentModalUnitId(null)}
+                    onEquipItem={handleEquipItem}
+                    onUnequipItem={handleUnequipItem}
                 />
             )}
         </div>

@@ -1,5 +1,16 @@
 # React + TypeScript + Vite
 
+## Equipment Mechanics Guardrails
+
+- Equipment-derived combat/runtime effects are centralized in `src/game/equipmentState.ts`.
+- Equip/unequip state changes must use transactional APIs:
+  - `equipItemForCharacter(unitId, itemId, slot)`
+  - `unequipItemForCharacter(unitId, slot)`
+- After gear changes, clamp player HP/MP with effective caps:
+  - `getEffectiveMaxHp(unit.id, unit)`
+  - `getEffectiveMaxMana(unit.id, unit)`
+- Combat, AI targeting, movement speed, and regen should read centralized derived values instead of slot-level item reads.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:
