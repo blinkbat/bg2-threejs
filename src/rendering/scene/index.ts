@@ -175,18 +175,18 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     const WATER_TILE_OPACITY = 0.4;
     const WATER_BUBBLE_DENSITY = 0.2;
     const WATER_BUBBLE_GROUP_Y_OFFSET = 0.0048;
-    const WATER_BUBBLE_BASE_OPACITY = 0.26;
+    const WATER_BUBBLE_BASE_OPACITY = 0.32;
     const WATER_BUBBLE_COLOR = "#ffffff";
-    const WATER_BUBBLE_SCALE_MIN = 0.62;
-    const WATER_BUBBLE_SCALE_MAX = 2.45;
-    const WATER_BUBBLE_SCALE_CURVE = 2.1;
+    const WATER_BUBBLE_SCALE_MIN = 0.72;
+    const WATER_BUBBLE_SCALE_MAX = 2.65;
+    const WATER_BUBBLE_SCALE_CURVE = 2.0;
     const LAVA_BUBBLE_GROUP_Y_OFFSET = 0.0054;
     const LAVA_BUBBLE_DENSITY = 0.24;
-    const LAVA_BUBBLE_BASE_OPACITY = 0.3;
+    const LAVA_BUBBLE_BASE_OPACITY = 0.37;
     const LAVA_BUBBLE_COLOR = "#7a2a14";
-    const LAVA_BUBBLE_SCALE_MIN = 0.72;
-    const LAVA_BUBBLE_SCALE_MAX = 2.6;
-    const LAVA_BUBBLE_SCALE_CURVE = 2.0;
+    const LAVA_BUBBLE_SCALE_MIN = 0.82;
+    const LAVA_BUBBLE_SCALE_MAX = 2.8;
+    const LAVA_BUBBLE_SCALE_CURVE = 1.9;
     const TERRAIN_WATER_COLOR_SHALLOW = "#32718a";
     const TERRAIN_WATER_COLOR_DEEP = "#295f75";
     // Keep floor layers visually flat so they remain below prop/shadow layers.
@@ -199,7 +199,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     const floorMatPool: Record<string, THREE.MeshStandardMaterial> = {};
     const waterMatPool: Record<string, THREE.MeshStandardMaterial> = {};
     const lavaMatPool: Record<string, THREE.MeshStandardMaterial> = {};
-    const lavaBubbleGeo = new THREE.RingGeometry(0.042, 0.068, 16);
+    const lavaBubbleGeo = new THREE.RingGeometry(0.046, 0.074, 16);
     const areaIdUnitRange = hashAreaIdToUnitRange(area.id);
 
     function isTerrainWater(value: string | undefined): boolean {
@@ -390,7 +390,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                         wavePhase: hashNoise(x, z, bubbleSeed + 17) * Math.PI * 2,
                         waveSpeed: 0.9 + hashNoise(x, z, bubbleSeed + 31) * 0.45,
                         baseOpacity: LAVA_BUBBLE_BASE_OPACITY,
-                        baseScale: 0.95 + hashNoise(x, z, bubbleSeed + 43) * 0.2,
+                        baseScale: 1.02 + hashNoise(x, z, bubbleSeed + 43) * 0.22,
                     };
 
                     const bubbleCount = 2 + Math.floor(hashNoise(x, z, bubbleSeed + 59) * 2);
@@ -404,7 +404,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                         });
                         const bubble = new THREE.Mesh(lavaBubbleGeo, bubbleMat);
                         const bubbleAngle = hashNoise(x, z, bubbleSeed + 71 + bubbleIndex * 17) * Math.PI * 2;
-                        const bubbleRadius = 0.05 + hashNoise(x, z, bubbleSeed + 83 + bubbleIndex * 19) * 0.14;
+                        const bubbleRadius = 0.055 + hashNoise(x, z, bubbleSeed + 83 + bubbleIndex * 19) * 0.145;
                         const bubbleScaleNoise = hashNoise(x, z, bubbleSeed + 97 + bubbleIndex * 23);
                         const bubbleScale = THREE.MathUtils.lerp(
                             LAVA_BUBBLE_SCALE_MIN,
@@ -488,7 +488,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                         wavePhase: hashNoise(x, z, bubbleSeed + 17) * Math.PI * 2,
                         waveSpeed: 0.78 + hashNoise(x, z, bubbleSeed + 31) * 0.35,
                         baseOpacity: WATER_BUBBLE_BASE_OPACITY,
-                        baseScale: 0.9 + hashNoise(x, z, bubbleSeed + 43) * 0.18,
+                        baseScale: 0.96 + hashNoise(x, z, bubbleSeed + 43) * 0.2,
                     };
 
                     const bubbleCount = 2 + Math.floor(hashNoise(x, z, bubbleSeed + 59) * 2);
@@ -502,7 +502,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                         });
                         const bubble = new THREE.Mesh(lavaBubbleGeo, bubbleMat);
                         const bubbleAngle = hashNoise(x, z, bubbleSeed + 71 + bubbleIndex * 17) * Math.PI * 2;
-                        const bubbleRadius = 0.04 + hashNoise(x, z, bubbleSeed + 83 + bubbleIndex * 19) * 0.12;
+                        const bubbleRadius = 0.045 + hashNoise(x, z, bubbleSeed + 83 + bubbleIndex * 19) * 0.13;
                         const bubbleScaleNoise = hashNoise(x, z, bubbleSeed + 97 + bubbleIndex * 23);
                         const bubbleScale = THREE.MathUtils.lerp(
                             WATER_BUBBLE_SCALE_MIN,
@@ -992,6 +992,14 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     const columnMeshes: THREE.Mesh[] = [];
     const columnGroups: THREE.Mesh[][] = [];  // Groups of column parts that fade together
 
+    // Shared unit-radius sphere geometries for decorations (ferns, weeds).
+    // Individual meshes use mesh.scale to set the visual radius.
+    const _decoSphere6x5 = new THREE.SphereGeometry(1, 6, 5);
+    const _decoSphere5x4 = new THREE.SphereGeometry(1, 5, 4);
+    const _decoSphere8x6 = new THREE.SphereGeometry(1, 8, 6);
+    const _decoSphere10x8 = new THREE.SphereGeometry(1, 10, 8);
+    const _decoSphere9x8 = new THREE.SphereGeometry(1, 9, 8);
+
     const addWeedsCluster = (
         centerX: number,
         centerZ: number,
@@ -1053,7 +1061,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 scene.add(stalk);
 
                 const tipBulb = new THREE.Mesh(
-                    new THREE.SphereGeometry(stalkRadius * 0.85, 8, 6),
+                    _decoSphere8x6,
                     new THREE.MeshStandardMaterial({
                         color: frondColor,
                         metalness: 0.0,
@@ -1063,10 +1071,11 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                     })
                 );
                 tipBulb.position.set(0, stalkHeight * 0.5, 0);
+                tipBulb.scale.setScalar(stalkRadius * 0.85);
                 stalk.add(tipBulb);
             } else {
                 const blade = new THREE.Mesh(
-                    new THREE.SphereGeometry(lobeRadius, 10, 8),
+                    _decoSphere10x8,
                     new THREE.MeshStandardMaterial({
                         color: frondColor,
                         metalness: 0.0,
@@ -1085,14 +1094,14 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 blade.rotation.y = angle + (Math.random() - 0.5) * 0.35;
                 blade.rotation.x = -lean;
                 blade.rotation.z = (Math.random() - 0.5) * 0.45;
-                blade.scale.set(lobeScaleX, lobeScaleY, lobeScaleZ);
+                blade.scale.set(lobeRadius * lobeScaleX, lobeRadius * lobeScaleY, lobeRadius * lobeScaleZ);
                 if (j === 0) blade.name = "decoration";
                 scene.add(blade);
 
                 // Optional top nub keeps silhouette playful/chunky.
                 if (Math.random() < 0.45) {
                     const nub = new THREE.Mesh(
-                        new THREE.SphereGeometry(lobeRadius * 0.45, 8, 6),
+                        _decoSphere8x6,
                         new THREE.MeshStandardMaterial({
                             color: frondColor,
                             metalness: 0.0,
@@ -1101,6 +1110,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                             emissiveIntensity: 0.04
                         })
                     );
+                    nub.scale.setScalar(lobeRadius * 0.45);
                     nub.position.set(
                         blade.position.x + Math.cos(angle) * lobeRadius * 0.2,
                         blade.position.y + lobeRadius * lobeScaleY * 0.6,
@@ -1117,13 +1127,14 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
             const rootAngle = Math.random() * Math.PI * 2;
             const rootDist = Math.random() * (isLarge ? 0.08 : 0.05) * size;
             const root = new THREE.Mesh(
-                new THREE.SphereGeometry(rootRadius, 9, 8),
+                _decoSphere9x8,
                 new THREE.MeshStandardMaterial({
                     color: isLarge ? "#8daf60" : "#95b769",
                     metalness: 0.0,
                     roughness: 0.88
                 })
             );
+            root.scale.setScalar(rootRadius);
             root.position.set(
                 centerX + Math.cos(rootAngle) * rootDist,
                 rootRadius * 0.65,
@@ -1386,9 +1397,10 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                     const color = colors[Math.floor(Math.random() * 2)];  // Darker colors
 
                     const sphere = new THREE.Mesh(
-                        new THREE.SphereGeometry(sphereSize, 6, 5),
+                        _decoSphere6x5,
                         new THREE.MeshStandardMaterial({ color, metalness: 0.0, roughness: 0.9 })
                     );
+                    sphere.scale.setScalar(sphereSize);
                     sphere.position.set(
                         dec.x + Math.cos(angle) * radius,
                         sphereSize * 0.7,
@@ -1407,9 +1419,10 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                     const color = colors[1 + Math.floor(Math.random() * 2)];
 
                     const sphere = new THREE.Mesh(
-                        new THREE.SphereGeometry(sphereSize, 6, 5),
+                        _decoSphere6x5,
                         new THREE.MeshStandardMaterial({ color, metalness: 0.0, roughness: 0.85 })
                     );
+                    sphere.scale.setScalar(sphereSize);
                     sphere.position.set(
                         dec.x + Math.cos(angle) * radius,
                         sphereSize + 0.15 * bushScale,
@@ -1427,9 +1440,10 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                     const color = colors[3 + Math.floor(Math.random() * 2)];
 
                     const sphere = new THREE.Mesh(
-                        new THREE.SphereGeometry(sphereSize, 6, 5),
+                        _decoSphere6x5,
                         new THREE.MeshStandardMaterial({ color, metalness: 0.0, roughness: 0.8 })
                     );
+                    sphere.scale.setScalar(sphereSize);
                     sphere.position.set(
                         dec.x + Math.cos(angle) * radius,
                         0.3 * bushScale + sphereSize,
@@ -1451,9 +1465,10 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                     const color = colors[Math.floor(Math.random() * 2)];
 
                     const sphere = new THREE.Mesh(
-                        new THREE.SphereGeometry(sphereSize, 5, 4),
+                        _decoSphere5x4,
                         new THREE.MeshStandardMaterial({ color, metalness: 0.0, roughness: 0.9 })
                     );
+                    sphere.scale.setScalar(sphereSize);
                     sphere.position.set(
                         dec.x + Math.cos(angle) * radius,
                         sphereSize * 0.7,
@@ -1467,9 +1482,10 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 const topSize = (0.08 + Math.random() * 0.05) * bushScale;
                 const topColor = colors[2 + Math.floor(Math.random() * 2)];
                 const top = new THREE.Mesh(
-                    new THREE.SphereGeometry(topSize, 5, 4),
+                    _decoSphere5x4,
                     new THREE.MeshStandardMaterial({ color: topColor, metalness: 0.0, roughness: 0.85 })
                 );
+                top.scale.setScalar(topSize);
                 top.position.set(
                     dec.x + (Math.random() - 0.5) * 0.1 * bushScale,
                     0.15 * bushScale + topSize,
@@ -1706,6 +1722,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
             color: "#6090c0",
             transparent: true,
             opacity: 0.08,
+            depthWrite: false,
             side: THREE.DoubleSide
         });
 

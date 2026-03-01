@@ -144,7 +144,8 @@ export function computeAreaData(area: AreaData): ComputedAreaData {
         }
     }
 
-    // Unblock transition (door) cells - doors render as portals, not walls
+    // Keep transition footprints out of merged wall geometry so portal meshes
+    // render cleanly instead of being replaced by wall obstacles.
     area.transitions.forEach(trans => {
         for (let dz = 0; dz < trans.h; dz++) {
             for (let dx = 0; dx < trans.w; dx++) {
@@ -162,6 +163,19 @@ export function computeAreaData(area: AreaData): ComputedAreaData {
 
     // Merge obstacles BEFORE dynamic blockers (trees, secret doors, etc.)
     const mergedObstacles = mergeObstacles(blocked, area.gridWidth, area.gridHeight);
+
+    // Transition doors are non-walkable for movement/pathing.
+    area.transitions.forEach(trans => {
+        for (let dz = 0; dz < trans.h; dz++) {
+            for (let dx = 0; dx < trans.w; dx++) {
+                const x = Math.floor(trans.x) + dx;
+                const z = Math.floor(trans.z) + dz;
+                if (x >= 0 && x < area.gridWidth && z >= 0 && z < area.gridHeight) {
+                    blocked[x][z] = true;
+                }
+            }
+        }
+    });
 
     // Secret doors: keep cells blocked for movement/LOS until opened.
     // They render with dedicated secret-door meshes, so we do NOT include them in mergedObstacles.

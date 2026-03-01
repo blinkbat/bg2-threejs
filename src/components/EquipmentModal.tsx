@@ -358,7 +358,7 @@ export function EquipmentModal({
                                                 key={slotMeta.key}
                                                 content={<ItemTooltip item={item} />}
                                                 placement="bottom"
-                                                delay={[300, 0]}
+                                                delay={[0, 0]}
                                             >
                                                 {slotButton}
                                             </Tippy>
@@ -419,7 +419,7 @@ export function EquipmentModal({
                                                 key={entry.itemId}
                                                 content={<ItemTooltip item={item} />}
                                                 placement="left"
-                                                delay={[200, 0]}
+                                                delay={[0, 0]}
                                             >
                                                 <button
                                                     type="button"

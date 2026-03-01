@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Swords, Square, Shield, UsersRound, X, Brain } from "lucide-react";
 
 interface CommandBarProps {
@@ -13,7 +14,7 @@ interface CommandBarProps {
     partyAutoBattleActive: boolean;
 }
 
-export function CommandBar({
+export const CommandBar = memo(function CommandBar({
     commandMode, onStop, onHold, onAttackMove,
     onSelectAll, onDeselectAll, onToggleAutoBattle,
     hasSelection, holdActive, partyAutoBattleActive
@@ -67,4 +68,4 @@ export function CommandBar({
             </button>
         </div>
     );
-}
+});

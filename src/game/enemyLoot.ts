@@ -59,7 +59,7 @@ const ENEMY_LOOT_SLOTS: Partial<Record<EnemyType, readonly LootSlot[]>> = {
         { kind: "item", itemId: "blightberry", chance: 0.14 }
     ],
     giant_amoeba: [
-        { kind: "item", itemId: "blightberry", chance: 0.24 }
+        { kind: "item", itemId: "blightberry", chance: 0.14 }
     ],
     kobold: [
         { kind: "gold", tier: "small", chance: 0.22 },

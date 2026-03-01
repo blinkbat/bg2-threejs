@@ -289,14 +289,22 @@ export function getUnitsInBox(
     const minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
     const sel: number[] = [];
 
-    Object.entries(unitsRef).forEach(([id, g]) => {
-        const u = unitsStateRef.find(u => u.id === Number(id));
-        if (!u || u.team !== "player" || u.hp <= 0) return;
-        const p = new THREE.Vector3(g.position.x, 0.5, g.position.z).project(camera);
-        const sx = ((p.x + 1) / 2) * rendererRect.width + rendererRect.left;
-        const sy = ((-p.y + 1) / 2) * rendererRect.height + rendererRect.top;
-        if (sx >= minX && sx <= maxX && sy >= minY && sy <= maxY) sel.push(Number(id));
-    });
+    // Build O(1) lookup map instead of O(n) .find() per unit
+    const unitMap = new Map<number, Unit>();
+    for (const u of unitsStateRef) {
+        if (u.team === "player" && u.hp > 0) unitMap.set(u.id, u);
+    }
+
+    const _projVec = new THREE.Vector3();
+    for (const idStr in unitsRef) {
+        const numId = Number(idStr);
+        if (!unitMap.has(numId)) continue;
+        const g = unitsRef[numId];
+        _projVec.set(g.position.x, 0.5, g.position.z).project(camera);
+        const sx = ((_projVec.x + 1) / 2) * rendererRect.width + rendererRect.left;
+        const sy = ((-_projVec.y + 1) / 2) * rendererRect.height + rendererRect.top;
+        if (sx >= minX && sx <= maxX && sy >= minY && sy <= maxY) sel.push(numId);
+    }
 
     return sel;
 }

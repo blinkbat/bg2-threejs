@@ -146,6 +146,9 @@ export function updatePoisonVisuals(
 
 const ENERGY_SHIELD_BUBBLE_NAME = "energyShieldBubble";
 
+// Shared geometry for all shield bubbles — avoids re-creating per unit
+const sharedBubbleGeometry = new THREE.SphereGeometry(0.7, 24, 16);
+
 export function updateEnergyShieldVisuals(
     unitsState: Unit[],
     unitsRef: Record<number, UnitGroup>,
@@ -155,16 +158,25 @@ export function updateEnergyShieldVisuals(
         const unitGroup = unitsRef[unit.id];
         if (!unitGroup) continue;
 
-        const hasShield = hasStatusEffect(unit, "energyShield");
-        const hasDivineLattice = hasStatusEffect(unit, "divine_lattice");
-        const hasBarrier = hasShield || hasDivineLattice;
+        const effects = unit.statusEffects;
+        const hasBarrier = effects !== undefined && effects.length > 0
+            && effects.some(e => e.type === "energyShield" || e.type === "divine_lattice");
+        if (!hasBarrier) {
+            // Fast path: remove bubble if present
+            const existing = unitGroup.getObjectByName(ENERGY_SHIELD_BUBBLE_NAME) as THREE.Mesh | undefined;
+            if (existing) {
+                unitGroup.remove(existing);
+                (existing.material as THREE.MeshBasicMaterial).dispose();
+            }
+            continue;
+        }
+
+        const hasDivineLattice = effects.some(e => e.type === "divine_lattice");
         const existingBubble = unitGroup.getObjectByName(ENERGY_SHIELD_BUBBLE_NAME) as THREE.Mesh | undefined;
 
-        if (hasBarrier && !existingBubble) {
+        if (!existingBubble) {
             const bubbleColor = hasDivineLattice ? 0xffffff : 0x66ccff;
             const bubbleOpacity = hasDivineLattice ? 0.22 : 0.25;
-            // Create bubble
-            const bubbleGeometry = new THREE.SphereGeometry(0.7, 24, 16);
             const bubbleMaterial = new THREE.MeshBasicMaterial({
                 color: bubbleColor,
                 transparent: true,
@@ -172,16 +184,11 @@ export function updateEnergyShieldVisuals(
                 side: THREE.DoubleSide,
                 depthWrite: false
             });
-            const bubble = new THREE.Mesh(bubbleGeometry, bubbleMaterial);
+            const bubble = new THREE.Mesh(sharedBubbleGeometry, bubbleMaterial);
             bubble.name = ENERGY_SHIELD_BUBBLE_NAME;
-            bubble.position.y = 0.5;  // Center on unit
+            bubble.position.y = 0.5;
             unitGroup.add(bubble);
-        } else if (!hasBarrier && existingBubble) {
-            // Remove bubble
-            unitGroup.remove(existingBubble);
-            existingBubble.geometry.dispose();
-            (existingBubble.material as THREE.MeshBasicMaterial).dispose();
-        } else if (hasBarrier && existingBubble) {
+        } else {
             const bubbleMat = existingBubble.material as THREE.MeshBasicMaterial;
             if (hasDivineLattice) {
                 bubbleMat.color.setHex(0xffffff);
@@ -203,8 +210,6 @@ export function updateEnergyShieldVisuals(
 // FOG OF WAR UPDATE
 // =============================================================================
 
-// Cache for fog change detection - simple hash of visible cells
-let lastFogHash = 0;
 let lastFogVisibilityKey = 0;
 let hasFogVisibilityKey = false;
 let lastFogAreaId: string | null = null;
@@ -284,7 +289,6 @@ function updateEnemyGroupFade(group: UnitGroup, shouldBeVisible: boolean): void 
  * Reset fog hash cache (call on game restart).
  */
 export function resetFogCache(): void {
-    lastFogHash = 0;
     lastFogVisibilityKey = 0;
     hasFogVisibilityKey = false;
     lastFogAreaId = null;
@@ -301,7 +305,6 @@ export function updateFogOfWar(
     const area = getCurrentArea();
     if (lastFogAreaId !== area.id) {
         lastFogAreaId = area.id;
-        lastFogHash = 0;
         hasFogVisibilityKey = false;
     }
 
@@ -334,22 +337,10 @@ export function updateFogOfWar(
         hasFogVisibilityKey = true;
         lastFogVisibilityKey = visibilityKey;
 
-        updateVisibility(visibility, playerUnits, { current: unitsRef });
+        const fogChanged = updateVisibility(visibility, playerUnits, { current: unitsRef });
 
-        // FNV-style rolling hash to detect visibility changes with low collision risk.
-        let fogHash = 2166136261;
-        for (let x = 0; x < area.gridWidth; x++) {
-            for (let z = 0; z < area.gridHeight; z++) {
-                const vis = visibility[x]?.[z] ?? 0;
-                const mixed = (x * 73856093) ^ (z * 19349663) ^ vis;
-                fogHash = Math.imul(fogHash ^ mixed, 16777619);
-            }
-        }
-        fogHash >>>= 0;
-
-        // Only redraw fog texture if visibility changed
-        if (fogHash !== lastFogHash) {
-            lastFogHash = fogHash;
+        // Only redraw fog texture if visibility actually changed
+        if (fogChanged) {
 
             const { ctx, texture } = fogTexture;
 

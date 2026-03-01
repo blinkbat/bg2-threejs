@@ -1,11 +1,11 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, memo } from "react";
 import type { CombatLogEntry } from "../core/types";
 
 interface CombatLogProps {
     log: CombatLogEntry[];
 }
 
-export function CombatLog({ log }: CombatLogProps) {
+export const CombatLog = memo(function CombatLog({ log }: CombatLogProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const innerRef = useRef<HTMLDivElement>(null);
     const draggingScrollbarRef = useRef(false);
@@ -162,4 +162,4 @@ export function CombatLog({ log }: CombatLogProps) {
             </div>
         </div>
     );
-}
+});

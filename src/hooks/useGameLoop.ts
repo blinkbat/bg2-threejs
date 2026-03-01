@@ -138,6 +138,7 @@ export interface PerfFrameSample {
 
 const PERF_SAMPLE_FPS_THRESHOLD = 45;
 const PERF_CAPTURE_WINDOW_MS = 5000;
+const FPS_UI_SAMPLE_WINDOW_MS = 500;
 
 function getProgramCount(info: THREE.WebGLInfo): number | null {
     const programs = Reflect.get(info, "programs");
@@ -532,7 +533,7 @@ export function useGameLoop({
 }: UseGameLoopOptions): void {
     // FPS tracking refs
     const fpsFrameCount = useRef(0);
-    const fpsLastTime = useRef(Date.now());
+    const fpsLastTime = useRef<number | null>(null);
     const perfCaptureUntilRef = useRef(0);
     const previousHpByIdRef = useRef<Map<number, number>>(new Map());
 
@@ -561,7 +562,10 @@ export function useGameLoop({
         previousHpByIdRef.current = new Map(stateRefs.unitsStateRef.current.map(unit => [unit.id, unit.hp]));
         const setUnitsLive = createLiveUnitsDispatch(callbacks.setUnits, stateRefs.unitsStateRef);
 
-        const animate = () => {
+        fpsFrameCount.current = 0;
+        fpsLastTime.current = null;
+
+        const animate = (rafNow: number) => {
             const frameStart = performance.now();
             animId = requestAnimationFrame(animate);
             const now = Date.now();
@@ -601,11 +605,16 @@ export function useGameLoop({
             );
 
             // FPS counter
+            if (fpsLastTime.current === null) {
+                fpsLastTime.current = rafNow;
+            }
             fpsFrameCount.current++;
-            if (now - fpsLastTime.current >= 1000) {
-                callbacks.setFps(fpsFrameCount.current);
+            const fpsElapsedMs = rafNow - fpsLastTime.current;
+            if (fpsElapsedMs >= FPS_UI_SAMPLE_WINDOW_MS) {
+                const measuredFps = fpsFrameCount.current * (1000 / fpsElapsedMs);
+                callbacks.setFps(Math.round(measuredFps));
                 fpsFrameCount.current = 0;
-                fpsLastTime.current = now;
+                fpsLastTime.current = rafNow;
             }
 
             // Visual effects (doors), camera panning, and damage text updates

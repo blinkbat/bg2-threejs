@@ -23,7 +23,7 @@ import { applySyncedUnitUpdate, applySyncedUnitsUpdate } from "../core/stateUtil
 import { logDefeated, applyPoison, applySlowed, hasStatusEffect, isUnitAlive } from "./combatMath";
 import { tryKillBark } from "./barks";
 import { getNextUnitId } from "../core/unitIds";
-import { ENEMY_STATS } from "../game/enemyStats";
+import { ENEMY_STATS, getAmoebaMaxHpForSplitCount } from "../game/enemyStats";
 import { UNIT_DATA, getXpForLevel, getEffectiveMaxHp, getEffectiveMaxMana } from "../game/playerUnits";
 import { LEVEL_UP_HP, LEVEL_UP_MANA, LEVEL_UP_STAT_POINTS, LEVEL_UP_SKILL_POINTS } from "../game/statBonuses";
 import { trySubmergeKraken, isEnemyUntargetable } from "../gameLoop/enemyBehaviors";
@@ -607,9 +607,10 @@ export function applyDamageToUnit(
 
     const projectedHp = Math.max(0, currentHp - effectiveDamage);
 
-    // Check for amoeba split mechanic
+    // Check for amoeba split mechanic: split on death only if a smaller stage exists.
+    // The spawned children always start at their stage max HP.
     const shouldSplit = targetState?.enemyType === "giant_amoeba" &&
-        projectedHp > 0 &&  // Survived the hit
+        projectedHp <= 0 &&
         (targetState.splitCount ?? 0) < (ENEMY_STATS.giant_amoeba.maxSplitCount ?? 3);
 
     if (shouldSplit && targetState) {
@@ -617,8 +618,7 @@ export function applyDamageToUnit(
         const currentSplitCount = targetState.splitCount ?? 0;
         const newSplitCount = currentSplitCount + 1;
 
-        // Calculate HP for split offspring (divide remaining HP, minimum 1)
-        const splitHp = Math.max(1, Math.floor(projectedHp / 2));
+        const splitHp = getAmoebaMaxHpForSplitCount(newSplitCount);
 
         // Spawn positions - offset from original position
         const offsetDist = 0.8;

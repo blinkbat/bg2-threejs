@@ -75,6 +75,8 @@ export function processStatusEffects(
     // Side effects to run after the single setUnits call
     const sideEffects: Array<() => void> = [];
     const pendingBlinds = new Map<number, PendingBlind>();
+    // Pre-filter alive enemies once for aura effects (avoids O(n²) re-scan per aura)
+    let aliveEnemies: { unit: Unit; group: UnitGroup; radius: number }[] | null = null;
     const auraDamageCtx = buildDamageContext(
         scene,
         damageTexts,
@@ -124,14 +126,24 @@ export function processStatusEffects(
                     const sourceName = data.name;
 
                     if (auraRadius > 0 && auraDamage > 0) {
-                        for (const target of unitsState) {
-                            if (!isUnitAlive(target, defeatedThisFrame) || target.team !== "enemy") continue;
+                        // Lazily build alive enemies list once per frame
+                        if (aliveEnemies === null) {
+                            aliveEnemies = [];
+                            for (const t of unitsState) {
+                                if (t.team !== "enemy" || !isUnitAlive(t, defeatedThisFrame)) continue;
+                                const tg = unitsRef[t.id];
+                                if (!tg) continue;
+                                aliveEnemies.push({ unit: t, group: tg, radius: getUnitRadius(t) });
+                            }
+                        }
+
+                        for (const enemy of aliveEnemies) {
+                            const target = enemy.unit;
                             if (target.id === unit.id) continue;
+                            if (defeatedThisFrame.has(target.id)) continue;
 
-                            const targetG = unitsRef[target.id];
-                            if (!targetG) continue;
-
-                            const targetRadius = getUnitRadius(target);
+                            const targetG = enemy.group;
+                            const targetRadius = enemy.radius;
                             if (!isInRange(unitG.position.x, unitG.position.z, targetG.position.x, targetG.position.z, targetRadius, auraRadius)) {
                                 continue;
                             }

@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { UNIT_DATA } from "../game/playerUnits";
 import { getPlayerUnitColor } from "../game/unitColors";
 import type { Unit } from "../core/types";
@@ -25,7 +26,7 @@ interface FormationIndicatorProps {
     formationOrder: number[];
 }
 
-export function FormationIndicator({ units, formationOrder }: FormationIndicatorProps) {
+export const FormationIndicator = memo(function FormationIndicator({ units, formationOrder }: FormationIndicatorProps) {
     const players = sortUnitsByFormationOrder(
         units.filter(u => u.team === "player"),
         formationOrder
@@ -60,4 +61,4 @@ export function FormationIndicator({ units, formationOrder }: FormationIndicator
             </div>
         </div>
     );
-}
+});

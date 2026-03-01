@@ -11,7 +11,7 @@ import {
     PLAYER_MOVE_TIMEOUT_MS,
     DEFAULT_UNIT_RADIUS
 } from "../core/constants";
-import { findPath, isPassable } from "./pathfinding";
+import { findPath, isBlocked, isPassable } from "./pathfinding";
 import {
     canScanForTargets, recordTargetScan, getBlockedTargets,
     recentlyGaveUp, checkPathNeedsRecalc, createPathToTarget,
@@ -685,6 +685,10 @@ interface AvoidanceBucketEntry {
 const AVOIDANCE_CELL_SIZE = 2;
 const avoidanceBuckets = new Map<string, AvoidanceBucketEntry[]>();
 let maxAvoidanceRadius = DEFAULT_UNIT_RADIUS;
+const MAX_WALL_CLEARANCE = 0.45;
+const MIN_WALL_CLEARANCE = 0.2;
+const WALL_CLEARANCE_RATIO = 0.65;
+const WALL_CLEARANCE_EPSILON = 0.001;
 
 function getAvoidanceBucketKey(cellX: number, cellZ: number): string {
     return `${cellX},${cellZ}`;
@@ -796,10 +800,82 @@ export function calculateAvoidance(ctx: MovementContext, desiredX: number, desir
     return { avoidX, avoidZ };
 }
 
+function clamp(value: number, min: number, max: number): number {
+    return Math.max(min, Math.min(max, value));
+}
+
+function getWallClearance(unit: Unit): number {
+    const radius = getUnitRadius(unit);
+    return clamp(radius * WALL_CLEARANCE_RATIO, MIN_WALL_CLEARANCE, MAX_WALL_CLEARANCE);
+}
+
+function resolveWallClearance(
+    unit: Unit,
+    x: number,
+    z: number,
+    flying: boolean,
+    canTraverseWaterTerrain: boolean
+): { x: number; z: number } | null {
+    if (!isPassable(Math.floor(x), Math.floor(z), flying, canTraverseWaterTerrain)) {
+        return null;
+    }
+
+    const clearance = getWallClearance(unit);
+    const clearanceSq = clearance * clearance;
+    let adjustedX = clampToGrid(x, 0.5, "x");
+    let adjustedZ = clampToGrid(z, 0.5, "z");
+
+    for (let iteration = 0; iteration < 2; iteration++) {
+        const centerCellX = Math.floor(adjustedX);
+        const centerCellZ = Math.floor(adjustedZ);
+
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dz = -1; dz <= 1; dz++) {
+                const cellX = centerCellX + dx;
+                const cellZ = centerCellZ + dz;
+                if (!isBlocked(cellX, cellZ)) continue;
+
+                const nearestX = clamp(adjustedX, cellX, cellX + 1);
+                const nearestZ = clamp(adjustedZ, cellZ, cellZ + 1);
+                let diffX = adjustedX - nearestX;
+                let diffZ = adjustedZ - nearestZ;
+                let distanceSq = diffX * diffX + diffZ * diffZ;
+
+                if (distanceSq >= clearanceSq) continue;
+
+                if (distanceSq < WALL_CLEARANCE_EPSILON) {
+                    // Candidate sits exactly on the wall boundary; push away from cell center.
+                    diffX = adjustedX - (cellX + 0.5);
+                    diffZ = adjustedZ - (cellZ + 0.5);
+                    const norm = Math.hypot(diffX, diffZ) || 1;
+                    adjustedX += (diffX / norm) * (clearance + WALL_CLEARANCE_EPSILON);
+                    adjustedZ += (diffZ / norm) * (clearance + WALL_CLEARANCE_EPSILON);
+                } else {
+                    const distance = Math.sqrt(distanceSq);
+                    const push = clearance - distance;
+                    adjustedX += (diffX / distance) * push;
+                    adjustedZ += (diffZ / distance) * push;
+                }
+
+                adjustedX = clampToGrid(adjustedX, 0.5, "x");
+                adjustedZ = clampToGrid(adjustedZ, 0.5, "z");
+                distanceSq = diffX * diffX + diffZ * diffZ;
+            }
+        }
+    }
+
+    if (!isPassable(Math.floor(adjustedX), Math.floor(adjustedZ), flying, canTraverseWaterTerrain)) {
+        return null;
+    }
+
+    return { x: adjustedX, z: adjustedZ };
+}
+
 /**
  * Try to move with wall sliding - if direct movement blocked, try sliding along walls.
  */
 export function applyWallSliding(
+    unit: Unit,
     g: UnitGroup,
     moveX: number,
     moveZ: number,
@@ -808,31 +884,30 @@ export function applyWallSliding(
 ): void {
     const newX = g.position.x + moveX;
     const newZ = g.position.z + moveZ;
-    const cellX = Math.floor(newX);
-    const cellZ = Math.floor(newZ);
 
-    if (isPassable(cellX, cellZ, flying, canTraverseWaterTerrain)) {
-        // Direct movement is valid
-        g.position.x = clampToGrid(newX, 0.5, "x");
-        g.position.z = clampToGrid(newZ, 0.5, "z");
+    const direct = resolveWallClearance(unit, newX, newZ, flying, canTraverseWaterTerrain);
+    if (direct) {
+        g.position.x = direct.x;
+        g.position.z = direct.z;
     } else {
         // Try wall sliding - move along one axis if the other is blocked
         const xOnlyX = g.position.x + moveX;
-        const xOnlyCellX = Math.floor(xOnlyX);
-        const xOnlyCellZ = Math.floor(g.position.z);
-        const canMoveX = isPassable(xOnlyCellX, xOnlyCellZ, flying, canTraverseWaterTerrain);
+        const xOnly = resolveWallClearance(unit, xOnlyX, g.position.z, flying, canTraverseWaterTerrain);
+        const canMoveX = xOnly !== null;
 
         const zOnlyZ = g.position.z + moveZ;
-        const zOnlyCellX = Math.floor(g.position.x);
-        const zOnlyCellZ = Math.floor(zOnlyZ);
-        const canMoveZ = isPassable(zOnlyCellX, zOnlyCellZ, flying, canTraverseWaterTerrain);
+        const zOnly = resolveWallClearance(unit, g.position.x, zOnlyZ, flying, canTraverseWaterTerrain);
+        const canMoveZ = zOnly !== null;
 
         if (canMoveX && Math.abs(moveX) > Math.abs(moveZ)) {
-            g.position.x = clampToGrid(xOnlyX, 0.5, "x");
+            g.position.x = xOnly.x;
+            g.position.z = xOnly.z;
         } else if (canMoveZ) {
-            g.position.z = clampToGrid(zOnlyZ, 0.5, "z");
+            g.position.x = zOnly.x;
+            g.position.z = zOnly.z;
         } else if (canMoveX) {
-            g.position.x = clampToGrid(xOnlyX, 0.5, "x");
+            g.position.x = xOnly.x;
+            g.position.z = xOnly.z;
         }
         // If neither axis is valid, unit doesn't move (stuck against corner)
     }
@@ -843,6 +918,14 @@ export function applyWallSliding(
  */
 export function runMovementPhase(ctx: MovementContext): void {
     const { unit, g, targetX, targetZ, speedMultiplier = 1.0 } = ctx;
+    const { isFlying, canTraverseWaterTerrain } = getMovementFlags(unit);
+
+    // Keep units out of wall overlap even when idle or waiting on target updates.
+    const settled = resolveWallClearance(unit, g.position.x, g.position.z, isFlying, canTraverseWaterTerrain);
+    if (settled) {
+        g.position.x = settled.x;
+        g.position.z = settled.z;
+    }
 
     const dx = targetX - g.position.x;
     const dz = targetZ - g.position.z;
@@ -868,9 +951,8 @@ export function runMovementPhase(ctx: MovementContext): void {
         moveX = (moveX / moveMag) * speed;
         moveZ = (moveZ / moveMag) * speed;
 
-        const { isFlying, canTraverseWaterTerrain } = getMovementFlags(unit);
         // Apply movement with wall sliding
-        applyWallSliding(g, moveX, moveZ, isFlying, canTraverseWaterTerrain);
+        applyWallSliding(unit, g, moveX, moveZ, isFlying, canTraverseWaterTerrain);
     }
 }
 

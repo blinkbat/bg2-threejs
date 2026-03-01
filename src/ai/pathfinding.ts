@@ -257,27 +257,38 @@ export function findSpawnPositions(
 /**
  * Decay all visible cells to seen state.
  */
-function decayVisibility(visibility: number[][]): void {
+function decayVisibility(visibility: number[][]): boolean {
+    let changed = false;
     for (let x = 0; x < visibility.length; x++) {
         for (let z = 0; z < (visibility[x]?.length ?? 0); z++) {
-            if (visibility[x][z] === 2) visibility[x][z] = 1;
+            if (visibility[x][z] === 2) {
+                visibility[x][z] = 1;
+                changed = true;
+            }
         }
     }
+    return changed;
 }
 
 /**
  * Mark cells visible from a unit's position using line of sight.
+ * Returns true if any cell was newly set to visible.
  */
-function markVisibleFromUnit(visibility: number[][], ux: number, uz: number): void {
+function markVisibleFromUnit(visibility: number[][], ux: number, uz: number): boolean {
+    let changed = false;
     for (let dx = -VISION_RADIUS; dx <= VISION_RADIUS; dx++) {
         for (let dz = -VISION_RADIUS; dz <= VISION_RADIUS; dz++) {
             const x = ux + dx, z = uz + dz;
             if (!isWithinGrid(x, z)) continue;
             // Skip if outside vision circle
             if (dx * dx + dz * dz > VISION_RADIUS * VISION_RADIUS) continue;
-            if (hasLineOfSight(ux, uz, x, z)) visibility[x][z] = 2;
+            if (hasLineOfSight(ux, uz, x, z)) {
+                if (visibility[x][z] !== 2) changed = true;
+                visibility[x][z] = 2;
+            }
         }
     }
+    return changed;
 }
 
 export function hasLineOfSight(x0: number, z0: number, x1: number, z1: number): boolean {
@@ -303,8 +314,8 @@ export function updateVisibility(
     visibility: number[][],
     playerUnits: Unit[],
     unitsRef: React.RefObject<Record<number, UnitGroup>>
-): number[][] {
-    decayVisibility(visibility);
+): boolean {
+    let changed = decayVisibility(visibility);
 
     // Mark cells visible from each player unit
     // Use Math.round to center visibility on the unit's visual position
@@ -312,10 +323,10 @@ export function updateVisibility(
         const g = unitsRef.current[u.id];
         if (!g || u.hp <= 0) return;
         const ux = Math.round(g.position.x), uz = Math.round(g.position.z);
-        markVisibleFromUnit(visibility, ux, uz);
+        if (markVisibleFromUnit(visibility, ux, uz)) changed = true;
     });
 
-    return visibility;
+    return changed;
 }
 
 // =============================================================================

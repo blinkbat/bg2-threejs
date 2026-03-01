@@ -88,8 +88,10 @@ describe("area helpers", () => {
         const area = createArea();
         const computed = computeAreaData(area);
 
-        // Transition opens geometry wall at (1,1)
-        expect(computed.blocked[1][1]).toBe(false);
+        // Transition door footprint is non-walkable
+        expect(computed.blocked[1][1]).toBe(true);
+        // Transition cells should not be merged into rendered wall obstacles
+        expect(computed.mergedObstacles.some(obstacle => obstacle.x === 1 && obstacle.z === 1)).toBe(false);
         // Terrain hazards are not wall-blocked but are tracked separately
         expect(computed.blocked[2][2]).toBe(false);
         expect(computed.terrainBlocked.has("2,2")).toBe(true);

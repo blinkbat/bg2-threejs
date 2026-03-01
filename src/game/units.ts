@@ -1,6 +1,6 @@
 import type { UnitData, EnemyStats, Unit } from "../core/types";
 import { getEffectiveUnitData } from "./playerUnits";
-import { ENEMY_STATS } from "./enemyStats";
+import { ENEMY_STATS, getAmoebaMaxHpForSplitCount } from "./enemyStats";
 
 // =============================================================================
 // SHARED HELPERS
@@ -21,7 +21,8 @@ function getStatsCacheKey(unit: Unit): string {
     if (unit.team === "player") {
         return `player:${unit.id}`;
     }
-    return `enemy:${unit.id}:${unit.enemyType ?? "unknown"}`;
+    const amoebaStage = unit.enemyType === "giant_amoeba" ? `:${unit.splitCount ?? 0}` : "";
+    return `enemy:${unit.id}:${unit.enemyType ?? "unknown"}${amoebaStage}`;
 }
 
 /** Clear the per-frame stats cache. Call once at the start of each game loop frame. */
@@ -45,7 +46,17 @@ export function getUnitStats(unit: Unit): UnitData | EnemyStats {
     } else if (!unit.enemyType) {
         result = ENEMY_STATS.kobold;
     } else {
-        result = ENEMY_STATS[unit.enemyType];
+        const baseEnemyStats = ENEMY_STATS[unit.enemyType];
+        if (unit.enemyType === "giant_amoeba") {
+            const stageMaxHp = getAmoebaMaxHpForSplitCount(unit.splitCount ?? 0);
+            result = {
+                ...baseEnemyStats,
+                hp: stageMaxHp,
+                maxHp: stageMaxHp,
+            };
+        } else {
+            result = baseEnemyStats;
+        }
     }
 
     statsCache.set(cacheKey, result);

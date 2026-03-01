@@ -1,6 +1,8 @@
 import type { EnemyStats, EnemyType } from "../core/types";
 import { DEFAULT_MOVE_SPEED } from "../core/constants";
 
+const AMOEBA_SPLIT_HP_SCALE = 0.7;
+
 // =============================================================================
 // ENEMY STATS - Keyed by EnemyType
 // =============================================================================
@@ -93,7 +95,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         attackCooldown: 2200,
         moveSpeed: 0.7,
         size: 1.8,
-        expReward: 100,
+        expReward: 115,
         baseCrit: 5,
         biteChance: 20,
         biteDamage: [14, 22],
@@ -123,7 +125,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         moveSpeed: 1.4,    // Fast flyer (140% normal speed)
         flying: true,      // Floats above ground
         lifesteal: 0.5,    // Heals for 50% of damage dealt
-        expReward: 18
+        expReward: 20
     },
     bloated_corpse: {
         name: "Bloated Corpse",
@@ -136,7 +138,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         attackCooldown: 2400,
         size: 1.35,            // Chunky, lumbering body
         moveSpeed: 0.42,       // Slow zombie
-        expReward: 65,
+        expReward: 58,
         deathAcidPool: {
             radius: 2.2,
             duration: 10000
@@ -153,7 +155,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         attackCooldown: 2500,
         size: 1.8,  // Large
         moveSpeed: 0.5,  // 50% slower than normal - lumbering
-        expReward: 30,
+        expReward: 36,
         spawnSkill: {
             spawnType: "broodling",
             cooldown: 4000,  // Spawn every 4 seconds when in combat
@@ -227,7 +229,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         attackCooldown: 2000,
         moveSpeed: 0.9,
         size: 1.1,
-        expReward: 20,
+        expReward: 24,
         enrage: {
             hpThreshold: 0.5,
             speedMultiplier: 1.5,
@@ -256,8 +258,8 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     giant_amoeba: {
         name: "Giant Amoeba",
-        hp: 65,
-        maxHp: 65,
+        hp: 35,
+        maxHp: 35,
         damage: [3, 6],
         accuracy: 55,
         armor: 0,
@@ -265,9 +267,9 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         attackCooldown: 2200,
         size: 2.0,  // Large - decreases with each split
         moveSpeed: 0.7,  // Slightly slower, it's a blob
-        maxSplitCount: 3,
+        maxSplitCount: 2,
         slowChance: 30,  // 30% chance to slow on hit
-        expReward: 12
+        expReward: 5
     },
     innkeeper: {
         name: "Innkeeper",
@@ -364,7 +366,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         moveSpeed: 0.5,        // Very slow flyer
         flying: true,          // Floats above ground (ignores lava)
         fireballAttack: true,  // Uses slow fireball that hurts everything
-        expReward: 25,
+        expReward: 30,
         // Kiting behavior - retreat when players get close
         kiteTrigger: 4,        // Start kiting when player within this range
         kiteDistance: 3,       // How far to retreat (shorter due to slow speed)
@@ -383,7 +385,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         projectileColor: "#6b1f6b", // Dark purple bolt
         size: 1.3,                 // Tall
         moveSpeed: 0.6,            // Slow movement
-        expReward: 50,
+        expReward: 65,
         // Kiting behavior - retreat when players get close
         kiteTrigger: 4,
         kiteDistance: 3,
@@ -419,7 +421,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         projectileColor: "#9b59b6",
         size: 1.2,
         moveSpeed: 0.55,
-        expReward: 45,
+        expReward: 62,
         kiteTrigger: 4,
         kiteDistance: 3,
         kiteCooldown: 4000,
@@ -449,7 +451,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         attackCooldown: 1000,
         size: 1.5,
         moveSpeed: 0.35,
-        expReward: 55,
+        expReward: 72,
         breathSkill: {
             name: "Fire Breath",
             cooldown: 4000,
@@ -486,7 +488,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         moveSpeed: 0.4,  // Slow movement
         attackCooldown: 3000,
         size: 2.0,
-        expReward: 75,
+        expReward: 82,
         skill: {
             name: "Swipe",
             cooldown: 10000,  // 10 seconds
@@ -568,7 +570,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         size: 1.0,
         moveSpeed: 1.7,
         flying: true,
-        expReward: 42,
+        expReward: 52,
         phaseShiftSkill: {
             name: "Umbral Drift",
             cooldown: 7000,
@@ -578,3 +580,9 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         }
     },
 };
+
+export function getAmoebaMaxHpForSplitCount(splitCount: number): number {
+    const stage = Math.max(0, Math.floor(splitCount));
+    const baseMaxHp = ENEMY_STATS.giant_amoeba.maxHp;
+    return Math.max(1, Math.floor(baseMaxHp * Math.pow(AMOEBA_SPLIT_HP_SCALE, stage)));
+}

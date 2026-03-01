@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, memo } from "react";
 import { Play, Pause, Menu, Bug } from "lucide-react";
 import { MenuModal } from "./MenuModal";
 import { JukeboxModal } from "./JukeboxModal";
@@ -48,7 +48,7 @@ interface HUDProps {
     onModalOpenStateChange?: (isOpen: boolean) => void;
 }
 
-export function HUD({
+export const HUD = memo(function HUD({
     areaName,
     areaFlavor,
     alivePlayers,
@@ -463,4 +463,4 @@ export function HUD({
             )}
         </>
     );
-}
+});

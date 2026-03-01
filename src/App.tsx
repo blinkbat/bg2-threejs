@@ -32,7 +32,7 @@ import { getItem } from "./game/items";
 import { isConsumable } from "./core/types";
 import { updateChestStates } from "./rendering/scene";
 import { soundFns } from "./audio";
-import { updateUnit, updateUnitWith, createLiveUnitsDispatch } from "./core/stateUtils";
+import { updateUnit, updateUnitWith, updateUnitsWhere, createLiveUnitsDispatch } from "./core/stateUtils";
 import { createUnitsForArea as createAreaUnits, type PersistedPlayer } from "./app/gameSetup";
 
 // Extracted modules
@@ -452,17 +452,21 @@ function Game({
 
     useEffect(() => {
         if (!currentDialogNode) return;
-        if (dialogTypedChars >= currentDialogNode.text.length) return;
+
+        const textLength = currentDialogNode.text.length;
 
         const intervalId = window.setInterval(() => {
             setDialogTypedChars(prev => {
-                if (prev >= currentDialogNode.text.length) return prev;
-                return Math.min(currentDialogNode.text.length, prev + DIALOG_CHARS_PER_TICK);
+                const next = Math.min(textLength, prev + DIALOG_CHARS_PER_TICK);
+                if (next >= textLength) {
+                    window.clearInterval(intervalId);
+                }
+                return next;
             });
         }, DIALOG_TYPING_INTERVAL_MS);
 
         return () => window.clearInterval(intervalId);
-    }, [currentDialogNode, dialogTypedChars]);
+    }, [currentDialogNode]);
 
     useEffect(() => {
         if (!currentDialogNode) return;
@@ -842,10 +846,7 @@ function Game({
             const reviveX = userG.position.x + Math.cos(angle) * 1.5;
             const reviveZ = userG.position.z + Math.sin(angle) * 1.5;
 
-            setUnits(prev => prev.map(u => {
-                if (u.id !== targetId) return u;
-                return { ...u, hp: item.value, x: reviveX, z: reviveZ, statusEffects: undefined, target: null };
-            }));
+            updateUnit(setUnits, targetId, { hp: item.value, x: reviveX, z: reviveZ, statusEffects: undefined, target: null });
 
             // Make the unit visible and reposition
             reviveUnitVisual(sceneState.unitGroups, targetId, reviveX, reviveZ);
@@ -1545,11 +1546,7 @@ function Game({
         if (players.length === 0) return;
 
         const enableAutoBattle = players.some(u => !u.aiEnabled);
-        setUnits(prev => prev.map(u => (
-            u.team === "player"
-                ? { ...u, aiEnabled: enableAutoBattle }
-                : u
-        )));
+        updateUnitsWhere(setUnits, u => u.team === "player", { aiEnabled: enableAutoBattle });
         addLog(
             `Auto-battle ${enableAutoBattle ? "enabled" : "disabled"} for party and summons.`,
             enableAutoBattle ? "#22c55e" : "#f59e0b"
@@ -1569,18 +1566,9 @@ function Game({
     }, [doProcessQueue]);
 
     const clampUnitToEffectiveCaps = useCallback((unitId: number) => {
-        setUnits(prev => prev.map(u => {
-            if (u.id !== unitId) {
-                return u;
-            }
-
-            const nextHpCap = getEffectiveMaxHp(u.id, u);
-            const nextManaCap = getEffectiveMaxMana(u.id, u);
-            return {
-                ...u,
-                hp: Math.min(u.hp, nextHpCap),
-                mana: u.mana === undefined ? undefined : Math.min(u.mana, nextManaCap),
-            };
+        updateUnitWith(setUnits, unitId, u => ({
+            hp: Math.min(u.hp, getEffectiveMaxHp(u.id, u)),
+            mana: u.mana === undefined ? undefined : Math.min(u.mana, getEffectiveMaxMana(u.id, u)),
         }));
     }, []);
 
@@ -1832,6 +1820,89 @@ function Game({
     }, [lightingTuning, currentAreaId]);
 
     // =============================================================================
+    // EXTRACTED CALLBACKS (stable refs for memoized children)
+    // =============================================================================
+
+    const handleToggleDebug = useCallback(() => setDebug(d => !d), []);
+    const handleToggleFastMove = useCallback(() => setFastMove(f => !f), []);
+    const handleAttackMove = useCallback(() => setCommandMode("attackMove"), []);
+    const handleClosePanel = useCallback(() => setShowPanel(false), []);
+    const handleCloseEquipmentModal = useCallback(() => setEquipmentModalUnitId(null), []);
+
+    const handleTargetUnit = useCallback((targetUnitId: number) => {
+        if (consumableTargetingModeRef.current) {
+            handleConsumableTarget(targetUnitId);
+            return;
+        }
+        const tm = targetingModeRef.current;
+        if (!tm || !sceneState.scene) return;
+        const skillCtx = getSkillContext();
+        handleTargetingOnUnit(
+            targetUnitId, tm,
+            { actionCooldownRef, actionQueueRef, rangeIndicatorRef: { current: sceneState.rangeIndicator }, aoeIndicatorRef: { current: sceneState.aoeIndicator } },
+            { unitsStateRef: unitsStateRef as React.RefObject<Unit[]>, pausedRef },
+            { setTargetingMode, setQueuedActions },
+            sceneState.unitGroups, skillCtx, addLog
+        );
+    }, [handleConsumableTarget, sceneState, getSkillContext, addLog]);
+
+    const handleAssignSkill = useCallback((unitId: number, slotIndex: number, skillName: string | null) => {
+        setHotbarAssignments(prev => {
+            const unitSlots = prev[unitId] || [null, null, null, null, null];
+            const newSlots = [...unitSlots];
+            newSlots[slotIndex] = skillName;
+            const newAssignments = { ...prev, [unitId]: newSlots };
+            saveHotbarAssignments(newAssignments);
+            return newAssignments;
+        });
+    }, []);
+
+    const handleReorderFormation = useCallback((newOrder: number[]) => {
+        setFormationOrder(newOrder);
+        saveFormationOrder(newOrder);
+    }, []);
+
+    const handleToggleAI = useCallback((id: number) => {
+        updateUnitWith(setUnits, id, u => ({ aiEnabled: !u.aiEnabled }));
+    }, []);
+
+    const handleIncrementStat = useCallback((id: number, stat: keyof CharacterStats) => {
+        updateUnitWith(setUnits, id, u => {
+            if ((u.statPoints ?? 0) <= 0) return {};
+            const currentStats = u.stats ?? { strength: 0, dexterity: 0, vitality: 0, intelligence: 0, faith: 0 };
+            const newStats = { ...currentStats, [stat]: currentStats[stat] + 1 };
+            const partial: Partial<Unit> = { statPoints: (u.statPoints ?? 0) - 1, stats: newStats };
+            if (stat === "vitality") {
+                const updated = { ...u, ...partial };
+                partial.hp = Math.min(u.hp + HP_PER_VITALITY, getEffectiveMaxHp(u.id, updated));
+            }
+            if (stat === "intelligence") {
+                const updated = { ...u, ...partial };
+                partial.mana = Math.min((u.mana ?? 0) + MP_PER_INTELLIGENCE, getEffectiveMaxMana(u.id, updated));
+            }
+            return partial;
+        });
+    }, []);
+
+    const handleLearnSkill = useCallback((id: number, skillName: string) => {
+        updateUnitWith(setUnits, id, u => {
+            if ((u.learnedSkills ?? []).includes(skillName)) return {};
+            if (!playtestUnlockAllSkills && (u.skillPoints ?? 0) <= 0) return {};
+            return {
+                skillPoints: playtestUnlockAllSkills ? (u.skillPoints ?? 0) : (u.skillPoints ?? 0) - 1,
+                learnedSkills: [...(u.learnedSkills ?? []), skillName]
+            };
+        });
+    }, [playtestUnlockAllSkills]);
+
+    const handleChangeEquipmentUnit = useCallback((id: number) => {
+        setEquipmentModalUnitId(id);
+        setSelectedIds([id]);
+    }, []);
+
+    const otherModalOpen = helpOpen || saveLoadOpen || isDialogOpen || hudMenuModalOpen || equipmentModalOpen || sleepFadeOpacity > 0;
+
+    // =============================================================================
     // RENDER
     // =============================================================================
 
@@ -1912,8 +1983,8 @@ function Game({
 
             {hoveredDoor && (
                 <div className="enemy-tooltip" style={{ left: hoveredDoor.x + 12, top: hoveredDoor.y - 10 }}>
-                    <div className="enemy-tooltip-name">Door</div>
-                    <div className="enemy-tooltip-status" style={{ color: "#4a90d9" }}>To: {AREAS[hoveredDoor.targetArea as AreaId]?.name ?? hoveredDoor.targetArea}</div>
+                    <div className="enemy-tooltip-name">Travel</div>
+                    <div className="enemy-tooltip-status" style={{ color: "#4a90d9" }}>{AREAS[hoveredDoor.targetArea as AreaId]?.name ?? hoveredDoor.targetArea}</div>
                 </div>
             )}
 
@@ -1965,7 +2036,7 @@ function Game({
             <div style={{ position: "absolute", top: 10, right: 10, color: "#888", fontSize: 11, opacity: 0.6 }}>{fps} fps</div>
 
             {/* UI Components */}
-            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onShowHelp={onShowHelp} onRestart={onRestart} onSaveClick={onSaveClick} onLoadClick={onLoadClick} debug={debug} onToggleDebug={() => setDebug(d => !d)} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} onStatBoost={handleStatBoost} onTogglePlaytestUnlockAllSkills={handleTogglePlaytestUnlockAllSkills} playtestUnlockAllSkillsEnabled={playtestSettings.unlockAllSkills} onTogglePlaytestSkipDialogs={handleTogglePlaytestSkipDialogs} playtestSkipDialogsEnabled={playtestSettings.skipDialogs} onToggleFastMove={() => setFastMove(f => !f)} fastMoveEnabled={fastMove} lightingTuning={lightingTuning} onUpdateLightingTuning={handleUpdateLightingTuning} onResetLightingTuning={handleResetLightingTuning} lightingTuningOutput={lightingTuningOutput} otherModalOpen={helpOpen || saveLoadOpen || isDialogOpen || hudMenuModalOpen || equipmentModalOpen || sleepFadeOpacity > 0} hasSelection={selectedIds.length > 0} onModalOpenStateChange={setHudMenuModalOpen} />
+            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onShowHelp={onShowHelp} onRestart={onRestart} onSaveClick={onSaveClick} onLoadClick={onLoadClick} debug={debug} onToggleDebug={handleToggleDebug} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} onStatBoost={handleStatBoost} onTogglePlaytestUnlockAllSkills={handleTogglePlaytestUnlockAllSkills} playtestUnlockAllSkillsEnabled={playtestSettings.unlockAllSkills} onTogglePlaytestSkipDialogs={handleTogglePlaytestSkipDialogs} playtestSkipDialogsEnabled={playtestSettings.skipDialogs} onToggleFastMove={handleToggleFastMove} fastMoveEnabled={fastMove} lightingTuning={lightingTuning} onUpdateLightingTuning={handleUpdateLightingTuning} onResetLightingTuning={handleResetLightingTuning} lightingTuningOutput={lightingTuningOutput} otherModalOpen={otherModalOpen} hasSelection={selectedIds.length > 0} onModalOpenStateChange={setHudMenuModalOpen} />
             <CombatLog log={combatLog} />
             <FormationIndicator units={units} formationOrder={formationOrder} />
             <div className="bottom-bar-container">
@@ -1973,7 +2044,7 @@ function Game({
                 commandMode={commandMode}
                 onStop={handleStop}
                 onHold={handleHold}
-                onAttackMove={() => setCommandMode("attackMove")}
+                onAttackMove={handleAttackMove}
                 onSelectAll={handleSelectAllPlayers}
                 onDeselectAll={handleDeselectAllPlayers}
                 onToggleAutoBattle={handleTogglePartyAutoBattle}
@@ -1984,74 +2055,25 @@ function Game({
             <PartyBar
                 units={units} selectedIds={selectedIds} onSelect={setSelectedIds} targetingMode={targetingMode}
                 consumableTargetingMode={consumableTargetingMode}
-                onTargetUnit={(targetUnitId) => {
-                    // Handle consumable targeting (clicking dead ally portrait)
-                    if (consumableTargetingMode) {
-                        handleConsumableTarget(targetUnitId);
-                        return;
-                    }
-                    if (!targetingMode || !sceneState.scene) return;
-                    const skillCtx = getSkillContext();
-                    handleTargetingOnUnit(
-                        targetUnitId, targetingMode,
-                        { actionCooldownRef, actionQueueRef, rangeIndicatorRef: { current: sceneState.rangeIndicator }, aoeIndicatorRef: { current: sceneState.aoeIndicator } },
-                        { unitsStateRef: unitsStateRef as React.RefObject<Unit[]>, pausedRef },
-                        { setTargetingMode, setQueuedActions },
-                        sceneState.unitGroups, skillCtx, addLog
-                    );
-                }}
+                onTargetUnit={handleTargetUnit}
                 hotbarAssignments={hotbarAssignments}
-                onAssignSkill={(unitId, slotIndex, skillName) => {
-                    setHotbarAssignments(prev => {
-                        const unitSlots = prev[unitId] || [null, null, null, null, null];
-                        const newSlots = [...unitSlots];
-                        newSlots[slotIndex] = skillName;
-                        const newAssignments = { ...prev, [unitId]: newSlots };
-                        saveHotbarAssignments(newAssignments);
-                        return newAssignments;
-                    });
-                }}
+                onAssignSkill={handleAssignSkill}
                 onCastSkill={handleCastSkill} skillCooldowns={skillCooldowns} paused={paused}
                 formationOrder={formationOrder}
-                onReorderFormation={(newOrder) => { setFormationOrder(newOrder); saveFormationOrder(newOrder); }}
+                onReorderFormation={handleReorderFormation}
                 hideHotbar={equipmentModalOpen}
             />
             </div>
             {showPanel && selectedIds.length === 1 && (
                 <UnitPanel
-                    unitId={selectedIds[0]} units={units} onClose={() => setShowPanel(false)}
-                    onToggleAI={(id) => updateUnitWith(setUnits, id, u => ({ aiEnabled: !u.aiEnabled }))}
+                    unitId={selectedIds[0]} units={units} onClose={handleClosePanel}
+                    onToggleAI={handleToggleAI}
                     onCastSkill={handleCastSkill} skillCooldowns={skillCooldowns} paused={paused}
                     queuedSkills={queuedActions.filter(q => q.unitId === selectedIds[0]).map(q => q.skillName)}
                     onUseConsumable={handleUseConsumable} consumableCooldownEnd={selectedConsumableCooldownEnd}
                     onOpenEquipment={setEquipmentModalUnitId}
-                    onIncrementStat={(id, stat) => setUnits(prev => prev.map(u => {
-                        if (u.id === id && (u.statPoints ?? 0) > 0) {
-                            const currentStats = u.stats ?? { strength: 0, dexterity: 0, vitality: 0, intelligence: 0, faith: 0 };
-                            const newStats = { ...currentStats, [stat]: currentStats[stat] + 1 };
-                            const updated = { ...u, statPoints: (u.statPoints ?? 0) - 1, stats: newStats };
-                            if (stat === "vitality") {
-                                const maxHp = getEffectiveMaxHp(u.id, updated);
-                                updated.hp = Math.min(u.hp + HP_PER_VITALITY, maxHp);
-                            }
-                            if (stat === "intelligence") {
-                                const maxMana = getEffectiveMaxMana(u.id, updated);
-                                updated.mana = Math.min((u.mana ?? 0) + MP_PER_INTELLIGENCE, maxMana);
-                            }
-                            return updated;
-                        }
-                        return u;
-                    }))}
-                    onLearnSkill={(id, skillName) => setUnits(prev => prev.map(u => {
-                        if (u.id === id && !(u.learnedSkills ?? []).includes(skillName) && (playtestUnlockAllSkills || (u.skillPoints ?? 0) > 0)) {
-                            return {
-                                ...u,
-                                skillPoints: playtestUnlockAllSkills ? (u.skillPoints ?? 0) : (u.skillPoints ?? 0) - 1,
-                                learnedSkills: [...(u.learnedSkills ?? []), skillName]
-                            };
-                        }
-                        return u;
-                    }))}
+                    onIncrementStat={handleIncrementStat}
+                    onLearnSkill={handleLearnSkill}
                     gold={gold}
                 />
             )}
@@ -2059,11 +2081,11 @@ function Game({
                 <EquipmentModal
                     key={equipmentModalUnitId}
                     unitId={equipmentModalUnitId}
-                    onClose={() => setEquipmentModalUnitId(null)}
+                    onClose={handleCloseEquipmentModal}
                     onEquipItem={handleEquipItem}
                     onUnequipItem={handleUnequipItem}
                     onMoveEquippedItem={handleMoveEquippedItem}
-                    onChangeUnit={(id) => { setEquipmentModalUnitId(id); setSelectedIds([id]); }}
+                    onChangeUnit={handleChangeEquipmentUnit}
                     formationOrder={formationOrder}
                 />
             )}

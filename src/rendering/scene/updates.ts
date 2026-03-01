@@ -556,6 +556,9 @@ function getGroupedColumnMeshes(columnGroups?: THREE.Mesh[][]): Set<THREE.Mesh> 
 const WALL_CHECK_INTERVAL = 3;
 let wallCheckFrame = 0;
 const cachedOccludingMeshes = new Set<THREE.Mesh>();
+// Track which tree/column groups are already fully marked to avoid redundant .some() scans
+const cachedOccludingTreeGroups = new Set<TreeOcclusionGroup>();
+const cachedOccludingColumnGroups = new Set<THREE.Mesh[]>();
 
 /**
  * Update wall, tree, column, and candle transparency based on unit occlusion.
@@ -579,6 +582,8 @@ export function updateWallTransparency(
     if (wallCheckFrame >= WALL_CHECK_INTERVAL) {
         wallCheckFrame = 0;
         cachedOccludingMeshes.clear();
+        cachedOccludingTreeGroups.clear();
+        cachedOccludingColumnGroups.clear();
 
         _cameraPos.copy(camera.position);
 
@@ -616,7 +621,7 @@ export function updateWallTransparency(
                 const unitZ = unitGroup.position.z;
 
                 for (const group of treeOcclusionGroups) {
-                    if (group.meshes.some(mesh => cachedOccludingMeshes.has(mesh))) continue;
+                    if (cachedOccludingTreeGroups.has(group)) continue;
                     const groupOccludes = doesCircleOccludeSegmentXZ(
                         cameraX,
                         cameraZ,
@@ -625,6 +630,7 @@ export function updateWallTransparency(
                         group.circle
                     );
                     if (groupOccludes) {
+                        cachedOccludingTreeGroups.add(group);
                         for (const mesh of group.meshes) {
                             cachedOccludingMeshes.add(mesh);
                         }
@@ -635,8 +641,7 @@ export function updateWallTransparency(
             // Check grouped columns first so multipart structures fade together.
             if (columnGroups) {
                 for (const group of columnGroups) {
-                    // Skip if already marked
-                    if (group.some(mesh => cachedOccludingMeshes.has(mesh))) continue;
+                    if (cachedOccludingColumnGroups.has(group)) continue;
 
                     // Check if any part of the group is occluding
                     let groupOccludes = false;
@@ -653,6 +658,7 @@ export function updateWallTransparency(
 
                     // If any part occludes, mark ALL parts of the group
                     if (groupOccludes) {
+                        cachedOccludingColumnGroups.add(group);
                         for (const mesh of group) {
                             cachedOccludingMeshes.add(mesh);
                         }

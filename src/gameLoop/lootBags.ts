@@ -33,6 +33,7 @@ export function resetLootBagIds(): void {
 function createLootBagMesh(id: number, x: number, z: number): THREE.Group {
     const group = new THREE.Group();
     group.position.set(x, 0, z);
+    group.scale.setScalar(0.75);
 
     const userData = { lootBagId: id, lootBagX: x, lootBagZ: z };
 
