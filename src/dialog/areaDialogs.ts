@@ -4,9 +4,15 @@ import type { DialogChoice, DialogDefinition, DialogNode, DialogUiAction } from 
 
 function cloneDialogUiAction(action: AreaDialogUiAction | undefined): DialogUiAction | undefined {
     if (!action) return undefined;
+    if (action.type === "open_menu") {
+        return {
+            type: "open_menu",
+            menuId: action.menuId,
+        };
+    }
     return {
-        type: action.type,
-        menuId: action.menuId,
+        type: "event",
+        eventId: action.eventId,
     };
 }
 
@@ -16,6 +22,7 @@ function cloneAreaDialogChoice(choice: AreaDialogChoice): DialogChoice {
         id: choice.id,
         label: choice.label,
         ...(nextNodeId ? { nextNodeId } : {}),
+        ...(choice.conditions && choice.conditions.length > 0 ? { conditions: choice.conditions.map(condition => ({ ...condition })) } : {}),
         ...(choice.onDialogEndAction ? { onDialogEndAction: cloneDialogUiAction(choice.onDialogEndAction) } : {}),
     };
 }

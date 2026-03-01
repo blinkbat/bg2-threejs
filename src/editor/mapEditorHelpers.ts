@@ -91,6 +91,9 @@ export function cloneDialogCondition(condition: AreaDialogTriggerCondition): Are
             ...(condition.range !== undefined ? { range: condition.range } : {}),
         };
     }
+    if (condition.type === "npc_engaged") {
+        return { type: "npc_engaged", spawnIndex: condition.spawnIndex };
+    }
     if (condition.type === "party_out_of_combat_range") {
         return { type: "party_out_of_combat_range", range: condition.range };
     }
@@ -124,6 +127,7 @@ export function cloneDialogChoice(choice: AreaDialogChoice): AreaDialogChoice {
         id: choice.id,
         label: choice.label,
         ...(choice.nextNodeId ? { nextNodeId: choice.nextNodeId } : {}),
+        ...(choice.conditions && choice.conditions.length > 0 ? { conditions: choice.conditions.map(condition => ({ ...condition })) } : {}),
         ...(choice.onDialogEndAction ? { onDialogEndAction: { ...choice.onDialogEndAction } } : {}),
     };
 }

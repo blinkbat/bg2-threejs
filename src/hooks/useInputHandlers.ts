@@ -117,6 +117,7 @@ export interface InputCallbacks {
     addLog: (text: string, color?: string) => void;
     getSkillContext: (defeatedThisFrame?: Set<number>) => SkillExecutionContext;
     handleAreaTransition: (transition: AreaTransition) => void;
+    onNpcEngaged: (unitId: number) => void;
     onCloseHelp: () => void;
     processActionQueue: (defeatedThisFrame: Set<number>) => void;
     handleCastSkillRef: React.MutableRefObject<((unitId: number, skill: Skill) => void) | null>;
@@ -133,6 +134,7 @@ export interface UseInputHandlersOptions {
 }
 
 const DIRECT_MOVE_SAMPLE_DENSITY = 4;
+const NPC_ENGAGE_RANGE = 3.5;
 
 interface ChestHitData {
     chestIndex: number;
@@ -614,6 +616,27 @@ export function useInputHandlers({
                     if (o.userData.unitId !== undefined) {
                         const id = o.userData.unitId as number;
                         const clickedUnit = stateRefs.unitsStateRef.current.find(u => u.id === id);
+                        if (
+                            clickedUnit
+                            && clickedUnit.team === "neutral"
+                            && clickedUnit.hp > 0
+                        ) {
+                            const npcGroup = unitGroups[id];
+                            if (!npcGroup) return;
+                            const playerNearby = isAnyAlivePlayerWithinRange(
+                                stateRefs.unitsStateRef,
+                                unitGroups,
+                                npcGroup.position.x,
+                                npcGroup.position.z,
+                                NPC_ENGAGE_RANGE
+                            );
+                            if (!playerNearby) {
+                                callbacks.addLog("You need to get closer to speak to them.", "#f59e0b");
+                                return;
+                            }
+                            callbacks.onNpcEngaged(id);
+                            return;
+                        }
                         if (
                             clickedUnit
                             && clickedUnit.team === "enemy"

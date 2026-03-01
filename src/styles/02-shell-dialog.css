@@ -256,6 +256,35 @@
     background: #1f2438;
 }
 
+.dialog-choice-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.dialog-choice-btn:disabled {
+    border-color: #394055;
+    background: #141a26;
+    color: #8e96a8;
+    cursor: not-allowed;
+}
+
+.dialog-choice-btn:disabled:hover {
+    border-color: #394055;
+    background: #141a26;
+}
+
+.dialog-choice-btn:disabled .dialog-choice-index {
+    color: #6b7280;
+}
+
+.dialog-choice-disabled-reason {
+    margin-left: 20px;
+    font-size: 12px;
+    line-height: 1.35;
+    color: #9ca3b5;
+}
+
 .dialog-choice-index {
     display: inline-block;
     width: 18px;

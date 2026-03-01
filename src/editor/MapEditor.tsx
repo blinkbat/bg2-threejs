@@ -2497,7 +2497,7 @@ export function MapEditor() {
                         <input
                             type="number"
                             value={metadata.width}
-                            onChange={e => setMetadata(prev => ({ ...prev, width: Math.max(5, Math.min(50, parseInt(e.target.value) || 5)) }))}
+                            onChange={e => setMetadata(prev => ({ ...prev, width: Math.max(5, Math.min(100, parseInt(e.target.value) || 5)) }))}
                             style={{ padding: 8, fontSize: 14, background: "#333", border: "1px solid #555", borderRadius: 4, color: "#fff" }}
                         />
                     </label>
@@ -2506,7 +2506,7 @@ export function MapEditor() {
                         <input
                             type="number"
                             value={metadata.height}
-                            onChange={e => setMetadata(prev => ({ ...prev, height: Math.max(5, Math.min(50, parseInt(e.target.value) || 5)) }))}
+                            onChange={e => setMetadata(prev => ({ ...prev, height: Math.max(5, Math.min(100, parseInt(e.target.value) || 5)) }))}
                             style={{ padding: 8, fontSize: 14, background: "#333", border: "1px solid #555", borderRadius: 4, color: "#fff" }}
                         />
                     </label>

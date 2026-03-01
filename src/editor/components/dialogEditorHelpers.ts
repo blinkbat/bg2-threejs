@@ -3,6 +3,7 @@ import type { DialogSpeakerId } from "../../dialog/types";
 import type { EnemyType } from "../../core/types";
 import type {
     AreaDialogDefinition,
+    AreaDialogEventId,
     AreaDialogMenuId,
     AreaDialogNode,
     AreaDialogTrigger,
@@ -38,10 +39,11 @@ export interface TriggerValidationState {
 
 export type TriggerListFilter = "all" | "needs_fix" | "ready" | "wip";
 
-export const DIALOG_END_MENU_OPTIONS: Array<{ value: AreaDialogMenuId; label: string }> = [
+export const DIALOG_END_MENU_OPTIONS: Array<{ value: AreaDialogMenuId | AreaDialogEventId; label: string }> = [
     { value: "controls", label: "Controls" },
     { value: "save_game", label: "Save Menu" },
     { value: "load_game", label: "Load Menu" },
+    { value: "spend_the_night", label: "Spend The Night" },
 ];
 
 export const SAVE_FEEDBACK_MS = 2500;
@@ -52,6 +54,7 @@ export const TRIGGER_CONDITION_OPTIONS: Array<{ value: AreaDialogTriggerConditio
     { value: "party_enters_location", label: "When Party Enters Named Location" },
     { value: "party_enters_region", label: "When Party Enters Region" },
     { value: "unit_seen", label: "When Party Sees Enemy" },
+    { value: "npc_engaged", label: "When NPC Is Engaged" },
     { value: "party_out_of_combat_range", label: "When Party Is Out Of Combat Range" },
     { value: "after_delay", label: "After Delay" },
 ];
@@ -95,6 +98,12 @@ export function createDefaultDialog(dialogId: string): AreaDialogDefinition {
 
 export function toDialogEndAction(menuId: string): AreaDialogUiAction | undefined {
     if (menuId === "") return undefined;
+    if (menuId === "spend_the_night") {
+        return {
+            type: "event",
+            eventId: "spend_the_night",
+        };
+    }
     if (menuId !== "controls" && menuId !== "save_game" && menuId !== "load_game") return undefined;
     return {
         type: "open_menu",
@@ -103,8 +112,9 @@ export function toDialogEndAction(menuId: string): AreaDialogUiAction | undefine
 }
 
 export function toDialogEndActionMenuId(action: AreaDialogUiAction | undefined): string {
-    if (!action || action.type !== "open_menu") return "";
-    return action.menuId;
+    if (!action) return "";
+    if (action.type === "open_menu") return action.menuId;
+    return action.eventId;
 }
 
 export function createConditionByType(
@@ -125,6 +135,9 @@ export function createConditionByType(
     }
     if (conditionType === "unit_seen") {
         return { type: "unit_seen", spawnIndex: 0, range: 12 };
+    }
+    if (conditionType === "npc_engaged") {
+        return { type: "npc_engaged", spawnIndex: 0 };
     }
     if (conditionType === "party_out_of_combat_range") {
         return { type: "party_out_of_combat_range", range: 12 };
@@ -166,6 +179,11 @@ export function isDialogConditionValid(
         return enemySpawnOptions.some(spawn => spawn.spawnIndex === condition.spawnIndex)
             && (condition.range ?? 12) > 0;
     }
+    if (condition.type === "npc_engaged") {
+        return enemySpawnOptions.some(
+            spawn => spawn.spawnIndex === condition.spawnIndex && spawn.enemyType === "innkeeper"
+        );
+    }
     if (condition.type === "party_out_of_combat_range") {
         return condition.range > 0;
     }
@@ -188,6 +206,7 @@ export function stripInvalidNodeLinks(nodesById: Record<string, AreaDialogNode>)
                 id: choice.id,
                 label: choice.label,
                 ...(choiceNextNodeId ? { nextNodeId: choiceNextNodeId } : {}),
+                ...(choice.conditions && choice.conditions.length > 0 ? { conditions: choice.conditions.map(condition => ({ ...condition })) } : {}),
                 ...(choice.onDialogEndAction ? { onDialogEndAction: { ...choice.onDialogEndAction } } : {}),
             };
         });
@@ -279,6 +298,7 @@ export function getTriggerConditionTypeLabel(conditionType: AreaDialogTriggerCon
     if (conditionType === "party_enters_location") return "When Party Enters Named Location";
     if (conditionType === "party_enters_region") return "When Party Enters Region";
     if (conditionType === "unit_seen") return "When Party Sees Enemy";
+    if (conditionType === "npc_engaged") return "When NPC Is Engaged";
     if (conditionType === "party_out_of_combat_range") return "When Party Is Out Of Combat Range";
     return "After Delay";
 }
@@ -305,6 +325,10 @@ export function describeTriggerCondition(
     if (condition.type === "unit_seen") {
         const spawnLabel = spawnLabelByIndex.get(condition.spawnIndex) ?? `#${condition.spawnIndex} (missing spawn)`;
         return `Party sees enemy ${spawnLabel} within ${condition.range ?? 12} range.`;
+    }
+    if (condition.type === "npc_engaged") {
+        const spawnLabel = spawnLabelByIndex.get(condition.spawnIndex) ?? `#${condition.spawnIndex} (missing spawn)`;
+        return `A nearby party member clicks NPC ${spawnLabel}.`;
     }
     if (condition.type === "party_out_of_combat_range") {
         return `No living enemy is within ${condition.range} range of the party.`;

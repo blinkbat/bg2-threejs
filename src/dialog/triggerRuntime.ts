@@ -7,6 +7,7 @@ const DEFAULT_UNIT_SEEN_RANGE = 12;
 export interface DialogTriggerRuntimeState {
     stickySatisfiedConditionKeys: Set<string>;
     previousRegionInsideByConditionKey: Map<string, boolean>;
+    pendingNpcEngagementSpawnIndexes: Set<number>;
 }
 
 export interface DialogTriggerEvaluationContext {
@@ -156,6 +157,17 @@ export function isDialogTriggerSatisfied(context: DialogTriggerEvaluationContext
             const visibleRange = condition.range ?? DEFAULT_UNIT_SEEN_RANGE;
             if (isUnitSeenByParty(units, condition.spawnIndex, visibleRange)) {
                 runtimeState.stickySatisfiedConditionKeys.add(conditionKey);
+                continue;
+            }
+            return false;
+        }
+
+        if (condition.type === "npc_engaged") {
+            const npcUnit = getStaticSpawnUnit(units, condition.spawnIndex);
+            if (!npcUnit || npcUnit.hp <= 0 || npcUnit.team !== "neutral") {
+                return false;
+            }
+            if (runtimeState.pendingNpcEngagementSpawnIndexes.has(condition.spawnIndex)) {
                 continue;
             }
             return false;

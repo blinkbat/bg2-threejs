@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
+    AreaDialogChoiceCondition,
     AreaDialogDefinition,
     AreaDialogNode,
     AreaLocation,
@@ -98,14 +99,12 @@ export function DialogEditorModal({
         if (!firstDialog) return null;
         return listNodeIds(firstDialog)[0] ?? null;
     });
-    const [dialogsSaved, setDialogsSaved] = useState(false);
-    const [triggersSaved, setTriggersSaved] = useState(false);
+    const [saved, setSaved] = useState(false);
     const [editorView, setEditorView] = useState<"list" | "trigger" | "dialog">("list");
     const [triggerTab, setTriggerTab] = useState<"conditions" | "actions">("conditions");
     const [triggerSearchText, setTriggerSearchText] = useState("");
     const [triggerFilter, setTriggerFilter] = useState<TriggerListFilter>("all");
-    const dialogsSavedTimeoutRef = useRef<number | null>(null);
-    const triggersSavedTimeoutRef = useRef<number | null>(null);
+    const savedTimeoutRef = useRef<number | null>(null);
     const knownTriggerIdsRef = useRef<Set<string>>(new Set(dialogTriggers.map(trigger => trigger.id)));
     const initialDialogIdsRef = useRef<Set<string>>(new Set(dialogs.map(dialog => dialog.id)));
     const dialogIdRemapRef = useRef<Map<string, string>>(new Map());
@@ -132,13 +131,9 @@ export function DialogEditorModal({
 
     useEffect(() => {
         return () => {
-            if (dialogsSavedTimeoutRef.current !== null) {
-                window.clearTimeout(dialogsSavedTimeoutRef.current);
-                dialogsSavedTimeoutRef.current = null;
-            }
-            if (triggersSavedTimeoutRef.current !== null) {
-                window.clearTimeout(triggersSavedTimeoutRef.current);
-                triggersSavedTimeoutRef.current = null;
+            if (savedTimeoutRef.current !== null) {
+                window.clearTimeout(savedTimeoutRef.current);
+                savedTimeoutRef.current = null;
             }
         };
     }, []);
@@ -247,6 +242,10 @@ export function DialogEditorModal({
         });
         return next;
     }, [enemySpawnOptions]);
+    const npcSpawnOptions = useMemo(
+        () => enemySpawnOptions.filter(spawn => spawn.enemyType === "innkeeper"),
+        [enemySpawnOptions]
+    );
     const locationLabelById = useMemo(() => {
         const next = new Map<string, string>();
         dialogLocations.forEach(location => {
@@ -471,6 +470,7 @@ export function DialogEditorModal({
                         id: choice.id,
                         label: choice.label,
                         ...(choiceNextNodeId ? { nextNodeId: choiceNextNodeId } : {}),
+                        ...(choice.conditions && choice.conditions.length > 0 ? { conditions: choice.conditions.map(condition => ({ ...condition })) } : {}),
                         ...(choice.onDialogEndAction ? { onDialogEndAction: { ...choice.onDialogEndAction } } : {}),
                     };
                 });
@@ -514,6 +514,7 @@ export function DialogEditorModal({
                         id: choice.id,
                         label: choice.label,
                         ...(choiceNextNodeId ? { nextNodeId: choiceNextNodeId } : {}),
+                        ...(choice.conditions && choice.conditions.length > 0 ? { conditions: choice.conditions.map(condition => ({ ...condition })) } : {}),
                         ...(choice.onDialogEndAction ? { onDialogEndAction: { ...choice.onDialogEndAction } } : {}),
                     };
                 });
@@ -587,6 +588,7 @@ export function DialogEditorModal({
                         id: choice.id,
                         label: choice.label,
                         ...(nextNodeId ? { nextNodeId } : {}),
+                        ...(choice.conditions && choice.conditions.length > 0 ? { conditions: choice.conditions.map(condition => ({ ...condition })) } : {}),
                         ...(choice.onDialogEndAction ? { onDialogEndAction: { ...choice.onDialogEndAction } } : {}),
                     }
                     : choice
@@ -611,6 +613,60 @@ export function DialogEditorModal({
         });
     };
 
+    const CHOICE_CONDITION_TYPES: { value: AreaDialogChoiceCondition["type"]; label: string }[] = [
+        { value: "party_is_gathered", label: "Party Is Gathered" },
+        { value: "party_has_gold", label: "Party Has Gold" },
+    ];
+
+    const addChoiceCondition = (choiceId: string, conditionType: AreaDialogChoiceCondition["type"]): void => {
+        updateSelectedNode(node => {
+            const choices = node.choices ?? [];
+            const nextChoices = choices.map(choice => {
+                if (choice.id !== choiceId) return choice;
+                const existing = choice.conditions ?? [];
+                if (existing.some(c => c.type === conditionType)) return choice;
+                const newCondition: AreaDialogChoiceCondition = conditionType === "party_has_gold"
+                    ? { type: "party_has_gold", amount: 100 }
+                    : { type: "party_is_gathered" };
+                return { ...choice, conditions: [...existing, newCondition] };
+            });
+            return { ...node, choices: nextChoices };
+        });
+    };
+
+    const removeChoiceCondition = (choiceId: string, conditionType: AreaDialogChoiceCondition["type"]): void => {
+        updateSelectedNode(node => {
+            const choices = node.choices ?? [];
+            const nextChoices = choices.map(choice => {
+                if (choice.id !== choiceId) return choice;
+                const remaining = (choice.conditions ?? []).filter(c => c.type !== conditionType);
+                return {
+                    ...choice,
+                    ...(remaining.length > 0 ? { conditions: remaining } : { conditions: undefined }),
+                };
+            });
+            return { ...node, choices: nextChoices };
+        });
+    };
+
+    const updateChoiceCondition = (
+        choiceId: string,
+        conditionType: AreaDialogChoiceCondition["type"],
+        updater: (condition: AreaDialogChoiceCondition) => AreaDialogChoiceCondition
+    ): void => {
+        updateSelectedNode(node => {
+            const choices = node.choices ?? [];
+            const nextChoices = choices.map(choice => {
+                if (choice.id !== choiceId) return choice;
+                const nextConditions = (choice.conditions ?? []).map(c =>
+                    c.type === conditionType ? updater(c) : c
+                );
+                return { ...choice, conditions: nextConditions };
+            });
+            return { ...node, choices: nextChoices };
+        });
+    };
+
     const removeChoice = (choiceId: string): void => {
         updateSelectedNode(node => {
             const choices = node.choices ?? [];
@@ -622,8 +678,10 @@ export function DialogEditorModal({
         });
     };
 
-    const saveDraftDialogs = (): void => {
-        if (validationErrors.length > 0) return;
+    const canSave = validationErrors.length === 0 && canSaveTriggers;
+
+    const saveAll = (): void => {
+        if (!canSave) return;
         const remapEntries = Array.from(dialogIdRemapRef.current.entries());
         const dialogIdRemap = remapEntries.length > 0
             ? Object.fromEntries(remapEntries)
@@ -631,26 +689,14 @@ export function DialogEditorModal({
         onSaveDialogs(draftDialogs.map(cloneDialogDefinition), dialogIdRemap);
         dialogIdRemapRef.current = new Map();
         initialDialogIdsRef.current = new Set(draftDialogs.map(dialog => dialog.id));
-        setDialogsSaved(true);
-        if (dialogsSavedTimeoutRef.current !== null) {
-            window.clearTimeout(dialogsSavedTimeoutRef.current);
-        }
-        dialogsSavedTimeoutRef.current = window.setTimeout(() => {
-            setDialogsSaved(false);
-            dialogsSavedTimeoutRef.current = null;
-        }, SAVE_FEEDBACK_MS);
-    };
-
-    const saveDraftTriggers = (): void => {
-        if (!canSaveTriggers) return;
         onSaveTriggers(dialogTriggers.map(cloneDialogTrigger));
-        setTriggersSaved(true);
-        if (triggersSavedTimeoutRef.current !== null) {
-            window.clearTimeout(triggersSavedTimeoutRef.current);
+        setSaved(true);
+        if (savedTimeoutRef.current !== null) {
+            window.clearTimeout(savedTimeoutRef.current);
         }
-        triggersSavedTimeoutRef.current = window.setTimeout(() => {
-            setTriggersSaved(false);
-            triggersSavedTimeoutRef.current = null;
+        savedTimeoutRef.current = window.setTimeout(() => {
+            setSaved(false);
+            savedTimeoutRef.current = null;
         }, SAVE_FEEDBACK_MS);
     };
 
@@ -721,7 +767,7 @@ export function DialogEditorModal({
                             <button
                                 title="Create trigger"
                                 onClick={() => onAddDialogTrigger()}
-                                className="editor-btn editor-btn--success"
+                                className="editor-btn editor-btn--primary"
                             >
                                 <span className="editor-btn-label">
                                     <PlusIcon size={14} />
@@ -729,38 +775,20 @@ export function DialogEditorModal({
                                 </span>
                             </button>
                         )}
-                        {editorView === "dialog" && (
-                            <button
-                                title={validationErrors.length > 0 ? "Resolve errors before saving" : "Save dialog payloads"}
-                                onClick={saveDraftDialogs}
-                                disabled={validationErrors.length > 0}
-                                className="editor-btn editor-btn--success"
-                                style={{
-                                    background: validationErrors.length > 0 ? "#5b6276" : (dialogsSaved ? "#238a57" : "#2f9f63"),
-                                    cursor: validationErrors.length > 0 ? "not-allowed" : "pointer",
-                                    opacity: validationErrors.length > 0 ? 0.75 : 1,
-                                }}
-                            >
-                                <span className="editor-btn-label">
-                                    {dialogsSaved ? <CheckIcon size={14} /> : <SaveIcon size={14} />}
-                                    {dialogsSaved ? "Saved" : "Save Dialogs"}
-                                </span>
-                            </button>
-                        )}
                         <button
-                            title={canSaveTriggers ? "Save triggers" : "Fix or mark WIP before saving triggers"}
-                            onClick={saveDraftTriggers}
-                            disabled={!canSaveTriggers}
-                            className="editor-btn editor-btn--primary"
+                            title={canSave ? "Save dialogs and triggers" : "Resolve errors before saving"}
+                            onClick={saveAll}
+                            disabled={!canSave}
+                            className="editor-btn editor-btn--success"
                             style={{
-                                background: !canSaveTriggers ? "#5b6276" : (triggersSaved ? "#2f7ea8" : "#3d67ad"),
-                                cursor: canSaveTriggers ? "pointer" : "not-allowed",
-                                opacity: canSaveTriggers ? 1 : 0.75,
+                                background: !canSave ? "#5b6276" : (saved ? "#238a57" : "#2f9f63"),
+                                cursor: canSave ? "pointer" : "not-allowed",
+                                opacity: canSave ? 1 : 0.75,
                             }}
                         >
                             <span className="editor-btn-label">
-                                {triggersSaved ? <CheckIcon size={14} /> : <SaveIcon size={14} />}
-                                {triggersSaved ? "Saved" : "Save Triggers"}
+                                {saved ? <CheckIcon size={14} /> : <SaveIcon size={14} />}
+                                {saved ? "Saved" : "Save"}
                             </span>
                         </button>
                         <button
@@ -992,6 +1020,15 @@ export function DialogEditorModal({
                                                         <select value={condition.spawnIndex} onChange={event => onUpdateDialogTriggerCondition(trigger.id, conditionIndex, current => { if (current.type !== "enemy_killed") return current; return { ...current, spawnIndex: parseInt(event.target.value, 10) || 0 }; })} style={{ padding: 8, fontSize: 14, background: "#1f2433", border: "1px solid #555d73", borderRadius: 4, color: "#fff" }}>
                                                             {enemySpawnOptions.map(spawn => (<option key={`enemy-killed-${spawn.spawnIndex}`} value={spawn.spawnIndex}>#{spawn.spawnIndex}: {spawn.enemyType} ({spawn.x},{spawn.z})</option>))}
                                                             {enemySpawnOptions.length === 0 && <option value={0}>No enemy spawns</option>}
+                                                        </select>
+                                                    </label>
+                                                )}
+                                                {condition.type === "npc_engaged" && (
+                                                    <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                                        <span style={{ fontSize: 14 }}>NPC Spawn</span>
+                                                        <select value={condition.spawnIndex} onChange={event => onUpdateDialogTriggerCondition(trigger.id, conditionIndex, current => { if (current.type !== "npc_engaged") return current; return { ...current, spawnIndex: parseInt(event.target.value, 10) || 0 }; })} style={{ padding: 8, fontSize: 14, background: "#1f2433", border: "1px solid #555d73", borderRadius: 4, color: "#fff" }}>
+                                                            {npcSpawnOptions.map(spawn => (<option key={`npc-engaged-${spawn.spawnIndex}`} value={spawn.spawnIndex}>#{spawn.spawnIndex}: {spawn.enemyType} ({spawn.x},{spawn.z})</option>))}
+                                                            {npcSpawnOptions.length === 0 && <option value={0}>No NPC spawns</option>}
                                                         </select>
                                                     </label>
                                                 )}
@@ -1250,26 +1287,168 @@ export function DialogEditorModal({
                                     <div style={{ borderTop: "1px solid #3d465b", paddingTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
                                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                                             <div style={{ fontSize: 15, fontWeight: 700 }}>Choices</div>
-                                            <button onClick={addChoiceToSelectedNode} style={{ padding: "4px 8px", fontSize: 13, background: "#3484d0", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}>+ Choice</button>
+                                            <button
+                                                onClick={addChoiceToSelectedNode}
+                                                className="editor-btn editor-btn--primary editor-btn--small"
+                                            >
+                                                + Choice
+                                            </button>
                                         </div>
                                         {(selectedNode.choices ?? []).length === 0 && (
                                             <div style={{ fontSize: 14, color: "#9aa6c5" }}>No choices. Node advances using "Next Node" + continue button.</div>
                                         )}
-                                        {(selectedNode.choices ?? []).map(choice => (
-                                            <div key={`${selectedNode.id}-${choice.id}`} style={{ border: "1px solid #4b5369", borderRadius: 6, padding: 8, background: "#2a3041", display: "grid", gridTemplateColumns: "160px 1fr 170px 170px 70px", gap: 8, alignItems: "center" }}>
-                                                <input value={choice.id} onChange={event => renameChoice(choice.id, event.target.value)} style={{ padding: 8, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 14 }} />
-                                                <input value={choice.label} onChange={event => updateChoiceLabel(choice.id, event.target.value)} placeholder="Choice label" style={{ padding: 8, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 14 }} />
-                                                <select value={choice.nextNodeId ?? ""} onChange={event => updateChoiceNextNodeId(choice.id, event.target.value)} style={{ padding: 8, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 14 }}>
-                                                    <option value="">(end dialog)</option>
-                                                    {nodeIds.map(nodeId => (<option key={`choice-next-${choice.id}-${nodeId}`} value={nodeId}>{nodeId}</option>))}
-                                                </select>
-                                                <select value={toDialogEndActionMenuId(choice.onDialogEndAction)} onChange={event => updateChoiceDialogEndAction(choice.id, event.target.value)} style={{ padding: 8, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 14 }}>
-                                                    <option value="">(no end action)</option>
-                                                    {DIALOG_END_MENU_OPTIONS.map(option => (<option key={`choice-end-action-${choice.id}-${option.value}`} value={option.value}>{option.label}</option>))}
-                                                </select>
-                                                <button onClick={() => removeChoice(choice.id)} style={{ padding: "6px 8px", fontSize: 13, background: "#9d4040", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}>Remove</button>
-                                            </div>
-                                        ))}
+                                        {(selectedNode.choices ?? []).map(choice => {
+                                            const conditions = choice.conditions ?? [];
+                                            const usedTypes = new Set(conditions.map(c => c.type));
+                                            const availableTypes = CHOICE_CONDITION_TYPES.filter(t => !usedTypes.has(t.value));
+
+                                            return (
+                                                <div key={`${selectedNode.id}-${choice.id}`} className="editor-choice-card">
+                                                    <div className="editor-choice-main">
+                                                        <label className="editor-choice-field">
+                                                            <span className="editor-choice-label">Choice ID</span>
+                                                            <input
+                                                                value={choice.id}
+                                                                onChange={event => renameChoice(choice.id, event.target.value)}
+                                                                className="editor-trigger-input editor-choice-input"
+                                                            />
+                                                        </label>
+                                                        <label className="editor-choice-field editor-choice-field--wide">
+                                                            <span className="editor-choice-label">Label</span>
+                                                            <input
+                                                                value={choice.label}
+                                                                onChange={event => updateChoiceLabel(choice.id, event.target.value)}
+                                                                placeholder="Choice label"
+                                                                className="editor-trigger-input editor-choice-input"
+                                                            />
+                                                        </label>
+                                                        <label className="editor-choice-field">
+                                                            <span className="editor-choice-label">Next Node</span>
+                                                            <select
+                                                                value={choice.nextNodeId ?? ""}
+                                                                onChange={event => updateChoiceNextNodeId(choice.id, event.target.value)}
+                                                                className="editor-trigger-input editor-choice-input"
+                                                            >
+                                                                <option value="">(end dialog)</option>
+                                                                {nodeIds.map(nodeId => (
+                                                                    <option key={`choice-next-${choice.id}-${nodeId}`} value={nodeId}>{nodeId}</option>
+                                                                ))}
+                                                            </select>
+                                                        </label>
+                                                        <label className="editor-choice-field">
+                                                            <span className="editor-choice-label">End Action</span>
+                                                            <select
+                                                                value={toDialogEndActionMenuId(choice.onDialogEndAction)}
+                                                                onChange={event => updateChoiceDialogEndAction(choice.id, event.target.value)}
+                                                                className="editor-trigger-input editor-choice-input"
+                                                            >
+                                                                <option value="">(no end action)</option>
+                                                                {DIALOG_END_MENU_OPTIONS.map(option => (
+                                                                    <option key={`choice-end-action-${choice.id}-${option.value}`} value={option.value}>{option.label}</option>
+                                                                ))}
+                                                            </select>
+                                                        </label>
+                                                        <button
+                                                            onClick={() => removeChoice(choice.id)}
+                                                            className="editor-btn editor-btn--danger editor-btn--small editor-choice-remove"
+                                                        >
+                                                            Remove
+                                                        </button>
+                                                    </div>
+                                                    {conditions.length > 0 && (
+                                                        <div className="editor-choice-conditions">
+                                                            {conditions.map(condition => (
+                                                                <div key={condition.type} className="editor-choice-condition-row">
+                                                                    <span className="editor-choice-condition-type">
+                                                                        {CHOICE_CONDITION_TYPES.find(t => t.value === condition.type)?.label ?? condition.type}
+                                                                    </span>
+                                                                    {condition.type === "party_is_gathered" && (
+                                                                        <label className="editor-choice-field">
+                                                                            <span className="editor-choice-label">Max Distance</span>
+                                                                            <input
+                                                                                type="number"
+                                                                                min={0.1}
+                                                                                step={0.1}
+                                                                                value={condition.maxDistance ?? ""}
+                                                                                onChange={event => {
+                                                                                    const raw = event.target.value.trim();
+                                                                                    const val = raw.length === 0 ? undefined : Number(raw);
+                                                                                    const maxDistance = val !== undefined && Number.isFinite(val) && val > 0 ? val : undefined;
+                                                                                    updateChoiceCondition(choice.id, "party_is_gathered", c => ({
+                                                                                        ...c,
+                                                                                        ...(maxDistance !== undefined ? { maxDistance } : { maxDistance: undefined }),
+                                                                                    }));
+                                                                                }}
+                                                                                placeholder="Default"
+                                                                                className="editor-trigger-input editor-choice-input"
+                                                                            />
+                                                                        </label>
+                                                                    )}
+                                                                    {condition.type === "party_has_gold" && (
+                                                                        <label className="editor-choice-field">
+                                                                            <span className="editor-choice-label">Gold Amount</span>
+                                                                            <input
+                                                                                type="number"
+                                                                                min={1}
+                                                                                step={1}
+                                                                                value={condition.amount}
+                                                                                onChange={event => {
+                                                                                    const val = parseInt(event.target.value) || 1;
+                                                                                    updateChoiceCondition(choice.id, "party_has_gold", c => ({
+                                                                                        ...c,
+                                                                                        amount: Math.max(1, val),
+                                                                                    }));
+                                                                                }}
+                                                                                className="editor-trigger-input editor-choice-input"
+                                                                            />
+                                                                        </label>
+                                                                    )}
+                                                                    <label className="editor-choice-field editor-choice-field--wide">
+                                                                        <span className="editor-choice-label">Disabled Message</span>
+                                                                        <input
+                                                                            value={condition.disabledMessage ?? ""}
+                                                                            onChange={event => {
+                                                                                const msg = event.target.value;
+                                                                                updateChoiceCondition(choice.id, condition.type, c => ({
+                                                                                    ...c,
+                                                                                    ...(msg.trim().length > 0 ? { disabledMessage: msg } : { disabledMessage: undefined }),
+                                                                                }));
+                                                                            }}
+                                                                            placeholder="Shown when blocked"
+                                                                            className="editor-trigger-input editor-choice-input"
+                                                                        />
+                                                                    </label>
+                                                                    <button
+                                                                        onClick={() => removeChoiceCondition(choice.id, condition.type)}
+                                                                        className="editor-btn editor-btn--danger editor-btn--small editor-choice-condition-remove"
+                                                                        title="Remove condition"
+                                                                    >
+                                                                        <XIcon size={14} />
+                                                                    </button>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                    {availableTypes.length > 0 && (
+                                                        <select
+                                                            value=""
+                                                            onChange={event => {
+                                                                if (event.target.value) {
+                                                                    addChoiceCondition(choice.id, event.target.value as AreaDialogChoiceCondition["type"]);
+                                                                    event.target.value = "";
+                                                                }
+                                                            }}
+                                                            className="editor-trigger-input editor-choice-add-condition"
+                                                        >
+                                                            <option value="">+ Add Condition</option>
+                                                            {availableTypes.map(t => (
+                                                                <option key={t.value} value={t.value}>{t.label}</option>
+                                                            ))}
+                                                        </select>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 </>
                             )}

@@ -69,17 +69,27 @@ import { loadFormationOrder, saveFormationOrder } from "./hooks/formationStorage
 import { HelpModal } from "./components/HelpModal";
 import { SaveLoadModal } from "./components/SaveLoadModal";
 import { DialogModal } from "./components/DialogModal";
-import { type SaveSlotData, SAVE_VERSION, saveGame, loadGame } from "./game/saveLoad";
+import {
+    type DialogTriggerProgress,
+    type SaveLoadOperationResult,
+    type SaveSlotData,
+    buildSaveSlotData,
+    deleteSave,
+    loadGame,
+    resolveLoadedSaveState,
+    saveGame
+} from "./game/saveLoad";
 import { clearFogVisibilityMemory } from "./game/fogMemory";
 import { buildAreaDialogDefinitionMap } from "./dialog/areaDialogs";
 import { getDialogDefinitionById } from "./dialog/registry";
+import { isInRange } from "./rendering/range";
 import {
     getDialogTriggerPriority,
     getTriggerStartDialogId,
     isDialogTriggerSatisfied,
     type DialogTriggerRuntimeState
 } from "./dialog/triggerRuntime";
-import type { DialogChoice, DialogDefinition, DialogNode, DialogSpeaker, DialogState, DialogUiAction } from "./dialog/types";
+import type { DialogChoiceCondition, DialogDefinition, DialogNode, DialogSpeaker, DialogState, DialogUiAction } from "./dialog/types";
 import {
     formatPerfLogLine,
     PERF_LOG_BUFFER_LIMIT,
@@ -121,6 +131,7 @@ interface GameProps {
     initialOpenedSecretDoors: Set<string> | null;
     initialGold: number | null;
     initialKilledEnemies: Set<string> | null;
+    initialDialogTriggerProgress: DialogTriggerProgress | null;
     dialogTriggersEnabled: boolean;
     onReady?: () => void;
 }
@@ -132,6 +143,9 @@ export interface SaveableGameState {
     openedSecretDoors: Set<string>;
     gold: number;
     killedEnemies: Set<string>;
+    hotbarAssignments: HotbarAssignments;
+    formationOrder: number[];
+    dialogTriggerProgress: DialogTriggerProgress;
 }
 
 interface LightingTuningSettings {
@@ -166,6 +180,29 @@ const DIALOG_TYPING_INTERVAL_MS = 18;
 const DIALOG_CHARS_PER_TICK = 3;
 const DIALOG_MIN_BLIP_INTERVAL_MS = 38;
 const DIALOG_TRIGGER_REPEAT_GUARD_MS = 1500;
+const DIALOG_PARTY_GATHERED_DEFAULT_MAX_DISTANCE = 8;
+const SPEND_NIGHT_FADE_MS = 420;
+const SPEND_NIGHT_BLACK_HOLD_MS = 260;
+
+function cloneDialogTriggerProgressForRuntime(progress: DialogTriggerProgress | null): Record<string, Set<string>> {
+    const clone: Record<string, Set<string>> = {};
+    if (!progress) return clone;
+
+    for (const [areaId, triggerIds] of Object.entries(progress)) {
+        clone[areaId] = new Set(triggerIds);
+    }
+
+    return clone;
+}
+
+function serializeDialogTriggerProgressForSave(progress: Record<string, Set<string>>): DialogTriggerProgress {
+    const serialized: DialogTriggerProgress = {};
+    for (const [areaId, triggerIds] of Object.entries(progress)) {
+        if (triggerIds.size === 0) continue;
+        serialized[areaId] = Array.from(triggerIds);
+    }
+    return serialized;
+}
 
 // =============================================================================
 // GAME COMPONENT
@@ -174,7 +211,7 @@ const DIALOG_TRIGGER_REPEAT_GUARD_MS = 1500;
 function Game({
     onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, saveLoadOpen,
     persistedPlayers, spawnPoint, spawnDirection, onSaveClick, onLoadClick, gameStateRef,
-    initialOpenedChests, initialOpenedSecretDoors, initialGold, initialKilledEnemies, dialogTriggersEnabled, onReady
+    initialOpenedChests, initialOpenedSecretDoors, initialGold, initialKilledEnemies, initialDialogTriggerProgress, dialogTriggersEnabled, onReady
 }: GameProps) {
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -219,7 +256,7 @@ function Game({
     const [hoveredChest, setHoveredChest] = useState<{ x: number; y: number; chestIndex: number; chestX: number; chestZ: number } | null>(null);
     const [openedChests, setOpenedChests] = useState<Set<string>>(() => initialOpenedChests ?? new Set());
     const [openedSecretDoors, setOpenedSecretDoors] = useState<Set<string>>(() => initialOpenedSecretDoors ?? new Set());
-    const [gold, setGold] = useState(() => initialGold ?? 0);
+    const [gold, setGold] = useState(() => initialGold ?? 30);
     const [killedEnemies, setKilledEnemies] = useState<Set<string>>(() => initialKilledEnemies ?? new Set());
     const [hoveredPlayer, setHoveredPlayer] = useState<{ id: number; x: number; y: number } | null>(null);
     const [hoveredDoor, setHoveredDoor] = useState<{ targetArea: string; x: number; y: number } | null>(null);
@@ -234,6 +271,7 @@ function Game({
     const [lightingTuning, setLightingTuning] = useState<LightingTuningSettings>({ ...DEFAULT_LIGHTING_TUNING });
     const [dialogState, setDialogState] = useState<DialogState | null>(null);
     const [dialogTypedChars, setDialogTypedChars] = useState(0);
+    const [sleepFadeOpacity, setSleepFadeOpacity] = useState(0);
     const [hudMenuModalOpen, setHudMenuModalOpen] = useState(false);
     const [equipmentModalUnitId, setEquipmentModalUnitId] = useState<number | null>(null);
 
@@ -256,16 +294,21 @@ function Game({
     const formationOrderRef = useRef(formationOrder);
     const commandModeRef = useRef(commandMode);
     const handleCastSkillRef = useRef<((unitId: number, skill: Skill) => void) | null>(null);
+    const unitGroupsRef = useRef<Record<number, { position: { x: number; z: number } }>>({});
     const dialogPauseForcedRef = useRef(false);
     const dialogLastBlipAtRef = useRef(0);
     const dialogPreviousTypedCharsRef = useRef(0);
     const dialogTriggerAreaLoadedAtRef = useRef(Date.now());
     const firedDialogTriggerIdsRef = useRef<Set<string>>(new Set());
     const dialogTriggerLastFiredAtRef = useRef<Map<string, number>>(new Map());
+    const dialogTriggerProgressByAreaRef = useRef<Record<string, Set<string>>>(cloneDialogTriggerProgressForRuntime(initialDialogTriggerProgress));
     const skippedDialogTriggerLogIdsRef = useRef<Set<string>>(new Set());
+    const spendNightFadeTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+    const spendNightRestoreTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
     const dialogTriggerRuntimeStateRef = useRef<DialogTriggerRuntimeState>({
         stickySatisfiedConditionKeys: new Set(),
-        previousRegionInsideByConditionKey: new Map()
+        previousRegionInsideByConditionKey: new Map(),
+        pendingNpcEngagementSpawnIndexes: new Set(),
     });
 
     // Sync refs with state
@@ -281,6 +324,9 @@ function Game({
     useEffect(() => { hotbarAssignmentsRef.current = hotbarAssignments; }, [hotbarAssignments]);
     useEffect(() => { formationOrderRef.current = formationOrder; }, [formationOrder]);
     useEffect(() => { commandModeRef.current = commandMode; }, [commandMode]);
+    useEffect(() => {
+        dialogTriggerProgressByAreaRef.current = cloneDialogTriggerProgressForRuntime(initialDialogTriggerProgress);
+    }, [initialDialogTriggerProgress]);
     useEffect(() => {
         if (showPanel && selectedIds.length === 1 && isCorePlayerId(selectedIds[0])) {
             setEquipmentModalUnitId(prev => prev !== null ? selectedIds[0] : null);
@@ -301,12 +347,78 @@ function Game({
         return dialogState.definition.speakers[currentDialogNode.speakerId] ?? null;
     }, [dialogState, currentDialogNode]);
 
-    const dialogChoices = currentDialogNode?.choices ?? [];
+    const isPartyGatheredForDialog = useCallback((maxDistance: number): boolean => {
+        const aliveCoreParty = units.filter(unit =>
+            unit.team === "player"
+            && isCorePlayerId(unit.id)
+            && unit.hp > 0
+        );
+        if (aliveCoreParty.length <= 1) return true;
+
+        const groups = unitGroupsRef.current;
+        for (let i = 0; i < aliveCoreParty.length; i++) {
+            const source = aliveCoreParty[i];
+            const sourceG = groups[source.id];
+            const sx = sourceG?.position.x ?? source.x;
+            const sz = sourceG?.position.z ?? source.z;
+            for (let j = i + 1; j < aliveCoreParty.length; j++) {
+                const target = aliveCoreParty[j];
+                const targetG = groups[target.id];
+                const tx = targetG?.position.x ?? target.x;
+                const tz = targetG?.position.z ?? target.z;
+                if (!isInRange(sx, sz, tx, tz, 0, maxDistance)) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }, [units]);
+
+    const getDialogChoiceConditionBlockReason = useCallback((condition: DialogChoiceCondition): string | null => {
+        const customDisabledMessage = typeof condition.disabledMessage === "string" && condition.disabledMessage.trim().length > 0
+            ? condition.disabledMessage.trim()
+            : undefined;
+        if (condition.type === "party_is_gathered") {
+            const maxDistance = condition.maxDistance ?? DIALOG_PARTY_GATHERED_DEFAULT_MAX_DISTANCE;
+            if (!isPartyGatheredForDialog(maxDistance)) {
+                return customDisabledMessage
+                    ?? `Party is scattered. Bring all living party members within ${maxDistance} units of each other.`;
+            }
+            return null;
+        }
+        if (condition.type === "party_has_gold") {
+            if (gold < condition.amount) {
+                return customDisabledMessage
+                    ?? `Requires ${condition.amount} gold (you have ${gold}).`;
+            }
+            return null;
+        }
+        return customDisabledMessage ?? "Requirements for this option are not met.";
+    }, [isPartyGatheredForDialog, gold]);
+
+    const dialogChoiceOptions = useMemo(() => {
+        const choices = currentDialogNode?.choices ?? [];
+        return choices.map(choice => {
+            const disabledReason = (choice.conditions ?? [])
+                .map(getDialogChoiceConditionBlockReason)
+                .find(reason => reason !== null) ?? undefined;
+
+            return {
+                choice,
+                disabled: disabledReason !== undefined,
+                disabledReason
+            };
+        });
+    }, [currentDialogNode, getDialogChoiceConditionBlockReason]);
+    const dialogChoiceOptionsById = useMemo(() => {
+        return new Map(dialogChoiceOptions.map(option => [option.choice.id, option]));
+    }, [dialogChoiceOptions]);
     const isDialogOpen = dialogState !== null;
     const equipmentModalOpen = equipmentModalUnitId !== null;
     const isDialogTyping = currentDialogNode !== null && dialogTypedChars < currentDialogNode.text.length;
     const dialogVisibleText = currentDialogNode ? currentDialogNode.text.slice(0, dialogTypedChars) : "";
-    const canContinueWithoutChoices = !isDialogTyping && dialogChoices.length === 0 && currentDialogNode !== null;
+    const canContinueWithoutChoices = !isDialogTyping && dialogChoiceOptions.length === 0 && currentDialogNode !== null;
     const anyMenuOpen = isDialogOpen || helpOpen || saveLoadOpen || hudMenuModalOpen || equipmentModalOpen;
 
     useEffect(() => {
@@ -315,12 +427,15 @@ function Game({
 
     useEffect(() => {
         dialogTriggerAreaLoadedAtRef.current = Date.now();
-        firedDialogTriggerIdsRef.current = new Set();
+        const persistedFiredIds = dialogTriggerProgressByAreaRef.current[currentAreaId] ?? new Set<string>();
+        firedDialogTriggerIdsRef.current = new Set(persistedFiredIds);
+        dialogTriggerProgressByAreaRef.current[currentAreaId] = new Set(firedDialogTriggerIdsRef.current);
         dialogTriggerLastFiredAtRef.current = new Map();
         skippedDialogTriggerLogIdsRef.current = new Set();
         dialogTriggerRuntimeStateRef.current = {
             stickySatisfiedConditionKeys: new Set(),
-            previousRegionInsideByConditionKey: new Map()
+            previousRegionInsideByConditionKey: new Map(),
+            pendingNpcEngagementSpawnIndexes: new Set(),
         };
     }, [currentAreaId]);
 
@@ -423,6 +538,7 @@ function Game({
         sceneRef.current = sceneState.scene;
         rendererRef.current = sceneState.renderer;
     }, [sceneState.scene, sceneState.renderer]);
+    unitGroupsRef.current = sceneState.unitGroups;
 
     // Preload portrait images before fade-in
     const [portraitsReady, setPortraitsReady] = useState(false);
@@ -828,9 +944,61 @@ function Game({
         setDialogTypedChars(currentDialogNode.text.length);
     }, [currentDialogNode]);
 
+    const clearSpendNightTimers = useCallback(() => {
+        if (spendNightFadeTimeoutRef.current !== null) {
+            window.clearTimeout(spendNightFadeTimeoutRef.current);
+            spendNightFadeTimeoutRef.current = null;
+        }
+        if (spendNightRestoreTimeoutRef.current !== null) {
+            window.clearTimeout(spendNightRestoreTimeoutRef.current);
+            spendNightRestoreTimeoutRef.current = null;
+        }
+    }, []);
+
+    const runSpendNightEvent = useCallback(() => {
+        clearSpendNightTimers();
+        setSleepFadeOpacity(1);
+
+        spendNightFadeTimeoutRef.current = window.setTimeout(() => {
+            spendNightFadeTimeoutRef.current = null;
+
+            setUnits(prev => prev.map(unit => {
+                if (unit.team !== "player" || !isCorePlayerId(unit.id) || unit.hp <= 0) {
+                    return unit;
+                }
+                const maxHp = getEffectiveMaxHp(unit.id, unit);
+                const maxMana = getEffectiveMaxMana(unit.id, unit);
+                return {
+                    ...unit,
+                    hp: maxHp,
+                    mana: unit.mana === undefined ? undefined : maxMana,
+                };
+            }));
+
+            soundFns.playHeal();
+            addLog("The party spends the night and wakes restored.", "#22c55e");
+
+            spendNightRestoreTimeoutRef.current = window.setTimeout(() => {
+                spendNightRestoreTimeoutRef.current = null;
+                setSleepFadeOpacity(0);
+            }, SPEND_NIGHT_BLACK_HOLD_MS);
+        }, SPEND_NIGHT_FADE_MS);
+    }, [addLog, clearSpendNightTimers]);
+
+    useEffect(() => {
+        return () => {
+            clearSpendNightTimers();
+        };
+    }, [clearSpendNightTimers]);
+
     const runDialogUiAction = useCallback((action: DialogUiAction | undefined) => {
         if (!action) return;
-        if (action.type !== "open_menu") return;
+        if (action.type === "event") {
+            if (action.eventId === "spend_the_night") {
+                runSpendNightEvent();
+            }
+            return;
+        }
 
         if (action.menuId === "controls") {
             onShowHelp();
@@ -843,11 +1011,11 @@ function Game({
         if (action.menuId === "load_game") {
             onLoadClick();
         }
-    }, [onShowHelp, onSaveClick, onLoadClick]);
+    }, [onShowHelp, onSaveClick, onLoadClick, runSpendNightEvent]);
 
     const closeDialogWithAction = useCallback((action: DialogUiAction | undefined) => {
         if (action) {
-            closeDialog({ resumeIfForced: false });
+            closeDialog({ resumeIfForced: action.type === "event" });
             runDialogUiAction(action);
             return;
         }
@@ -865,8 +1033,11 @@ function Game({
         closeDialogWithAction(currentDialogNode.onDialogEndAction);
     }, [dialogState, currentDialogNode, closeDialogWithAction]);
 
-    const chooseDialogOption = useCallback((choice: DialogChoice) => {
+    const chooseDialogOption = useCallback((choiceId: string) => {
         if (!dialogState || !currentDialogNode) return;
+        const selectedChoice = dialogChoiceOptionsById.get(choiceId);
+        if (!selectedChoice || selectedChoice.disabled) return;
+        const choice = selectedChoice.choice;
 
         if (choice.nextNodeId && dialogState.definition.nodes[choice.nextNodeId]) {
             setDialogState({ definition: dialogState.definition, nodeId: choice.nextNodeId });
@@ -874,7 +1045,7 @@ function Game({
         }
 
         closeDialogWithAction(choice.onDialogEndAction ?? currentDialogNode.onDialogEndAction);
-    }, [dialogState, currentDialogNode, closeDialogWithAction]);
+    }, [dialogState, currentDialogNode, dialogChoiceOptionsById, closeDialogWithAction]);
 
     useEffect(() => {
         if (!dialogTriggersEnabled) return;
@@ -883,8 +1054,12 @@ function Game({
             if (isDialogOpen) return;
 
             const area = getCurrentArea();
+            const runtimeState = dialogTriggerRuntimeStateRef.current;
             const triggers = area.dialogTriggers ?? [];
-            if (triggers.length === 0) return;
+            if (triggers.length === 0) {
+                runtimeState.pendingNpcEngagementSpawnIndexes.clear();
+                return;
+            }
             const areaDialogDefinitionsById = buildAreaDialogDefinitionMap(area.dialogs);
 
             // Trigger conditions that depend on position must read live scene transforms,
@@ -902,8 +1077,11 @@ function Game({
             const now = Date.now();
             const firedIds = firedDialogTriggerIdsRef.current;
             const lastFiredAtByTriggerId = dialogTriggerLastFiredAtRef.current;
-            const runtimeState = dialogTriggerRuntimeStateRef.current;
             const sortedTriggers = [...triggers].sort((a, b) => getDialogTriggerPriority(b) - getDialogTriggerPriority(a));
+            const markTriggerFired = (triggerId: string): void => {
+                firedIds.add(triggerId);
+                dialogTriggerProgressByAreaRef.current[currentAreaId] = new Set(firedIds);
+            };
 
             for (const trigger of sortedTriggers) {
                 if (trigger.wip) {
@@ -939,7 +1117,7 @@ function Game({
                 if (!targetDialogId) {
                     addLog(`Trigger "${trigger.id}" has no executable action.`, "#ef4444");
                     if (once) {
-                        firedIds.add(trigger.id);
+                        markTriggerFired(trigger.id);
                     }
                     lastFiredAtByTriggerId.set(trigger.id, now);
                     continue;
@@ -949,7 +1127,7 @@ function Game({
                 if (!definition) {
                     addLog(`Trigger "${trigger.id}" references unknown dialog "${targetDialogId}".`, "#ef4444");
                     if (once) {
-                        firedIds.add(trigger.id);
+                        markTriggerFired(trigger.id);
                     }
                     lastFiredAtByTriggerId.set(trigger.id, now);
                     continue;
@@ -968,17 +1146,18 @@ function Game({
                     continue;
                 }
 
-                firedIds.add(trigger.id);
+                markTriggerFired(trigger.id);
                 lastFiredAtByTriggerId.set(trigger.id, now);
                 startDialog(definition);
                 break;
             }
+            runtimeState.pendingNpcEngagementSpawnIndexes.clear();
         };
 
         evaluateDialogTriggers();
         const intervalId = window.setInterval(evaluateDialogTriggers, DIALOG_TRIGGER_POLL_MS);
         return () => window.clearInterval(intervalId);
-    }, [addLog, dialogTriggersEnabled, isDialogOpen, killedEnemies, playtestSkipDialogs, sceneState.unitGroups, startDialog, units]);
+    }, [addLog, currentAreaId, dialogTriggersEnabled, isDialogOpen, killedEnemies, playtestSkipDialogs, sceneState.unitGroups, startDialog, units]);
 
     const buildPersistedPlayers = useCallback((allUnits: Unit[]): PersistedPlayer[] => {
         const players = allUnits.filter(u => u.team === "player");
@@ -1086,14 +1265,25 @@ function Game({
         setCommandMode
     }), []);
 
+    const handleNpcEngaged = useCallback((unitId: number) => {
+        const npcUnit = unitsStateRef.current.find(unit => unit.id === unitId);
+        if (!npcUnit || npcUnit.team !== "neutral" || npcUnit.hp <= 0) return;
+        const spawnIndex = unitId - 100;
+        if (!Number.isInteger(spawnIndex) || spawnIndex < 0) return;
+        const area = getCurrentArea();
+        if (!area.enemySpawns[spawnIndex]) return;
+        dialogTriggerRuntimeStateRef.current.pendingNpcEngagementSpawnIndexes.add(spawnIndex);
+    }, []);
+
     const inputCallbacks = useMemo(() => ({
         addLog,
         getSkillContext,
         handleAreaTransition,
+        onNpcEngaged: handleNpcEngaged,
         onCloseHelp,
         processActionQueue: doProcessQueue,
         handleCastSkillRef
-    }), [addLog, getSkillContext, handleAreaTransition, onCloseHelp, doProcessQueue]);
+    }), [addLog, getSkillContext, handleAreaTransition, handleNpcEngaged, onCloseHelp, doProcessQueue]);
 
     useInputHandlers({
         containerRef,
@@ -1215,7 +1405,12 @@ function Game({
                 players: buildPersistedPlayers(unitsStateRef.current),
                 currentAreaId: getCurrentAreaId(),
                 openedChests: openedChestsRef.current,
-                openedSecretDoors, gold, killedEnemies
+                openedSecretDoors,
+                gold,
+                killedEnemies,
+                hotbarAssignments: hotbarAssignmentsRef.current,
+                formationOrder: formationOrderRef.current,
+                dialogTriggerProgress: serializeDialogTriggerProgressForSave(dialogTriggerProgressByAreaRef.current),
             };
         };
         return () => { gameStateRef.current = null; };
@@ -1744,7 +1939,7 @@ function Game({
                     portraitTint={currentDialogSpeaker.portraitTint}
                     visibleText={dialogVisibleText}
                     isTyping={isDialogTyping}
-                    choices={dialogChoices}
+                    choices={dialogChoiceOptions}
                     canContinueWithoutChoices={canContinueWithoutChoices}
                     continueLabel={currentDialogNode.continueLabel ?? "Continue"}
                     onSkipTyping={skipDialogTyping}
@@ -1754,11 +1949,23 @@ function Game({
                 />
             )}
 
+            <div
+                style={{
+                    position: "absolute",
+                    inset: 0,
+                    backgroundColor: "#000",
+                    opacity: sleepFadeOpacity,
+                    pointerEvents: sleepFadeOpacity > 0 ? "all" : "none",
+                    transition: `opacity ${SPEND_NIGHT_FADE_MS}ms ease-in-out`,
+                    zIndex: 9500
+                }}
+            />
+
             {/* FPS */}
             <div style={{ position: "absolute", top: 10, right: 10, color: "#888", fontSize: 11, opacity: 0.6 }}>{fps} fps</div>
 
             {/* UI Components */}
-            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onShowHelp={onShowHelp} onRestart={onRestart} onSaveClick={onSaveClick} onLoadClick={onLoadClick} debug={debug} onToggleDebug={() => setDebug(d => !d)} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} onStatBoost={handleStatBoost} onTogglePlaytestUnlockAllSkills={handleTogglePlaytestUnlockAllSkills} playtestUnlockAllSkillsEnabled={playtestSettings.unlockAllSkills} onTogglePlaytestSkipDialogs={handleTogglePlaytestSkipDialogs} playtestSkipDialogsEnabled={playtestSettings.skipDialogs} onToggleFastMove={() => setFastMove(f => !f)} fastMoveEnabled={fastMove} lightingTuning={lightingTuning} onUpdateLightingTuning={handleUpdateLightingTuning} onResetLightingTuning={handleResetLightingTuning} lightingTuningOutput={lightingTuningOutput} otherModalOpen={helpOpen || saveLoadOpen || isDialogOpen || hudMenuModalOpen || equipmentModalOpen} hasSelection={selectedIds.length > 0} onModalOpenStateChange={setHudMenuModalOpen} />
+            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onShowHelp={onShowHelp} onRestart={onRestart} onSaveClick={onSaveClick} onLoadClick={onLoadClick} debug={debug} onToggleDebug={() => setDebug(d => !d)} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} onStatBoost={handleStatBoost} onTogglePlaytestUnlockAllSkills={handleTogglePlaytestUnlockAllSkills} playtestUnlockAllSkillsEnabled={playtestSettings.unlockAllSkills} onTogglePlaytestSkipDialogs={handleTogglePlaytestSkipDialogs} playtestSkipDialogsEnabled={playtestSettings.skipDialogs} onToggleFastMove={() => setFastMove(f => !f)} fastMoveEnabled={fastMove} lightingTuning={lightingTuning} onUpdateLightingTuning={handleUpdateLightingTuning} onResetLightingTuning={handleResetLightingTuning} lightingTuningOutput={lightingTuningOutput} otherModalOpen={helpOpen || saveLoadOpen || isDialogOpen || hudMenuModalOpen || equipmentModalOpen || sleepFadeOpacity > 0} hasSelection={selectedIds.length > 0} onModalOpenStateChange={setHudMenuModalOpen} />
             <CombatLog log={combatLog} />
             <FormationIndicator units={units} formationOrder={formationOrder} />
             <div className="bottom-bar-container">
@@ -1892,6 +2099,7 @@ export default function App() {
     const [initialOpenedSecretDoors, setInitialOpenedSecretDoors] = useState<Set<string> | null>(null);
     const [initialGold, setInitialGold] = useState<number | null>(null);
     const [initialKilledEnemies, setInitialKilledEnemies] = useState<Set<string> | null>(null);
+    const [initialDialogTriggerProgress, setInitialDialogTriggerProgress] = useState<DialogTriggerProgress | null>(null);
     const [savePreviewState, setSavePreviewState] = useState<SaveSlotData | null>(null);
     const gameStateRef = useRef<(() => SaveableGameState) | null>(null);
     const [startupPhase, setStartupPhase] = useState<StartupPhase>(skipIntroByDefault ? "running" : "title");
@@ -1950,6 +2158,7 @@ export default function App() {
         setInitialOpenedSecretDoors(null);
         setInitialGold(null);
         setInitialKilledEnemies(null);
+        setInitialDialogTriggerProgress(null);
         clearFogVisibilityMemory();
         initializeEquipmentState();
         setCurrentArea(DEFAULT_STARTING_AREA);
@@ -1971,6 +2180,7 @@ export default function App() {
             setInitialOpenedSecretDoors(new Set(worldState.openedSecretDoors));
             setInitialKilledEnemies(new Set(worldState.killedEnemies));
             setInitialGold(worldState.gold);
+            setInitialDialogTriggerProgress(worldState.dialogTriggerProgress);
         }
 
         // Store pending transition and start fade to black
@@ -2038,21 +2248,14 @@ export default function App() {
         if (!gameStateRef.current) return null;
         const state = gameStateRef.current();
         const areaData = AREAS[state.currentAreaId];
-        return {
-            version: SAVE_VERSION,
+        const slotName = areaData?.name ?? state.currentAreaId;
+        return buildSaveSlotData({
             timestamp,
-            slotName: areaData.name,
-            players: state.players,
-            currentAreaId: state.currentAreaId,
-            openedChests: Array.from(state.openedChests),
-            openedSecretDoors: Array.from(state.openedSecretDoors),
-            killedEnemies: Array.from(state.killedEnemies),
-            gold: state.gold,
+            slotName,
+            state,
             equipment: getAllEquipment(),
             inventory: getPartyInventory(),
-            hotbarAssignments: loadHotbarAssignments(),
-            formationOrder: loadFormationOrder()
-        };
+        });
     }, []);
 
     useEffect(() => {
@@ -2066,40 +2269,54 @@ export default function App() {
         return () => clearInterval(interval);
     }, [showSaveLoad, buildCurrentSavePreview]);
 
-    const handleSave = (slot: number) => {
-        if (!gameStateRef.current) return;
+    const handleSave = (slot: number): SaveLoadOperationResult => {
+        if (!gameStateRef.current) {
+            return {
+                ok: false,
+                code: "invalid_save_data",
+                error: "Game state is unavailable. Please try again.",
+            };
+        }
         const state = gameStateRef.current();
         const areaData = AREAS[state.currentAreaId];
-        const timestamp = Date.now();
-        const saveData: SaveSlotData = {
-            version: SAVE_VERSION, timestamp, slotName: areaData.name,
-            players: state.players, currentAreaId: state.currentAreaId,
-            openedChests: Array.from(state.openedChests), openedSecretDoors: Array.from(state.openedSecretDoors),
-            killedEnemies: Array.from(state.killedEnemies), gold: state.gold,
-            equipment: getAllEquipment(), inventory: getPartyInventory(),
-            hotbarAssignments: loadHotbarAssignments(), formationOrder: loadFormationOrder()
-        };
-        saveGame(slot, saveData);
+        const saveData = buildSaveSlotData({
+            timestamp: Date.now(),
+            slotName: areaData?.name ?? state.currentAreaId,
+            state,
+            equipment: getAllEquipment(),
+            inventory: getPartyInventory(),
+        });
+        return saveGame(slot, saveData);
     };
 
-    const handleLoad = (slot: number) => {
-        const saveData = loadGame(slot);
-        if (!saveData) return;
+    const handleLoad = (slot: number): SaveLoadOperationResult => {
+        const loaded = loadGame(slot);
+        if (!loaded.ok) return loaded;
+
+        const resolved = resolveLoadedSaveState(loaded.data, AREAS);
+        if (!resolved.ok) return resolved;
+
+        const saveData = resolved.data;
         clearFogVisibilityMemory();
         setAllEquipment(saveData.equipment);
         setPartyInventory(saveData.inventory);
-        setCurrentArea(saveData.currentAreaId);
-        const area = AREAS[saveData.currentAreaId];
+        setCurrentArea(saveData.areaId);
         setInitialOpenedChests(new Set(saveData.openedChests));
         setInitialOpenedSecretDoors(new Set(saveData.openedSecretDoors));
-        setInitialKilledEnemies(new Set(saveData.killedEnemies ?? []));
+        setInitialKilledEnemies(new Set(saveData.killedEnemies));
         setInitialGold(saveData.gold);
         setPersistedPlayers(saveData.players);
-        setSpawnPoint(area.defaultSpawn);
+        setInitialDialogTriggerProgress(saveData.dialogTriggerProgress);
+        setSpawnPoint(saveData.spawnPoint);
         // Restore UI state to localStorage so Game reads it on remount
         if (saveData.hotbarAssignments) saveHotbarAssignments(saveData.hotbarAssignments);
         if (saveData.formationOrder) saveFormationOrder(saveData.formationOrder);
         setGameKey(k => k + 1);
+        return { ok: true };
+    };
+
+    const handleDelete = (slot: number): SaveLoadOperationResult => {
+        return deleteSave(slot);
     };
 
     const openSaveLoadModal = useCallback((mode: "save" | "load") => {
@@ -2139,12 +2356,13 @@ export default function App() {
                     gameStateRef={gameStateRef}
                     initialOpenedChests={initialOpenedChests} initialOpenedSecretDoors={initialOpenedSecretDoors}
                     initialGold={initialGold} initialKilledEnemies={initialKilledEnemies}
+                    initialDialogTriggerProgress={initialDialogTriggerProgress}
                     dialogTriggersEnabled={dialogTriggersEnabled}
                     onReady={handleSceneReady}
                 />
             )}
             {gameMounted && showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
-            {gameMounted && showSaveLoad && <SaveLoadModal mode={saveLoadMode} onClose={closeSaveLoadModal} onSave={handleSave} onLoad={handleLoad} currentState={savePreviewState} />}
+            {gameMounted && showSaveLoad && <SaveLoadModal mode={saveLoadMode} onClose={closeSaveLoadModal} onSave={handleSave} onLoad={handleLoad} onDelete={handleDelete} currentState={savePreviewState} />}
             {startupPhase === "title" && (
                 <div className="startup-title-screen">
                     <div className="startup-title-card">

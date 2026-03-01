@@ -1,23 +1,25 @@
-import { useEffect } from "react";
+﻿import { useEffect, useState } from "react";
 import {
+    type SaveLoadOperationResult,
     type SaveSlotData,
-    getSaveSlots,
-    deleteSave,
     formatSaveTimestamp,
+    getAreaDisplayName,
     getPartyLevel,
-    getAreaDisplayName
+    getSaveSlots,
 } from "../game/saveLoad";
 
 interface SaveLoadModalProps {
     mode: "save" | "load";
     onClose: () => void;
-    onSave: (slot: number) => void;
-    onLoad: (slot: number) => void;
-    currentState: SaveSlotData | null;  // Current game state for saving
+    onSave: (slot: number) => SaveLoadOperationResult;
+    onLoad: (slot: number) => SaveLoadOperationResult;
+    onDelete: (slot: number) => SaveLoadOperationResult;
+    currentState: SaveSlotData | null;
 }
 
-export function SaveLoadModal({ mode, onClose, onSave, onLoad, currentState }: SaveLoadModalProps) {
+export function SaveLoadModal({ mode, onClose, onSave, onLoad, onDelete, currentState }: SaveLoadModalProps) {
     const slots = getSaveSlots();
+    const [error, setError] = useState<string | null>(null);
 
     // ESC key to close
     useEffect(() => {
@@ -33,30 +35,34 @@ export function SaveLoadModal({ mode, onClose, onSave, onLoad, currentState }: S
         return () => window.removeEventListener("keydown", handleKeyDown);
     }, [onClose]);
 
-    const handleSave = (slot: number) => {
+    const finishWithResult = (result: SaveLoadOperationResult): void => {
+        if (!result.ok) {
+            setError(result.error);
+            return;
+        }
+        setError(null);
+        onClose();
+    };
+
+    const handleSave = (slot: number): void => {
         if (!currentState) return;
 
-        // If slot has data, confirm overwrite
-        if (slots[slot]) {
-            if (!confirm("Overwrite this save?")) return;
+        if (slots[slot] && !confirm("Overwrite this save?")) {
+            return;
         }
 
-        onSave(slot);
-        onClose();
+        finishWithResult(onSave(slot));
     };
 
-    const handleLoad = (slot: number) => {
+    const handleLoad = (slot: number): void => {
         if (!slots[slot]) return;
-        onLoad(slot);
-        onClose();
+        finishWithResult(onLoad(slot));
     };
 
-    const handleDelete = (slot: number) => {
+    const handleDelete = (slot: number): void => {
         if (!slots[slot]) return;
         if (!confirm("Delete this save?")) return;
-        deleteSave(slot);
-        // Force re-render by closing and the parent will handle
-        onClose();
+        finishWithResult(onDelete(slot));
     };
 
     return (
@@ -64,8 +70,14 @@ export function SaveLoadModal({ mode, onClose, onSave, onLoad, currentState }: S
             <div className="modal-content save-load-modal" onClick={e => e.stopPropagation()}>
                 <div className="help-header">
                     <h2 className="help-title">{mode === "save" ? "Save Game" : "Load Game"}</h2>
-                    <div className="close-btn" onClick={onClose}>×</div>
+                    <div className="close-btn" onClick={onClose}>x</div>
                 </div>
+
+                {error && (
+                    <div className="help-section" style={{ color: "#ef4444", paddingTop: 0 }}>
+                        {error}
+                    </div>
+                )}
 
                 <div className="save-slots">
                     {slots.map((slot, index) => (

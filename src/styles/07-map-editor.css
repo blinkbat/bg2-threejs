@@ -307,3 +307,109 @@
 .editor-trigger-studio-dialog-nodes {
     color: #9fb5dc;
 }
+
+.editor-choice-card {
+    border: 1px solid #4b5369;
+    border-radius: 8px;
+    background: #2a3041;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.editor-choice-main {
+    display: grid;
+    gap: 8px;
+    align-items: end;
+    grid-template-columns: minmax(100px, 0.7fr) minmax(180px, 2fr) minmax(120px, 1fr) minmax(120px, 1fr) 72px;
+}
+
+.editor-choice-conditions {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    border-top: 1px solid #3d465b;
+    padding-top: 8px;
+}
+
+.editor-choice-condition-row {
+    display: grid;
+    gap: 8px;
+    align-items: end;
+    grid-template-columns: auto minmax(90px, 0.6fr) minmax(180px, 2fr) 32px;
+}
+
+.editor-choice-condition-type {
+    font-size: 12px;
+    font-weight: 600;
+    color: #93c5fd;
+    white-space: nowrap;
+    padding-bottom: 7px;
+}
+
+.editor-choice-condition-remove {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.editor-choice-add-condition {
+    align-self: flex-start;
+    width: auto;
+    min-width: 160px;
+}
+
+.editor-choice-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.editor-choice-field--wide {
+    flex: 1;
+    min-width: 0;
+}
+
+.editor-choice-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #aab7d5;
+    letter-spacing: 0.2px;
+}
+
+.editor-choice-input {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.editor-choice-input:disabled {
+    background: #31374b;
+    border-color: #535c76;
+    color: #94a2c2;
+    cursor: not-allowed;
+}
+
+.editor-choice-remove {
+    width: 100%;
+    height: 34px;
+}
+
+@media (max-width: 980px) {
+    .editor-choice-main {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .editor-choice-condition-row {
+        grid-template-columns: 1fr;
+    }
+
+    .editor-choice-remove {
+        width: auto;
+    }
+}

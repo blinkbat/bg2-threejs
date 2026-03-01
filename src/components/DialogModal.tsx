@@ -1,19 +1,25 @@
 import { useEffect, type CSSProperties } from "react";
 import type { DialogChoice } from "../dialog/types";
 
+export interface DialogChoiceOption {
+    choice: DialogChoice;
+    disabled: boolean;
+    disabledReason?: string;
+}
+
 interface DialogModalProps {
     speakerName: string;
     portraitSrc: string;
     portraitTint: string;
     visibleText: string;
     isTyping: boolean;
-    choices: DialogChoice[];
+    choices: DialogChoiceOption[];
     canContinueWithoutChoices: boolean;
     continueLabel: string;
     onSkipTyping: () => void;
     onSkipDialog: () => void;
     onContinueWithoutChoices: () => void;
-    onChoose: (choice: DialogChoice) => void;
+    onChoose: (choiceId: string) => void;
 }
 
 export function DialogModal({
@@ -31,10 +37,13 @@ export function DialogModal({
     onChoose,
 }: DialogModalProps) {
     const hasChoices = choices.length > 0;
+    const hasEnabledChoices = choices.some(choice => !choice.disabled);
     const keyHintText = isTyping
         ? "Space / Enter to skip text, Esc to skip dialog"
         : hasChoices
-            ? "Press 1-9 or click a choice, Esc to skip dialog"
+            ? (hasEnabledChoices
+                ? "Press 1-9 or click a choice, Esc to skip dialog"
+                : "No valid choices right now, Esc to skip dialog")
             : "Space / Enter to continue, Esc to skip dialog";
 
     useEffect(() => {
@@ -69,8 +78,8 @@ export function DialogModal({
             if (!isTyping) {
                 const choiceIndex = Number(key) - 1;
                 const choice = choices[choiceIndex];
-                if (choice) {
-                    onChoose(choice);
+                if (choice && !choice.disabled) {
+                    onChoose(choice.choice.id);
                 }
             }
         };
@@ -102,14 +111,15 @@ export function DialogModal({
                         <>
                             <div className="dialog-choices">
                                 {choices.map((choice, index) => (
-                                    <button
-                                        key={choice.id}
-                                        className="dialog-choice-btn"
-                                        onClick={() => onChoose(choice)}
-                                        disabled={isTyping}
-                                    >
-                                        <span className="dialog-choice-index">{index + 1}.</span> {choice.label}
-                                    </button>
+                                    <div key={choice.choice.id} className="dialog-choice-item">
+                                        <button
+                                            className="dialog-choice-btn"
+                                            onClick={() => onChoose(choice.choice.id)}
+                                            disabled={isTyping || choice.disabled}
+                                        >
+                                            <span className="dialog-choice-index">{index + 1}.</span> {choice.disabledReason ?? choice.choice.label}
+                                        </button>
+                                    </div>
                                 ))}
                             </div>
                         </>

@@ -34,17 +34,40 @@ export interface AreaDialogChoice {
     id: string;
     label: string;
     nextNodeId?: string;
+    conditions?: AreaDialogChoiceCondition[];
     onDialogEndAction?: AreaDialogUiAction;
 }
 
 export type AreaDialogMenuId = "controls" | "save_game" | "load_game";
+export type AreaDialogEventId = "spend_the_night";
 
 export interface AreaDialogOpenMenuAction {
     type: "open_menu";
     menuId: AreaDialogMenuId;
 }
 
-export type AreaDialogUiAction = AreaDialogOpenMenuAction;
+export interface AreaDialogEventAction {
+    type: "event";
+    eventId: AreaDialogEventId;
+}
+
+export type AreaDialogUiAction = AreaDialogOpenMenuAction | AreaDialogEventAction;
+
+export interface AreaDialogChoicePartyGatheredCondition {
+    type: "party_is_gathered";
+    maxDistance?: number;
+    disabledMessage?: string;
+}
+
+export interface AreaDialogChoicePartyHasGoldCondition {
+    type: "party_has_gold";
+    amount: number;
+    disabledMessage?: string;
+}
+
+export type AreaDialogChoiceCondition =
+    | AreaDialogChoicePartyGatheredCondition
+    | AreaDialogChoicePartyHasGoldCondition;
 
 export interface AreaDialogNode {
     id: string;
@@ -98,6 +121,11 @@ export interface DialogTriggerUnitSeenCondition {
     range?: number;      // Optional override range from party (world units)
 }
 
+export interface DialogTriggerNpcEngagedCondition {
+    type: "npc_engaged";
+    spawnIndex: number;  // Index in area.enemySpawns for the NPC
+}
+
 export interface DialogTriggerOutOfCombatRangeCondition {
     type: "party_out_of_combat_range";
     range: number;  // No living enemy within this range of any living party member
@@ -114,6 +142,7 @@ export type AreaDialogTriggerCondition =
     | DialogTriggerPartyEntersLocationCondition
     | DialogTriggerPartyEntersRegionCondition
     | DialogTriggerUnitSeenCondition
+    | DialogTriggerNpcEngagedCondition
     | DialogTriggerOutOfCombatRangeCondition
     | DialogTriggerDelayCondition;
 

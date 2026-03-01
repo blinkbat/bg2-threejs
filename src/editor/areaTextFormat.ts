@@ -13,7 +13,9 @@ import {
     DEFAULT_AREA_LIGHT_TINT,
     type AreaData,
     type AreaDialogChoice,
+    type AreaDialogChoiceCondition,
     type AreaDialogDefinition,
+    type AreaDialogEventId,
     type AreaDialogMenuId,
     type AreaLocation,
     type AreaDialogNode,
@@ -758,6 +760,7 @@ function parseLightLine(line: string, lights: AreaLight[]) {
 
 const DIALOG_SPEAKER_IDS = new Set<string>(Object.keys(DIALOG_SPEAKERS));
 const DIALOG_MENU_IDS = new Set<AreaDialogMenuId>(["controls", "save_game", "load_game"]);
+const DIALOG_EVENT_IDS = new Set<AreaDialogEventId>(["spend_the_night"]);
 
 function isDialogSpeakerId(value: string): value is DialogSpeakerId {
     return DIALOG_SPEAKER_IDS.has(value);
@@ -765,13 +768,60 @@ function isDialogSpeakerId(value: string): value is DialogSpeakerId {
 
 function sanitizeAreaDialogUiAction(raw: unknown): AreaDialogUiAction | undefined {
     if (!isRecord(raw)) return undefined;
-    if (raw.type !== "open_menu") return undefined;
-    if (typeof raw.menuId !== "string") return undefined;
-    if (!DIALOG_MENU_IDS.has(raw.menuId as AreaDialogMenuId)) return undefined;
-    return {
-        type: "open_menu",
-        menuId: raw.menuId as AreaDialogMenuId,
-    };
+    if (raw.type === "open_menu") {
+        if (typeof raw.menuId !== "string") return undefined;
+        if (!DIALOG_MENU_IDS.has(raw.menuId as AreaDialogMenuId)) return undefined;
+        return {
+            type: "open_menu",
+            menuId: raw.menuId as AreaDialogMenuId,
+        };
+    }
+    if (raw.type === "event") {
+        if (typeof raw.eventId !== "string") return undefined;
+        if (!DIALOG_EVENT_IDS.has(raw.eventId as AreaDialogEventId)) return undefined;
+        return {
+            type: "event",
+            eventId: raw.eventId as AreaDialogEventId,
+        };
+    }
+    return undefined;
+}
+
+function sanitizeAreaDialogChoiceCondition(raw: unknown): AreaDialogChoiceCondition | null {
+    if (!isRecord(raw)) return null;
+    const disabledMessage = typeof raw.disabledMessage === "string" && raw.disabledMessage.trim().length > 0
+        ? raw.disabledMessage.trim()
+        : undefined;
+
+    if (raw.type === "party_is_gathered") {
+        if (raw.maxDistance === undefined) {
+            return {
+                type: "party_is_gathered",
+                ...(disabledMessage ? { disabledMessage } : {}),
+            };
+        }
+        if (typeof raw.maxDistance !== "number" || !Number.isFinite(raw.maxDistance) || raw.maxDistance <= 0) {
+            return null;
+        }
+        return {
+            type: "party_is_gathered",
+            maxDistance: raw.maxDistance,
+            ...(disabledMessage ? { disabledMessage } : {}),
+        };
+    }
+
+    if (raw.type === "party_has_gold") {
+        if (typeof raw.amount !== "number" || !Number.isFinite(raw.amount) || raw.amount <= 0) {
+            return null;
+        }
+        return {
+            type: "party_has_gold",
+            amount: raw.amount,
+            ...(disabledMessage ? { disabledMessage } : {}),
+        };
+    }
+
+    return null;
 }
 
 function sanitizeAreaDialogChoice(raw: unknown): AreaDialogChoice | null {
@@ -783,11 +833,17 @@ function sanitizeAreaDialogChoice(raw: unknown): AreaDialogChoice | null {
         ? raw.nextNodeId.trim()
         : undefined;
     const onDialogEndAction = sanitizeAreaDialogUiAction(raw.onDialogEndAction);
+    const conditions = Array.isArray(raw.conditions)
+        ? raw.conditions
+            .map(condition => sanitizeAreaDialogChoiceCondition(condition))
+            .filter((condition): condition is AreaDialogChoiceCondition => condition !== null)
+        : [];
 
     return {
         id: raw.id.trim(),
         label: raw.label,
         ...(nextNodeId ? { nextNodeId } : {}),
+        ...(conditions.length > 0 ? { conditions } : {}),
         ...(onDialogEndAction ? { onDialogEndAction } : {}),
     };
 }
@@ -951,6 +1007,12 @@ function sanitizeDialogTriggerCondition(raw: unknown): AreaDialogTriggerConditio
         const rawRange = toOptionalFiniteNumber(raw.range);
         const range = rawRange !== undefined ? Math.max(0.1, rawRange) : undefined;
         return { type: "unit_seen", spawnIndex, ...(range !== undefined ? { range } : {}) };
+    }
+
+    if (conditionType === "npc_engaged") {
+        const spawnIndex = toNonNegativeInt(raw.spawnIndex);
+        if (spawnIndex === null) return null;
+        return { type: "npc_engaged", spawnIndex };
     }
 
     if (conditionType === "party_out_of_combat_range") {

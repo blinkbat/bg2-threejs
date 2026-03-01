@@ -15,18 +15,41 @@ export interface DialogSpeaker {
 }
 
 export type DialogMenuId = "controls" | "save_game" | "load_game";
+export type DialogEventId = "spend_the_night";
 
 export interface DialogOpenMenuAction {
     type: "open_menu";
     menuId: DialogMenuId;
 }
 
-export type DialogUiAction = DialogOpenMenuAction;
+export interface DialogEventAction {
+    type: "event";
+    eventId: DialogEventId;
+}
+
+export type DialogUiAction = DialogOpenMenuAction | DialogEventAction;
+
+export interface DialogChoicePartyGatheredCondition {
+    type: "party_is_gathered";
+    maxDistance?: number;
+    disabledMessage?: string;
+}
+
+export interface DialogChoicePartyHasGoldCondition {
+    type: "party_has_gold";
+    amount: number;
+    disabledMessage?: string;
+}
+
+export type DialogChoiceCondition =
+    | DialogChoicePartyGatheredCondition
+    | DialogChoicePartyHasGoldCondition;
 
 export interface DialogChoice {
     id: string;
     label: string;
     nextNodeId?: string;
+    conditions?: DialogChoiceCondition[];
     onDialogEndAction?: DialogUiAction;
 }
 
