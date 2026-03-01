@@ -31,7 +31,7 @@ const SLOT_ROWS: SlotMeta[][] = [
     [
         { key: "leftHand", label: "Main Hand" },
         { key: "armor", label: "Armor" },
-        { key: "rightHand", label: "Off Hand" },
+        { key: "rightHand", label: "Off-Hand" },
     ],
     [
         { key: "accessory1", label: "Accessory 1" },
@@ -402,7 +402,7 @@ export function EquipmentModal({
 
                                     {selectedSlotDisabled && (
                                         <div className="equipment-modal-side-note">
-                                            Off-hand is disabled while a two-handed weapon is in main hand.
+                                            Off-hand disabled while a two-handed weapon is equipped.
                                         </div>
                                     )}
 

@@ -37,7 +37,7 @@ import { executeEnemyBasicAttack } from "./enemyAttack";
 import { isUnitCharging } from "./constructCharge";
 import { isUnitBreathing, startFireBreath } from "./fireBreath";
 import { tryStartChargeAttack, tryLeapToTarget, isUnitLeaping, tryVinesSkill, tryAcidSlugPatrol, processAcidTrailAndAura, runPreAttackBehaviors, isShadePhased, isUnitCastingGlare } from "./enemyBehaviors";
-export { clearLeaps, updateLeaps, isUnitLeaping, updateTentacles, clearTentacles, trySubmergeKraken, isKrakenSubmerged, isKrakenFullySubmerged, updateSubmergedKrakens, processGlares, clearGlares, isUnitCastingGlare, processShadePhases, clearShadePhases, isShadePhased } from "./enemyBehaviors";
+export { clearLeaps, updateLeaps, isUnitLeaping, updateTentacles, clearTentacles, trySubmergeKraken, isKrakenSubmerged, isKrakenFullySubmerged, updateSubmergedKrakens, clearSubmergedKrakens, processGlares, clearGlares, isUnitCastingGlare, processShadePhases, clearShadePhases, isShadePhased } from "./enemyBehaviors";
 export { spawnLootBag, removeLootBag, clearAllLootBags, resetLootBagIds } from "./lootBags";
 
 // Re-export unit ID utilities for backwards compatibility

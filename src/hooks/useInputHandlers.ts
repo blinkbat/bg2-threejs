@@ -796,6 +796,27 @@ export function useInputHandlers({
 // HELPER FUNCTIONS
 // =============================================================================
 
+function isAnyAlivePlayerWithinRange(
+    unitsStateRef: React.MutableRefObject<Unit[]>,
+    unitGroups: Record<number, UnitGroup>,
+    centerX: number,
+    centerZ: number,
+    range: number
+): boolean {
+    const rangeSq = range * range;
+    for (const unit of unitsStateRef.current) {
+        if (unit.team !== "player" || unit.hp <= 0) continue;
+        const playerG = unitGroups[unit.id];
+        if (!playerG) continue;
+        const dx = playerG.position.x - centerX;
+        const dz = playerG.position.z - centerZ;
+        if (dx * dx + dz * dz <= rangeSq) {
+            return true;
+        }
+    }
+    return false;
+}
+
 function handleChestClick(
     userData: ChestHitData,
     stateRefs: InputStateRefs,
@@ -813,12 +834,13 @@ function handleChestClick(
     }
 
     const chestRange = 3.5;
-    const alivePlayers = stateRefs.unitsStateRef.current.filter(u => u.team === "player" && u.hp > 0);
-    const playerNearby = alivePlayers.some(player => {
-        const playerG = unitGroups[player.id];
-        if (!playerG) return false;
-        return Math.sqrt((playerG.position.x - chestX) ** 2 + (playerG.position.z - chestZ) ** 2) <= chestRange;
-    });
+    const playerNearby = isAnyAlivePlayerWithinRange(
+        stateRefs.unitsStateRef,
+        unitGroups,
+        chestX,
+        chestZ,
+        chestRange
+    );
 
     if (!playerNearby) {
         callbacks.addLog("You need to get closer to open this chest.", "#f59e0b");
@@ -888,12 +910,13 @@ function handleLootBagClick(
     if (bagIndex === -1) return;
 
     const lootRange = 3.5;
-    const alivePlayers = stateRefs.unitsStateRef.current.filter(u => u.team === "player" && u.hp > 0);
-    const playerNearby = alivePlayers.some(player => {
-        const playerG = unitGroups[player.id];
-        if (!playerG) return false;
-        return Math.sqrt((playerG.position.x - lootBagX) ** 2 + (playerG.position.z - lootBagZ) ** 2) <= lootRange;
-    });
+    const playerNearby = isAnyAlivePlayerWithinRange(
+        stateRefs.unitsStateRef,
+        unitGroups,
+        lootBagX,
+        lootBagZ,
+        lootRange
+    );
 
     if (!playerNearby) {
         callbacks.addLog("You need to get closer to open this.", "#f59e0b");
@@ -959,12 +982,13 @@ function handleSecretDoorClick(
     const crackTileZ = secretDoor.blockingWall.z + Math.floor((secretDoor.blockingWall.h - 1) / 2);
     const crackCenterX = crackTileX + 0.5;
     const crackCenterZ = crackTileZ + 0.5;
-    const alivePlayers = stateRefs.unitsStateRef.current.filter(u => u.team === "player" && u.hp > 0);
-    const playerNearby = alivePlayers.some(player => {
-        const playerG = unitGroups[player.id];
-        if (!playerG) return false;
-        return Math.sqrt((playerG.position.x - crackCenterX) ** 2 + (playerG.position.z - crackCenterZ) ** 2) <= doorRange;
-    });
+    const playerNearby = isAnyAlivePlayerWithinRange(
+        stateRefs.unitsStateRef,
+        unitGroups,
+        crackCenterX,
+        crackCenterZ,
+        doorRange
+    );
 
     if (!playerNearby) {
         callbacks.addLog("You need to get closer to inspect this.", "#f59e0b");

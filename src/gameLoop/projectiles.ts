@@ -34,6 +34,13 @@ function isCombatUnit(unit: Unit): unit is Unit & { team: "player" | "enemy" } {
     return unit.team === "player" || unit.team === "enemy";
 }
 
+type CombatUnit = Unit & { team: "player" | "enemy" };
+
+// Reuse frame-local scratch buffers to avoid per-frame allocations.
+const aliveUnitsScratch: CombatUnit[] = [];
+const alivePlayersScratch: CombatUnit[] = [];
+const aliveEnemiesScratch: CombatUnit[] = [];
+
 // =============================================================================
 // MAGIC WAVE VOLLEY TRACKING
 // =============================================================================
@@ -380,10 +387,12 @@ export function updateProjectiles(
 ): Projectile[] {
     // Shared DamageContext for all projectile hit processing
     const dmgCtx = buildDamageContext(scene, damageTexts, hitFlashRef, unitsRef, unitsState, setUnits, addLog, now, defeatedThisFrame);
-    type CombatUnit = Unit & { team: "player" | "enemy" };
-    const aliveUnits: CombatUnit[] = [];
-    const alivePlayers: CombatUnit[] = [];
-    const aliveEnemies: CombatUnit[] = [];
+    aliveUnitsScratch.length = 0;
+    alivePlayersScratch.length = 0;
+    aliveEnemiesScratch.length = 0;
+    const aliveUnits = aliveUnitsScratch;
+    const alivePlayers = alivePlayersScratch;
+    const aliveEnemies = aliveEnemiesScratch;
     for (const unit of unitsState) {
         if (unit.hp <= 0 || defeatedThisFrame.has(unit.id)) continue;
         if (!isCombatUnit(unit)) continue;
@@ -449,7 +458,7 @@ export function updateProjectiles(
         }
     };
 
-    return projectilesRef.filter(proj => {
+    const processProjectile = (proj: Projectile): boolean => {
         // AOE projectile (like Fireball)
         if (proj.type === "aoe") {
             const { targetPos } = proj;
@@ -1112,5 +1121,16 @@ export function updateProjectiles(
         proj.mesh.position.x += dx * proj.speed;
         proj.mesh.position.z += dz * proj.speed;
         return true;
-    });
+    };
+
+    let writeIndex = 0;
+    for (let i = 0; i < projectilesRef.length; i++) {
+        const projectile = projectilesRef[i];
+        if (processProjectile(projectile)) {
+            projectilesRef[writeIndex] = projectile;
+            writeIndex++;
+        }
+    }
+    projectilesRef.length = writeIndex;
+    return projectilesRef;
 }

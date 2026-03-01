@@ -1223,15 +1223,18 @@ function Game({
 
     // Update selection rings
     useEffect(() => {
+        const selectedSet = new Set<number>(selectedIds);
+        const unitsById = new Map<number, Unit>(units.map(unit => [unit.id, unit]));
+
         Object.entries(sceneState.selectRings).forEach(([id, ring]) => {
-            const unit = units.find(u => u.id === Number(id));
-            ring.visible = selectedIds.includes(Number(id)) && (unit?.hp ?? 0) > 0;
+            const numericId = Number(id);
+            const unit = unitsById.get(numericId);
+            ring.visible = selectedSet.has(numericId) && (unit?.hp ?? 0) > 0;
         });
-        const selectedUnit = units.find(u => u.id === selectedIds[0]);
+
+        const selectedUnit = unitsById.get(selectedIds[0]);
         const shouldShowPanel = selectedIds.length === 1 && selectedUnit?.team === "player" && (selectedUnit?.hp ?? 0) > 0;
-        queueMicrotask(() => {
-            setShowPanel(shouldShowPanel);
-        });
+        setShowPanel(prev => prev === shouldShowPanel ? prev : shouldShowPanel);
     }, [selectedIds, units, sceneState.selectRings]);
 
     // Debug grid
