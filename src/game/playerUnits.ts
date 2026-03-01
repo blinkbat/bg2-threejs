@@ -77,8 +77,8 @@ export function getStartingPlayerStats(unitId: number): CharacterStats {
 
 // Level 1 base stats - characters gain stats on level up
 export const UNIT_DATA: Record<number, UnitData> = {
-    1: { name: "Barbarian", class: "Barbarian", hp: 33, maxHp: 33, mana: 15, maxMana: 15, damage: [1, 4], accuracy: 70, armor: 0, skills: [SKILLS.warcry, SKILLS.defiance, SKILLS.stunningBlow, SKILLS.summonAncestor, SKILLS.highlandDefense], items: [], attackCooldown: 2000, baseCrit: 3 },
-    2: { name: "Paladin", class: "Paladin", hp: 32, maxHp: 32, mana: 19, maxMana: 19, damage: [1, 4], accuracy: 65, armor: 0, skills: [SKILLS.raiseShield, SKILLS.divineLattice, SKILLS.sanctuary, SKILLS.holyStrike, SKILLS.vanquishingLight], items: [], attackCooldown: 2500 },
+    1: { name: "Barbarian", class: "Barbarian", hp: 33, maxHp: 33, mana: 15, maxMana: 15, damage: [1, 4], accuracy: 70, armor: 0, skills: [SKILLS.warcry, SKILLS.defiance, SKILLS.stunningBlow, SKILLS.summonAncestor, SKILLS.highlandDefense], items: [], range: 1.95, attackCooldown: 2000, baseCrit: 3 },
+    2: { name: "Paladin", class: "Paladin", hp: 32, maxHp: 32, mana: 19, maxMana: 19, damage: [1, 4], accuracy: 65, armor: 0, skills: [SKILLS.raiseShield, SKILLS.divineLattice, SKILLS.sanctuary, SKILLS.holyStrike, SKILLS.vanquishingLight], items: [], range: 1.7, attackCooldown: 2500 },
     3: { name: "Thief", class: "Thief", hp: 20, maxHp: 20, mana: 17, maxMana: 17, damage: [1, 4], accuracy: 75, armor: 0, skills: [SKILLS.poisonDagger, SKILLS.targetHead, SKILLS.targetArm, SKILLS.targetLegs, SKILLS.caltrops, SKILLS.dodge], items: [], attackCooldown: 1500, baseCrit: 5 },
     4: { name: "Wizard", class: "Wizard", hp: 17, maxHp: 17, mana: 45, maxMana: 45, damage: [1, 4], accuracy: 60, armor: 0, skills: [SKILLS.fireball, SKILLS.chainLightning, SKILLS.magicWave, SKILLS.glacialWhorl, SKILLS.energyShield, SKILLS.bodySwap], items: [], attackCooldown: 3000, baseCrit: 2 },
     5: { name: "Monk", class: "Monk", hp: 25, maxHp: 25, mana: 17, maxMana: 17, damage: [1, 4], accuracy: 70, armor: 0, skills: [SKILLS.flurryOfFists, SKILLS.forcePush, SKILLS.qiFocus, SKILLS.sunStance, SKILLS.pangolinStance], items: [], attackCooldown: 1800 },
@@ -111,7 +111,7 @@ export function getBasicAttackSkill(unitId: number): Skill {
         cooldown: attackCooldown,
         type: "damage",
         targetType: "enemy",
-        range: range ?? 1.8,
+        range: range ?? 1.55,
         damageRange: damage,
         damageType,
         projectileColor,

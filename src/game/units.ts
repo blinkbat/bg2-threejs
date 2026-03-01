@@ -7,7 +7,7 @@ import { ENEMY_STATS, getAmoebaMaxHpForSplitCount } from "./enemyStats";
 // =============================================================================
 
 /** Default melee attack range (used when unit has no range specified) */
-export const DEFAULT_MELEE_RANGE = 1.8;
+export const DEFAULT_MELEE_RANGE = 1.55;
 
 // =============================================================================
 // PER-FRAME STATS CACHE

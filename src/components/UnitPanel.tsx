@@ -544,7 +544,7 @@ function SkillTooltip({ skill, isShielded, cantripUses }: { skill: Skill; isShie
     // Range (skip for self-targeted AOE skills that use range as radius, and dodge which shows it inline)
     const skipRange = skill.type === "dodge" || (skill.targetType === "self" && (skill.type === "taunt" || skill.type === "flurry" || skill.type === "aoe_buff"));
     if (skill.range > 0 && !skipRange) {
-        lines.push({ label: isRanged ? "Range" : "Melee", value: isRanged ? `${skill.range}` : "1.8" });
+        lines.push({ label: isRanged ? "Range" : "Melee", value: `${skill.range}` });
     }
 
     // AOE
