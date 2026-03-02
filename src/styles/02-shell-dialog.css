@@ -2,19 +2,19 @@
    GLASS PANEL (shared background for modals/panels)
    ----------------------------------------------------------------------------- */
 .glass-panel {
-    background: linear-gradient(180deg, rgba(30,30,46,0.72) 0%, rgba(18,18,26,0.72) 100%);
+    background: var(--ui-color-panel-glass);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
-    border: 2px solid rgba(61,61,92,0.5);
+    border: 1px solid var(--ui-color-border-muted);
     border-radius: 8px;
-    color: #ddd;
+    color: var(--ui-color-text-secondary);
 }
 
 .glass-panel-light {
-    background: rgba(15,15,25,0.7);
+    background: var(--ui-color-glass);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
-    border: 1px solid rgba(60,60,90,0.4);
+    border: 1px solid var(--ui-color-border-soft);
     border-radius: 6px;
 }
 
@@ -22,7 +22,7 @@
 .modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,0.8);
+    background: var(--ui-color-overlay-strong);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -38,7 +38,7 @@
     padding: var(--ui-modal-padding);
     width: min(var(--ui-modal-default-max-width), calc(100vw - var(--ui-modal-edge-gap)));
     max-width: var(--ui-modal-default-max-width);
-    color: #ddd;
+    color: var(--ui-color-text-secondary);
 }
 
 .startup-title-screen {
@@ -53,9 +53,9 @@
 
 .startup-title-card {
     width: min(var(--ui-startup-card-max-width), calc(100vw - var(--ui-modal-edge-gap)));
-    border: 1px solid rgba(72, 84, 118, 0.72);
+    border: 1px solid var(--ui-color-border-muted-strong);
     border-radius: 12px;
-    background: rgba(8, 10, 20, 0.78);
+    background: var(--ui-color-surface-elevated);
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
     padding: 36px 32px;
@@ -63,12 +63,12 @@
     flex-direction: column;
     align-items: center;
     gap: 40px;
-    box-shadow: 0 20px 56px rgba(0, 0, 0, 0.48);
+    box-shadow: 0 20px 56px var(--ui-color-shadow-soft);
 }
 
 .startup-title-text {
     margin: 0;
-    color: #f2f5ff;
+    color: var(--ui-color-text);
     font-size: 22px;
     line-height: 1.15;
     letter-spacing: 0.7px;
@@ -76,10 +76,10 @@
 }
 
 .startup-title-btn {
-    border: 1px solid #5b7fd4;
+    border: 1px solid var(--ui-color-accent-primary-border);
     border-radius: 8px;
-    background: linear-gradient(180deg, #2d66ca 0%, #1f4fa2 100%);
-    color: #ffffff;
+    background: var(--ui-color-accent-primary);
+    color: var(--ui-color-text);
     font-size: 16px;
     line-height: 1;
     padding: 14px 24px;
@@ -88,7 +88,7 @@
 }
 
 .startup-title-btn:hover {
-    border-color: #7ea0eb;
+    border-color: var(--ui-color-accent-primary-bright);
     filter: brightness(1.08);
     transform: translateY(-1px);
 }
@@ -98,7 +98,7 @@
 }
 
 .dialog-overlay {
-    background: rgba(0, 0, 0, 0.72);
+    background: var(--ui-color-overlay);
     z-index: 1300;
     animation: dialogOverlayFadeIn 180ms ease-out;
 }
@@ -117,8 +117,8 @@
 }
 
 @keyframes dialogOverlayFadeIn {
-    from { background: rgba(0, 0, 0, 0); }
-    to { background: rgba(0, 0, 0, 0.72); }
+    from { background: transparent; }
+    to { background: var(--ui-color-overlay); }
 }
 
 @keyframes dialogModalFadeIn {
@@ -143,18 +143,18 @@
     width: 104px;
     height: 104px;
     border-radius: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.16);
-    background: var(--dialog-portrait-tint, #6b86c9);
+    border: 1px solid var(--ui-color-border-muted);
+    background: var(--dialog-portrait-tint, var(--ui-color-accent-primary));
     overflow: hidden;
     flex-shrink: 0;
-    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.28), 0 4px 14px rgba(0, 0, 0, 0.36);
+    box-shadow: inset 0 0 0 1px var(--ui-color-overlay-soft), 0 4px 14px var(--ui-color-shadow-soft);
 }
 
 .dialog-portrait-frame::before {
     content: "";
     position: absolute;
     inset: 0;
-    background: linear-gradient(to bottom, rgba(255, 255, 255, 0.16), rgba(0, 0, 0, 0.22));
+    background: linear-gradient(to bottom, var(--ui-color-border-muted), var(--ui-color-overlay-soft));
     pointer-events: none;
     z-index: 0;
 }
@@ -172,7 +172,7 @@
 .dialog-portrait-tint {
     position: absolute;
     inset: 0;
-    background: var(--dialog-portrait-tint, #6b86c9);
+    background: var(--dialog-portrait-tint, var(--ui-color-accent-primary));
     mix-blend-mode: multiply;
     opacity: 0.8;
     pointer-events: none;
@@ -189,15 +189,15 @@
 .dialog-speaker {
     font-size: 20px;
     font-weight: 700;
-    color: #f3f4f6;
+    color: var(--ui-color-text);
 }
 
 .dialog-body {
     min-height: 104px;
     line-height: 1.5;
-    color: #e5e7eb;
-    background: #12121d;
-    border: 1px solid #2e2e42;
+    color: var(--ui-color-text-secondary);
+    background: var(--ui-color-surface-alt);
+    border: 1px solid var(--ui-color-border);
     border-radius: 6px;
     padding: 12px;
     white-space: pre-wrap;
@@ -205,7 +205,7 @@
 
 .dialog-caret {
     margin-left: 1px;
-    color: #60a5fa;
+    color: var(--ui-color-accent-primary-bright);
     animation: dialog-caret-blink 0.7s steps(1) infinite;
 }
 
@@ -225,7 +225,7 @@
 }
 
 .dialog-keyhint {
-    color: #9ca3b5;
+    color: var(--ui-color-text-dim);
     font-size: 11px;
     letter-spacing: 0.2px;
 }
@@ -240,10 +240,10 @@
 .dialog-choice-btn {
     width: 100%;
     text-align: left;
-    border: 1px solid #3f3f5f;
+    border: 1px solid var(--ui-color-border);
     border-radius: 6px;
-    background: #1a1a2a;
-    color: #e5e7eb;
+    background: var(--ui-color-surface);
+    color: var(--ui-color-text-secondary);
     padding: 10px 12px;
     cursor: pointer;
     font-family: inherit;
@@ -252,8 +252,8 @@
 }
 
 .dialog-choice-btn:hover {
-    border-color: #60a5fa;
-    background: #1f2438;
+    border-color: var(--ui-color-accent-primary-bright);
+    background: var(--ui-color-surface-hover);
 }
 
 .dialog-choice-item {
@@ -263,32 +263,32 @@
 }
 
 .dialog-choice-btn:disabled {
-    border-color: #394055;
-    background: #141a26;
-    color: #8e96a8;
+    border-color: var(--ui-color-border);
+    background: var(--ui-color-surface-active);
+    color: var(--ui-color-text-dim);
     cursor: not-allowed;
 }
 
 .dialog-choice-btn:disabled:hover {
-    border-color: #394055;
-    background: #141a26;
+    border-color: var(--ui-color-border);
+    background: var(--ui-color-surface-active);
 }
 
 .dialog-choice-btn:disabled .dialog-choice-index {
-    color: #6b7280;
+    color: var(--ui-color-text-faint);
 }
 
 .dialog-choice-disabled-reason {
     margin-left: 20px;
     font-size: 12px;
     line-height: 1.35;
-    color: #9ca3b5;
+    color: var(--ui-color-text-dim);
 }
 
 .dialog-choice-index {
     display: inline-block;
     width: 18px;
-    color: #93c5fd;
+    color: var(--ui-color-accent-primary-bright);
     font-weight: 600;
 }
 

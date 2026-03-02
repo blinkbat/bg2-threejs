@@ -50,7 +50,7 @@ export const FormationIndicator = memo(function FormationIndicator({ units, form
                             style={{
                                 gridColumn: pos.col + 1,
                                 gridRow: pos.row + 1,
-                                background: dead ? "#333" : getPlayerUnitColor(unit.id),
+                                background: dead ? "var(--ui-color-border)" : getPlayerUnitColor(unit.id),
                             }}
                             title={data.name}
                         >

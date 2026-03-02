@@ -32,7 +32,7 @@ export function HpBarsOverlay() {
                             position: "absolute",
                             width: barWidth,
                             height: barHeight,
-                            backgroundColor: "#111",
+                            backgroundColor: "var(--ui-color-surface-alt)",
                             transform: `translate3d(${x}px, ${y}px, 0)`,
                             willChange: "transform"
                         }}
@@ -51,4 +51,3 @@ export function HpBarsOverlay() {
         </div>
     );
 }
-

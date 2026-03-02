@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import App from "./App.tsx";
 import "./styles.css";
 import "tippy.js/dist/tippy.css";
+import { applyThemeColorSettings, createDefaultThemeColorSettings } from "./ui/themeColors";
 
 const MapEditor = lazy(async () => {
     const mod = await import("./editor/MapEditor.tsx");
@@ -12,6 +13,7 @@ const MapEditor = lazy(async () => {
 
 // Use base path from vite config for deployed builds, empty for local dev
 const basename = import.meta.env.BASE_URL;
+applyThemeColorSettings(createDefaultThemeColorSettings());
 
 createRoot(document.getElementById("root")!).render(
     <BrowserRouter basename={basename}>

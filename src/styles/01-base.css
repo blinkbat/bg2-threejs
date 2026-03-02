@@ -42,12 +42,69 @@ strong, b {
     --ui-jukebox-max-width: 980px;
 
     --ui-startup-card-max-width: 560px;
+
+    /* Shared semantic UI colors */
+    --ui-color-surface: #1a1a2a;
+    --ui-color-surface-alt: #0d0d15;
+    --ui-color-surface-hover: #252538;
+    --ui-color-surface-active: #151520;
+    --ui-color-glass: rgba(15, 15, 25, 0.7);
+    --ui-color-panel-glass: var(--ui-color-glass);
+    --ui-color-surface-elevated: rgba(30, 30, 45, 0.8);
+    --ui-color-surface-elevated-hover: rgba(45, 45, 65, 0.9);
+    --ui-color-surface-muted: rgba(255, 255, 255, 0.05);
+    --ui-color-surface-muted-hover: rgba(255, 255, 255, 0.1);
+    --ui-color-surface-muted-active: rgba(255, 255, 255, 0.08);
+
+    --ui-color-border: #444;
+    --ui-color-border-strong: #555;
+    --ui-color-border-soft: rgba(255, 255, 255, 0.1);
+    --ui-color-border-soft-strong: rgba(255, 255, 255, 0.2);
+    --ui-color-border-muted: rgba(255, 255, 255, 0.15);
+    --ui-color-border-muted-strong: rgba(255, 255, 255, 0.25);
+
+    --ui-color-text: #ffffff;
+    --ui-color-text-secondary: #dddddd;
+    --ui-color-text-muted: #aaaaaa;
+    --ui-color-text-dim: #888888;
+    --ui-color-text-faint: #666666;
+
+    --ui-color-accent-primary: #3b82f6;
+    --ui-color-accent-primary-bright: #60a5fa;
+    --ui-color-accent-primary-soft: rgba(59, 130, 246, 0.2);
+    --ui-color-accent-primary-border: rgba(59, 130, 246, 0.4);
+    --ui-color-accent-cyan: #5ebaff;
+    --ui-color-accent-success: #22c55e;
+    --ui-color-accent-success-bright: #4ade80;
+    --ui-color-accent-success-soft: rgba(34, 197, 94, 0.2);
+    --ui-color-accent-success-border: rgba(34, 197, 94, 0.3);
+    --ui-color-accent-warning: #f59e0b;
+    --ui-color-accent-warning-soft: rgba(245, 158, 11, 0.1);
+    --ui-color-accent-gold: #f1c40f;
+    --ui-color-accent-danger: #ef4444;
+    --ui-color-accent-danger-soft: rgba(239, 68, 68, 0.15);
+    --ui-color-accent-arcane: #8e44ad;
+    --ui-color-accent-arcane-soft: rgba(142, 68, 173, 0.15);
+    --ui-color-accent-arcane-border: rgba(142, 68, 173, 0.3);
+    --ui-color-selection-border: var(--ui-color-accent-success);
+    --ui-color-selection-fill: var(--ui-color-accent-success-soft);
+
+    --ui-color-overlay-soft: rgba(0, 0, 0, 0.3);
+    --ui-color-overlay: rgba(0, 0, 0, 0.5);
+    --ui-color-overlay-strong: rgba(0, 0, 0, 0.8);
+    --ui-color-tooltip-bg: rgba(20, 20, 30, 0.95);
+    --ui-color-shadow-soft: rgba(0, 0, 0, 0.35);
+    --ui-color-shadow: rgba(0, 0, 0, 0.6);
+    --ui-color-shadow-strong: rgba(0, 0, 0, 0.8);
+
+    /* Legacy compatibility tokens */
+    --ui-border-color: var(--ui-color-border);
 }
 
 /* Dark mode scrollbars */
 * {
     scrollbar-width: thin;
-    scrollbar-color: #555 #222;
+    scrollbar-color: var(--ui-color-border-strong) var(--ui-color-surface-alt);
 }
 
 *::-webkit-scrollbar {
@@ -56,31 +113,31 @@ strong, b {
 }
 
 *::-webkit-scrollbar-track {
-    background: #222;
+    background: var(--ui-color-surface-alt);
 }
 
 *::-webkit-scrollbar-thumb {
-    background: #555;
+    background: var(--ui-color-border-strong);
     border-radius: 5px;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-    background: #666;
+    background: var(--ui-color-border-soft-strong);
 }
 
 /* -----------------------------------------------------------------------------
    COMMON UTILITIES
    ----------------------------------------------------------------------------- */
 .text-muted {
-    color: #888;
+    color: var(--ui-color-text-dim);
 }
 
 .text-light {
-    color: #aaa;
+    color: var(--ui-color-text-muted);
 }
 
 .text-white {
-    color: #fff;
+    color: var(--ui-color-text);
 }
 
 .text-center {

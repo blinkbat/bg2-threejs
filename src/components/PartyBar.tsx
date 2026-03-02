@@ -205,7 +205,7 @@ export function PartyBar({
     }, [corePlayerUnits, effectiveOrderIndex]);
 
     // Dragged unit color for the spacer bar
-    const dragColor = draggingId !== null ? getPlayerUnitColor(draggingId) : "#999";
+    const dragColor = draggingId !== null ? getPlayerUnitColor(draggingId) : "var(--ui-color-text-dim)";
 
     // Spacer element — a real flex child that receives drag events
     const spacer = (

@@ -74,7 +74,7 @@ export function SaveLoadModal({ mode, onClose, onSave, onLoad, onDelete, current
                 </div>
 
                 {error && (
-                    <div className="help-section" style={{ color: "#ef4444", paddingTop: 0 }}>
+                    <div className="help-section" style={{ color: "var(--ui-color-accent-danger)", paddingTop: 0 }}>
                         {error}
                     </div>
                 )}

@@ -142,11 +142,11 @@ function HotbarSlot({
     return (
         <Tippy
             content={locked && skill ? (
-                <div className="hotbar-tooltip">
-                    <div className="hotbar-tooltip-name" style={{ color: getSkillTextColor(skill.type, skill.damageType) }}>{skill.name}</div>
-                    <div className="hotbar-tooltip-hint" style={{ color: "#f59e0b" }}>Not yet learned</div>
-                    <div className="hotbar-tooltip-hint">Right-click to change</div>
-                </div>
+                    <div className="hotbar-tooltip">
+                        <div className="hotbar-tooltip-name" style={{ color: getSkillTextColor(skill.type, skill.damageType) }}>{skill.name}</div>
+                    <div className="hotbar-tooltip-hint" style={{ color: "var(--ui-color-accent-warning)" }}>Not yet learned</div>
+                        <div className="hotbar-tooltip-hint">Right-click to change</div>
+                    </div>
             ) : skill ? (
                 <div className="hotbar-tooltip">
                     <div className="hotbar-tooltip-name" style={{ color: getSkillTextColor(skill.type, skill.damageType) }}>{skill.name}</div>

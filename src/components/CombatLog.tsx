@@ -5,6 +5,26 @@ interface CombatLogProps {
     log: CombatLogEntry[];
 }
 
+function toUiThemeColor(color: string | undefined): string {
+    if (!color) return "var(--ui-color-text-secondary)";
+    const normalized = color.trim().toLowerCase();
+    if (normalized === "#888" || normalized === "#888888") return "var(--ui-color-text-dim)";
+    if (normalized === "#ccc") return "var(--ui-color-text-secondary)";
+    if (normalized === "#ecf0f1") return "var(--ui-color-text)";
+    if (normalized === "#f59e0b") return "var(--ui-color-accent-warning)";
+    if (normalized === "#f5d742" || normalized === "#ffd700" || normalized === "#f1c40f") return "var(--ui-color-accent-gold)";
+    if (normalized === "#22c55e" || normalized === "#4ade80" || normalized === "#7cba7c") return "var(--ui-color-accent-success)";
+    if (normalized === "#3b82f6" || normalized === "#58a6ff") return "var(--ui-color-accent-primary-bright)";
+    if (normalized === "#9b59b6") return "var(--ui-color-accent-arcane)";
+    if (normalized === "#ef4444") return "var(--ui-color-accent-danger)";
+    if (normalized === "#3cb371" || normalized === "#88aa22") return "var(--ui-color-accent-success)";
+    if (normalized === "#9966ff" || normalized === "#9932cc" || normalized === "#8b5fbf" || normalized === "#6b3fa0") return "var(--ui-color-accent-arcane)";
+    if (normalized === "#5599ff") return "var(--ui-color-accent-primary-bright)";
+    if (normalized === "#ff6600" || normalized === "#cc6600") return "var(--ui-color-accent-warning)";
+    if (normalized === "#cc3300") return "var(--ui-color-accent-danger)";
+    return color;
+}
+
 export const CombatLog = memo(function CombatLog({ log }: CombatLogProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const innerRef = useRef<HTMLDivElement>(null);
@@ -155,7 +175,7 @@ export const CombatLog = memo(function CombatLog({ log }: CombatLogProps) {
         <div ref={containerRef} className="combat-log glass-panel-light">
             <div ref={innerRef} className="combat-log-inner">
                 {log.slice(-50).map((entry: CombatLogEntry, i: number) => (
-                    <div key={i} className="log-entry" style={{ color: entry.color || "#ccc" }}>
+                    <div key={i} className="log-entry" style={{ color: toUiThemeColor(entry.color) }}>
                         {entry.text}
                     </div>
                 ))}

@@ -77,11 +77,11 @@ function getItemTooltipLines(item: Item): TooltipLine[] {
     }
     if (isAccessory(item)) {
         if (item.bonusMaxHp) lines.push({ label: "Max HP", value: `+${item.bonusMaxHp}`, color: COLORS.hpHigh });
-        if (item.bonusMagicDamage) lines.push({ label: "Magic Dmg", value: `+${item.bonusMagicDamage}`, color: "#9b59b6" });
+        if (item.bonusMagicDamage) lines.push({ label: "Magic Dmg", value: `+${item.bonusMagicDamage}`, color: "var(--ui-color-accent-arcane)" });
         if (item.bonusArmor) lines.push({ label: "Armor", value: `+${item.bonusArmor}`, color: COLORS.shieldedText });
         if (item.hpRegen && item.hpRegenInterval) lines.push({ label: "Regen", value: `+${item.hpRegen} / ${item.hpRegenInterval / 1000}s`, color: COLORS.hpHigh });
-        if (item.aggroReduction) lines.push({ label: "Aggro", value: `-${Math.round(item.aggroReduction * 100)}%`, color: "#f59e0b" });
-        if (item.bonusMoveSpeed) lines.push({ label: "Speed", value: `+${Math.round(item.bonusMoveSpeed * 100)}%`, color: "#58a6ff" });
+        if (item.aggroReduction) lines.push({ label: "Aggro", value: `-${Math.round(item.aggroReduction * 100)}%`, color: "var(--ui-color-accent-warning)" });
+        if (item.bonusMoveSpeed) lines.push({ label: "Speed", value: `+${Math.round(item.bonusMoveSpeed * 100)}%`, color: "var(--ui-color-accent-primary-bright)" });
     }
     return lines;
 }

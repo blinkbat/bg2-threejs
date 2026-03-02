@@ -1938,12 +1938,32 @@ function Game({
         () => (hoveredPlayer ? unitsById.get(hoveredPlayer.id) : undefined),
         [hoveredPlayer, unitsById]
     );
+    const getHealthStatusColor = useCallback((pct: number): string => {
+        if (pct >= 1) return "var(--ui-color-accent-success)";
+        if (pct > 0.75) return "var(--ui-color-accent-success-bright)";
+        if (pct > 0.5) return "var(--ui-color-accent-warning)";
+        if (pct > 0.25) return "var(--ui-color-accent-warning)";
+        return "var(--ui-color-accent-danger)";
+    }, []);
     const areaData = getCurrentArea();
 
     return (
         <div className={equipmentModalOpen ? "equip-modal-active" : undefined} style={{ width: "100%", height: "100vh", position: "relative", cursor: (targetingMode || consumableTargetingMode || commandMode === "attackMove") ? "crosshair" : "default" }}>
             <div ref={containerRef} style={{ width: "100%", height: "100%", filter: paused ? "saturate(0.4) brightness(0.85)" : "none", transition: "filter 0.2s" }} />
-            {selBox && <div style={{ position: "absolute", left: selBox.left, top: selBox.top, width: selBox.width, height: selBox.height, border: "1px solid #00ff00", backgroundColor: "rgba(0,255,0,0.1)", pointerEvents: "none" }} />}
+            {selBox && (
+                <div
+                    style={{
+                        position: "absolute",
+                        left: selBox.left,
+                        top: selBox.top,
+                        width: selBox.width,
+                        height: selBox.height,
+                        border: "1px solid var(--ui-color-selection-border)",
+                        backgroundColor: "var(--ui-color-selection-fill)",
+                        pointerEvents: "none"
+                    }}
+                />
+            )}
             <HpBarsOverlay />
 
             {/* Tooltips */}
@@ -1953,12 +1973,12 @@ function Game({
                 const stats = ENEMY_STATS[enemy.enemyType];
                 const pct = enemy.hp / stats.maxHp;
                 const status = pct >= 1 ? "Unharmed" : pct > 0.75 ? "Scuffed" : pct > 0.5 ? "Injured" : pct > 0.25 ? "Badly wounded" : "Near death";
-                const statusColor = pct >= 1 ? "#22c55e" : pct > 0.75 ? "#86efac" : pct > 0.5 ? "#eab308" : pct > 0.25 ? "#f97316" : "#ef4444";
+                const statusColor = getHealthStatusColor(pct);
                 return (
                     <div className="enemy-tooltip" style={{ left: hoveredEnemy.x + 12, top: hoveredEnemy.y - 10 }}>
                         <div className="enemy-tooltip-name">{stats.name}</div>
                         <div className="enemy-tooltip-status" style={{ color: statusColor }}>{status}</div>
-                        {debug && <div className="enemy-tooltip-status" style={{ color: "#888" }}>{enemy.hp}/{stats.maxHp} HP</div>}
+                        {debug && <div className="enemy-tooltip-status" style={{ color: "var(--ui-color-text-dim)" }}>{enemy.hp}/{stats.maxHp} HP</div>}
                     </div>
                 );
             })()}
@@ -1972,7 +1992,7 @@ function Game({
                 if (!data) return null;
                 const pct = player.hp / data.maxHp;
                 const status = pct >= 1 ? "Unharmed" : pct > 0.75 ? "Scuffed" : pct > 0.5 ? "Injured" : pct > 0.25 ? "Badly wounded" : "Near death";
-                const statusColor = pct >= 1 ? "#22c55e" : pct > 0.75 ? "#86efac" : pct > 0.5 ? "#eab308" : pct > 0.25 ? "#f97316" : "#ef4444";
+                const statusColor = getHealthStatusColor(pct);
                 return (
                     <div className="enemy-tooltip" style={{ left: hoveredPlayer.x + 12, top: hoveredPlayer.y - 10 }}>
                         <div className="enemy-tooltip-name">{data.name}</div>
@@ -1984,7 +2004,7 @@ function Game({
             {hoveredDoor && (
                 <div className="enemy-tooltip" style={{ left: hoveredDoor.x + 12, top: hoveredDoor.y - 10 }}>
                     <div className="enemy-tooltip-name">Travel</div>
-                    <div className="enemy-tooltip-status" style={{ color: "#4a90d9" }}>{AREAS[hoveredDoor.targetArea as AreaId]?.name ?? hoveredDoor.targetArea}</div>
+                    <div className="enemy-tooltip-status" style={{ color: "var(--ui-color-accent-primary-bright)" }}>{AREAS[hoveredDoor.targetArea as AreaId]?.name ?? hoveredDoor.targetArea}</div>
                 </div>
             )}
 
@@ -1993,7 +2013,7 @@ function Game({
             {hoveredLootBag && (
                 <div className="enemy-tooltip" style={{ left: hoveredLootBag.x + 12, top: hoveredLootBag.y - 10 }}>
                     <div className="enemy-tooltip-name">Loot Bag</div>
-                    <div className="enemy-tooltip-status" style={{ color: "#f1c40f" }}>
+                    <div className="enemy-tooltip-status" style={{ color: "var(--ui-color-accent-gold)" }}>
                         {hoveredLootBag.gold > 0
                             ? `${hoveredLootBag.gold} Gold`
                             : hoveredLootBag.hasItems
@@ -2024,7 +2044,7 @@ function Game({
                 style={{
                     position: "absolute",
                     inset: 0,
-                    backgroundColor: "#000",
+                    backgroundColor: "var(--ui-color-overlay-strong)",
                     opacity: sleepFadeOpacity,
                     pointerEvents: sleepFadeOpacity > 0 ? "all" : "none",
                     transition: `opacity ${SPEND_NIGHT_FADE_MS}ms ease-in-out`,
@@ -2033,7 +2053,7 @@ function Game({
             />
 
             {/* FPS */}
-            <div style={{ position: "absolute", top: 10, right: 10, color: "#888", fontSize: 11, opacity: 0.6 }}>{fps} fps</div>
+            <div style={{ position: "absolute", top: 10, right: 10, color: "var(--ui-color-text-dim)", fontSize: 11, opacity: 0.6 }}>{fps} fps</div>
 
             {/* UI Components */}
             <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onShowHelp={onShowHelp} onRestart={onRestart} onSaveClick={onSaveClick} onLoadClick={onLoadClick} debug={debug} onToggleDebug={handleToggleDebug} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} onStatBoost={handleStatBoost} onTogglePlaytestUnlockAllSkills={handleTogglePlaytestUnlockAllSkills} playtestUnlockAllSkillsEnabled={playtestSettings.unlockAllSkills} onTogglePlaytestSkipDialogs={handleTogglePlaytestSkipDialogs} playtestSkipDialogsEnabled={playtestSettings.skipDialogs} onToggleFastMove={handleToggleFastMove} fastMoveEnabled={fastMove} lightingTuning={lightingTuning} onUpdateLightingTuning={handleUpdateLightingTuning} onResetLightingTuning={handleResetLightingTuning} lightingTuningOutput={lightingTuningOutput} otherModalOpen={otherModalOpen} hasSelection={selectedIds.length > 0} onModalOpenStateChange={setHudMenuModalOpen} />
@@ -2400,7 +2420,7 @@ export default function App() {
                 style={{
                     position: "fixed",
                     inset: 0,
-                    backgroundColor: "#000",
+                    backgroundColor: "var(--ui-color-overlay-strong)",
                     opacity: transitionOpacity,
                     pointerEvents: transitionOpacity > 0 ? "all" : "none",
                     transition: `opacity ${transitionDurationMs}ms ease-in-out`,

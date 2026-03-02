@@ -33,7 +33,7 @@ import { getAvailableAreaIds, BASE_CELL_SIZE, MAX_HISTORY, LAYER_BRUSHES, PROP_T
 import { registerAreaFromText } from "../game/areas";
 import { EntityEditPopup, TreeEditPopup, DecorationEditPopup, LocationEditPopup } from "./popups";
 import { ConnectionsPanel } from "./panels";
-import { DialogEditorModal } from "./components";
+import { DialogEditorModal, ItemRegistryEditorModal } from "./components";
 import {
     clampFiniteNumber,
     clampTreeSizeByType,
@@ -178,6 +178,8 @@ export function MapEditor() {
     const dialogRegionDragRef = useRef<DialogRegionDragState | null>(null);
     const [dialogTriggersDraft, setDialogTriggersDraft] = useState<AreaDialogTrigger[] | null>(null);
     const [dialogEditorOpen, setDialogEditorOpen] = useState(false);
+    const [itemRegistryEditorOpen, setItemRegistryEditorOpen] = useState(false);
+    const [itemRegistryRevision, setItemRegistryRevision] = useState(0);
     const activeDialogTriggers = dialogTriggersDraft ?? dialogTriggers;
 
     const composedTerrainLayer = useMemo(
@@ -2403,6 +2405,7 @@ export function MapEditor() {
                 {editingEntity && (
                     <EntityEditPopup
                         entity={editingEntity.entity}
+                        itemRegistryRevision={itemRegistryRevision}
                         screenX={editingEntity.screenX}
                         screenY={editingEntity.screenY}
                         onSave={updateEntity}
@@ -2570,6 +2573,21 @@ export function MapEditor() {
                     Fog of War
                 </label>
 
+                <div style={{ borderTop: "1px solid #444", paddingTop: 14, marginTop: 2, display: "flex", flexDirection: "column", gap: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                        <h3 style={{ margin: 0, fontSize: 16 }}>Items</h3>
+                        <button
+                            className="editor-btn editor-btn--small editor-btn--primary"
+                            onClick={() => setItemRegistryEditorOpen(true)}
+                        >
+                            Open Item Registry
+                        </button>
+                    </div>
+                    <div style={{ fontSize: 12, color: "#9fb5dc" }}>
+                        Edit global items (weapons, gear, keys, consumables) used by chests and gameplay.
+                    </div>
+                </div>
+
                 {/* Trigger Studio */}
                 <div className="editor-trigger-studio">
                     <div className="editor-trigger-studio-header">
@@ -2622,6 +2640,15 @@ export function MapEditor() {
                     />
                 </div>
             </div>
+
+            {itemRegistryEditorOpen && (
+                <ItemRegistryEditorModal
+                    onClose={() => setItemRegistryEditorOpen(false)}
+                    onApplied={() => {
+                        setItemRegistryRevision(prev => prev + 1);
+                    }}
+                />
+            )}
 
             {dialogEditorOpen && (
                 <DialogEditorModal

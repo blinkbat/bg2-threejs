@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, memo } from "react";
 import { Play, Pause, Menu, Bug } from "lucide-react";
 import { MenuModal } from "./MenuModal";
 import { JukeboxModal } from "./JukeboxModal";
+import { UIColorAdjuster } from "./UIColorAdjuster";
 import { AREAS, type AreaId } from "../game/areas";
 
 interface LightingTuningSettings {
@@ -283,6 +284,9 @@ export const HUD = memo(function HUD({
                                 )}
                             </div>
                         </div>
+
+                        <UIColorAdjuster />
+
                         {lightingTuning && onUpdateLightingTuning && (
                             <div className="hud-debug-group">
                                 <div className="hud-debug-group-header">

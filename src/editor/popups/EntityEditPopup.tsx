@@ -2,7 +2,7 @@
 // ENTITY EDIT POPUP
 // =============================================================================
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
     DEFAULT_AREA_LIGHT_ANGLE,
     DEFAULT_AREA_LIGHT_BRIGHTNESS,
@@ -13,23 +13,13 @@ import {
     DEFAULT_AREA_LIGHT_TINT,
     type AreaId,
 } from "../../game/areas/types";
-import type { EnemyType } from "../../core/types";
+import type { EnemyType, Item } from "../../core/types";
 import { DEFAULT_CANDLE_LIGHT_COLOR, DEFAULT_TORCH_LIGHT_COLOR } from "../../core/constants";
 import type { EntityDef } from "../types";
 import { useClampedPosition } from "../hooks/useClampedPosition";
 import { getAvailableAreaIds, ENEMY_TYPES, popupStyle, inputStyle, selectStyle, buttonStyle } from "../constants";
-import { ITEMS, WEAPONS, SHIELDS, ARMORS, ACCESSORIES, KEYS, CONSUMABLES } from "../../game/items";
+import { ITEMS, getItemCategoryGroups } from "../../game/items";
 import { AreaMinimap } from "../components";
-
-// Organized item categories for the picker
-const ITEM_CATEGORIES = [
-    { label: "Consumables", items: Object.keys(CONSUMABLES) },
-    { label: "Weapons", items: Object.keys(WEAPONS) },
-    { label: "Shields", items: Object.keys(SHIELDS) },
-    { label: "Armor", items: Object.keys(ARMORS) },
-    { label: "Accessories", items: Object.keys(ACCESSORIES) },
-    { label: "Keys", items: Object.keys(KEYS) },
-];
 
 function isHexColor(value: string | undefined): value is string {
     return typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value);
@@ -41,6 +31,7 @@ function getDefaultLightTintForEntity(type: "candle" | "torch"): string {
 
 interface EntityEditPopupProps {
     entity: EntityDef;
+    itemRegistryRevision?: number;
     screenX: number;
     screenY: number;
     onSave: (e: EntityDef) => void;
@@ -48,7 +39,7 @@ interface EntityEditPopupProps {
     onNavigate?: (areaId: string) => void;
 }
 
-export function EntityEditPopup({ entity, screenX, screenY, onSave, onClose, onNavigate }: EntityEditPopupProps) {
+export function EntityEditPopup({ entity, itemRegistryRevision = 0, screenX, screenY, onSave, onClose, onNavigate }: EntityEditPopupProps) {
     const [draft, setDraft] = useState({ ...entity });
     const { popupRef, position } = useClampedPosition(screenX, screenY);
 
@@ -71,6 +62,7 @@ export function EntityEditPopup({ entity, screenX, screenY, onSave, onClose, onN
 
             {draft.type === "chest" && (
                 <ChestItemsEditor
+                    itemRegistryRevision={itemRegistryRevision}
                     gold={draft.chestGold || 0}
                     itemsString={draft.chestItems || ""}
                     locked={draft.chestLocked || ""}
@@ -353,6 +345,7 @@ export function EntityEditPopup({ entity, screenX, screenY, onSave, onClose, onN
 // =============================================================================
 
 interface ChestItemsEditorProps {
+    itemRegistryRevision: number;
     gold: number;
     itemsString: string;
     locked: string;
@@ -381,6 +374,7 @@ function itemsToString(items: ChestItem[]): string {
 }
 
 function ChestItemsEditor({
+    itemRegistryRevision,
     gold,
     itemsString,
     locked,
@@ -394,6 +388,31 @@ function ChestItemsEditor({
     const [selectedCategory, setSelectedCategory] = useState(0);
     const [selectedItem, setSelectedItem] = useState("");
     const [addQty, setAddQty] = useState(1);
+    const itemCategories = useMemo(() => {
+        // Force category refresh when the registry is edited in the map editor.
+        void itemRegistryRevision;
+        return getItemCategoryGroups();
+    }, [itemRegistryRevision]);
+    const keyItems = useMemo(() => {
+        const keyCategory = itemCategories.find(category => category.category === "key");
+        if (!keyCategory) return [];
+        return keyCategory.itemIds
+            .map(itemId => ITEMS[itemId])
+            .filter((item): item is Item => Boolean(item))
+            .filter((item): item is Item & { category: "key"; keyId: string } => item.category === "key" && item.keyId.length > 0)
+            .map(item => ({ itemId: item.id, keyId: item.keyId, name: item.name }));
+    }, [itemCategories]);
+
+    useEffect(() => {
+        setItems(parseItemsString(itemsString));
+    }, [itemsString]);
+
+    useEffect(() => {
+        if (selectedCategory >= itemCategories.length) {
+            setSelectedCategory(0);
+            setSelectedItem("");
+        }
+    }, [itemCategories.length, selectedCategory]);
 
     const updateItems = (newItems: ChestItem[]) => {
         setItems(newItems);
@@ -425,7 +444,13 @@ function ChestItemsEditor({
         }));
     };
 
-    const categoryItems = ITEM_CATEGORIES[selectedCategory]?.items || [];
+    const categoryItems = useMemo(() => itemCategories[selectedCategory]?.itemIds ?? [], [itemCategories, selectedCategory]);
+
+    useEffect(() => {
+        if (selectedItem.length > 0 && !categoryItems.includes(selectedItem)) {
+            setSelectedItem("");
+        }
+    }, [categoryItems, selectedItem]);
 
     return (
         <>
@@ -446,7 +471,7 @@ function ChestItemsEditor({
 
                 {/* Category tabs */}
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 2, marginBottom: 6 }}>
-                    {ITEM_CATEGORIES.map((cat, idx) => (
+                    {itemCategories.map((cat, idx) => (
                         <button
                             key={cat.label}
                             onClick={() => { setSelectedCategory(idx); setSelectedItem(""); }}
@@ -581,8 +606,8 @@ function ChestItemsEditor({
                     onChange={e => onLockedChange(e.target.value)}
                 >
                     <option value="">Not locked</option>
-                    {Object.keys(KEYS).map(keyId => (
-                        <option key={keyId} value={KEYS[keyId].keyId}>{KEYS[keyId].name}</option>
+                    {keyItems.map(item => (
+                        <option key={item.itemId} value={item.keyId}>{item.name}</option>
                     ))}
                 </select>
             </label>
