@@ -3,7 +3,8 @@
 // =============================================================================
 
 import type { Unit, UnitGroup, EnemyStats } from "../core/types";
-import { distance, distanceToPoint } from "./geometry";
+import { distanceToPoint } from "./geometry";
+import { isInRange, getUnitRadius } from "../rendering/range";
 
 // =============================================================================
 // UNIT LOOKUP CACHE - O(1) unit lookups by ID
@@ -60,19 +61,6 @@ export function findNearestUnit(
 }
 
 /**
- * Find the nearest unit to another unit (using UnitGroup positions).
- */
-export function findNearestUnitTo(
-    units: Unit[],
-    unitsRef: Record<number, UnitGroup>,
-    fromGroup: UnitGroup,
-    filter: (unit: Unit) => boolean,
-    maxDist: number = Infinity
-): { unit: Unit; group: UnitGroup; dist: number } | null {
-    return findNearestUnit(units, unitsRef, fromGroup.position.x, fromGroup.position.z, filter, maxDist);
-}
-
-/**
  * Get all alive units of a specific team.
  */
 export function getAliveUnits(units: Unit[], team: "player" | "enemy"): Unit[] {
@@ -100,13 +88,6 @@ export function getAliveUnitsWithGroups(
 }
 
 /**
- * Check if a unit is alive and on a specific team.
- */
-export function isAliveOnTeam(unit: Unit, team: "player" | "enemy"): boolean {
-    return unit.team === team && unit.hp > 0;
-}
-
-/**
  * Check if any player unit is within aggro range of a position.
  * Used by spawner enemies (brood mother, necromancer) to detect players.
  */
@@ -120,6 +101,6 @@ export function isPlayerVisible(
         if (u.team !== "player" || u.hp <= 0) return false;
         const playerG = unitsRef[u.id];
         if (!playerG) return false;
-        return distance(playerG.position.x, playerG.position.z, g.position.x, g.position.z) <= enemyStats.aggroRange;
+        return isInRange(g.position.x, g.position.z, playerG.position.x, playerG.position.z, getUnitRadius(u), enemyStats.aggroRange);
     });
 }

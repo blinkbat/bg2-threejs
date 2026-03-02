@@ -9,6 +9,7 @@ import { getCurrentArea, getCurrentAreaId } from "../game/areas";
 import type { Unit, FogTexture, Projectile, SwingAnimation, DamageText, UnitGroup, SanctuaryTile, HolyTile } from "../core/types";
 import type { AcidTile, LootBag } from "../core/types";
 import { createScene, updateChestStates, updateCamera, type DoorMesh, type SecretDoorMesh, type ChestMeshData } from "../rendering/scene";
+import { disposeLoadedTextures } from "../rendering/scene/units";
 import { resetFogCache, resetSpriteFacing, clearChargeAttacks, clearFireBreaths, clearCurses, clearGlares, clearLeaps, clearTentacles, clearShadePhases, clearSubmergedKrakens, resetLootBagIds } from "../gameLoop";
 import { resetAllBroodMotherScreeches, resetAllEnemyKiteCooldowns, resetAllEnemyKitingState } from "../game/enemyState";
 import { resetAllMovementState } from "../ai/movement";
@@ -355,6 +356,7 @@ export function useThreeScene({
         return () => {
             saveFogVisibility(areaIdAtMount, gameRefs.visibility);
             clearEffectAnimations();
+            disposeLoadedTextures();
             disposeSceneResources(sceneRefs.scene);
             if (sceneRefs.renderer) {
                 sceneRefs.renderer.dispose();

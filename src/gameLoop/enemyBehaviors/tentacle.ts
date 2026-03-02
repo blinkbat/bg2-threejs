@@ -5,7 +5,7 @@
 import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText } from "../../core/types";
 import { ENEMY_STATS } from "../../game/enemyStats";
-import { distance } from "../../game/geometry";
+import { isInRange, getUnitRadius } from "../../rendering/range";
 import { getNextUnitId } from "../../core/unitIds";
 import { soundFns } from "../../audio";
 import { setSkillCooldown } from "../../combat/combatMath";
@@ -58,7 +58,7 @@ export function trySpawnTentacle(ctx: TentacleContext): boolean {
         if (u.team !== "player" || u.hp <= 0) return false;
         const playerG = unitsRef[u.id];
         if (!playerG) return false;
-        return distance(playerG.position.x, playerG.position.z, g.position.x, g.position.z) <= enemyStats.aggroRange;
+        return isInRange(g.position.x, g.position.z, playerG.position.x, playerG.position.z, getUnitRadius(u), enemyStats.aggroRange);
     });
 
     if (visibleTargets.length === 0) {

@@ -2,7 +2,7 @@
 // RANGE & HITBOX UTILITIES
 // =============================================================================
 
-import type { Unit, UnitGroup } from "../core/types";
+import type { Unit } from "../core/types";
 import { DEFAULT_UNIT_RADIUS } from "../core/constants";
 import { UNIT_DATA } from "../game/playerUnits";
 import { ENEMY_STATS } from "../game/enemyStats";
@@ -25,20 +25,11 @@ export function getUnitRadius(unit: Unit): number {
 }
 
 /**
- * Get the hitbox radius for a unit by ID, looking up in unitsState.
- */
-export function getUnitRadiusById(unitId: number, unitsState: Unit[]): number {
-    const unit = unitsState.find(u => u.id === unitId);
-    if (!unit) return DEFAULT_UNIT_RADIUS;
-    return getUnitRadius(unit);
-}
-
-/**
  * Calculate the effective distance between two units for range checks.
  * This is the distance from the attacker to the closest edge of the target's hitbox.
  * If any part of the target is in range, it should be targetable.
  */
-export function getEffectiveDistance(
+function getEffectiveDistance(
     attackerX: number,
     attackerZ: number,
     targetX: number,
@@ -62,25 +53,4 @@ export function isInRange(
     range: number
 ): boolean {
     return getEffectiveDistance(attackerX, attackerZ, targetX, targetZ, targetRadius) <= range;
-}
-
-/**
- * Convenience function: check if attacker can reach target unit.
- * Looks up target's position from UnitGroup and radius from Unit.
- */
-export function canReachTarget(
-    attackerG: UnitGroup,
-    targetG: UnitGroup,
-    targetUnit: Unit,
-    range: number
-): boolean {
-    const targetRadius = getUnitRadius(targetUnit);
-    return isInRange(
-        attackerG.position.x,
-        attackerG.position.z,
-        targetG.position.x,
-        targetG.position.z,
-        targetRadius,
-        range
-    );
 }

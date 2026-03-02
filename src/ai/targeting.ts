@@ -24,7 +24,7 @@ export interface KiteContext {
     now: number;
 }
 
-export interface KiteResult {
+interface KiteResult {
     isKiting: boolean;
 }
 

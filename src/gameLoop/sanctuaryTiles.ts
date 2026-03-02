@@ -6,6 +6,7 @@ import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, SanctuaryTile, AcidTile } from "../core/types";
 import { COLORS, SANCTUARY_TILE_DURATION, SANCTUARY_TICK_INTERVAL, SANCTUARY_MAX_TILES } from "../core/constants";
 import { getUnitStats } from "../game/units";
+import { getEffectiveMaxHp } from "../game/playerUnits";
 import { spawnDamageNumber } from "../combat/damageEffects";
 import { disposeBasicMesh } from "../rendering/disposal";
 import { createTileMesh, updateTileFade, removeExpiredTiles, clearAllTiles, getTileKey, isUnitOnTile, type TileProcessConfig } from "./tileUtils";
@@ -154,7 +155,7 @@ export function processSanctuaryTiles(
                 const requestedHeal = requestedHealById.get(u.id);
                 if (!requestedHeal || u.hp <= 0) return u;
 
-                const maxHp = getUnitStats(u).maxHp;
+                const maxHp = getEffectiveMaxHp(u.id, u);
                 if (u.hp >= maxHp) return u;
 
                 const actualHeal = Math.min(requestedHeal, maxHp - u.hp);

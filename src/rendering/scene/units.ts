@@ -97,6 +97,24 @@ function loadFilteredTexture(url: string): THREE.Texture {
     return tex;
 }
 
+/** Dispose all cached sprite textures. Call during scene cleanup. */
+export function disposeLoadedTextures(): void {
+    if (!texturesLoaded) return;
+    const textures = [
+        wizardTexture, barbarianTexture, clericTexture, paladinTexture, thiefTexture, monkTexture,
+        vampireBatTexture, basiliskYounglingTexture, bloatedCorpseTexture, fireImpTexture,
+        occultistPygmyTexture, wanderingShadeTexture, acidSlugTexture,
+        amoebaLgTexture, amoebaMdTexture, amoebaSmTexture,
+        armoredCrabTexture, broodlingTexture, broodMotherTexture, corruptedDruidTexture,
+        crablingTexture, feralHoundTexture, koboldArcherTexture, koboldWarriorTexture,
+        koboldWitchDoctorTexture, krakenTentacleTexture, krakenBodyTexture, undeadKnightTexture
+    ];
+    for (const tex of textures) {
+        if (tex) tex.dispose();
+    }
+    texturesLoaded = false;
+}
+
 /** Eagerly load all sprite textures. Call early to avoid first-frame pop-in. */
 export function ensureTexturesLoaded(): void {
     if (texturesLoaded) return;

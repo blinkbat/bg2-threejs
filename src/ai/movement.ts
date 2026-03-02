@@ -27,6 +27,7 @@ const lastTargetScan: Record<number, number> = {};
 
 // Track targets that enemies couldn't reach (to avoid repeatedly targeting them)
 const unreachableTargets: Record<number, { targetId: number; until: number }[]> = {};
+const MAX_UNREACHABLE_TARGETS_PER_UNIT = 8;
 
 // Track jitter detection - stores recent movement directions
 interface JitterState {
@@ -193,6 +194,10 @@ export function handleGiveUp(
         // Clean up expired entries and add new one
         unreachableTargets[unitId] = unreachableTargets[unitId]
             .filter(entry => entry.until > now);
+        // Cap list size to prevent unbounded growth
+        if (unreachableTargets[unitId].length >= MAX_UNREACHABLE_TARGETS_PER_UNIT) {
+            unreachableTargets[unitId].shift();
+        }
         unreachableTargets[unitId].push({
             targetId: failedTargetId,
             until: now + UNREACHABLE_COOLDOWN
@@ -273,7 +278,7 @@ export function getBlockedTargets(unitId: number, now: number): Set<number> {
 // PATH RECALCULATION
 // =============================================================================
 
-export interface PathRecalcResult {
+interface PathRecalcResult {
     needsNewPath: boolean;
     reason: "no_path" | "target_moved" | "unit_deviated" | "none";
 }
@@ -343,7 +348,7 @@ export function hasReachedWaypoint(
 // PATH CREATION
 // =============================================================================
 
-export interface CreatePathResult {
+interface CreatePathResult {
     path: { x: number; z: number }[];
     success: boolean;
 }

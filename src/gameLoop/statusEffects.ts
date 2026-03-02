@@ -226,13 +226,20 @@ export function processStatusEffects(
 
     if (mutations.size === 0) return;
 
-    // Phase 2: Single setUnits call for all units
+    // Phase 2: Single setUnits call for all units.
+    // Track which units were killed inside the callback so defeat handling
+    // uses the *actual* HP from React state, not the stale per-frame cache.
+    const defeatedInThisPass = new Set<number>();
     setUnits(prev => prev.map(u => {
         const mut = mutations.get(u.id);
         if (!mut) return u;
-        if (mut.doom) return { ...u, hp: 0, statusEffects: undefined };
+        if (mut.doom) {
+            if (u.hp > 0) defeatedInThisPass.add(u.id);
+            return { ...u, hp: 0, statusEffects: undefined };
+        }
         const newHp = Math.max(0, Math.min(mut.maxHp, u.hp + mut.hpDelta));
         if (newHp <= 0) {
+            if (u.hp > 0) defeatedInThisPass.add(u.id);
             return { ...u, hp: 0, statusEffects: undefined };
         }
         const effects = mut.newEffects.length > 0 ? mut.newEffects : undefined;
@@ -240,17 +247,14 @@ export function processStatusEffects(
     }));
 
     // Phase 3: Handle defeats and deferred side effects
-    for (const [unitId, mut] of mutations) {
-        const unit = getUnitById(unitId);
-        if (!unit) continue;
-        const predictedHp = mut.doom ? 0 : Math.max(0, unit.hp + mut.hpDelta);
-        if (predictedHp <= 0 && unit.hp > 0) {
-            const unitG = unitsRef[unitId];
-            if (unitG) {
-                defeatedThisFrame.add(unitId);
-                const data = getUnitStats(unit);
-                handleUnitDefeat(unitId, unitG, unitsRef, addLog, data.name);
-            }
+    for (const unitId of defeatedInThisPass) {
+        if (defeatedThisFrame.has(unitId)) continue;
+        const unitG = unitsRef[unitId];
+        if (unitG) {
+            defeatedThisFrame.add(unitId);
+            const unit = getUnitById(unitId);
+            const name = unit ? getUnitStats(unit).name : "Unknown";
+            handleUnitDefeat(unitId, unitG, unitsRef, addLog, name);
         }
     }
 
