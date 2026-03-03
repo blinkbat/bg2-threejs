@@ -54,7 +54,7 @@ export function UnitPanel({
     onLearnSkill,
     gold = 0
 }: UnitPanelProps) {
-    const displayTime = useDisplayTime(paused, 16);
+    const displayTime = useDisplayTime(paused, 50);
     const [tab, setTab] = useState("status");
     const data = UNIT_DATA[unitId];
     const unit = units.find((u: Unit) => u.id === unitId);

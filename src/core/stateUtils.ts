@@ -5,6 +5,7 @@
 import type { Unit } from "./types";
 
 type SetUnits = React.Dispatch<React.SetStateAction<Unit[]>>;
+const LIVE_DISPATCH_PATCH_MAX_UNITS = 64;
 
 export interface LiveUnitsDispatch extends SetUnits {
     __liveUnitsRef: React.MutableRefObject<Unit[]>;
@@ -37,11 +38,58 @@ export function createLiveUnitsDispatch(
         const snapshotPrev = unitsStateRef.current;
         const snapshotNext = updater(snapshotPrev);
         unitsStateRef.current = snapshotNext;
+        // For larger unit arrays, skip pre-diff scanning and fall back to updater replay.
+        // The pre-diff path is best for small arrays where index patching wins clearly.
+        const changedIndices = snapshotNext !== snapshotPrev
+            && snapshotNext.length === snapshotPrev.length
+            && snapshotPrev.length <= LIVE_DISPATCH_PATCH_MAX_UNITS
+            ? (() => {
+                const indices: number[] = [];
+                for (let i = 0; i < snapshotPrev.length; i++) {
+                    if (snapshotPrev[i] !== snapshotNext[i]) {
+                        indices.push(i);
+                    }
+                }
+                return indices;
+            })()
+            : null;
 
         setUnits(prev => {
             if (prev === snapshotPrev) {
                 unitsStateRef.current = snapshotNext;
                 return snapshotNext;
+            }
+
+            if (changedIndices !== null && prev.length === snapshotPrev.length) {
+                let canPatch = true;
+                for (let i = 0; i < prev.length; i++) {
+                    if (prev[i].id !== snapshotPrev[i].id || snapshotNext[i].id !== snapshotPrev[i].id) {
+                        canPatch = false;
+                        break;
+                    }
+                }
+                if (canPatch) {
+                    for (const index of changedIndices) {
+                        if (prev[index] !== snapshotPrev[index]) {
+                            canPatch = false;
+                            break;
+                        }
+                    }
+                }
+
+                if (canPatch) {
+                    let patched = prev;
+                    for (const index of changedIndices) {
+                        const replacement = snapshotNext[index];
+                        if (patched[index] === replacement) continue;
+                        if (patched === prev) {
+                            patched = [...prev];
+                        }
+                        patched[index] = replacement;
+                    }
+                    unitsStateRef.current = patched;
+                    return patched;
+                }
             }
 
             const next = updater(prev);

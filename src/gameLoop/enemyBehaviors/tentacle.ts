@@ -13,6 +13,7 @@ import { COLORS, TENTACLE_EMERGE_DURATION, TENTACLE_START_Y, MAX_LIFETIME_TENTAC
 import { getGameTime } from "../../core/gameClock";
 import { scheduleEffectAnimation } from "../../core/effectScheduler";
 import { applyDamageToUnit, type DamageContext } from "../../combat/damageEffects";
+import { getUnitById } from "../../game/unitQuery";
 import type { TentacleContext } from "./types";
 
 // =============================================================================
@@ -147,7 +148,6 @@ export function trySpawnTentacle(ctx: TentacleContext): boolean {
  */
 export function updateTentacles(
     now: number,
-    unitsState: Unit[],
     unitsRef: Record<number, UnitGroup>,
     setUnits: React.Dispatch<React.SetStateAction<Unit[]>>,
     addLog: (text: string, color?: string) => void
@@ -157,7 +157,7 @@ export function updateTentacles(
         const elapsed = now - tentacle.spawnTime;
 
         // Check if tentacle still exists (might have been killed)
-        const tentacleUnit = unitsState.find(u => u.id === tentacle.unitId);
+        const tentacleUnit = getUnitById(tentacle.unitId);
         if (!tentacleUnit || tentacleUnit.hp <= 0) {
             activeTentacles.splice(i, 1);
             continue;
@@ -228,9 +228,11 @@ export function handleTentacleDeath(
     now: number,
     defeatedThisFrame: Set<number>
 ): void {
+    void unitsState; // Kept for API compat; lookup uses cached getUnitById
     if (!tentacleUnit.spawnedBy) return;
 
-    const parentKraken = unitsState.find(u => u.id === tentacleUnit.spawnedBy && u.hp > 0);
+    const parentKrakenCandidate = getUnitById(tentacleUnit.spawnedBy!);
+    const parentKraken = parentKrakenCandidate && parentKrakenCandidate.hp > 0 ? parentKrakenCandidate : undefined;
     if (!parentKraken) return;
 
     const krakenG = unitsRef[parentKraken.id];

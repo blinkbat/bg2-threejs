@@ -126,3 +126,67 @@ export function getFormationPositionsForSpawn(
     const angle = DIRECTION_ANGLES[direction] ?? 0;
     return getFormationPositions(spawnX, spawnZ, angle, count);
 }
+
+/**
+ * Find passable spawn positions for multiple units around a spawn point.
+ * Uses formation layout when a direction is provided (area transitions),
+ * otherwise falls back to a simple grid pattern.
+ */
+export function findSpawnPositions(
+    spawnX: number,
+    spawnZ: number,
+    count: number,
+    direction?: "north" | "south" | "east" | "west"
+): { x: number; z: number }[] {
+    if (direction) {
+        return getFormationPositionsForSpawn(spawnX, spawnZ, direction, count);
+    }
+
+    // Fallback: simple 3-wide grid (used for initial game load with no transition)
+    const spacing = 1.5;
+    const positions: { x: number; z: number }[] = [];
+    const usedCells = new Set<string>();
+
+    for (let i = 0; i < count; i++) {
+        const idealX = spawnX + (i % 3) * spacing - spacing;
+        const idealZ = spawnZ + Math.floor(i / 3) * spacing;
+
+        let found = false;
+        const cx = Math.floor(idealX);
+        const cz = Math.floor(idealZ);
+        const ck = `${cx},${cz}`;
+
+        if (isPassable(cx, cz) && !usedCells.has(ck)) {
+            positions.push({ x: idealX, z: idealZ });
+            usedCells.add(ck);
+            found = true;
+        }
+
+        if (!found) {
+            for (let radius = 1; radius <= 5; radius++) {
+                if (found) break;
+                for (let dx = -radius; dx <= radius; dx++) {
+                    if (found) break;
+                    for (let dz = -radius; dz <= radius; dz++) {
+                        if (Math.abs(dx) !== radius && Math.abs(dz) !== radius) continue;
+                        const checkX = cx + dx;
+                        const checkZ = cz + dz;
+                        const key = `${checkX},${checkZ}`;
+                        if (isPassable(checkX, checkZ) && !usedCells.has(key)) {
+                            positions.push({ x: checkX + 0.5, z: checkZ + 0.5 });
+                            usedCells.add(key);
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!found) {
+            positions.push({ x: spawnX, z: spawnZ });
+        }
+    }
+
+    return positions;
+}

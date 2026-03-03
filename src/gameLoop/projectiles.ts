@@ -41,6 +41,67 @@ const aliveUnitsScratch: CombatUnit[] = [];
 const alivePlayersScratch: CombatUnit[] = [];
 const aliveEnemiesScratch: CombatUnit[] = [];
 
+interface ProjectileBucketEntry {
+    unit: CombatUnit;
+    group: UnitGroup;
+}
+
+const PROJECTILE_BUCKET_CELL_SIZE = 2;
+const PROJECTILE_BUCKET_KEY_STRIDE = 1024;
+const projectileBuckets = new Map<number, ProjectileBucketEntry[]>();
+
+function getProjectileBucketCell(coord: number): number {
+    return Math.floor(coord / PROJECTILE_BUCKET_CELL_SIZE);
+}
+
+function getProjectileBucketKey(cellX: number, cellZ: number): number {
+    return cellX * PROJECTILE_BUCKET_KEY_STRIDE + cellZ;
+}
+
+function buildProjectileBuckets(
+    aliveUnits: CombatUnit[],
+    unitsRef: Record<number, UnitGroup>
+): void {
+    projectileBuckets.clear();
+    for (const unit of aliveUnits) {
+        const group = unitsRef[unit.id];
+        if (!group) continue;
+        const cellX = getProjectileBucketCell(group.position.x);
+        const cellZ = getProjectileBucketCell(group.position.z);
+        const key = getProjectileBucketKey(cellX, cellZ);
+        const bucket = projectileBuckets.get(key);
+        const entry: ProjectileBucketEntry = { unit, group };
+        if (bucket) {
+            bucket.push(entry);
+        } else {
+            projectileBuckets.set(key, [entry]);
+        }
+    }
+}
+
+function forEachProjectileCandidatesNear(
+    x: number,
+    z: number,
+    radius: number,
+    targetTeam: "player" | "enemy" | "both",
+    visit: (unit: CombatUnit, group: UnitGroup) => void
+): void {
+    const centerCellX = getProjectileBucketCell(x);
+    const centerCellZ = getProjectileBucketCell(z);
+    const cellRadius = Math.max(1, Math.ceil(radius / PROJECTILE_BUCKET_CELL_SIZE));
+
+    for (let dx = -cellRadius; dx <= cellRadius; dx++) {
+        for (let dz = -cellRadius; dz <= cellRadius; dz++) {
+            const bucket = projectileBuckets.get(getProjectileBucketKey(centerCellX + dx, centerCellZ + dz));
+            if (!bucket) continue;
+            for (const entry of bucket) {
+                if (targetTeam !== "both" && entry.unit.team !== targetTeam) continue;
+                visit(entry.unit, entry.group);
+            }
+        }
+    }
+}
+
 // =============================================================================
 // MAGIC WAVE VOLLEY TRACKING
 // =============================================================================
@@ -331,7 +392,7 @@ function applySkillProjectileOnHitEffect(
     attackerId: number,
     now: number,
     scene: THREE.Scene,
-    setUnits: React.Dispatch<React.SetStateAction<Unit[]>>,
+    queueUnitMutation: (unitId: number, mutation: (unit: Unit) => Unit) => void,
     addLog: (text: string, color?: string) => void
 ): void {
     const statusType = effect.type === "stun"
@@ -355,10 +416,10 @@ function applySkillProjectileOnHitEffect(
         sourceId: attackerId
     };
 
-    setUnits(prev => prev.map(u => {
-        if (u.id !== targetId || u.hp <= 0) return u;
-        return { ...u, statusEffects: applyStatusEffect(u.statusEffects, statusEffect) };
-    }));
+    queueUnitMutation(targetId, unit => {
+        if (unit.hp <= 0) return unit;
+        return { ...unit, statusEffects: applyStatusEffect(unit.statusEffects, statusEffect) };
+    });
 
     addLog(effectVisual.logText, effectVisual.color);
     createAnimatedRing(scene, targetX, targetZ, effectVisual.color, {
@@ -403,6 +464,16 @@ export function updateProjectiles(
             alivePlayers.push(unit);
         }
     }
+    buildProjectileBuckets(aliveUnits, unitsRef);
+    const pendingUnitMutations = new Map<number, (unit: Unit) => Unit>();
+    const queueUnitMutation = (unitId: number, mutation: (unit: Unit) => Unit): void => {
+        const existing = pendingUnitMutations.get(unitId);
+        if (!existing) {
+            pendingUnitMutations.set(unitId, mutation);
+            return;
+        }
+        pendingUnitMutations.set(unitId, unit => mutation(existing(unit)));
+    };
 
     const explodeAoeProjectile = (proj: Projectile & { type: "aoe" }, explodeX: number, explodeZ: number): void => {
         const attackerUnit = getUnitById(proj.attackerId);
@@ -422,12 +493,10 @@ export function updateProjectiles(
 
         let hitCount = 0;
         let totalDamage = 0;
-        for (const target of aliveUnits) {
-            const tg = unitsRef[target.id];
-            if (!tg) continue;
+        forEachProjectileCandidatesNear(explodeX, explodeZ, aoeRadius, "both", (target, tg) => {
 
             const targetDist = distance(tg.position.x, tg.position.z, explodeX, explodeZ);
-            if (targetDist > aoeRadius) continue;
+            if (targetDist > aoeRadius) return;
 
             const targetData = getUnitStats(target);
             const { damage: dmg } = calculateDamageWithCrit(
@@ -450,7 +519,7 @@ export function updateProjectiles(
             if (attackerUnit?.team === "player") {
                 aggroOnHit(target, proj.attackerId, unitsRef);
             }
-        }
+        });
 
         if (hitCount > 0) {
             soundFns.playHit();
@@ -656,91 +725,104 @@ export function updateProjectiles(
             const trapCasterGroup = unitsRef[trapProj.attackerId];
             const trapCasterName = trapCaster ? getUnitStats(trapCaster).name : undefined;
 
-            for (const enemy of aliveEnemies) {
-                const enemyG = unitsRef[enemy.id];
-                if (!enemyG) continue;
+            let triggered = false;
+            forEachProjectileCandidatesNear(
+                trapProj.targetPos.x,
+                trapProj.targetPos.z,
+                trapProj.aoeRadius,
+                "enemy",
+                (_enemy, enemyG) => {
+                    if (triggered) return;
+                    const dist = distance(
+                        enemyG.position.x,
+                        enemyG.position.z,
+                        trapProj.targetPos.x,
+                        trapProj.targetPos.z
+                    );
+                    if (dist <= trapProj.aoeRadius) {
+                        triggered = true;
+                    }
+                }
+            );
+            if (triggered) {
+                // Trap triggered! Apply pinned effect and damage to all enemies in radius
+                let pinnedCount = 0;
+                let totalDamage = 0;
+                const pinnedTargetIds: number[] = [];
 
-                const dist = distance(
-                    enemyG.position.x, enemyG.position.z,
-                    trapProj.targetPos.x, trapProj.targetPos.z
-                );
-
-                if (dist <= trapProj.aoeRadius) {
-                    // Trap triggered! Apply pinned effect and damage to all enemies in radius
-                    let pinnedCount = 0;
-                    let totalDamage = 0;
-                    const pinnedTargetIds: number[] = [];
-
-                    for (const target of aliveEnemies) {
-                        const targetG = unitsRef[target.id];
-                        if (!targetG) continue;
-
+                forEachProjectileCandidatesNear(
+                    trapProj.targetPos.x,
+                    trapProj.targetPos.z,
+                    trapProj.aoeRadius,
+                    "enemy",
+                    (target, targetG) => {
                         const targetDist = distance(
-                            targetG.position.x, targetG.position.z,
-                            trapProj.targetPos.x, trapProj.targetPos.z
+                            targetG.position.x,
+                            targetG.position.z,
+                            trapProj.targetPos.x,
+                            trapProj.targetPos.z
                         );
 
-                        if (targetDist <= trapProj.aoeRadius) {
-                            // Calculate damage if trap has damage
-                            let damage = 0;
-                            if (trapProj.trapDamage) {
-                                damage = rollDamage(trapProj.trapDamage[0], trapProj.trapDamage[1]);
-                                totalDamage += damage;
-                                const targetData = getUnitStats(target);
-                                applyDamageToUnit(dmgCtx, target.id, targetG, damage, targetData.name, {
-                                    color: COLORS.pinnedText,
-                                    targetUnit: target,
-                                    attackerName: trapCaster?.team === "player" ? trapCasterName : undefined,
-                                    attackerPosition: trapCasterGroup ? { x: trapCasterGroup.position.x, z: trapCasterGroup.position.z } : undefined,
-                                    damageType: "physical",
-                                    attackerId: trapProj.attackerId
-                                });
-                            }
-
-                            pinnedTargetIds.push(target.id);
-
-                            pinnedCount++;
+                        if (targetDist > trapProj.aoeRadius) return;
+                        // Calculate damage if trap has damage
+                        let damage = 0;
+                        if (trapProj.trapDamage) {
+                            damage = rollDamage(trapProj.trapDamage[0], trapProj.trapDamage[1]);
+                            totalDamage += damage;
+                            const targetData = getUnitStats(target);
+                            applyDamageToUnit(dmgCtx, target.id, targetG, damage, targetData.name, {
+                                color: COLORS.pinnedText,
+                                targetUnit: target,
+                                attackerName: trapCaster?.team === "player" ? trapCasterName : undefined,
+                                attackerPosition: trapCasterGroup ? { x: trapCasterGroup.position.x, z: trapCasterGroup.position.z } : undefined,
+                                damageType: "physical",
+                                attackerId: trapProj.attackerId
+                            });
                         }
+
+                        pinnedTargetIds.push(target.id);
+                        pinnedCount++;
                     }
+                );
 
-                    if (pinnedTargetIds.length > 0) {
-                        const pinnedSet = new Set<number>(pinnedTargetIds);
-                        const pinnedEffect: StatusEffect = {
-                            type: "pinned",
-                            duration: trapProj.pinnedDuration,
-                            tickInterval: BUFF_TICK_INTERVAL,
-                            timeSinceTick: 0,
-                            lastUpdateTime: now,
-                            damagePerTick: 0,
-                            sourceId: trapProj.attackerId
-                        };
+                if (pinnedTargetIds.length > 0) {
+                    const pinnedEffect: StatusEffect = {
+                        type: "pinned",
+                        duration: trapProj.pinnedDuration,
+                        tickInterval: BUFF_TICK_INTERVAL,
+                        timeSinceTick: 0,
+                        lastUpdateTime: now,
+                        damagePerTick: 0,
+                        sourceId: trapProj.attackerId
+                    };
 
-                        setUnits(prev => prev.map(u => {
-                            if (!pinnedSet.has(u.id) || u.hp <= 0) return u;
-                            return { ...u, statusEffects: applyStatusEffect(u.statusEffects, pinnedEffect) };
-                        }));
+                    for (const pinnedTargetId of pinnedTargetIds) {
+                        queueUnitMutation(pinnedTargetId, unit => {
+                            if (unit.hp <= 0) return unit;
+                            return { ...unit, statusEffects: applyStatusEffect(unit.statusEffects, pinnedEffect) };
+                        });
                     }
-
-                    // Visual effect - red ring expanding
-                    const triggerRing = new THREE.Mesh(
-                        new THREE.RingGeometry(0.2, trapProj.aoeRadius, 32),
-                        new THREE.MeshBasicMaterial({ color: "#cc4444", transparent: true, opacity: 0.6, side: THREE.DoubleSide })
-                    );
-                    triggerRing.rotation.x = -Math.PI / 2;
-                    triggerRing.position.set(trapProj.targetPos.x, 0.1, trapProj.targetPos.z);
-                    scene.add(triggerRing);
-                    animateExpandingMesh(scene, triggerRing, { duration: 400, initialOpacity: 0.6, maxScale: trapProj.aoeRadius * 1.3, baseRadius: trapProj.aoeRadius });
-
-                    soundFns.playHit();
-                    if (totalDamage > 0) {
-                        addLog(`Caltrops pins ${pinnedCount} ${pinnedCount === 1 ? "enemy" : "enemies"} for ${totalDamage} damage!`, COLORS.pinnedText);
-                    } else {
-                        addLog(logTrapTriggered("Caltrops", pinnedCount), COLORS.pinnedText);
-                    }
-
-                    disposeProjectile(scene, proj);
-                    return false;
                 }
+
+                // Visual effect - red ring expanding
+                const triggerRing = new THREE.Mesh(
+                    new THREE.RingGeometry(0.2, trapProj.aoeRadius, 32),
+                    new THREE.MeshBasicMaterial({ color: "#cc4444", transparent: true, opacity: 0.6, side: THREE.DoubleSide })
+                );
+                triggerRing.rotation.x = -Math.PI / 2;
+                triggerRing.position.set(trapProj.targetPos.x, 0.1, trapProj.targetPos.z);
+                scene.add(triggerRing);
+                animateExpandingMesh(scene, triggerRing, { duration: 400, initialOpacity: 0.6, maxScale: trapProj.aoeRadius * 1.3, baseRadius: trapProj.aoeRadius });
+
+                soundFns.playHit();
+                if (totalDamage > 0) {
+                    addLog(`Caltrops pins ${pinnedCount} ${pinnedCount === 1 ? "enemy" : "enemies"} for ${totalDamage} damage!`, COLORS.pinnedText);
+                } else {
+                    addLog(logTrapTriggered("Caltrops", pinnedCount), COLORS.pinnedText);
+                }
+
+                disposeProjectile(scene, proj);
+                return false;
             }
 
             return true;  // Trap still active, waiting for trigger
@@ -799,62 +881,66 @@ export function updateProjectiles(
 
             // Hit detection — only hit enemies (based on attackerTeam)
             const targetTeam = pProj.attackerTeam === "player" ? "enemy" : "player";
-            const targetCandidates = targetTeam === "enemy" ? aliveEnemies : alivePlayers;
             const chilledTargets = new Set<number>();
             const attackerName = attackerUnit ? getUnitStats(attackerUnit).name : undefined;
             const statBonus = calculateStatBonus(attackerUnit, pProj.damageType);
-            for (const target of targetCandidates) {
-                if (pProj.hitUnits.has(target.id)) continue;
+            forEachProjectileCandidatesNear(
+                proj.mesh.position.x,
+                proj.mesh.position.z,
+                piercingHitRadius,
+                targetTeam,
+                (target, targetG) => {
+                    if (pProj.hitUnits.has(target.id)) return;
 
-                const targetG = unitsRef[target.id];
-                if (!targetG) continue;
-
-                const distToTarget = distance(
-                    proj.mesh.position.x, proj.mesh.position.z,
-                    targetG.position.x, targetG.position.z
-                );
-
-                if (distToTarget <= piercingHitRadius) {
-                    pProj.hitUnits.add(target.id);
-
-                    const targetData = getUnitStats(target);
-                    const { damage: dmg } = calculateDamageWithCrit(
-                        pProj.damage[0] + statBonus, pProj.damage[1] + statBonus,
-                        getEffectiveArmor(target, targetData.armor),
-                        pProj.damageType, attackerUnit
+                    const distToTarget = distance(
+                        proj.mesh.position.x, proj.mesh.position.z,
+                        targetG.position.x, targetG.position.z
                     );
 
-                    applyDamageToUnit(dmgCtx, target.id, targetG, dmg, targetData.name, {
-                        color: COLORS.dmgCold,
-                        attackerName,
-                        targetUnit: target,
-                        damageType: pProj.damageType
-                    });
-                    spawnProjectileImpact(scene, targetG.position.x, targetG.position.z, COLORS.dmgCold, 1.15, 180);
-                    createAnimatedRing(scene, targetG.position.x, targetG.position.z, COLORS.chilledText, {
-                        innerRadius: 0.08,
-                        outerRadius: 0.2,
-                        maxScale: 1.1,
-                        duration: 160,
-                        initialOpacity: 0.55,
-                        y: 0.1
-                    });
+                    if (distToTarget <= piercingHitRadius) {
+                        pProj.hitUnits.add(target.id);
 
-                    // Roll for chill
-                    if (rollChance(pProj.chillChance)) {
-                        chilledTargets.add(target.id);
+                        const targetData = getUnitStats(target);
+                        const { damage: dmg } = calculateDamageWithCrit(
+                            pProj.damage[0] + statBonus, pProj.damage[1] + statBonus,
+                            getEffectiveArmor(target, targetData.armor),
+                            pProj.damageType, attackerUnit
+                        );
+
+                        applyDamageToUnit(dmgCtx, target.id, targetG, dmg, targetData.name, {
+                            color: COLORS.dmgCold,
+                            attackerName,
+                            targetUnit: target,
+                            damageType: pProj.damageType
+                        });
+                        spawnProjectileImpact(scene, targetG.position.x, targetG.position.z, COLORS.dmgCold, 1.15, 180);
+                        createAnimatedRing(scene, targetG.position.x, targetG.position.z, COLORS.chilledText, {
+                            innerRadius: 0.08,
+                            outerRadius: 0.2,
+                            maxScale: 1.1,
+                            duration: 160,
+                            initialOpacity: 0.55,
+                            y: 0.1
+                        });
+
+                        // Roll for chill
+                        if (rollChance(pProj.chillChance)) {
+                            chilledTargets.add(target.id);
+                        }
+
+                        soundFns.playHit();
+                        aggroOnHit(target, pProj.attackerId, unitsRef);
                     }
-
-                    soundFns.playHit();
-                    aggroOnHit(target, pProj.attackerId, unitsRef);
                 }
-            }
+            );
 
             if (chilledTargets.size > 0) {
-                setUnits(prev => prev.map(u => {
-                    if (!chilledTargets.has(u.id) || u.hp <= 0) return u;
-                    return applyChilled(u, pProj.attackerId, now);
-                }));
+                for (const chilledTargetId of chilledTargets) {
+                    queueUnitMutation(chilledTargetId, unit => {
+                        if (unit.hp <= 0) return unit;
+                        return applyChilled(unit, pProj.attackerId, now);
+                    });
+                }
             }
 
             return true;
@@ -901,54 +987,57 @@ export function updateProjectiles(
 
             // Check collision with all living units (hurts EVERYTHING - friendly fire!)
             // But don't hurt the attacker who fired it
-            for (const target of aliveUnits) {
-                if (target.id === fbProj.attackerId) continue;  // Don't hurt self
-                if (fbProj.hitUnits.has(target.id)) continue;  // Already hit this unit
+            forEachProjectileCandidatesNear(
+                proj.mesh.position.x,
+                proj.mesh.position.z,
+                0.6,
+                "both",
+                (target, targetG) => {
+                    if (target.id === fbProj.attackerId) return;  // Don't hurt self
+                    if (fbProj.hitUnits.has(target.id)) return;  // Already hit this unit
 
-                const targetG = unitsRef[target.id];
-                if (!targetG) continue;
-
-                const distToTarget = distance(
-                    proj.mesh.position.x, proj.mesh.position.z,
-                    targetG.position.x, targetG.position.z
-                );
-
-                // Hit radius - slightly larger than normal for easier hits
-                if (distToTarget < 0.6) {
-                    // Mark as hit so we don't hit again
-                    fbProj.hitUnits.add(target.id);
-
-                    const targetData = getUnitStats(target);
-
-                    const { damage: dmg } = calculateDamageWithCrit(
-                        fbProj.damage[0], fbProj.damage[1],
-                        getEffectiveArmor(target, targetData.armor),
-                        fbProj.damageType,
-                        attackerUnit
+                    const distToTarget = distance(
+                        proj.mesh.position.x, proj.mesh.position.z,
+                        targetG.position.x, targetG.position.z
                     );
 
-                    applyDamageToUnit(dmgCtx, target.id, targetG, dmg, targetData.name, {
-                        color: getDamageColor(target.team, true),
-                        attackerName: attackerData?.name,
-                        targetUnit: target,
-                        damageType: fbProj.damageType
-                    });
-                    spawnProjectileImpact(scene, targetG.position.x, targetG.position.z, COLORS.dmgFire, 1.2, 190);
+                    // Hit radius - slightly larger than normal for easier hits
+                    if (distToTarget < 0.6) {
+                        // Mark as hit so we don't hit again
+                        fbProj.hitUnits.add(target.id);
 
-                    soundFns.playHit();
+                        const targetData = getUnitStats(target);
 
-                    // Log the hit
-                    const attackerName = attackerData?.name ?? "Fireball";
-                    addLog(`${attackerName}'s fireball burns ${targetData.name} for ${dmg} damage!`, COLORS.damageNeutral);
+                        const { damage: dmg } = calculateDamageWithCrit(
+                            fbProj.damage[0], fbProj.damage[1],
+                            getEffectiveArmor(target, targetData.armor),
+                            fbProj.damageType,
+                            attackerUnit
+                        );
 
-                    // Aggro enemies hit by the fireball
-                    if (attackerUnit?.team === "enemy" && target.team === "enemy") {
-                        // Enemy hit by friendly fire - don't aggro
-                    } else {
-                        aggroOnHit(target, fbProj.attackerId, unitsRef);
+                        applyDamageToUnit(dmgCtx, target.id, targetG, dmg, targetData.name, {
+                            color: getDamageColor(target.team, true),
+                            attackerName: attackerData?.name,
+                            targetUnit: target,
+                            damageType: fbProj.damageType
+                        });
+                        spawnProjectileImpact(scene, targetG.position.x, targetG.position.z, COLORS.dmgFire, 1.2, 190);
+
+                        soundFns.playHit();
+
+                        // Log the hit
+                        const attackerName = attackerData?.name ?? "Fireball";
+                        addLog(`${attackerName}'s fireball burns ${targetData.name} for ${dmg} damage!`, COLORS.damageNeutral);
+
+                        // Aggro enemies hit by the fireball
+                        if (attackerUnit?.team === "enemy" && target.team === "enemy") {
+                            // Enemy hit by friendly fire - don't aggro
+                        } else {
+                            aggroOnHit(target, fbProj.attackerId, unitsRef);
+                        }
                     }
                 }
-            }
+            );
 
             // Rotate the fireball for visual effect
             proj.mesh.rotation.x += 0.1;
@@ -1081,7 +1170,7 @@ export function updateProjectiles(
                         attackerUnit.id,
                         now,
                         scene,
-                        setUnits,
+                        queueUnitMutation,
                         addLog
                     );
                 }
@@ -1132,5 +1221,22 @@ export function updateProjectiles(
         }
     }
     projectilesRef.length = writeIndex;
+
+    if (pendingUnitMutations.size > 0) {
+        setUnits(prev => {
+            let changed = false;
+            const nextUnits = prev.map(unit => {
+                const mutation = pendingUnitMutations.get(unit.id);
+                if (!mutation || unit.hp <= 0) return unit;
+                const nextUnit = mutation(unit);
+                if (nextUnit !== unit) {
+                    changed = true;
+                }
+                return nextUnit;
+            });
+            return changed ? nextUnits : prev;
+        });
+    }
+
     return projectilesRef;
 }

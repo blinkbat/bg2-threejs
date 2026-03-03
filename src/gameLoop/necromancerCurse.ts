@@ -13,6 +13,7 @@ import { applyDamageToUnit, buildDamageContext, createAnimatedRing } from "../co
 import { soundFns } from "../audio";
 import { disposeBasicMesh } from "../rendering/disposal";
 import { createGroundWarningTile, forEachTileInRadius } from "./tileUtils";
+import { getUnitById } from "../game/unitQuery";
 
 // =============================================================================
 // TYPES
@@ -188,7 +189,7 @@ function executeCurse(
     now: number,
     defeatedThisFrame: Set<number>
 ): void {
-    const caster = unitsState.find(u => u.id === curse.casterId);
+    const caster = getUnitById(curse.casterId);
     const casterStats = caster ? getUnitStats(caster) as EnemyStats : null;
     const accuracy = casterStats?.accuracy ?? 65;
     const casterName = casterStats?.name ?? "Necromancer";

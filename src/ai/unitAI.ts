@@ -24,7 +24,7 @@ import { getAttackRange } from "../game/units";
 import { ENEMY_STATS } from "../game/enemyStats";
 import { getEffectivePlayerAggroMultiplier } from "../game/equipmentState";
 import { hasStatusEffect, isUnitAlive } from "../combat/combatMath";
-import { isEnemyUntargetable } from "../gameLoop/enemyBehaviors";
+import { isEnemyUntargetable } from "../gameLoop/enemyBehaviors/untargetable";
 import { getUnitById } from "../game/unitQuery";
 import type { Unit, UnitGroup } from "../core/types";
 
@@ -34,6 +34,158 @@ function getMovementFlags(unit: Unit): { isFlying: boolean; canTraverseWaterTerr
         isFlying: !!(enemyType && ENEMY_STATS[enemyType]?.flying === true),
         canTraverseWaterTerrain: enemyType === "baby_kraken"
     };
+}
+
+interface TargetingBucketEntry {
+    unit: Unit;
+    group: UnitGroup;
+}
+
+const TARGETING_CELL_SIZE = 4;
+const TARGETING_KEY_STRIDE = 1024;
+const playerTargetBuckets = new Map<number, TargetingBucketEntry[]>();
+const enemyTargetBuckets = new Map<number, TargetingBucketEntry[]>();
+const allPlayerTargetEntries: TargetingBucketEntry[] = [];
+const allEnemyTargetEntries: TargetingBucketEntry[] = [];
+const TARGETING_HASH_SEED = 2166136261;
+const TARGETING_HASH_PRIME = 16777619;
+let targetingCacheReady = false;
+let hasTargetingCacheKey = false;
+let lastTargetingCacheKey = 0;
+let lastTargetingEntryCount = -1;
+let lastTargetingUnitsRef: Record<number, UnitGroup> | null = null;
+
+function getTargetingCell(coord: number): number {
+    return Math.floor(coord / TARGETING_CELL_SIZE);
+}
+
+function getTargetingBucketKey(cellX: number, cellZ: number): number {
+    return cellX * TARGETING_KEY_STRIDE + cellZ;
+}
+
+function computeDefeatedHash(defeatedThisFrame: Set<number>): number {
+    let hash = 0;
+    for (const unitId of defeatedThisFrame) {
+        hash ^= Math.imul(unitId, 2654435761);
+    }
+    return hash >>> 0;
+}
+
+function pushTargetingEntry(
+    buckets: Map<number, TargetingBucketEntry[]>,
+    cellX: number,
+    cellZ: number,
+    entry: TargetingBucketEntry
+): void {
+    const key = getTargetingBucketKey(cellX, cellZ);
+    const bucket = buckets.get(key);
+    if (bucket) {
+        bucket.push(entry);
+    } else {
+        buckets.set(key, [entry]);
+    }
+}
+
+function forEachCachedTargetsInRange(
+    team: "player" | "enemy",
+    centerX: number,
+    centerZ: number,
+    range: number,
+    visit: (entry: TargetingBucketEntry) => void
+): boolean {
+    if (!targetingCacheReady) return false;
+
+    if (!Number.isFinite(range)) {
+        const entries = team === "player" ? allPlayerTargetEntries : allEnemyTargetEntries;
+        for (const entry of entries) visit(entry);
+        return true;
+    }
+
+    const bucketMap = team === "player" ? playerTargetBuckets : enemyTargetBuckets;
+    const cellX = getTargetingCell(centerX);
+    const cellZ = getTargetingCell(centerZ);
+    const cellRadius = Math.max(1, Math.ceil(range / TARGETING_CELL_SIZE));
+
+    for (let dx = -cellRadius; dx <= cellRadius; dx++) {
+        for (let dz = -cellRadius; dz <= cellRadius; dz++) {
+            const bucket = bucketMap.get(getTargetingBucketKey(cellX + dx, cellZ + dz));
+            if (!bucket) continue;
+            for (const entry of bucket) {
+                visit(entry);
+            }
+        }
+    }
+
+    return true;
+}
+
+export function updateTargetingCache(
+    unitsState: Unit[],
+    unitsRef: Record<number, UnitGroup>,
+    defeatedThisFrame: Set<number>
+): void {
+    if (lastTargetingUnitsRef !== unitsRef) {
+        hasTargetingCacheKey = false;
+        lastTargetingUnitsRef = unitsRef;
+    }
+
+    let key = TARGETING_HASH_SEED;
+    let entryCount = 0;
+    const defeatedHash = computeDefeatedHash(defeatedThisFrame);
+
+    for (const unit of unitsState) {
+        if (unit.hp <= 0 || defeatedThisFrame.has(unit.id)) continue;
+        if (unit.team === "neutral") continue;
+        if (hasStatusEffect(unit, "divine_lattice")) continue;
+
+        const group = unitsRef[unit.id];
+        if (!group) continue;
+
+        const cellX = getTargetingCell(group.position.x);
+        const cellZ = getTargetingCell(group.position.z);
+        const teamMarker = unit.team === "player" ? 1 : 2;
+        key = Math.imul(key ^ unit.id, TARGETING_HASH_PRIME);
+        key = Math.imul(key ^ teamMarker, TARGETING_HASH_PRIME);
+        key = Math.imul(key ^ cellX, TARGETING_HASH_PRIME);
+        key = Math.imul(key ^ cellZ, TARGETING_HASH_PRIME);
+        entryCount++;
+    }
+
+    key = Math.imul(key ^ defeatedHash, TARGETING_HASH_PRIME) >>> 0;
+    if (hasTargetingCacheKey && key === lastTargetingCacheKey && entryCount === lastTargetingEntryCount) {
+        targetingCacheReady = true;
+        return;
+    }
+
+    targetingCacheReady = true;
+    playerTargetBuckets.clear();
+    enemyTargetBuckets.clear();
+    allPlayerTargetEntries.length = 0;
+    allEnemyTargetEntries.length = 0;
+
+    for (const unit of unitsState) {
+        if (unit.hp <= 0 || defeatedThisFrame.has(unit.id)) continue;
+        if (unit.team === "neutral") continue;
+        if (hasStatusEffect(unit, "divine_lattice")) continue;
+
+        const group = unitsRef[unit.id];
+        if (!group) continue;
+
+        const entry: TargetingBucketEntry = { unit, group };
+        const cellX = getTargetingCell(group.position.x);
+        const cellZ = getTargetingCell(group.position.z);
+        if (unit.team === "player") {
+            allPlayerTargetEntries.push(entry);
+            pushTargetingEntry(playerTargetBuckets, cellX, cellZ, entry);
+        } else {
+            allEnemyTargetEntries.push(entry);
+            pushTargetingEntry(enemyTargetBuckets, cellX, cellZ, entry);
+        }
+    }
+
+    hasTargetingCacheKey = true;
+    lastTargetingCacheKey = key;
+    lastTargetingEntryCount = entryCount;
 }
 
 /**
@@ -185,31 +337,62 @@ export function findNearestTarget(ctx: TargetingContext, alerted: boolean = fals
         }
     }
 
-    for (const enemy of unitsState) {
-        if (enemy.team !== enemyTeam || enemy.hp <= 0) continue;
-        if (hasStatusEffect(enemy, "divine_lattice")) continue;
-        if (defeatedThisFrame.has(enemy.id)) continue;
-        if (blockedTargets?.has(enemy.id)) continue;
+    const evaluateCandidate = (candidate: Unit, candidateGroup: UnitGroup): void => {
+        if (candidate.team !== enemyTeam || candidate.hp <= 0) return;
+        if (hasStatusEffect(candidate, "divine_lattice")) return;
+        if (defeatedThisFrame.has(candidate.id)) return;
+        if (blockedTargets?.has(candidate.id)) return;
         // Skip untargetable enemies.
-        if (isEnemyUntargetable(enemy.id)) continue;
-
-        const eg = unitsRef[enemy.id];
-        if (!eg) continue;
+        if (isEnemyUntargetable(candidate.id)) return;
 
         // Players need line of sight, enemies see all
         if (isPlayer) {
-            const enemyX = Math.floor(eg.position.x);
-            const enemyZ = Math.floor(eg.position.z);
-            if (visibility[enemyX]?.[enemyZ] !== 2) continue;
+            const enemyX = Math.floor(candidateGroup.position.x);
+            const enemyZ = Math.floor(candidateGroup.position.z);
+            if (visibility[enemyX]?.[enemyZ] !== 2) return;
         }
 
-        const d = distanceBetween(g.position, eg.position);
+        const d = distanceBetween(g.position, candidateGroup.position);
         const score = !isPlayer
-            ? d * getEffectivePlayerAggroMultiplier(enemy.id)
+            ? d * getEffectivePlayerAggroMultiplier(candidate.id)
             : d;
         if (score < nearestScore) {
             nearestScore = score;
-            nearest = enemy.id;
+            nearest = candidate.id;
+        }
+    };
+
+    if (isPlayer) {
+        const usedCache = forEachCachedTargetsInRange(
+            "enemy",
+            g.position.x,
+            g.position.z,
+            alerted ? Number.POSITIVE_INFINITY : aggroRange,
+            entry => evaluateCandidate(entry.unit, entry.group)
+        );
+        if (!usedCache) {
+            for (const enemy of unitsState) {
+                if (enemy.team !== "enemy" || enemy.hp <= 0) continue;
+                const eg = unitsRef[enemy.id];
+                if (!eg) continue;
+                evaluateCandidate(enemy, eg);
+            }
+        }
+    } else {
+        const usedCache = forEachCachedTargetsInRange(
+            "player",
+            g.position.x,
+            g.position.z,
+            Number.POSITIVE_INFINITY,
+            entry => evaluateCandidate(entry.unit, entry.group)
+        );
+        if (!usedCache) {
+            for (const player of unitsState) {
+                if (player.team !== "player" || player.hp <= 0) continue;
+                const pg = unitsRef[player.id];
+                if (!pg) continue;
+                evaluateCandidate(player, pg);
+            }
         }
     }
 
@@ -296,13 +479,10 @@ function findRecentDamageSource(ctx: TargetingContext): number | null {
     let closestId: number | null = null;
     let closestDist = 4.0;  // Must be within 4 units of the tracked position
 
-    for (const player of unitsState) {
-        if (player.team !== "player" || player.hp <= 0) continue;
-        if (hasStatusEffect(player, "divine_lattice")) continue;
-        if (defeatedThisFrame.has(player.id)) continue;
-
-        const pg = unitsRef[player.id];
-        if (!pg) continue;
+    const evaluatePlayer = (player: Unit, pg: UnitGroup): void => {
+        if (player.team !== "player" || player.hp <= 0) return;
+        if (hasStatusEffect(player, "divine_lattice")) return;
+        if (defeatedThisFrame.has(player.id)) return;
 
         // Check if this player is near the damage source position
         const distToSource = Math.hypot(
@@ -319,6 +499,22 @@ function findRecentDamageSource(ctx: TargetingContext): number | null {
         if (distToSource < closestDist && distToEnemy <= aggroRange * 2) {
             closestDist = distToSource;
             closestId = player.id;
+        }
+    };
+
+    const usedCache = forEachCachedTargetsInRange(
+        "player",
+        damageSource.x,
+        damageSource.z,
+        closestDist,
+        entry => evaluatePlayer(entry.unit, entry.group)
+    );
+    if (!usedCache) {
+        for (const player of unitsState) {
+            if (player.team !== "player" || player.hp <= 0) continue;
+            const pg = unitsRef[player.id];
+            if (!pg) continue;
+            evaluatePlayer(player, pg);
         }
     }
 
@@ -683,15 +879,19 @@ interface AvoidanceBucketEntry {
 }
 
 const AVOIDANCE_CELL_SIZE = 2;
-const avoidanceBuckets = new Map<string, AvoidanceBucketEntry[]>();
+const AVOIDANCE_KEY_STRIDE = 1024;
+const avoidanceBuckets = new Map<number, AvoidanceBucketEntry[]>();
 let maxAvoidanceRadius = DEFAULT_UNIT_RADIUS;
+// Dirty flag: track unit cell positions to skip rebuild when nothing moved
+let lastAvoidancePositionKey = 0;
+let lastAvoidanceUnitCount = -1;
 const MAX_WALL_CLEARANCE = 0.45;
 const MIN_WALL_CLEARANCE = 0.2;
 const WALL_CLEARANCE_RATIO = 0.65;
 const WALL_CLEARANCE_EPSILON = 0.001;
 
-function getAvoidanceBucketKey(cellX: number, cellZ: number): string {
-    return `${cellX},${cellZ}`;
+function getAvoidanceBucketKey(cellX: number, cellZ: number): number {
+    return cellX * AVOIDANCE_KEY_STRIDE + cellZ;
 }
 
 function getAvoidanceCell(coord: number): number {
@@ -701,11 +901,32 @@ function getAvoidanceCell(coord: number): number {
 /**
  * Build a lightweight spatial hash once per frame so local avoidance
  * checks don't scan every unit for every mover.
+ * Uses a position-based dirty flag to skip rebuild when no unit has moved cells.
  */
 export function updateAvoidanceCache(
     unitsState: Unit[],
     unitsRef: Record<number, UnitGroup>
 ): void {
+    // Quick dirty check: hash all alive unit cell positions
+    let positionKey = 2166136261;
+    let aliveCount = 0;
+    for (const unit of unitsState) {
+        if (unit.hp <= 0) continue;
+        const group = unitsRef[unit.id];
+        if (!group) continue;
+        aliveCount++;
+        const cx = getAvoidanceCell(group.position.x);
+        const cz = getAvoidanceCell(group.position.z);
+        positionKey = Math.imul(positionKey ^ (unit.id * 1024 + cx * 32 + cz), 16777619);
+    }
+    positionKey = positionKey >>> 0;
+
+    if (positionKey === lastAvoidancePositionKey && aliveCount === lastAvoidanceUnitCount) {
+        return;
+    }
+    lastAvoidancePositionKey = positionKey;
+    lastAvoidanceUnitCount = aliveCount;
+
     avoidanceBuckets.clear();
     maxAvoidanceRadius = DEFAULT_UNIT_RADIUS;
 
@@ -731,24 +952,6 @@ export function updateAvoidanceCache(
     }
 }
 
-function getNearbyAvoidanceEntries(group: UnitGroup, myRadius: number): AvoidanceBucketEntry[] {
-    const entries: AvoidanceBucketEntry[] = [];
-    const centerX = getAvoidanceCell(group.position.x);
-    const centerZ = getAvoidanceCell(group.position.z);
-    const maxInteractionDist = (myRadius + maxAvoidanceRadius) * AVOIDANCE_RANGE_MULTIPLIER;
-    const neighborRadius = Math.max(1, Math.ceil(maxInteractionDist / AVOIDANCE_CELL_SIZE));
-
-    for (let dx = -neighborRadius; dx <= neighborRadius; dx++) {
-        for (let dz = -neighborRadius; dz <= neighborRadius; dz++) {
-            const bucket = avoidanceBuckets.get(getAvoidanceBucketKey(centerX + dx, centerZ + dz));
-            if (!bucket) continue;
-            entries.push(...bucket);
-        }
-    }
-
-    return entries;
-}
-
 /**
  * Calculate avoidance vector from nearby units.
  * Player formation moves keep steering at reduced strength for cohesion.
@@ -762,36 +965,47 @@ export function calculateAvoidance(ctx: MovementContext, desiredX: number, desir
 
     const myRadius = getUnitRadius(unit);
     let avoidX = 0, avoidZ = 0;
+    const centerX = getAvoidanceCell(g.position.x);
+    const centerZ = getAvoidanceCell(g.position.z);
+    const maxInteractionDist = (myRadius + maxAvoidanceRadius) * AVOIDANCE_RANGE_MULTIPLIER;
+    const neighborRadius = Math.max(1, Math.ceil(maxInteractionDist / AVOIDANCE_CELL_SIZE));
 
-    for (const entry of getNearbyAvoidanceEntries(g, myRadius)) {
-        const otherU = entry.unit;
-        if (otherU.id === unit.id || otherU.hp <= 0) continue;
-        const otherG = entry.group;
+    for (let dx = -neighborRadius; dx <= neighborRadius; dx++) {
+        for (let dz = -neighborRadius; dz <= neighborRadius; dz++) {
+            const bucket = avoidanceBuckets.get(getAvoidanceBucketKey(centerX + dx, centerZ + dz));
+            if (!bucket) continue;
 
-        const otherRadius = getUnitRadius(otherU);
-        const combinedRadius = myRadius + otherRadius;
-        const ox = otherG.position.x - g.position.x;
-        const oz = otherG.position.z - g.position.z;
-        const oDist = Math.hypot(ox, oz);
+            for (const entry of bucket) {
+                const otherU = entry.unit;
+                if (otherU.id === unit.id || otherU.hp <= 0) continue;
+                const otherG = entry.group;
 
-        if (oDist < combinedRadius * AVOIDANCE_RANGE_MULTIPLIER && oDist > MOVEMENT_MIN_MAGNITUDE) {
-            // Hard separation when overlapping - push directly away
-            if (oDist < combinedRadius) {
-                const sepStrength = (combinedRadius - oDist) / combinedRadius;
-                avoidX -= (ox / oDist) * sepStrength * AVOIDANCE_OVERLAP_STRENGTH;
-                avoidZ -= (oz / oDist) * sepStrength * AVOIDANCE_OVERLAP_STRENGTH;
-            }
-            // Steering when unit is ahead and close
-            else {
-                const dot = (ox * desiredX + oz * desiredZ) / oDist;
-                if (dot > AVOIDANCE_STEER_THRESHOLD) {
-                    const steerStrength = (combinedRadius * AVOIDANCE_RANGE_MULTIPLIER - oDist) / (combinedRadius * AVOIDANCE_STEER_STRENGTH);
-                    // Use XOR of unit IDs to determine which unit steers which way
-                    const steerRight = (unit.id ^ otherU.id) % 2 === 0;
-                    const perpX = steerRight ? -desiredZ : desiredZ;
-                    const perpZ = steerRight ? desiredX : -desiredX;
-                    avoidX += perpX * steerStrength * AVOIDANCE_STEER_STRENGTH * steeringScale;
-                    avoidZ += perpZ * steerStrength * AVOIDANCE_STEER_STRENGTH * steeringScale;
+                const otherRadius = getUnitRadius(otherU);
+                const combinedRadius = myRadius + otherRadius;
+                const ox = otherG.position.x - g.position.x;
+                const oz = otherG.position.z - g.position.z;
+                const oDist = Math.hypot(ox, oz);
+
+                if (oDist < combinedRadius * AVOIDANCE_RANGE_MULTIPLIER && oDist > MOVEMENT_MIN_MAGNITUDE) {
+                    // Hard separation when overlapping - push directly away
+                    if (oDist < combinedRadius) {
+                        const sepStrength = (combinedRadius - oDist) / combinedRadius;
+                        avoidX -= (ox / oDist) * sepStrength * AVOIDANCE_OVERLAP_STRENGTH;
+                        avoidZ -= (oz / oDist) * sepStrength * AVOIDANCE_OVERLAP_STRENGTH;
+                    }
+                    // Steering when unit is ahead and close
+                    else {
+                        const dot = (ox * desiredX + oz * desiredZ) / oDist;
+                        if (dot > AVOIDANCE_STEER_THRESHOLD) {
+                            const steerStrength = (combinedRadius * AVOIDANCE_RANGE_MULTIPLIER - oDist) / (combinedRadius * AVOIDANCE_STEER_STRENGTH);
+                            // Use XOR of unit IDs to determine which unit steers which way
+                            const steerRight = (unit.id ^ otherU.id) % 2 === 0;
+                            const perpX = steerRight ? -desiredZ : desiredZ;
+                            const perpZ = steerRight ? desiredX : -desiredX;
+                            avoidX += perpX * steerStrength * AVOIDANCE_STEER_STRENGTH * steeringScale;
+                            avoidZ += perpZ * steerStrength * AVOIDANCE_STEER_STRENGTH * steeringScale;
+                        }
+                    }
                 }
             }
         }

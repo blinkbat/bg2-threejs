@@ -9,6 +9,7 @@ import { distance } from "../../game/geometry";
 import { findPath } from "../../ai/pathfinding";
 import { runPathFollowingPhase, runMovementPhase, type PathContext, type MovementContext } from "../../ai/unitAI";
 import { createAcidTile, tryCreateAcidAura } from "../acidTiles";
+import { getUnitRadius, isInRange } from "../../rendering/range";
 
 // =============================================================================
 // TYPES
@@ -85,7 +86,10 @@ export function tryAcidSlugPatrol(ctx: AcidSlugContext): boolean {
         const playerG = unitsRef[u.id];
         if (!playerG) continue;
         const dist = distance(playerG.position.x, playerG.position.z, g.position.x, g.position.z);
-        if (dist <= slugData.aggroRange && (!closestPlayer || dist < closestPlayer.dist)) {
+        if (!isInRange(g.position.x, g.position.z, playerG.position.x, playerG.position.z, getUnitRadius(u), slugData.aggroRange)) {
+            continue;
+        }
+        if (!closestPlayer || dist < closestPlayer.dist) {
             closestPlayer = { unit: u, group: playerG, dist };
         }
     }

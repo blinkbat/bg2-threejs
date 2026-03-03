@@ -41,6 +41,7 @@ import { applyPoison, applyStatusEffect } from "./combat/combatMath";
 import { setupTargetingMode } from "./input";
 import { createLightningPillar } from "./combat/damageEffects";
 import { spawnLootBag } from "./gameLoop";
+import { clearPathCache, invalidateDynamicObstacles } from "./ai/pathfinding";
 import {
     togglePause,
     processActionQueue,
@@ -2058,7 +2059,7 @@ function Game({
             {/* UI Components */}
             <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onShowHelp={onShowHelp} onRestart={onRestart} onSaveClick={onSaveClick} onLoadClick={onLoadClick} debug={debug} onToggleDebug={handleToggleDebug} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} onStatBoost={handleStatBoost} onTogglePlaytestUnlockAllSkills={handleTogglePlaytestUnlockAllSkills} playtestUnlockAllSkillsEnabled={playtestSettings.unlockAllSkills} onTogglePlaytestSkipDialogs={handleTogglePlaytestSkipDialogs} playtestSkipDialogsEnabled={playtestSettings.skipDialogs} onToggleFastMove={handleToggleFastMove} fastMoveEnabled={fastMove} lightingTuning={lightingTuning} onUpdateLightingTuning={handleUpdateLightingTuning} onResetLightingTuning={handleResetLightingTuning} lightingTuningOutput={lightingTuningOutput} otherModalOpen={otherModalOpen} hasSelection={selectedIds.length > 0} onModalOpenStateChange={setHudMenuModalOpen} />
             <CombatLog log={combatLog} />
-            <FormationIndicator units={units} formationOrder={formationOrder} />
+            <FormationIndicator units={playerUnits} formationOrder={formationOrder} />
             <div className="bottom-bar-container">
             <CommandBar
                 commandMode={commandMode}
@@ -2073,7 +2074,7 @@ function Game({
                 partyAutoBattleActive={partyAutoBattleActive}
             />
             <PartyBar
-                units={units} selectedIds={selectedIds} onSelect={setSelectedIds} targetingMode={targetingMode}
+                units={playerUnits} selectedIds={selectedIds} onSelect={setSelectedIds} targetingMode={targetingMode}
                 consumableTargetingMode={consumableTargetingMode}
                 onTargetUnit={handleTargetUnit}
                 hotbarAssignments={hotbarAssignments}
@@ -2086,7 +2087,7 @@ function Game({
             </div>
             {showPanel && selectedIds.length === 1 && (
                 <UnitPanel
-                    unitId={selectedIds[0]} units={units} onClose={handleClosePanel}
+                    unitId={selectedIds[0]} units={playerUnits} onClose={handleClosePanel}
                     onToggleAI={handleToggleAI}
                     onCastSkill={handleCastSkill} skillCooldowns={skillCooldowns} paused={paused}
                     queuedSkills={queuedActions.filter(q => q.unitId === selectedIds[0]).map(q => q.skillName)}
@@ -2155,6 +2156,12 @@ export default function App() {
     const startupBootTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
     const startupReadyTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
 
+    const setCurrentAreaWithPathReset = useCallback((areaId: AreaId) => {
+        setCurrentArea(areaId);
+        clearPathCache();
+        invalidateDynamicObstacles();
+    }, []);
+
     const handleStartGame = useCallback(() => {
         if (startupPhase !== "title") return;
         setStartupPhase("booting");
@@ -2203,7 +2210,7 @@ export default function App() {
         setInitialDialogTriggerProgress(null);
         clearFogVisibilityMemory();
         initializeEquipmentState();
-        setCurrentArea(DEFAULT_STARTING_AREA);
+        setCurrentAreaWithPathReset(DEFAULT_STARTING_AREA);
         setGameKey(k => k + 1);
     };
 
@@ -2241,7 +2248,7 @@ export default function App() {
                 setPersistedPlayers(p);
                 setSpawnPoint(s);
                 setSpawnDirection(dir);
-                setCurrentArea(area);
+                setCurrentAreaWithPathReset(area);
                 setGameKey(k => k + 1);
             }
         }, AREA_FADE_DURATION);
@@ -2342,7 +2349,7 @@ export default function App() {
         clearFogVisibilityMemory();
         setAllEquipment(saveData.equipment);
         setPartyInventory(saveData.inventory);
-        setCurrentArea(saveData.areaId);
+        setCurrentAreaWithPathReset(saveData.areaId);
         setInitialOpenedChests(new Set(saveData.openedChests));
         setInitialOpenedSecretDoors(new Set(saveData.openedSecretDoors));
         setInitialKilledEnemies(new Set(saveData.killedEnemies));

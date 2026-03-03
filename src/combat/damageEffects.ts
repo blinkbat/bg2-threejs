@@ -26,7 +26,8 @@ import { getNextUnitId } from "../core/unitIds";
 import { ENEMY_STATS, getAmoebaMaxHpForSplitCount } from "../game/enemyStats";
 import { UNIT_DATA, getXpForLevel, getEffectiveMaxHp, getEffectiveMaxMana } from "../game/playerUnits";
 import { LEVEL_UP_HP, LEVEL_UP_MANA, LEVEL_UP_STAT_POINTS, LEVEL_UP_SKILL_POINTS } from "../game/statBonuses";
-import { trySubmergeKraken, isEnemyUntargetable } from "../gameLoop/enemyBehaviors";
+import { trySubmergeKraken } from "../gameLoop/enemyBehaviors/submerge";
+import { isEnemyUntargetable } from "../gameLoop/enemyBehaviors/untargetable";
 import { getCurrentArea } from "../game/areas";
 
 // =============================================================================

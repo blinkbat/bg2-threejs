@@ -14,6 +14,7 @@ import { soundFns } from "../../audio";
 import { disposeBasicMesh } from "../../rendering/disposal";
 import { normalizeAngle, isPointInCone } from "../../game/geometry";
 import type { GlareContext } from "./types";
+import { getUnitById } from "../../game/unitQuery";
 
 // =============================================================================
 // TYPES
@@ -211,7 +212,7 @@ export function processGlares(
     const toRemove: number[] = [];
 
     activeGlares.forEach((glare, glareId) => {
-        const unit = unitsState.find(u => u.id === glare.casterId);
+        const unit = getUnitById(glare.casterId);
 
         // Cancel glare if caster is dead
         if (!unit || unit.hp <= 0) {

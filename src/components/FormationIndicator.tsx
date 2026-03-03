@@ -26,7 +26,7 @@ interface FormationIndicatorProps {
     formationOrder: number[];
 }
 
-export const FormationIndicator = memo(function FormationIndicator({ units, formationOrder }: FormationIndicatorProps) {
+function FormationIndicatorComponent({ units, formationOrder }: FormationIndicatorProps) {
     const players = sortUnitsByFormationOrder(
         units.filter(u => u.team === "player"),
         formationOrder
@@ -61,4 +61,20 @@ export const FormationIndicator = memo(function FormationIndicator({ units, form
             </div>
         </div>
     );
-});
+}
+
+function areFormationPropsEqual(prev: FormationIndicatorProps, next: FormationIndicatorProps): boolean {
+    if (prev.units.length !== next.units.length) return false;
+    for (let i = 0; i < prev.units.length; i++) {
+        if (prev.units[i] !== next.units[i]) return false;
+    }
+
+    if (prev.formationOrder.length !== next.formationOrder.length) return false;
+    for (let i = 0; i < prev.formationOrder.length; i++) {
+        if (prev.formationOrder[i] !== next.formationOrder[i]) return false;
+    }
+
+    return true;
+}
+
+export const FormationIndicator = memo(FormationIndicatorComponent, areFormationPropsEqual);

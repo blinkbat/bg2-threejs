@@ -6,6 +6,7 @@ import * as THREE from "three";
 import type { Unit, UnitGroup } from "../../core/types";
 import { ENEMY_STATS } from "../../game/enemyStats";
 import { soundFns } from "../../audio";
+import { getUnitById } from "../../game/unitQuery";
 
 // =============================================================================
 // STATE
@@ -113,7 +114,6 @@ export function isKrakenFullySubmerged(unitId: number): boolean {
  */
 export function updateSubmergedKrakens(
     now: number,
-    unitsState: Unit[],
     unitsRef: Record<number, UnitGroup>,
     addLog: (text: string, color?: string) => void
 ): void {
@@ -121,7 +121,8 @@ export function updateSubmergedKrakens(
         const sk = submergedKrakens[i];
 
         // Check if kraken is still alive
-        const krakenUnit = unitsState.find(u => u.id === sk.unitId && u.hp > 0);
+        const krakenCandidate = getUnitById(sk.unitId);
+        const krakenUnit = krakenCandidate && krakenCandidate.hp > 0 ? krakenCandidate : undefined;
         if (!krakenUnit) {
             submergedKrakens.splice(i, 1);
             continue;

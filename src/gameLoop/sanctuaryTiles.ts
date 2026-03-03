@@ -111,6 +111,19 @@ export function processSanctuaryTiles(
     const tilesToRemove: string[] = [];
     const requestedHealById = new Map<number, number>();
     const unitNameById = new Map<number, string>();
+    const playerUnitsByTile = new Map<string, Array<{ unit: Unit; group: UnitGroup }>>();
+    for (const unit of unitsState) {
+        if (unit.hp <= 0 || unit.team !== "player") continue;
+        const unitG = unitsRef[unit.id];
+        if (!unitG) continue;
+        const key = getTileKey(Math.floor(unitG.position.x), Math.floor(unitG.position.z));
+        const existing = playerUnitsByTile.get(key);
+        if (existing) {
+            existing.push({ unit, group: unitG });
+        } else {
+            playerUnitsByTile.set(key, [{ unit, group: unitG }]);
+        }
+    }
 
     sanctuaryTiles.forEach((tile, key) => {
         // Accumulate time since last tick (pause-safe delta)
@@ -128,20 +141,16 @@ export function processSanctuaryTiles(
         // Check for heal tick
         if (tile.timeSinceTick >= SANCTUARY_TICK_INTERVAL) {
             tile.timeSinceTick = 0;
+            const tileOccupants = playerUnitsByTile.get(key);
+            if (!tileOccupants || tileOccupants.length === 0) return;
 
-            // Find player units standing on this tile
-            for (const unit of unitsState) {
-                if (unit.hp <= 0 || unit.team !== "player") continue;
-
-                const unitG = unitsRef[unit.id];
-                if (!unitG) continue;
-
-                if (isUnitOnTile(unitG.position.x, unitG.position.z, tile.x, tile.z)) {
-                    const existing = requestedHealById.get(unit.id) ?? 0;
-                    requestedHealById.set(unit.id, existing + tile.healPerTick);
-                    if (!unitNameById.has(unit.id)) {
-                        unitNameById.set(unit.id, getUnitStats(unit).name);
-                    }
+            // Add healing requests for players currently overlapping this tile.
+            for (const { unit, group } of tileOccupants) {
+                if (!isUnitOnTile(group.position.x, group.position.z, tile.x, tile.z)) continue;
+                const existing = requestedHealById.get(unit.id) ?? 0;
+                requestedHealById.set(unit.id, existing + tile.healPerTick);
+                if (!unitNameById.has(unit.id)) {
+                    unitNameById.set(unit.id, getUnitStats(unit).name);
                 }
             }
         }

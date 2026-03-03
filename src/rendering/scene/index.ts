@@ -170,6 +170,8 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
 
     // Shared geometry for all 1x1 floor/terrain tiles (hundreds of tiles, one geometry)
     const tileGeo = new THREE.PlaneGeometry(1, 1);
+    const tileInstanceRotation = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
+    const tileInstanceScale = new THREE.Vector3(1, 1, 1);
     const WATER_METALNESS = 0.52;
     const WATER_ROUGHNESS = 0.08;
     const WATER_TILE_OPACITY = 0.4;
@@ -199,6 +201,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     const floorMatPool: Record<string, THREE.MeshStandardMaterial> = {};
     const waterMatPool: Record<string, THREE.MeshStandardMaterial> = {};
     const lavaMatPool: Record<string, THREE.MeshStandardMaterial> = {};
+    const batchedTileMatrices = new Map<THREE.MeshStandardMaterial, THREE.Matrix4[]>();
     const lavaBubbleGeo = new THREE.RingGeometry(0.046, 0.074, 16);
     const areaIdUnitRange = hashAreaIdToUnitRange(area.id);
 
@@ -259,6 +262,44 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         }
         return lavaMatPool[color];
     }
+    function queueBatchedTile(
+        material: THREE.MeshStandardMaterial,
+        x: number,
+        y: number,
+        z: number
+    ): void {
+        const existing = batchedTileMatrices.get(material);
+        if (existing) {
+            existing.push(new THREE.Matrix4().compose(
+                new THREE.Vector3(x + 0.5, y, z + 0.5),
+                tileInstanceRotation,
+                tileInstanceScale
+            ));
+            return;
+        }
+
+        batchedTileMatrices.set(material, [
+            new THREE.Matrix4().compose(
+                new THREE.Vector3(x + 0.5, y, z + 0.5),
+                tileInstanceRotation,
+                tileInstanceScale
+            )
+        ]);
+    }
+    function flushBatchedTiles(): void {
+        for (const [material, matrices] of batchedTileMatrices.entries()) {
+            const instanced = new THREE.InstancedMesh(tileGeo, material, matrices.length);
+            instanced.name = "ground";
+            instanced.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+            for (let index = 0; index < matrices.length; index++) {
+                instanced.setMatrixAt(index, matrices[index]);
+            }
+            instanced.computeBoundingSphere();
+            setStaticRenderTier(instanced, "floor");
+            scene.add(instanced);
+        }
+        batchedTileMatrices.clear();
+    }
 
     const floorColors: Record<string, string> = {
         "s": "#c2b280",  // Sand - tan
@@ -317,12 +358,17 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                     tileMaterial.depthWrite = false;
                 }
 
-                const tile = new THREE.Mesh(tileGeo, tileMaterial);
-                tile.rotation.x = -Math.PI / 2;
-                tile.position.set(x + 0.5, FLOOR_BASE_Y + layerIndex * FLOOR_LAYER_HEIGHT_STEP, z + 0.5);
-                tile.name = "ground";
-                setStaticRenderTier(tile, "floor");
-                scene.add(tile);
+                const tileY = FLOOR_BASE_Y + layerIndex * FLOOR_LAYER_HEIGHT_STEP;
+                if (!hasRounding) {
+                    queueBatchedTile(tileMaterial, x, tileY, z);
+                } else {
+                    const tile = new THREE.Mesh(tileGeo, tileMaterial);
+                    tile.rotation.x = -Math.PI / 2;
+                    tile.position.set(x + 0.5, tileY, z + 0.5);
+                    tile.name = "ground";
+                    setStaticRenderTier(tile, "floor");
+                    scene.add(tile);
+                }
             }
         }
     }
@@ -459,12 +505,17 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                         waterMat.depthWrite = false;
                     }
 
-                    const tile = new THREE.Mesh(tileGeo, waterMat);
-                    tile.rotation.x = -Math.PI / 2;
-                    tile.position.set(x + 0.5, TERRAIN_BASE_Y + layerIndex * TERRAIN_LAYER_HEIGHT_STEP, z + 0.5);
-                    tile.name = "ground";
-                    setStaticRenderTier(tile, "floor");
-                    scene.add(tile);
+                    const tileY = TERRAIN_BASE_Y + layerIndex * TERRAIN_LAYER_HEIGHT_STEP;
+                    if (!hasRounding) {
+                        queueBatchedTile(waterMat, x, tileY, z);
+                    } else {
+                        const tile = new THREE.Mesh(tileGeo, waterMat);
+                        tile.rotation.x = -Math.PI / 2;
+                        tile.position.set(x + 0.5, tileY, z + 0.5);
+                        tile.name = "ground";
+                        setStaticRenderTier(tile, "floor");
+                        scene.add(tile);
+                    }
                     hasLiquidTiles = true;
 
                     const bubbleSeed = areaIdUnitRange * 1000 + layerIndex * 97;
@@ -532,6 +583,8 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
             }
         }
     }
+
+    flushBatchedTiles();
 
     if (hasLiquidTiles) {
         waterMesh = liquidTiles;
@@ -1863,24 +1916,32 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         depthWrite: false,
         toneMapped: false,
     });
+    const totalGridLines = area.gridHeight + area.gridWidth + 2;
+    const gridPositions = new Float32Array(totalGridLines * 2 * 3);
+    let gridOffset = 0;
     // Horizontal lines (along X axis, varying Z)
     for (let z = 0; z <= area.gridHeight; z++) {
-        const line = new THREE.Line(
-            new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, gridY, z), new THREE.Vector3(area.gridWidth, gridY, z)]),
-            gridMat
-        );
-        setStaticRenderTier(line, "grid");
-        scene.add(line);
+        gridPositions[gridOffset++] = 0;
+        gridPositions[gridOffset++] = gridY;
+        gridPositions[gridOffset++] = z;
+        gridPositions[gridOffset++] = area.gridWidth;
+        gridPositions[gridOffset++] = gridY;
+        gridPositions[gridOffset++] = z;
     }
     // Vertical lines (along Z axis, varying X)
     for (let x = 0; x <= area.gridWidth; x++) {
-        const line = new THREE.Line(
-            new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x, gridY, 0), new THREE.Vector3(x, gridY, area.gridHeight)]),
-            gridMat
-        );
-        setStaticRenderTier(line, "grid");
-        scene.add(line);
+        gridPositions[gridOffset++] = x;
+        gridPositions[gridOffset++] = gridY;
+        gridPositions[gridOffset++] = 0;
+        gridPositions[gridOffset++] = x;
+        gridPositions[gridOffset++] = gridY;
+        gridPositions[gridOffset++] = area.gridHeight;
     }
+    const gridGeometry = new THREE.BufferGeometry();
+    gridGeometry.setAttribute("position", new THREE.BufferAttribute(gridPositions, 3));
+    const gridLines = new THREE.LineSegments(gridGeometry, gridMat);
+    setStaticRenderTier(gridLines, "grid");
+    scene.add(gridLines);
 
     applyStaticRenderOrder(scene);
 

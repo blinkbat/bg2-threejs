@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { memo, useState, useRef, useEffect, useCallback, useMemo } from "react";
 import Tippy from "@tippyjs/react";
 import type { Unit, Skill, StatusEffectType } from "../core/types";
 import {
@@ -60,7 +60,7 @@ interface PartyBarProps {
     hideHotbar?: boolean;
 }
 
-export function PartyBar({
+function PartyBarComponent({
     units,
     selectedIds,
     onSelect,
@@ -445,3 +445,40 @@ export function PartyBar({
         </div>
     );
 }
+
+function areNumberArraysEqual(a: number[], b: number[]): boolean {
+    if (a === b) return true;
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+        if (a[i] !== b[i]) return false;
+    }
+    return true;
+}
+
+function areUnitRefsEqual(a: Unit[], b: Unit[]): boolean {
+    if (a === b) return true;
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+        if (a[i] !== b[i]) return false;
+    }
+    return true;
+}
+
+function arePartyBarPropsEqual(prev: PartyBarProps, next: PartyBarProps): boolean {
+    return areUnitRefsEqual(prev.units, next.units)
+        && areNumberArraysEqual(prev.selectedIds, next.selectedIds)
+        && prev.onSelect === next.onSelect
+        && prev.targetingMode === next.targetingMode
+        && prev.consumableTargetingMode === next.consumableTargetingMode
+        && prev.onTargetUnit === next.onTargetUnit
+        && prev.hotbarAssignments === next.hotbarAssignments
+        && prev.onAssignSkill === next.onAssignSkill
+        && prev.onCastSkill === next.onCastSkill
+        && prev.skillCooldowns === next.skillCooldowns
+        && prev.paused === next.paused
+        && areNumberArraysEqual(prev.formationOrder ?? [], next.formationOrder ?? [])
+        && prev.onReorderFormation === next.onReorderFormation
+        && prev.hideHotbar === next.hideHotbar;
+}
+
+export const PartyBar = memo(PartyBarComponent, arePartyBarPropsEqual);

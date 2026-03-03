@@ -6,7 +6,7 @@ import {
 import {
     HP_PER_VITALITY,
     MP_PER_INTELLIGENCE,
-} from "./statBonuses";
+} from "./progression";
 
 // =============================================================================
 // EXPERIENCE & LEVELING

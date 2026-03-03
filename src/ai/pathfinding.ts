@@ -1,5 +1,4 @@
 import { VISION_RADIUS, PATH_RECURSION_LIMIT, ASTAR_BLOCKED_TARGET_SEARCH, ASTAR_DIAGONAL_COST } from "../core/constants";
-import { getFormationPositionsForSpawn } from "../game/formation";
 import { blocked } from "../game/dungeon";
 import { isTreeBlocked, isTerrainBlocked, isWaterTerrain } from "../game/areas";
 import { isWithinGrid } from "../game/geometry";
@@ -32,6 +31,7 @@ const dynamicCostMap: Map<number, number> = new Map();
 
 // Track last unit positions to avoid recomputing when nothing moved
 let lastUnitPositions: Map<number, number> = new Map();
+let scratchUnitPositions: Map<number, number> = new Map();
 let dynamicObstaclesDirty = true;
 
 /**
@@ -46,7 +46,8 @@ export function updateDynamicObstacles(
 ): void {
     // Check if any unit has moved
     let needsUpdate = false;
-    const newPositions: Map<number, number> = new Map();
+    const newPositions = scratchUnitPositions;
+    newPositions.clear();
 
     for (const unit of units) {
         if (unit.hp <= 0) continue;
@@ -72,7 +73,9 @@ export function updateDynamicObstacles(
         return;
     }
 
+    const previousPositions = lastUnitPositions;
     lastUnitPositions = newPositions;
+    scratchUnitPositions = previousPositions;
     dynamicObstaclesDirty = false;
     dynamicCostMap.clear();
 
@@ -114,6 +117,7 @@ export function updateDynamicObstacles(
 export function invalidateDynamicObstacles(): void {
     dynamicObstaclesDirty = true;
     lastUnitPositions.clear();
+    scratchUnitPositions.clear();
 }
 
 /**
@@ -186,87 +190,52 @@ export function findNearestPassable(targetX: number, targetZ: number, maxRadius:
     return null;
 }
 
-/**
- * Find passable spawn positions for multiple units around a spawn point.
- * Uses formation layout when a direction is provided (area transitions),
- * otherwise falls back to a simple grid pattern.
- */
-export function findSpawnPositions(
-    spawnX: number,
-    spawnZ: number,
-    count: number,
-    direction?: "north" | "south" | "east" | "west"
-): { x: number; z: number }[] {
-    if (direction) {
-        return getFormationPositionsForSpawn(spawnX, spawnZ, direction, count);
-    }
-
-    // Fallback: simple 3-wide grid (used for initial game load with no transition)
-    const spacing = 1.5;
-    const positions: { x: number; z: number }[] = [];
-    const usedCells = new Set<number>();
-
-    for (let i = 0; i < count; i++) {
-        const idealX = spawnX + (i % 3) * spacing - spacing;
-        const idealZ = spawnZ + Math.floor(i / 3) * spacing;
-
-        let found = false;
-        const cx = Math.floor(idealX);
-        const cz = Math.floor(idealZ);
-        const ck = cellKey(cx, cz);
-
-        if (isPassable(cx, cz) && !usedCells.has(ck)) {
-            positions.push({ x: idealX, z: idealZ });
-            usedCells.add(ck);
-            found = true;
-        }
-
-        if (!found) {
-            for (let radius = 1; radius <= 5; radius++) {
-                if (found) break;
-                for (let dx = -radius; dx <= radius; dx++) {
-                    if (found) break;
-                    for (let dz = -radius; dz <= radius; dz++) {
-                        if (Math.abs(dx) !== radius && Math.abs(dz) !== radius) continue;
-                        const checkX = cx + dx;
-                        const checkZ = cz + dz;
-                        const key = cellKey(checkX, checkZ);
-                        if (isPassable(checkX, checkZ) && !usedCells.has(key)) {
-                            positions.push({ x: checkX + 0.5, z: checkZ + 0.5 });
-                            usedCells.add(key);
-                            found = true;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-
-        if (!found) {
-            positions.push({ x: spawnX, z: spawnZ });
-        }
-    }
-
-    return positions;
-}
-
 // =============================================================================
 // FOG OF WAR - Bresenham LOS, visibility states: 0=unseen, 1=seen, 2=visible
 // =============================================================================
+
+const previousVisibleCells: number[] = [];
+let visibilityTrackingDirty = true;
+
+function seedPreviousVisibleCells(visibility: number[][]): void {
+    previousVisibleCells.length = 0;
+    for (let x = 0; x < visibility.length; x++) {
+        for (let z = 0; z < (visibility[x]?.length ?? 0); z++) {
+            if (visibility[x][z] === 2) {
+                previousVisibleCells.push(cellKey(x, z));
+            }
+        }
+    }
+}
+
+export function resetVisibilityTracking(): void {
+    previousVisibleCells.length = 0;
+    visibilityTrackingDirty = true;
+}
 
 /**
  * Decay all visible cells to seen state.
  */
 function decayVisibility(visibility: number[][]): boolean {
+    if (visibilityTrackingDirty) {
+        seedPreviousVisibleCells(visibility);
+        visibilityTrackingDirty = false;
+    }
+
+    if (previousVisibleCells.length === 0) {
+        return false;
+    }
+
     let changed = false;
-    for (let x = 0; x < visibility.length; x++) {
-        for (let z = 0; z < (visibility[x]?.length ?? 0); z++) {
-            if (visibility[x][z] === 2) {
-                visibility[x][z] = 1;
-                changed = true;
-            }
+    for (const key of previousVisibleCells) {
+        const x = Math.floor(key / KEY_STRIDE);
+        const z = key - x * KEY_STRIDE;
+        if (visibility[x]?.[z] === 2) {
+            visibility[x][z] = 1;
+            changed = true;
         }
     }
+    previousVisibleCells.length = 0;
     return changed;
 }
 
@@ -283,8 +252,11 @@ function markVisibleFromUnit(visibility: number[][], ux: number, uz: number): bo
             // Skip if outside vision circle
             if (dx * dx + dz * dz > VISION_RADIUS * VISION_RADIUS) continue;
             if (hasLineOfSight(ux, uz, x, z)) {
-                if (visibility[x][z] !== 2) changed = true;
-                visibility[x][z] = 2;
+                if (visibility[x][z] !== 2) {
+                    changed = true;
+                    visibility[x][z] = 2;
+                    previousVisibleCells.push(cellKey(x, z));
+                }
             }
         }
     }

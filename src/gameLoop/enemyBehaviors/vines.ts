@@ -4,13 +4,13 @@
 
 import * as THREE from "three";
 import { getUnitStats } from "../../game/units";
-import { distance } from "../../game/geometry";
 import { soundFns } from "../../audio";
 import { setSkillCooldown, rollDamage } from "../../combat/combatMath";
 import { BUFF_TICK_INTERVAL, COLORS } from "../../core/constants";
 import { getGameTime } from "../../core/gameClock";
 import { scheduleEffectAnimation } from "../../core/effectScheduler";
 import { applyDamageToUnit, type DamageContext } from "../../combat/damageEffects";
+import { getUnitRadius, isInRange } from "../../rendering/range";
 import type { VinesContext } from "./types";
 
 const VINES_LIGHT_COLOR = 0x7fcf5a;
@@ -38,11 +38,15 @@ export function tryVinesSkill(ctx: VinesContext): boolean {
         return false;
     }
 
-    // Check distance to target
-    const dist = distance(targetG.position.x, targetG.position.z, g.position.x, g.position.z);
-
     // Only cast if target is within range
-    if (dist > vinesSkill.range) {
+    if (!isInRange(
+        g.position.x,
+        g.position.z,
+        targetG.position.x,
+        targetG.position.z,
+        getUnitRadius(targetUnit),
+        vinesSkill.range
+    )) {
         return false;
     }
 

@@ -128,6 +128,7 @@ export function processAcidTiles(
     defeatedThisFrame: Set<number>
 ): void {
     const tilesToRemove: string[] = [];
+    const unitsByTileKey = new Map<string, Array<{ unit: Unit; group: UnitGroup }>>();
     const damageCtx = buildDamageContext(
         scene,
         damageTexts,
@@ -139,6 +140,19 @@ export function processAcidTiles(
         now,
         defeatedThisFrame
     );
+    for (const unit of unitsState) {
+        if (!isUnitAlive(unit, defeatedThisFrame)) continue;
+        if (unit.enemyType === "acid_slug") continue;
+        const unitG = unitsRef[unit.id];
+        if (!unitG) continue;
+        const key = getTileKey(Math.floor(unitG.position.x), Math.floor(unitG.position.z));
+        const existing = unitsByTileKey.get(key);
+        if (existing) {
+            existing.push({ unit, group: unitG });
+        } else {
+            unitsByTileKey.set(key, [{ unit, group: unitG }]);
+        }
+    }
 
     acidTiles.forEach((tile, key) => {
         // Accumulate time since last tick (pause-safe delta)
@@ -156,26 +170,21 @@ export function processAcidTiles(
         // Check for damage tick
         if (tile.timeSinceTick >= ACID_TICK_INTERVAL) {
             tile.timeSinceTick = 0;
+            const tileOccupants = unitsByTileKey.get(key);
+            if (!tileOccupants || tileOccupants.length === 0) return;
 
-            // Find units standing on this tile (acid slugs are immune)
-            unitsState.forEach(unit => {
-                if (!isUnitAlive(unit, defeatedThisFrame)) return;
-                if (unit.enemyType === "acid_slug") return;
-
-                const unitG = unitsRef[unit.id];
-                if (!unitG) return;
-
-                if (isUnitOnTile(unitG.position.x, unitG.position.z, tile.x, tile.z)) {
-                    const dmg = ACID_DAMAGE_PER_TICK;
-                    const data = getUnitStats(unit);
-                    applyDamageToUnit(damageCtx, unit.id, unitG, dmg, data.name, {
-                        color: COLORS.acidText,
-                        hitMessage: { text: `${data.name} takes ${dmg} acid damage.`, color: COLORS.acidText },
-                        targetUnit: unit,
-                        damageType: "physical"
-                    });
-                }
-            });
+            // Damage only units currently overlapping this tile footprint.
+            for (const { unit, group } of tileOccupants) {
+                if (!isUnitOnTile(group.position.x, group.position.z, tile.x, tile.z)) continue;
+                const dmg = ACID_DAMAGE_PER_TICK;
+                const data = getUnitStats(unit);
+                applyDamageToUnit(damageCtx, unit.id, group, dmg, data.name, {
+                    color: COLORS.acidText,
+                    hitMessage: { text: `${data.name} takes ${dmg} acid damage.`, color: COLORS.acidText },
+                    targetUnit: unit,
+                    damageType: "physical"
+                });
+            }
         }
     });
 

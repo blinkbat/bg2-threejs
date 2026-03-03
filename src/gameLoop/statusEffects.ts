@@ -232,18 +232,35 @@ export function processStatusEffects(
     const defeatedInThisPass = new Set<number>();
     setUnits(prev => prev.map(u => {
         const mut = mutations.get(u.id);
-        if (!mut) return u;
-        if (mut.doom) {
-            if (u.hp > 0) defeatedInThisPass.add(u.id);
-            return { ...u, hp: 0, statusEffects: undefined };
+        const pendingBlind = pendingBlinds.get(u.id);
+        if (!mut && !pendingBlind) return u;
+
+        let nextUnit = u;
+
+        if (mut) {
+            if (mut.doom) {
+                if (u.hp > 0) defeatedInThisPass.add(u.id);
+                nextUnit = { ...u, hp: 0, statusEffects: undefined };
+            } else {
+                const newHp = Math.max(0, Math.min(mut.maxHp, u.hp + mut.hpDelta));
+                if (newHp <= 0) {
+                    if (u.hp > 0) defeatedInThisPass.add(u.id);
+                    nextUnit = { ...u, hp: 0, statusEffects: undefined };
+                } else {
+                    const effects = mut.newEffects.length > 0 ? mut.newEffects : undefined;
+                    nextUnit = { ...u, hp: newHp, statusEffects: effects };
+                }
+            }
         }
-        const newHp = Math.max(0, Math.min(mut.maxHp, u.hp + mut.hpDelta));
-        if (newHp <= 0) {
-            if (u.hp > 0) defeatedInThisPass.add(u.id);
-            return { ...u, hp: 0, statusEffects: undefined };
+
+        if (pendingBlind && nextUnit.hp > 0 && !hasStatusEffect(nextUnit, "blind")) {
+            nextUnit = {
+                ...nextUnit,
+                statusEffects: applyStatusEffect(nextUnit.statusEffects, pendingBlind.effect)
+            };
         }
-        const effects = mut.newEffects.length > 0 ? mut.newEffects : undefined;
-        return { ...u, hp: newHp, statusEffects: effects };
+
+        return nextUnit;
     }));
 
     // Phase 3: Handle defeats and deferred side effects
@@ -261,12 +278,6 @@ export function processStatusEffects(
     for (const fn of sideEffects) fn();
 
     if (pendingBlinds.size > 0) {
-        setUnits(prev => prev.map(u => {
-            const pending = pendingBlinds.get(u.id);
-            if (!pending || u.hp <= 0 || hasStatusEffect(u, "blind")) return u;
-            return { ...u, statusEffects: applyStatusEffect(u.statusEffects, pending.effect) };
-        }));
-
         for (const pending of pendingBlinds.values()) {
             addLog(`${pending.targetName} is blinded!`, COLORS.blindText);
         }

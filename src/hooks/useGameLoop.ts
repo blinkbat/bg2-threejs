@@ -24,7 +24,7 @@ import { createLiveUnitsDispatch } from "../core/stateUtils";
 import { publishHpBarOverlayFrame, resetHpBarOverlayFrame } from "./hpBarOverlayStore";
 import { updateCamera, updateWater, updateWallTransparency, updateTreeFogVisibility, updateFogOccluderVisibility, updateLightLOD, addUnitToScene, updateBillboards } from "../rendering/scene";
 import { updateDynamicObstacles } from "../ai/pathfinding";
-import { updateAvoidanceCache } from "../ai/unitAI";
+import { updateAvoidanceCache, updateTargetingCache } from "../ai/unitAI";
 import { updateUnitCache } from "../game/unitQuery";
 import { clearUnitStatsCache } from "../game/units";
 import { getUnitRadius, isInRange } from "../rendering/range";
@@ -558,7 +558,9 @@ export function useGameLoop({
 
         let animId: number;
         let hpBarFrame = 0;
+        let lastHpBarPublishAt = 0;
         let cachedRect = renderer.domElement.getBoundingClientRect();
+        const playerUnitsBuffer: Unit[] = [];
         previousHpByIdRef.current = new Map(stateRefs.unitsStateRef.current.map(unit => [unit.id, unit.hp]));
         const setUnitsLive = createLiveUnitsDispatch(callbacks.setUnits, stateRefs.unitsStateRef);
 
@@ -774,10 +776,10 @@ export function useGameLoop({
                 );
 
                 // Update tentacles
-                updateTentacles(now, currentUnits, unitGroups, setUnitsLive, callbacks.addLog);
+                updateTentacles(now, unitGroups, setUnitsLive, callbacks.addLog);
 
                 // Update submerged krakens
-                updateSubmergedKrakens(now, currentUnits, unitGroups, callbacks.addLog);
+                updateSubmergedKrakens(now, unitGroups, callbacks.addLog);
 
                 // Update Wandering Shade phase timing
                 processShadePhases(now, currentUnits, callbacks.addLog);
@@ -803,7 +805,13 @@ export function useGameLoop({
 
             // Fog of war
             sectionStart = performance.now();
-            const playerUnits = currentUnits.filter(u => u.team === "player" && u.hp > 0);
+            // Reuse array to avoid per-frame allocation (typically 4-6 player units)
+            playerUnitsBuffer.length = 0;
+            for (let i = 0; i < currentUnits.length; i++) {
+                const u = currentUnits[i];
+                if (u.team === "player" && u.hp > 0) playerUnitsBuffer.push(u);
+            }
+            const playerUnits = playerUnitsBuffer;
             if (fogTexture && fogMesh) {
                 updateFogOfWar(refs.visibility, playerUnits, unitGroups, fogTexture, currentUnits, fogMesh);
             }
@@ -823,7 +831,8 @@ export function useGameLoop({
                 callbacks.processActionQueue(defeatedThisFrame);
 
                 // Check for newly spawned units
-                currentUnits.forEach(unit => {
+                for (let i = 0; i < currentUnits.length; i++) {
+                    const unit = currentUnits[i];
                     if (!unitGroups[unit.id] && unit.hp > 0) {
                         addUnitToScene(
                             scene,
@@ -839,17 +848,19 @@ export function useGameLoop({
                         );
                         refs.paths[unit.id] = [];
                     }
-                });
+                }
 
                 // Update pathfinding obstacles
                 updateDynamicObstacles(currentUnits, unitGroups);
+                updateTargetingCache(currentUnits, unitGroups, defeatedThisFrame);
                 updateAvoidanceCache(currentUnits, unitGroups);
 
                 // Update each unit's AI
                 sectionStart = performance.now();
-                currentUnits.forEach(unit => {
+                for (let i = 0; i < currentUnits.length; i++) {
+                    const unit = currentUnits[i];
                     const g = unitGroups[unit.id];
-                    if (!g || unit.hp <= 0) return;
+                    if (!g || unit.hp <= 0) continue;
                     updateUnitAI(
                         unit, g, unitGroups, currentUnits, refs.visibility,
                         refs.paths, refs.actionCooldown, refs.hitFlash,
@@ -860,7 +871,7 @@ export function useGameLoop({
                         stateRefs.actionQueueRef.current, callbacks.setQueuedActions,
                         refs.acidTiles
                     );
-                });
+                }
                 unitAiMs = performance.now() - sectionStart;
 
                 // Update swing animations
@@ -884,7 +895,10 @@ export function useGameLoop({
             if (hpBarFrame % 60 === 0) {
                 cachedRect = renderer.domElement.getBoundingClientRect();
             }
-            publishHpBarOverlayFrame(updateHpBarPositions(currentUnits, unitGroups, camera, cachedRect, refs.zoomLevel, maxHp));
+            if (hpBarFrame === 1 || rafNow - lastHpBarPublishAt >= 33) {
+                publishHpBarOverlayFrame(updateHpBarPositions(currentUnits, unitGroups, camera, cachedRect, refs.zoomLevel, maxHp));
+                lastHpBarPublishAt = rafNow;
+            }
             const hpBarsMs = performance.now() - sectionStart;
 
             // Wall/tree/candle transparency

@@ -205,7 +205,7 @@ export function SkillHotbar({
     paused = false
 }: SkillHotbarProps) {
     const [selectorOpen, setSelectorOpen] = useState<number | null>(null);
-    const displayTime = useDisplayTime(paused, 16);
+    const displayTime = useDisplayTime(paused, 50);
     const allSkills = getAllSkills(unit.id, unit);
     const availableSkills = getAvailableSkills(unit.id);
 

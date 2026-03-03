@@ -12,6 +12,7 @@ import { applyDamageToUnit, buildDamageContext, createAnimatedRing } from "../co
 import { soundFns } from "../audio";
 import { disposeBasicMesh } from "../rendering/disposal";
 import { createGroundWarningTile } from "./tileUtils";
+import { getUnitById } from "../game/unitQuery";
 
 // =============================================================================
 // TYPES
@@ -153,7 +154,7 @@ export function processChargeAttacks(
     const toRemove: number[] = [];
 
     activeCharges.forEach((charge, unitId) => {
-        const unit = unitsState.find(u => u.id === unitId);
+        const unit = getUnitById(unitId);
 
         // Cancel charge if unit is dead
         if (!unit || unit.hp <= 0) {

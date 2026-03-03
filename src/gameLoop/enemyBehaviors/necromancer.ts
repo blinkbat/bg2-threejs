@@ -6,7 +6,7 @@ import type { Unit } from "../../core/types";
 import { ENEMY_STATS } from "../../game/enemyStats";
 import { isPlayerVisible } from "../../game/unitQuery";
 import { getNextUnitId } from "../../core/unitIds";
-import { findSpawnPositions } from "../../ai/pathfinding";
+import { findSpawnPositions } from "../../game/formation";
 import { setSkillCooldown } from "../../combat/combatMath";
 import { createAnimatedRing } from "../../combat/damageEffects";
 import type { RaiseContext } from "./types";

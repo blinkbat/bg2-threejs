@@ -12,6 +12,7 @@ import { applyDamageToUnit, buildDamageContext } from "../combat/damageEffects";
 import { soundFns } from "../audio";
 import { disposeBasicMesh } from "../rendering/disposal";
 import { isPointInCone } from "../game/geometry";
+import { getUnitById } from "../game/unitQuery";
 
 // =============================================================================
 // TYPES
@@ -136,7 +137,7 @@ export function processFireBreaths(
     const toRemove: number[] = [];
 
     activeBreaths.forEach((breath, unitId) => {
-        const unit = unitsState.find(u => u.id === unitId);
+        const unit = getUnitById(unitId);
         const casterG = unitsRef[unitId];
 
         // Cancel if caster died
@@ -162,7 +163,7 @@ export function processFireBreaths(
 
         // Aim at current target — retarget if needed
         let targetG: UnitGroup | undefined = unitsRef[breath.targetId];
-        let targetUnit = unitsState.find(u => u.id === breath.targetId);
+        let targetUnit = getUnitById(breath.targetId);
 
         // If current target is dead/gone, find nearest alive player
         if (!targetUnit || targetUnit.hp <= 0 || !targetG) {

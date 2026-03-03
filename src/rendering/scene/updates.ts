@@ -324,10 +324,15 @@ export function updateWater(waterMesh: THREE.Object3D | null, time: number, came
 
 /**
  * Update billboard meshes to face the camera.
+ * Caches camera quaternion so we only read it once per frame instead of
+ * accessing the camera object in each iteration.
  */
+const _billboardQuat = new THREE.Quaternion();
+
 export function updateBillboards(billboards: THREE.Mesh[], camera: THREE.Camera): void {
+    _billboardQuat.copy(camera.quaternion);
     for (const billboard of billboards) {
-        billboard.quaternion.copy(camera.quaternion);
+        billboard.quaternion.copy(_billboardQuat);
         const group = billboard.parent as UnitGroup | null;
         if (group?.userData?.facingRight === false) {
             billboard.scale.x = -Math.abs(billboard.scale.x);
@@ -402,14 +407,14 @@ function getCachedBox(mesh: THREE.Mesh): THREE.Box3 {
 }
 
 function isOcclusionFadeDisabled(mesh: THREE.Mesh): boolean {
-    return Reflect.get(mesh.userData, "disableOcclusionFade") === true;
+    return mesh.userData.disableOcclusionFade === true;
 }
 
 function buildTreeOcclusionCircle(meshes: THREE.Mesh[]): OcclusionCircle {
     for (const mesh of meshes) {
-        const centerX = readFiniteNumber(Reflect.get(mesh.userData, "fogFootprintCenterX"));
-        const centerZ = readFiniteNumber(Reflect.get(mesh.userData, "fogFootprintCenterZ"));
-        const radius = readFiniteNumber(Reflect.get(mesh.userData, "fogFootprintRadius"));
+        const centerX = readFiniteNumber(mesh.userData.fogFootprintCenterX);
+        const centerZ = readFiniteNumber(mesh.userData.fogFootprintCenterZ);
+        const radius = readFiniteNumber(mesh.userData.fogFootprintRadius);
         if (centerX !== null && centerZ !== null && radius !== null && radius > 0) {
             return { x: centerX, z: centerZ, radius: radius + TREE_OCCLUSION_RADIUS_PAD };
         }
@@ -471,7 +476,7 @@ function buildTreeOcclusionGroups(treeMeshes: THREE.Mesh[]): TreeOcclusionGroup[
     const groups: TreeOcclusionGroup[] = [];
 
     for (const mesh of treeMeshes) {
-        const fogObjectId = Reflect.get(mesh.userData, "fogObjectId");
+        const fogObjectId = mesh.userData.fogObjectId;
         if (typeof fogObjectId === "string" && fogObjectId.length > 0) {
             const existingGroup = treeGroupMap.get(fogObjectId);
             if (existingGroup) {
@@ -554,16 +559,59 @@ function getGroupedColumnMeshes(columnGroups?: THREE.Mesh[][]): Set<THREE.Mesh> 
 
 // Throttle expensive ray-box tests - only recalculate every N frames
 const WALL_CHECK_INTERVAL = 3;
-let wallCheckFrame = 0;
+let wallCheckFrame = WALL_CHECK_INTERVAL;
 const cachedOccludingMeshes = new Set<THREE.Mesh>();
 // Track which tree/column groups are already fully marked to avoid redundant .some() scans
 const cachedOccludingTreeGroups = new Set<TreeOcclusionGroup>();
 const cachedOccludingColumnGroups = new Set<THREE.Mesh[]>();
+const OCCLUSION_HASH_SEED = 2166136261;
+const OCCLUSION_HASH_PRIME = 16777619;
+const OCCLUSION_CAMERA_QUANT = 4; // 0.25-world-unit quantization
+let lastOcclusionCameraKey = Number.NaN;
+let lastOcclusionPlayerHash = 0;
+let lastOcclusionPlayerCount = -1;
+let occlusionDirty = true;
+
+function syncMaterialTransparency(
+    material: THREE.MeshStandardMaterial | THREE.MeshBasicMaterial,
+    targetOpacity: number,
+    currentOpacity: number
+): void {
+    const shouldBeTransparent = targetOpacity < 0.999 || currentOpacity < 0.999;
+    if (material.transparent !== shouldBeTransparent) {
+        material.transparent = shouldBeTransparent;
+        material.needsUpdate = true;
+    }
+}
+
+function computePlayerOcclusionHash(
+    unitsState: Unit[],
+    unitGroups: Record<number, UnitGroup>
+): { hash: number; count: number } {
+    let hash = OCCLUSION_HASH_SEED;
+    let count = 0;
+
+    for (const unit of unitsState) {
+        if (unit.team !== "player" || unit.hp <= 0) continue;
+        const group = unitGroups[unit.id];
+        if (!group || !group.visible) continue;
+
+        const qx = Math.round(group.position.x * OCCLUSION_CAMERA_QUANT);
+        const qz = Math.round(group.position.z * OCCLUSION_CAMERA_QUANT);
+        hash = Math.imul(hash ^ unit.id, OCCLUSION_HASH_PRIME);
+        hash = Math.imul(hash ^ qx, OCCLUSION_HASH_PRIME);
+        hash = Math.imul(hash ^ qz, OCCLUSION_HASH_PRIME);
+        count++;
+    }
+
+    return { hash: hash >>> 0, count };
+}
 
 /**
  * Update wall, tree, column, and candle transparency based on unit occlusion.
  * Objects between the camera and any unit become semi-transparent.
- * Ray-box intersection tests are throttled to every 3rd frame for performance.
+ * Ray-box intersection tests run only while camera/player inputs are changing
+ * and are throttled to every 3rd dirty frame.
  */
 export function updateWallTransparency(
     camera: THREE.OrthographicCamera,
@@ -576,16 +624,39 @@ export function updateWallTransparency(
     candleMeshes?: THREE.Mesh[],
     flameMeshes?: THREE.Mesh[]
 ): void {
-    wallCheckFrame++;
+    const qCameraX = Math.round(camera.position.x * OCCLUSION_CAMERA_QUANT);
+    const qCameraZ = Math.round(camera.position.z * OCCLUSION_CAMERA_QUANT);
+    const cameraKey = qCameraX * 65536 + qCameraZ;
+    const { hash: playerHash, count: playerCount } = computePlayerOcclusionHash(unitsState, unitGroups);
+    const occlusionInputsChanged = cameraKey !== lastOcclusionCameraKey
+        || playerHash !== lastOcclusionPlayerHash
+        || playerCount !== lastOcclusionPlayerCount;
+
+    if (occlusionInputsChanged) {
+        lastOcclusionCameraKey = cameraKey;
+        lastOcclusionPlayerHash = playerHash;
+        lastOcclusionPlayerCount = playerCount;
+        if (!occlusionDirty) {
+            wallCheckFrame = WALL_CHECK_INTERVAL - 1;
+        }
+        occlusionDirty = true;
+    }
+
+    if (occlusionDirty) {
+        wallCheckFrame++;
+    }
 
     // Only recalculate occlusion every N frames (expensive ray-box tests)
-    if (wallCheckFrame >= WALL_CHECK_INTERVAL) {
+    if (occlusionDirty && wallCheckFrame >= WALL_CHECK_INTERVAL) {
         wallCheckFrame = 0;
+        occlusionDirty = false;
         cachedOccludingMeshes.clear();
         cachedOccludingTreeGroups.clear();
         cachedOccludingColumnGroups.clear();
 
         _cameraPos.copy(camera.position);
+        const cameraX = _cameraPos.x;
+        const cameraZ = _cameraPos.z;
 
         const treeOcclusionGroups = getTreeOcclusionGroups(treeMeshes);
         const groupedColumnMeshes = getGroupedColumnMeshes(columnGroups);
@@ -615,8 +686,6 @@ export function updateWallTransparency(
 
             // Check trees if provided
             if (treeOcclusionGroups.length > 0) {
-                const cameraX = _cameraPos.x;
-                const cameraZ = _cameraPos.z;
                 const unitX = unitGroup.position.x;
                 const unitZ = unitGroup.position.z;
 
@@ -698,12 +767,14 @@ export function updateWallTransparency(
                     // Candle occludes if it's close to unit (within 2 units) and between camera and unit
                     if (distToCandle < 2.5) {
                         // Check if candle is between camera and unit using dot product
-                        const camToUnit = { x: unitX - _cameraPos.x, z: unitZ - _cameraPos.z };
-                        const camToCandle = { x: candleX - _cameraPos.x, z: candleZ - _cameraPos.z };
-                        const dot = camToUnit.x * camToCandle.x + camToUnit.z * camToCandle.z;
-                        const camToUnitLen = Math.sqrt(camToUnit.x * camToUnit.x + camToUnit.z * camToUnit.z);
-                        const camToCandleLen = Math.sqrt(camToCandle.x * camToCandle.x + camToCandle.z * camToCandle.z);
-                        if (dot > 0 && camToCandleLen < camToUnitLen) {
+                        const camToUnitX = unitX - cameraX;
+                        const camToUnitZ = unitZ - cameraZ;
+                        const camToCandleX = candleX - cameraX;
+                        const camToCandleZ = candleZ - cameraZ;
+                        const dot = camToUnitX * camToCandleX + camToUnitZ * camToCandleZ;
+                        const camToUnitLenSq = camToUnitX * camToUnitX + camToUnitZ * camToUnitZ;
+                        const camToCandleLenSq = camToCandleX * camToCandleX + camToCandleZ * camToCandleZ;
+                        if (dot > 0 && camToCandleLenSq < camToUnitLenSq) {
                             cachedOccludingMeshes.add(candle);
                             // Also mark corresponding flame
                             if (flameMeshes && flameMeshes[i]) {
@@ -720,16 +791,21 @@ export function updateWallTransparency(
     for (const mesh of wallMeshes) {
         const mat = mesh.material as THREE.MeshStandardMaterial;
         const targetOpacity = cachedOccludingMeshes.has(mesh) ? WALL_OPACITY_OCCLUDING : WALL_OPACITY_NORMAL;
-        mat.opacity += (targetOpacity - mat.opacity) * WALL_OPACITY_LERP_SPEED;
+        syncMaterialTransparency(mat, targetOpacity, mat.opacity);
+        const delta = targetOpacity - mat.opacity;
+        if (Math.abs(delta) < 0.0005) continue;
+        mat.opacity += delta * WALL_OPACITY_LERP_SPEED;
         if (Math.abs(mat.opacity - targetOpacity) < 0.01) mat.opacity = targetOpacity;
+        syncMaterialTransparency(mat, targetOpacity, mat.opacity);
     }
 
     // Update tree opacities if provided
     if (treeMeshes) {
         for (const mesh of treeMeshes) {
             const mat = mesh.material as THREE.MeshStandardMaterial;
-            const fogState = toFogRenderState(Reflect.get(mesh.userData, "fogRenderState"));
-            const fogOpacity = readFiniteNumber(Reflect.get(mesh.userData, "fogResolvedOpacity"));
+            const meshData = mesh.userData as FogMeshUserData;
+            const fogState = toFogRenderState(meshData.fogRenderState);
+            const fogOpacity = readFiniteNumber(meshData.fogResolvedOpacity);
             const occlusionTarget = cachedOccludingMeshes.has(mesh) ? WALL_OPACITY_OCCLUDING : WALL_OPACITY_NORMAL;
             let targetOpacity = occlusionTarget;
 
@@ -741,8 +817,12 @@ export function updateWallTransparency(
                 }
             }
 
-            mat.opacity += (targetOpacity - mat.opacity) * WALL_OPACITY_LERP_SPEED;
+            syncMaterialTransparency(mat, targetOpacity, mat.opacity);
+            const delta = targetOpacity - mat.opacity;
+            if (Math.abs(delta) < 0.0005) continue;
+            mat.opacity += delta * WALL_OPACITY_LERP_SPEED;
             if (Math.abs(mat.opacity - targetOpacity) < 0.01) mat.opacity = targetOpacity;
+            syncMaterialTransparency(mat, targetOpacity, mat.opacity);
         }
     }
 
@@ -750,8 +830,9 @@ export function updateWallTransparency(
     if (columnMeshes) {
         for (const mesh of columnMeshes) {
             const mat = mesh.material as THREE.MeshStandardMaterial;
-            const fogState = toFogRenderState(Reflect.get(mesh.userData, "fogRenderState"));
-            const fogOpacity = readFiniteNumber(Reflect.get(mesh.userData, "fogResolvedOpacity"));
+            const meshData = mesh.userData as FogMeshUserData;
+            const fogState = toFogRenderState(meshData.fogRenderState);
+            const fogOpacity = readFiniteNumber(meshData.fogResolvedOpacity);
             const occlusionTarget = isOcclusionFadeDisabled(mesh)
                 ? WALL_OPACITY_NORMAL
                 : (cachedOccludingMeshes.has(mesh) ? WALL_OPACITY_OCCLUDING : WALL_OPACITY_NORMAL);
@@ -765,8 +846,12 @@ export function updateWallTransparency(
                 }
             }
 
-            mat.opacity += (targetOpacity - mat.opacity) * WALL_OPACITY_LERP_SPEED;
+            syncMaterialTransparency(mat, targetOpacity, mat.opacity);
+            const delta = targetOpacity - mat.opacity;
+            if (Math.abs(delta) < 0.0005) continue;
+            mat.opacity += delta * WALL_OPACITY_LERP_SPEED;
             if (Math.abs(mat.opacity - targetOpacity) < 0.01) mat.opacity = targetOpacity;
+            syncMaterialTransparency(mat, targetOpacity, mat.opacity);
         }
     }
 
@@ -775,8 +860,12 @@ export function updateWallTransparency(
         for (const mesh of candleMeshes) {
             const mat = mesh.material as THREE.MeshStandardMaterial;
             const targetOpacity = cachedOccludingMeshes.has(mesh) ? WALL_OPACITY_OCCLUDING : WALL_OPACITY_NORMAL;
-            mat.opacity += (targetOpacity - mat.opacity) * WALL_OPACITY_LERP_SPEED;
+            syncMaterialTransparency(mat, targetOpacity, mat.opacity);
+            const delta = targetOpacity - mat.opacity;
+            if (Math.abs(delta) < 0.0005) continue;
+            mat.opacity += delta * WALL_OPACITY_LERP_SPEED;
             if (Math.abs(mat.opacity - targetOpacity) < 0.01) mat.opacity = targetOpacity;
+            syncMaterialTransparency(mat, targetOpacity, mat.opacity);
         }
     }
 
@@ -786,8 +875,12 @@ export function updateWallTransparency(
             const mat = mesh.material as THREE.MeshBasicMaterial;
             const baseOpacity = 0.85;  // Flame's normal opacity
             const targetOpacity = cachedOccludingMeshes.has(mesh) ? baseOpacity * WALL_OPACITY_OCCLUDING : baseOpacity;
-            mat.opacity += (targetOpacity - mat.opacity) * WALL_OPACITY_LERP_SPEED;
+            syncMaterialTransparency(mat, targetOpacity, mat.opacity);
+            const delta = targetOpacity - mat.opacity;
+            if (Math.abs(delta) < 0.0005) continue;
+            mat.opacity += delta * WALL_OPACITY_LERP_SPEED;
             if (Math.abs(mat.opacity - targetOpacity) < 0.01) mat.opacity = targetOpacity;
+            syncMaterialTransparency(mat, targetOpacity, mat.opacity);
         }
     }
 }
@@ -801,6 +894,32 @@ type FogRenderState = 0 | 1 | 2;
 interface FogFootprintCell {
     x: number;
     z: number;
+}
+
+interface FogMeshUserData extends Record<string, unknown> {
+    treeX?: number;
+    treeZ?: number;
+    isTrunk?: boolean;
+    isFoliage?: boolean;
+    fullHeight?: number;
+    fullY?: number;
+    fogRenderState?: number;
+    fogResolvedOpacity?: number;
+    fogDitherSeed?: number;
+    fogTransitionDurationMs?: number;
+    fogFootprintCells?: unknown;
+    fogCachedFootprintCellsSource?: unknown;
+    fogCachedFootprintCells?: FogFootprintCell[] | null;
+    fogTransitionStartMs?: number;
+    fogTransitionFromOpacity?: number;
+    fogTransitionFromScaleY?: number;
+    fogTransitionFromPosY?: number;
+    fogClipX?: number;
+    fogClipZ?: number;
+    fogClipBaseY?: number;
+    fogClipFullHeight?: number;
+    fogClipFullY?: number;
+    fogClipFullScaleY?: number;
 }
 
 interface FogTransitionSnapshot {
@@ -840,41 +959,55 @@ function toFogRenderState(value: unknown): FogRenderState | null {
 }
 
 function isAlphaHashCapableMaterial(material: THREE.Material): material is AlphaHashCapableMaterial {
-    return "alphaHash" in material && typeof Reflect.get(material, "alphaHash") === "boolean";
+    return "alphaHash" in material && typeof (material as AlphaHashCapableMaterial).alphaHash === "boolean";
 }
 
 function getFogDitherSeed(mesh: THREE.Mesh): number {
-    const existing = readFiniteNumber(Reflect.get(mesh.userData, "fogDitherSeed"));
+    const meshData = mesh.userData as FogMeshUserData;
+    const existing = readFiniteNumber(meshData.fogDitherSeed);
     if (existing !== null) return existing;
     const seed = Math.abs(Math.sin(mesh.id * 12.9898 + 78.233)) % 1;
-    mesh.userData.fogDitherSeed = seed;
+    meshData.fogDitherSeed = seed;
     return seed;
 }
 
 function getFogTransitionDurationMs(mesh: THREE.Mesh): number {
-    const existing = readFiniteNumber(Reflect.get(mesh.userData, "fogTransitionDurationMs"));
+    const meshData = mesh.userData as FogMeshUserData;
+    const existing = readFiniteNumber(meshData.fogTransitionDurationMs);
     if (existing !== null) return existing;
     const seed = getFogDitherSeed(mesh);
     const jitter = (seed * 2 - 1) * FOG_TRANSITION_JITTER_MS;
     const duration = THREE.MathUtils.clamp(FOG_TRANSITION_BASE_MS + jitter, 150, 300);
-    mesh.userData.fogTransitionDurationMs = duration;
+    meshData.fogTransitionDurationMs = duration;
     return duration;
 }
 
 function readFogFootprintCells(mesh: THREE.Mesh): FogFootprintCell[] | null {
-    const rawCells = Reflect.get(mesh.userData, "fogFootprintCells");
-    if (!Array.isArray(rawCells) || rawCells.length === 0) return null;
+    const meshData = mesh.userData as FogMeshUserData;
+    const rawCells = meshData.fogFootprintCells;
+    if (meshData.fogCachedFootprintCellsSource === rawCells) {
+        return meshData.fogCachedFootprintCells ?? null;
+    }
+    if (!Array.isArray(rawCells) || rawCells.length === 0) {
+        meshData.fogCachedFootprintCellsSource = rawCells;
+        meshData.fogCachedFootprintCells = null;
+        return null;
+    }
 
     const cells: FogFootprintCell[] = [];
     for (const rawCell of rawCells) {
         if (!rawCell || typeof rawCell !== "object") continue;
-        const x = readFiniteNumber(Reflect.get(rawCell, "x"));
-        const z = readFiniteNumber(Reflect.get(rawCell, "z"));
+        const cellObj = rawCell as { x?: unknown; z?: unknown };
+        const x = readFiniteNumber(cellObj.x);
+        const z = readFiniteNumber(cellObj.z);
         if (x === null || z === null) continue;
         cells.push({ x: Math.floor(x), z: Math.floor(z) });
     }
 
-    return cells.length > 0 ? cells : null;
+    const parsedCells = cells.length > 0 ? cells : null;
+    meshData.fogCachedFootprintCellsSource = rawCells;
+    meshData.fogCachedFootprintCells = parsedCells;
+    return parsedCells;
 }
 
 function resolveFogStateFromVisibility(
@@ -909,10 +1042,11 @@ function readFogTransitionSnapshot(
     fallbackScaleY: number,
     fallbackPosY: number
 ): FogTransitionSnapshot {
+    const meshData = mesh.userData as FogMeshUserData;
     return {
-        opacity: readFiniteNumber(Reflect.get(mesh.userData, "fogTransitionFromOpacity")) ?? fallbackOpacity,
-        scaleY: readFiniteNumber(Reflect.get(mesh.userData, "fogTransitionFromScaleY")) ?? fallbackScaleY,
-        posY: readFiniteNumber(Reflect.get(mesh.userData, "fogTransitionFromPosY")) ?? fallbackPosY,
+        opacity: readFiniteNumber(meshData.fogTransitionFromOpacity) ?? fallbackOpacity,
+        scaleY: readFiniteNumber(meshData.fogTransitionFromScaleY) ?? fallbackScaleY,
+        posY: readFiniteNumber(meshData.fogTransitionFromPosY) ?? fallbackPosY,
     };
 }
 
@@ -927,14 +1061,15 @@ function computeFogTransition(
     targetScaleY: number,
     targetPosY: number
 ): FogTransitionResult {
-    const previousState = toFogRenderState(Reflect.get(mesh.userData, "fogRenderState"));
+    const meshData = mesh.userData as FogMeshUserData;
+    const previousState = toFogRenderState(meshData.fogRenderState);
 
     if (previousState === null) {
-        mesh.userData.fogRenderState = nextState;
-        mesh.userData.fogTransitionStartMs = now;
-        mesh.userData.fogTransitionFromOpacity = targetOpacity;
-        mesh.userData.fogTransitionFromScaleY = targetScaleY;
-        mesh.userData.fogTransitionFromPosY = targetPosY;
+        meshData.fogRenderState = nextState;
+        meshData.fogTransitionStartMs = now;
+        meshData.fogTransitionFromOpacity = targetOpacity;
+        meshData.fogTransitionFromScaleY = targetScaleY;
+        meshData.fogTransitionFromPosY = targetPosY;
         return {
             opacity: targetOpacity,
             scaleY: targetScaleY,
@@ -944,14 +1079,14 @@ function computeFogTransition(
     }
 
     if (previousState !== nextState) {
-        mesh.userData.fogRenderState = nextState;
-        mesh.userData.fogTransitionStartMs = now;
-        mesh.userData.fogTransitionFromOpacity = currentOpacity;
-        mesh.userData.fogTransitionFromScaleY = currentScaleY;
-        mesh.userData.fogTransitionFromPosY = currentPosY;
+        meshData.fogRenderState = nextState;
+        meshData.fogTransitionStartMs = now;
+        meshData.fogTransitionFromOpacity = currentOpacity;
+        meshData.fogTransitionFromScaleY = currentScaleY;
+        meshData.fogTransitionFromPosY = currentPosY;
     }
 
-    const startMs = readFiniteNumber(Reflect.get(mesh.userData, "fogTransitionStartMs")) ?? now;
+    const startMs = readFiniteNumber(meshData.fogTransitionStartMs) ?? now;
     const durationMs = getFogTransitionDurationMs(mesh);
     const rawProgress = THREE.MathUtils.clamp((now - startMs) / durationMs, 0, 1);
     const easedProgress = rawProgress * rawProgress * (3 - 2 * rawProgress);
@@ -975,11 +1110,12 @@ function applyFogOpacity(
     if (isAlphaHashCapableMaterial(material)) {
         material.alphaHash = wantsDither;
     }
-    material.transparent = true;
 
     const seed = getFogDitherSeed(mesh);
     const ditherOffset = wantsDither ? (seed - 0.5) * FOG_DITHER_OPACITY_VARIANCE : 0;
-    material.opacity = THREE.MathUtils.clamp(clampedOpacity + ditherOffset, 0, 1);
+    const resolvedOpacity = THREE.MathUtils.clamp(clampedOpacity + ditherOffset, 0, 1);
+    syncMaterialTransparency(material, resolvedOpacity, material.opacity);
+    material.opacity = material.transparent ? resolvedOpacity : 1;
 }
 
 /**
@@ -995,13 +1131,14 @@ export function updateTreeFogVisibility(
     const now = Date.now();
 
     for (const mesh of treeMeshes) {
-        const treeX = readFiniteNumber(Reflect.get(mesh.userData, "treeX")) ?? mesh.position.x;
-        const treeZ = readFiniteNumber(Reflect.get(mesh.userData, "treeZ")) ?? mesh.position.z;
+        const meshData = mesh.userData as FogMeshUserData;
+        const treeX = readFiniteNumber(meshData.treeX) ?? mesh.position.x;
+        const treeZ = readFiniteNumber(meshData.treeZ) ?? mesh.position.z;
         const fogState = resolveFogStateFromVisibility(mesh, visibility, treeX, treeZ);
         const mat = mesh.material as THREE.MeshStandardMaterial;
 
-        if (mesh.userData.isTrunk) {
-            const fullHeight = readFiniteNumber(Reflect.get(mesh.userData, "fullHeight"));
+        if (meshData.isTrunk) {
+            const fullHeight = readFiniteNumber(meshData.fullHeight);
             if (fullHeight === null || fullHeight <= 0) continue;
             const fullY = fullHeight / 2;
             const targetOpacity = fogState === FOG_STATE_UNEXPLORED ? 0 : 1;
@@ -1026,15 +1163,15 @@ export function updateTreeFogVisibility(
             mesh.scale.y = 1;
             mesh.position.y = fullY;
             applyFogOpacity(mesh, mat, transition.opacity);
-            mesh.userData.fogResolvedOpacity = mat.opacity;
+            meshData.fogResolvedOpacity = mat.opacity;
 
             if (fogState === FOG_STATE_UNEXPLORED && transition.progress >= 1 && mat.opacity <= 0.01) {
                 mesh.visible = false;
             } else {
                 mesh.visible = true;
             }
-        } else if (mesh.userData.isFoliage) {
-            const fullY = readFiniteNumber(Reflect.get(mesh.userData, "fullY"));
+        } else if (meshData.isFoliage) {
+            const fullY = readFiniteNumber(meshData.fullY);
             if (fullY === null) continue;
 
             let targetOpacity = 0;
@@ -1062,7 +1199,7 @@ export function updateTreeFogVisibility(
             mesh.scale.y = 1;
             mesh.position.y = fullY;
             applyFogOpacity(mesh, mat, transition.opacity);
-            mesh.userData.fogResolvedOpacity = mat.opacity;
+            meshData.fogResolvedOpacity = mat.opacity;
 
             if (fogState === FOG_STATE_UNEXPLORED && transition.progress >= 1 && mat.opacity <= 0.01) {
                 mesh.visible = false;
@@ -1097,12 +1234,13 @@ export function updateFogOccluderVisibility(
     const MAX_HEIGHT_UNEXPLORED = FOG_Y - 0.1;
 
     for (const mesh of fogOccluderMeshes) {
-        const clipX = readFiniteNumber(Reflect.get(mesh.userData, "fogClipX"));
-        const clipZ = readFiniteNumber(Reflect.get(mesh.userData, "fogClipZ"));
-        const baseY = readFiniteNumber(Reflect.get(mesh.userData, "fogClipBaseY"));
-        const fullHeight = readFiniteNumber(Reflect.get(mesh.userData, "fogClipFullHeight"));
-        const fullY = readFiniteNumber(Reflect.get(mesh.userData, "fogClipFullY"));
-        const fullScaleY = readFiniteNumber(Reflect.get(mesh.userData, "fogClipFullScaleY"));
+        const meshData = mesh.userData as FogMeshUserData;
+        const clipX = readFiniteNumber(meshData.fogClipX);
+        const clipZ = readFiniteNumber(meshData.fogClipZ);
+        const baseY = readFiniteNumber(meshData.fogClipBaseY);
+        const fullHeight = readFiniteNumber(meshData.fogClipFullHeight);
+        const fullY = readFiniteNumber(meshData.fogClipFullY);
+        const fullScaleY = readFiniteNumber(meshData.fogClipFullScaleY);
 
         if (
             clipX === null
@@ -1164,9 +1302,9 @@ export function updateFogOccluderVisibility(
         mesh.position.y = transition.posY;
         if (mat) {
             applyFogOpacity(mesh, mat, transition.opacity);
-            mesh.userData.fogResolvedOpacity = mat.opacity;
+            meshData.fogResolvedOpacity = mat.opacity;
         } else {
-            mesh.userData.fogResolvedOpacity = transition.opacity;
+            meshData.fogResolvedOpacity = transition.opacity;
         }
 
         if (!targetVisible && transition.progress >= 1) {

@@ -135,6 +135,7 @@ export interface UseInputHandlersOptions {
 
 const DIRECT_MOVE_SAMPLE_DENSITY = 4;
 const NPC_ENGAGE_RANGE = 3.5;
+const HOVER_ROOT_REBUILD_INTERVAL_MS = 140;
 
 interface ChestHitData {
     chestIndex: number;
@@ -193,8 +194,16 @@ export function useInputHandlers({
     const raycasterRef = useRef(new THREE.Raycaster());
     const mouseRef = useRef(new THREE.Vector2());
     const lastHoverUpdateRef = useRef(0);
+    const lastHoverRootsBuildRef = useRef(0);
+    const lastHoverPositionRef = useRef<{ x: number; y: number }>({ x: Number.NaN, y: Number.NaN });
     const staticHoverRaycastRootsRef = useRef<THREE.Object3D[]>([]);
     const hoverRaycastRootsRef = useRef<THREE.Object3D[]>([]);
+    const hoveredEnemyRef = useRef<{ id: number; x: number; y: number } | null>(null);
+    const hoveredChestRef = useRef<{ x: number; y: number; chestIndex: number; chestX: number; chestZ: number } | null>(null);
+    const hoveredPlayerRef = useRef<{ id: number; x: number; y: number } | null>(null);
+    const hoveredDoorRef = useRef<{ targetArea: string; x: number; y: number } | null>(null);
+    const hoveredSecretDoorRef = useRef<{ x: number; y: number } | null>(null);
+    const hoveredLootBagRef = useRef<{ x: number; y: number; gold: number; hasItems: boolean } | null>(null);
 
     useEffect(() => {
         if (!sceneRefs || !containerRef.current) return;
@@ -210,10 +219,17 @@ export function useInputHandlers({
             staticHoverRaycastRoots.push(obj);
         });
         staticHoverRaycastRootsRef.current = staticHoverRaycastRoots;
+        lastHoverRootsBuildRef.current = 0;
 
         const updateCam = () => updateCamera(camera, gameRefs.current.cameraOffset);
         const closeAllTooltips = () => {
             hideAllTippy({ duration: 0 });
+            hoveredEnemyRef.current = null;
+            hoveredChestRef.current = null;
+            hoveredPlayerRef.current = null;
+            hoveredDoorRef.current = null;
+            hoveredSecretDoorRef.current = null;
+            hoveredLootBagRef.current = null;
             setters.setHoveredEnemy(null);
             setters.setHoveredChest(null);
             setters.setHoveredPlayer(null);
@@ -290,32 +306,50 @@ export function useInputHandlers({
             }
 
             const hoverNow = performance.now();
-            if (hoverNow - lastHoverUpdateRef.current < 16) {
+            const hoverIntervalMs = stateRefs.targetingModeRef.current ? 16 : 33;
+            if (hoverNow - lastHoverUpdateRef.current < hoverIntervalMs) {
+                return;
+            }
+            const lastHoverPos = lastHoverPositionRef.current;
+            if (lastHoverPos.x === e.clientX && lastHoverPos.y === e.clientY) {
                 return;
             }
             lastHoverUpdateRef.current = hoverNow;
+            lastHoverPositionRef.current = { x: e.clientX, y: e.clientY };
 
             const rect = renderer.domElement.getBoundingClientRect();
             mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
             mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
             raycaster.setFromCamera(mouse, camera);
             const hoverRoots = hoverRaycastRootsRef.current;
-            hoverRoots.length = 0;
+            if (
+                hoverRoots.length === 0
+                || hoverNow - lastHoverRootsBuildRef.current >= HOVER_ROOT_REBUILD_INTERVAL_MS
+            ) {
+                hoverRoots.length = 0;
+                const unitsById = new Map<number, Unit>();
+                for (const unit of stateRefs.unitsStateRef.current) {
+                    unitsById.set(unit.id, unit);
+                }
 
-            for (const unitId in unitGroups) {
-                const unitGroup = unitGroups[Number(unitId)];
-                if (unitGroup) {
+                for (const unitIdKey in unitGroups) {
+                    const unitId = Number(unitIdKey);
+                    const unitGroup = unitGroups[unitId];
+                    if (!unitGroup || !unitGroup.visible) continue;
+                    const unit = unitsById.get(unitId);
+                    if (unit && unit.hp <= 0) continue;
                     hoverRoots.push(unitGroup);
                 }
-            }
-            for (const secretDoor of secretDoorMeshes) {
-                hoverRoots.push(secretDoor);
-            }
-            for (const staticRoot of staticHoverRaycastRootsRef.current) {
-                hoverRoots.push(staticRoot);
-            }
-            for (const bag of gameRefs.current.lootBags) {
-                hoverRoots.push(bag.mesh);
+                for (const secretDoor of secretDoorMeshes) {
+                    hoverRoots.push(secretDoor);
+                }
+                for (const staticRoot of staticHoverRaycastRootsRef.current) {
+                    hoverRoots.push(staticRoot);
+                }
+                for (const bag of gameRefs.current.lootBags) {
+                    hoverRoots.push(bag.mesh);
+                }
+                lastHoverRootsBuildRef.current = hoverNow;
             }
             const hits = raycaster.intersectObjects(hoverRoots, true);
 
@@ -349,6 +383,9 @@ export function useInputHandlers({
             let foundEnemy: { id: number; x: number; y: number } | null = null;
             let foundChest: { x: number; y: number; chestIndex: number; chestX: number; chestZ: number } | null = null;
             let foundPlayer: { id: number; x: number; y: number } | null = null;
+            let foundDoor: { targetArea: string; x: number; y: number } | null = null;
+            let foundSecretDoor: { x: number; y: number } | null = null;
+            let foundLootBag: { x: number; y: number; gold: number; hasItems: boolean } | null = null;
 
             for (const hit of hits) {
                 const unitId = hit.object.userData?.unitId;
@@ -380,36 +417,90 @@ export function useInputHandlers({
                 if (hit.object.name === "door") {
                     const transition = hit.object.userData?.transition as AreaTransition | undefined;
                     if (transition) {
-                        setters.setHoveredDoor({ targetArea: transition.targetArea, x: e.clientX, y: e.clientY });
+                        foundDoor = { targetArea: transition.targetArea, x: e.clientX, y: e.clientY };
                     }
                     break;
                 }
                 if (hit.object.name === "secretDoor") {
-                    setters.setHoveredSecretDoor({ x: e.clientX, y: e.clientY });
+                    foundSecretDoor = { x: e.clientX, y: e.clientY };
                     break;
                 }
                 if (hit.object.name === "lootBag" && hit.object.userData?.lootBagId !== undefined) {
                     const bagId = hit.object.userData.lootBagId;
                     const bag = gameRefs.current.lootBags.find(b => b.id === bagId);
                     if (bag) {
-                        setters.setHoveredLootBag({
+                        foundLootBag = {
                             x: e.clientX,
                             y: e.clientY,
                             gold: bag.gold,
                             hasItems: (bag.items?.length ?? 0) > 0
-                        });
+                        };
                     }
                     break;
                 }
             }
 
-            setters.setHoveredEnemy(foundEnemy);
-            setters.setHoveredChest(foundChest);
-            setters.setHoveredPlayer(foundPlayer);
+            const previousEnemy = hoveredEnemyRef.current;
+            if (
+                previousEnemy?.id !== foundEnemy?.id
+                || previousEnemy?.x !== foundEnemy?.x
+                || previousEnemy?.y !== foundEnemy?.y
+            ) {
+                hoveredEnemyRef.current = foundEnemy;
+                setters.setHoveredEnemy(foundEnemy);
+            }
 
-            if (!hits.some(h => h.object.name === "door")) setters.setHoveredDoor(null);
-            if (!hits.some(h => h.object.name === "secretDoor")) setters.setHoveredSecretDoor(null);
-            if (!hits.some(h => h.object.name === "lootBag")) setters.setHoveredLootBag(null);
+            const previousChest = hoveredChestRef.current;
+            if (
+                previousChest?.chestIndex !== foundChest?.chestIndex
+                || previousChest?.chestX !== foundChest?.chestX
+                || previousChest?.chestZ !== foundChest?.chestZ
+                || previousChest?.x !== foundChest?.x
+                || previousChest?.y !== foundChest?.y
+            ) {
+                hoveredChestRef.current = foundChest;
+                setters.setHoveredChest(foundChest);
+            }
+
+            const previousPlayer = hoveredPlayerRef.current;
+            if (
+                previousPlayer?.id !== foundPlayer?.id
+                || previousPlayer?.x !== foundPlayer?.x
+                || previousPlayer?.y !== foundPlayer?.y
+            ) {
+                hoveredPlayerRef.current = foundPlayer;
+                setters.setHoveredPlayer(foundPlayer);
+            }
+
+            const previousDoor = hoveredDoorRef.current;
+            if (
+                previousDoor?.targetArea !== foundDoor?.targetArea
+                || previousDoor?.x !== foundDoor?.x
+                || previousDoor?.y !== foundDoor?.y
+            ) {
+                hoveredDoorRef.current = foundDoor;
+                setters.setHoveredDoor(foundDoor);
+            }
+
+            const previousSecretDoor = hoveredSecretDoorRef.current;
+            if (
+                previousSecretDoor?.x !== foundSecretDoor?.x
+                || previousSecretDoor?.y !== foundSecretDoor?.y
+            ) {
+                hoveredSecretDoorRef.current = foundSecretDoor;
+                setters.setHoveredSecretDoor(foundSecretDoor);
+            }
+
+            const previousLootBag = hoveredLootBagRef.current;
+            if (
+                previousLootBag?.x !== foundLootBag?.x
+                || previousLootBag?.y !== foundLootBag?.y
+                || previousLootBag?.gold !== foundLootBag?.gold
+                || previousLootBag?.hasItems !== foundLootBag?.hasItems
+            ) {
+                hoveredLootBagRef.current = foundLootBag;
+                setters.setHoveredLootBag(foundLootBag);
+            }
         };
 
         // =============================================================================

@@ -1,5 +1,6 @@
 import type { CharacterStats, SummonType, Unit } from "../core/types";
-import { findNearestPassable, findSpawnPositions } from "../ai/pathfinding";
+import { findNearestPassable } from "../ai/pathfinding";
+import { findSpawnPositions } from "../game/formation";
 import { getCurrentArea, getCurrentAreaId } from "../game/areas";
 import { ENEMY_STATS } from "../game/enemyStats";
 import { initializeUnitIdCounter } from "../gameLoop";

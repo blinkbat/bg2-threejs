@@ -7,9 +7,9 @@ import type { Unit, UnitGroup, DamageText, EnemyStats, EnemySkill, EnemyHealSkil
 import { COLORS, SWIPE_ANIMATE_DURATION } from "../core/constants";
 import { getUnitStats } from "../game/units";
 import { calculateDamageWithCrit, rollHit, rollDamage, getEffectiveArmor, logAoeHit, logAoeMiss } from "../combat/combatMath";
-import { distance } from "../game/geometry";
 import { applyDamageToUnit, animateExpandingMesh, getAliveUnitsInRange, spawnDamageNumber, buildDamageContext, createAnimatedRing } from "../combat/damageEffects";
 import { soundFns } from "../audio";
+import { getUnitRadius, isInRange } from "../rendering/range";
 
 // =============================================================================
 // ENEMY SKILL EXECUTION
@@ -138,8 +138,9 @@ export function executeEnemyHeal(
         const allyG = unitsRef[ally.id];
         if (!allyG) continue;
 
-        const dist = distance(g.position.x, g.position.z, allyG.position.x, allyG.position.z);
-        if (dist > skill.range) continue;
+        if (!isInRange(g.position.x, g.position.z, allyG.position.x, allyG.position.z, getUnitRadius(ally), skill.range)) {
+            continue;
+        }
 
         const allyStats = getUnitStats(ally) as EnemyStats;
         const missingHp = allyStats.maxHp - ally.hp;

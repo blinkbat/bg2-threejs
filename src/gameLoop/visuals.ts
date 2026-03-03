@@ -6,7 +6,7 @@ import * as THREE from "three";
 import type { Unit, DamageText, UnitGroup, FogTexture } from "../core/types";
 import { FOG_SCALE, FLASH_DURATION, ENRAGED_TINT_STRENGTH } from "../core/constants";
 import { hasStatusEffect } from "../combat/combatMath";
-import { updateVisibility } from "../ai/pathfinding";
+import { updateVisibility, resetVisibilityTracking } from "../ai/pathfinding";
 import { getCurrentArea } from "../game/areas";
 import { isEnemyHiddenFromView } from "./enemyBehaviors";
 import { recycleDamageNumber } from "../combat/damageEffects";
@@ -70,7 +70,7 @@ function getSpriteBaseColor(
     colorMaterial: THREE.MeshStandardMaterial | THREE.MeshPhongMaterial | THREE.MeshBasicMaterial,
     fallbackColor: THREE.Color
 ): THREE.Color {
-    const spriteBaseColor = Reflect.get(colorMaterial.userData, "spriteBaseColor");
+    const spriteBaseColor = colorMaterial.userData.spriteBaseColor;
     return spriteBaseColor instanceof THREE.Color ? spriteBaseColor : fallbackColor;
 }
 
@@ -216,6 +216,21 @@ let lastFogAreaId: string | null = null;
 const ENEMY_VIEW_FADE_LERP = 0.32;
 const ENEMY_VIEW_FADE_MIN_VISIBLE = 0.02;
 
+interface ViewFadeLightEntry {
+    light: THREE.Light;
+    baseIntensity: number;
+}
+
+interface ViewFadeMaterialEntry {
+    material: THREE.Material;
+    baseOpacity: number;
+}
+
+interface ViewFadeCache {
+    lights: ViewFadeLightEntry[];
+    materials: ViewFadeMaterialEntry[];
+}
+
 function computePlayerVisibilityKey(
     playerUnits: Unit[],
     unitsRef: Record<number, UnitGroup>
@@ -235,42 +250,112 @@ function computePlayerVisibilityKey(
     return visibilityKey >>> 0;
 }
 
-function applyViewFadeToGroup(group: UnitGroup, opacity: number): void {
-    const clampedOpacity = THREE.MathUtils.clamp(opacity, 0, 1);
-    group.userData.viewFadeOpacity = clampedOpacity;
+function buildViewFadeCache(group: UnitGroup): ViewFadeCache {
+    const lights: ViewFadeLightEntry[] = [];
+    const materials: ViewFadeMaterialEntry[] = [];
+    const seenMaterials = new Set<THREE.Material>();
 
     group.traverse(obj => {
         if (obj instanceof THREE.Light) {
-            const baseIntensityRaw = Reflect.get(obj.userData, "viewFadeBaseIntensity");
+            const baseIntensityRaw = obj.userData.viewFadeBaseIntensity;
             const baseIntensity = typeof baseIntensityRaw === "number" ? baseIntensityRaw : obj.intensity;
             if (typeof baseIntensityRaw !== "number") {
                 obj.userData.viewFadeBaseIntensity = baseIntensity;
             }
-            obj.intensity = baseIntensity * clampedOpacity;
-            obj.visible = clampedOpacity > ENEMY_VIEW_FADE_MIN_VISIBLE;
+            lights.push({ light: obj, baseIntensity });
             return;
         }
 
         if (!(obj instanceof THREE.Mesh)) return;
-        const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
-        for (const material of materials) {
-            const baseOpacityRaw = Reflect.get(material.userData, "viewFadeBaseOpacity");
+        const meshMaterials = Array.isArray(obj.material) ? obj.material : [obj.material];
+        for (const material of meshMaterials) {
+            if (seenMaterials.has(material)) continue;
+            seenMaterials.add(material);
+
+            const baseOpacityRaw = material.userData.viewFadeBaseOpacity;
             const baseOpacity = typeof baseOpacityRaw === "number" ? baseOpacityRaw : material.opacity;
             if (typeof baseOpacityRaw !== "number") {
                 material.userData.viewFadeBaseOpacity = baseOpacity;
             }
-            material.opacity = baseOpacity * clampedOpacity;
-            if (!material.transparent && (baseOpacity < 1 || clampedOpacity < 1)) {
-                material.transparent = true;
-            }
+            materials.push({ material, baseOpacity });
         }
     });
+
+    return { lights, materials };
+}
+
+function getViewFadeCache(group: UnitGroup): ViewFadeCache {
+    const childCount = group.children.length;
+    const ud = group.userData as Record<string, unknown>;
+    const cachedChildCountRaw = ud.viewFadeCacheChildCount;
+    const cachedRaw = ud.viewFadeCache;
+    if (
+        cachedRaw
+        && typeof cachedRaw === "object"
+        && Array.isArray((cachedRaw as ViewFadeCache).lights)
+        && Array.isArray((cachedRaw as ViewFadeCache).materials)
+        && typeof cachedChildCountRaw === "number"
+        && cachedChildCountRaw === childCount
+    ) {
+        return cachedRaw as ViewFadeCache;
+    }
+
+    const nextCache = buildViewFadeCache(group);
+    ud.viewFadeCache = nextCache;
+    ud.viewFadeCacheChildCount = childCount;
+    return nextCache;
+}
+
+function applyViewFadeToGroup(group: UnitGroup, opacity: number): void {
+    const clampedOpacity = THREE.MathUtils.clamp(opacity, 0, 1);
+    const rawPrevious = group.userData.viewFadeOpacity;
+    if (typeof rawPrevious === "number" && Math.abs(rawPrevious - clampedOpacity) < 0.001) {
+        return;
+    }
+
+    group.userData.viewFadeOpacity = clampedOpacity;
+    const cache = getViewFadeCache(group);
+
+    for (const lightEntry of cache.lights) {
+        const { light, baseIntensity } = lightEntry;
+        light.intensity = baseIntensity * clampedOpacity;
+        light.visible = clampedOpacity > ENEMY_VIEW_FADE_MIN_VISIBLE;
+    }
+
+    for (const materialEntry of cache.materials) {
+        const { material, baseOpacity } = materialEntry;
+        material.opacity = baseOpacity * clampedOpacity;
+        if (!material.transparent && (baseOpacity < 1 || clampedOpacity < 1)) {
+            material.transparent = true;
+        }
+    }
+}
+
+function hideEnemyGroup(group: UnitGroup): void {
+    const rawOpacity = group.userData.viewFadeOpacity;
+    const opacity = typeof rawOpacity === "number" ? rawOpacity : 1;
+    if (!group.visible && opacity <= ENEMY_VIEW_FADE_MIN_VISIBLE) {
+        return;
+    }
+    group.visible = false;
+    applyViewFadeToGroup(group, 0);
 }
 
 function updateEnemyGroupFade(group: UnitGroup, shouldBeVisible: boolean): void {
-    const rawOpacity = Reflect.get(group.userData, "viewFadeOpacity");
+    const rawOpacity = group.userData.viewFadeOpacity;
     const currentOpacity = typeof rawOpacity === "number" ? rawOpacity : (shouldBeVisible ? 1 : 0);
     const targetOpacity = shouldBeVisible ? 1 : 0;
+    if (Math.abs(currentOpacity - targetOpacity) < 0.001) {
+        if (typeof rawOpacity !== "number") {
+            applyViewFadeToGroup(group, targetOpacity);
+        }
+        group.visible = shouldBeVisible || targetOpacity > ENEMY_VIEW_FADE_MIN_VISIBLE;
+        if (!shouldBeVisible && targetOpacity <= ENEMY_VIEW_FADE_MIN_VISIBLE) {
+            group.visible = false;
+        }
+        return;
+    }
+
     let nextOpacity = THREE.MathUtils.lerp(currentOpacity, targetOpacity, ENEMY_VIEW_FADE_LERP);
 
     if (Math.abs(nextOpacity - targetOpacity) < 0.02) {
@@ -292,6 +377,7 @@ export function resetFogCache(): void {
     lastFogVisibilityKey = 0;
     hasFogVisibilityKey = false;
     lastFogAreaId = null;
+    resetVisibilityTracking();
 }
 
 export function updateFogOfWar(
@@ -306,6 +392,7 @@ export function updateFogOfWar(
     if (lastFogAreaId !== area.id) {
         lastFogAreaId = area.id;
         hasFogVisibilityKey = false;
+        resetVisibilityTracking();
     }
 
     // If area doesn't have fog of war, clear and hide it
@@ -318,8 +405,7 @@ export function updateFogOfWar(
             const g = unitsRef[u.id];
             if (!g) continue;
             if (u.hp <= 0) {
-                g.visible = false;
-                applyViewFadeToGroup(g, 0);
+                hideEnemyGroup(g);
                 continue;
             }
             updateEnemyGroupFade(g, !isEnemyHiddenFromView(u.id));
@@ -369,8 +455,7 @@ export function updateFogOfWar(
         const g = unitsRef[u.id];
         if (!g) continue;
         if (u.hp <= 0) {
-            g.visible = false;
-            applyViewFadeToGroup(g, 0);
+            hideEnemyGroup(g);
             continue;
         }
         const cx = Math.floor(g.position.x), cz = Math.floor(g.position.z);

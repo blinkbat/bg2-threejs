@@ -7,6 +7,8 @@
 import type { Unit, CharacterStats } from "../core/types";
 import { UNIT_DATA } from "./playerUnits";
 import { ENEMY_STATS } from "./enemyStats";
+import { HP_PER_VITALITY, MP_PER_INTELLIGENCE } from "./progression";
+export { HP_PER_VITALITY, MP_PER_INTELLIGENCE, LEVEL_UP_HP, LEVEL_UP_MANA, LEVEL_UP_STAT_POINTS, LEVEL_UP_SKILL_POINTS } from "./progression";
 
 /** Get character stats with fallback to zero */
 function getStats(unit: Unit): CharacterStats {
@@ -46,16 +48,6 @@ export function getDexterityCritChance(unit: Unit): number {
 
 /** Base crit damage multiplier (1.5x) */
 export const CRIT_MULTIPLIER = 1.5;
-
-// Per-point stat allocation bonuses
-export const HP_PER_VITALITY = 1;
-export const MP_PER_INTELLIGENCE = 1;
-
-// Level-up grants
-export const LEVEL_UP_HP = 2;
-export const LEVEL_UP_MANA = 1;
-export const LEVEL_UP_STAT_POINTS = 5;
-export const LEVEL_UP_SKILL_POINTS = 1;
 
 /** +HP_PER_VITALITY HP per vitality point */
 export function getVitalityHpBonus(unit: Unit): number {

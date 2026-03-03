@@ -2,8 +2,6 @@
 // AREA SYSTEM - Exports and state management
 // =============================================================================
 
-import { clearPathCache, invalidateDynamicObstacles } from "../../ai/pathfinding";
-
 // Types
 export * from "./types";
 
@@ -57,9 +55,6 @@ export function setCurrentArea(areaId: AreaId): ComputedAreaData {
 
     currentAreaId = areaId;
     currentAreaComputed = computeAreaData(nextArea);
-    // Invalidate pathfinding caches when changing areas
-    clearPathCache();
-    invalidateDynamicObstacles();
     return currentAreaComputed;
 }
 

@@ -155,6 +155,7 @@ export function processHolyTiles(
 ): void {
     const tilesToRemove: string[] = [];
     const damagedThisTick = new Set<number>();
+    const enemyUnitsByCell = new Map<string, Array<{ unit: Unit; group: UnitGroup; radius: number }>>();
     const damageCtx = buildDamageContext(
         scene,
         damageTexts,
@@ -166,6 +167,19 @@ export function processHolyTiles(
         now,
         defeatedThisFrame
     );
+    for (const unit of unitsState) {
+        if (!isUnitAlive(unit, defeatedThisFrame) || unit.team !== "enemy") continue;
+        const unitG = unitsRef[unit.id];
+        if (!unitG) continue;
+        const key = getTileKey(Math.floor(unitG.position.x), Math.floor(unitG.position.z));
+        const bucket = enemyUnitsByCell.get(key);
+        const entry = { unit, group: unitG, radius: getUnitRadius(unit) };
+        if (bucket) {
+            bucket.push(entry);
+        } else {
+            enemyUnitsByCell.set(key, [entry]);
+        }
+    }
 
     holyTiles.forEach((tile, key) => {
         const rawDelta = now - tile.lastUpdateTime;
@@ -182,33 +196,33 @@ export function processHolyTiles(
         }
         tile.timeSinceTick = 0;
 
-        for (const unit of unitsState) {
-            if (!isUnitAlive(unit, defeatedThisFrame) || unit.team !== "enemy") continue;
-            if (damagedThisTick.has(unit.id)) continue;
+        const tileCenterX = tile.x + 0.5;
+        const tileCenterZ = tile.z + 0.5;
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dz = -1; dz <= 1; dz++) {
+                const candidates = enemyUnitsByCell.get(getTileKey(tile.x + dx, tile.z + dz));
+                if (!candidates) continue;
+                for (const candidate of candidates) {
+                    if (damagedThisTick.has(candidate.unit.id)) continue;
+                    const overlapsTile = isInRange(
+                        tileCenterX,
+                        tileCenterZ,
+                        candidate.group.position.x,
+                        candidate.group.position.z,
+                        candidate.radius,
+                        HOLY_TILE_HIT_RADIUS
+                    );
+                    if (!overlapsTile) continue;
 
-            const unitG = unitsRef[unit.id];
-            if (!unitG) continue;
-
-            const unitRadius = getUnitRadius(unit);
-            const tileCenterX = tile.x + 0.5;
-            const tileCenterZ = tile.z + 0.5;
-            const overlapsTile = isInRange(
-                tileCenterX,
-                tileCenterZ,
-                unitG.position.x,
-                unitG.position.z,
-                unitRadius,
-                HOLY_TILE_HIT_RADIUS
-            );
-            if (!overlapsTile) continue;
-
-            const data = getUnitStats(unit);
-            applyDamageToUnit(damageCtx, unit.id, unitG, tile.damagePerTick, data.name, {
-                color: COLORS.holyGroundText,
-                targetUnit: unit,
-                damageType: "holy"
-            });
-            damagedThisTick.add(unit.id);
+                    const data = getUnitStats(candidate.unit);
+                    applyDamageToUnit(damageCtx, candidate.unit.id, candidate.group, tile.damagePerTick, data.name, {
+                        color: COLORS.holyGroundText,
+                        targetUnit: candidate.unit,
+                        damageType: "holy"
+                    });
+                    damagedThisTick.add(candidate.unit.id);
+                }
+            }
         }
     });
 
