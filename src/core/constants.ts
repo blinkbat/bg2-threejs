@@ -24,7 +24,6 @@ export const FLASH_DURATION = 200;
 export const POISON_DURATION = 8000;       // 8 seconds
 export const POISON_TICK_INTERVAL = 1000;  // tick every 1 second
 export const POISON_DAMAGE_PER_TICK = 2;   // 2 damage per tick
-export const POISON_TINT_STRENGTH = 0.4;   // Color lerp amount for poison visual
 
 // Status Effects - Buffs (shielded, stunned, cleansed, pinned)
 export const BUFF_TICK_INTERVAL = 100;     // tick every 100ms for smooth duration countdown
@@ -38,7 +37,6 @@ export const SLOW_MOVE_MULT = 0.5;         // 0.5x move speed when slowed
 export const CHILLED_DURATION = 5000;       // 5 seconds
 export const CHILLED_COOLDOWN_MULT = 2.0;   // 2x cooldowns when chilled
 export const CHILLED_MOVE_MULT = 0.5;       // 0.5x move speed when chilled
-export const CHILLED_TINT_STRENGTH = 0.4;   // Color lerp for chilled visual
 
 // Status Effects - Blind
 export const BLIND_DURATION = 5000;         // 5 seconds
@@ -53,7 +51,6 @@ export const DEFIANCE_COOLDOWN_MULT = 0.5; // 0.5x cooldowns when under defiance
 
 // Status Effects - Sun Stance (bonus fire damage on attacks)
 export const SUN_STANCE_BONUS_DAMAGE: [number, number] = [2, 3];
-export const SUN_STANCE_TINT_STRENGTH = 0.3;
 
 // Status Effects - Thorns (reflect melee damage)
 export const THORNS_DURATION = 30000;       // 30 seconds

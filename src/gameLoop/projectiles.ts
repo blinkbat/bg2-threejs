@@ -7,7 +7,6 @@ import type { Unit, UnitGroup, DamageText, Projectile, EnemyStats, MagicMissileP
 import { HIT_DETECTION_RADIUS, COLORS, BUFF_TICK_INTERVAL, SUN_STANCE_BONUS_DAMAGE, GLACIAL_WHORL_HIT_RADIUS } from "../core/constants";
 import { getUnitStats } from "../game/units";
 import { calculateDamageWithCrit, calculateDamageWithOptionalCritChance, getDirectionAndDistance, rollSkillHit, rollDamage, shouldApplyPoison, getEffectiveArmor, logHit, logLifestealHit, logMiss, logPoisoned, logAoeHit, logAoeMiss, getDamageColor, logTrapTriggered, calculateStatBonus, applyStatusEffect, checkEnemyDefenses, hasStatusEffect, rollChance, applyChilled, logStunned, logWeakened, logHamstrung } from "../combat/combatMath";
-import { distance } from "../game/geometry";
 import { accumulateDelta } from "../core/gameClock";
 import { isBlocked } from "../ai/pathfinding";
 import { isTreeBlocked } from "../game/areas";
@@ -15,6 +14,7 @@ import { ENEMY_STATS } from "../game/enemyStats";
 import { applyDamageToUnit, animateExpandingMesh, buildDamageContext, applyLifesteal, createAnimatedRing } from "../combat/damageEffects";
 import { soundFns } from "../audio";
 import { getUnitById } from "../game/unitQuery";
+import { getUnitRadius, isInRange } from "../rendering/range";
 
 // =============================================================================
 // DAMAGE TYPE HELPERS
@@ -494,9 +494,9 @@ export function updateProjectiles(
         let hitCount = 0;
         let totalDamage = 0;
         forEachProjectileCandidatesNear(explodeX, explodeZ, aoeRadius, "both", (target, tg) => {
-
-            const targetDist = distance(tg.position.x, tg.position.z, explodeX, explodeZ);
-            if (targetDist > aoeRadius) return;
+            if (defeatedThisFrame.has(target.id)) return;
+            const targetRadius = getUnitRadius(target);
+            if (!isInRange(explodeX, explodeZ, tg.position.x, tg.position.z, targetRadius, aoeRadius)) return;
 
             const targetData = getUnitStats(target);
             const { damage: dmg } = calculateDamageWithCrit(
@@ -600,20 +600,23 @@ export function updateProjectiles(
 
             let damageDealt = 0;
             let shieldBlocked = false;
+            const hitRange = HIT_DETECTION_RADIUS + 0.18;
 
             for (const targetUnit of aliveEnemies) {
                 if (mmProj.hitUnits.has(targetUnit.id)) continue;
+                if (defeatedThisFrame.has(targetUnit.id)) continue;
 
                 const targetG = unitsRef[targetUnit.id];
                 if (!targetG) continue;
-
-                const distToTarget = distance(
+                const targetRadius = getUnitRadius(targetUnit);
+                if (!isInRange(
                     proj.mesh.position.x,
                     proj.mesh.position.z,
                     targetG.position.x,
-                    targetG.position.z
-                );
-                if (distToTarget > HIT_DETECTION_RADIUS + 0.18) continue;
+                    targetG.position.z,
+                    targetRadius,
+                    hitRange
+                )) continue;
 
                 mmProj.hitUnits.add(targetUnit.id);
 
@@ -624,8 +627,8 @@ export function updateProjectiles(
                         checkEnemyDefenses(
                             enemyStats,
                             targetUnit.facing,
-                            attackerG.position.x,
-                            attackerG.position.z,
+                            proj.mesh.position.x,
+                            proj.mesh.position.z,
                             targetG.position.x,
                             targetG.position.z,
                             undefined,
@@ -731,15 +734,18 @@ export function updateProjectiles(
                 trapProj.targetPos.z,
                 trapProj.aoeRadius,
                 "enemy",
-                (_enemy, enemyG) => {
+                (enemy, enemyG) => {
                     if (triggered) return;
-                    const dist = distance(
+                    if (defeatedThisFrame.has(enemy.id)) return;
+                    const enemyRadius = getUnitRadius(enemy);
+                    if (isInRange(
+                        trapProj.targetPos.x,
+                        trapProj.targetPos.z,
                         enemyG.position.x,
                         enemyG.position.z,
-                        trapProj.targetPos.x,
-                        trapProj.targetPos.z
-                    );
-                    if (dist <= trapProj.aoeRadius) {
+                        enemyRadius,
+                        trapProj.aoeRadius
+                    )) {
                         triggered = true;
                     }
                 }
@@ -756,14 +762,16 @@ export function updateProjectiles(
                     trapProj.aoeRadius,
                     "enemy",
                     (target, targetG) => {
-                        const targetDist = distance(
+                        if (defeatedThisFrame.has(target.id)) return;
+                        const targetRadius = getUnitRadius(target);
+                        if (!isInRange(
+                            trapProj.targetPos.x,
+                            trapProj.targetPos.z,
                             targetG.position.x,
                             targetG.position.z,
-                            trapProj.targetPos.x,
-                            trapProj.targetPos.z
-                        );
-
-                        if (targetDist > trapProj.aoeRadius) return;
+                            targetRadius,
+                            trapProj.aoeRadius
+                        )) return;
                         // Calculate damage if trap has damage
                         let damage = 0;
                         if (trapProj.trapDamage) {
@@ -891,13 +899,16 @@ export function updateProjectiles(
                 targetTeam,
                 (target, targetG) => {
                     if (pProj.hitUnits.has(target.id)) return;
-
-                    const distToTarget = distance(
-                        proj.mesh.position.x, proj.mesh.position.z,
-                        targetG.position.x, targetG.position.z
-                    );
-
-                    if (distToTarget <= piercingHitRadius) {
+                    if (defeatedThisFrame.has(target.id)) return;
+                    const targetRadius = getUnitRadius(target);
+                    if (isInRange(
+                        proj.mesh.position.x,
+                        proj.mesh.position.z,
+                        targetG.position.x,
+                        targetG.position.z,
+                        targetRadius,
+                        piercingHitRadius
+                    )) {
                         pProj.hitUnits.add(target.id);
 
                         const targetData = getUnitStats(target);
@@ -994,15 +1005,18 @@ export function updateProjectiles(
                 "both",
                 (target, targetG) => {
                     if (target.id === fbProj.attackerId) return;  // Don't hurt self
+                    if (defeatedThisFrame.has(target.id)) return;
                     if (fbProj.hitUnits.has(target.id)) return;  // Already hit this unit
-
-                    const distToTarget = distance(
-                        proj.mesh.position.x, proj.mesh.position.z,
-                        targetG.position.x, targetG.position.z
-                    );
-
+                    const targetRadius = getUnitRadius(target);
                     // Hit radius - slightly larger than normal for easier hits
-                    if (distToTarget < 0.6) {
+                    if (isInRange(
+                        proj.mesh.position.x,
+                        proj.mesh.position.z,
+                        targetG.position.x,
+                        targetG.position.z,
+                        targetRadius,
+                        0.6
+                    )) {
                         // Mark as hit so we don't hit again
                         fbProj.hitUnits.add(target.id);
 
@@ -1059,9 +1073,17 @@ export function updateProjectiles(
             return false;
         }
 
-        const { dx, dz, dist } = getDirectionAndDistance(proj.mesh.position.x, proj.mesh.position.z, targetG.position.x, targetG.position.z);
+        const { dx, dz } = getDirectionAndDistance(proj.mesh.position.x, proj.mesh.position.z, targetG.position.x, targetG.position.z);
+        const targetRadius = getUnitRadius(targetUnit);
 
-        if (dist < HIT_DETECTION_RADIUS) {
+        if (isInRange(
+            proj.mesh.position.x,
+            proj.mesh.position.z,
+            targetG.position.x,
+            targetG.position.z,
+            targetRadius,
+            HIT_DETECTION_RADIUS
+        )) {
             if (targetUnit.team === "neutral") {
                 disposeProjectile(scene, proj);
                 return false;
@@ -1087,9 +1109,15 @@ export function updateProjectiles(
             // Check for enemy defensive abilities (player attacking shielded enemy)
             if (attackerUnit.team === "player" && targetUnit.enemyType) {
                 const enemyStats = ENEMY_STATS[targetUnit.enemyType];
-                const defense = attackerG
-                    ? checkEnemyDefenses(enemyStats, targetUnit.facing, attackerG.position.x, attackerG.position.z, targetG.position.x, targetG.position.z, incomingDamageType)
-                    : "none" as const;
+                const defense = checkEnemyDefenses(
+                    enemyStats,
+                    targetUnit.facing,
+                    proj.mesh.position.x,
+                    proj.mesh.position.z,
+                    targetG.position.x,
+                    targetG.position.z,
+                    incomingDamageType
+                );
                 if (defense !== "none") {
                     soundFns.playBlock();
                     const blockedLabel = skillName === "Attack" ? "attack" : skillName;

@@ -10,7 +10,7 @@
 // can be updated via setters. React components should sync their local state
 // with this module.
 
-import type { CharacterEquipment, DamageType, EquipmentSlot, PartyInventory } from "../core/types";
+import type { CharacterEquipment, EquipmentSlot, PartyInventory } from "../core/types";
 import {
     STARTING_EQUIPMENT,
     STARTING_INVENTORY,
@@ -42,13 +42,6 @@ let isInitialized = false;
 export interface EquipmentTransactionResult {
     unitId: number;
     previousEquipment: CharacterEquipment;
-    nextEquipment: CharacterEquipment;
-    previousInventory: PartyInventory;
-    nextInventory: PartyInventory;
-    previousStats: EffectivePlayerEquipmentStats;
-    nextStats: EffectivePlayerEquipmentStats;
-    // Callers should clamp live unit HP after applying this delta.
-    bonusMaxHpDelta: number;
 }
 
 // =============================================================================
@@ -84,14 +77,6 @@ function cloneAllEquipment(equipment: Record<number, CharacterEquipment>): Recor
 function cloneInventory(inventory: PartyInventory): PartyInventory {
     return {
         items: inventory.items.map(entry => ({ ...entry }))
-    };
-}
-
-function cloneStats(stats: EffectivePlayerEquipmentStats): EffectivePlayerEquipmentStats {
-    return {
-        ...stats,
-        damage: [stats.damage[0], stats.damage[1]],
-        hpRegen: stats.hpRegen ? { ...stats.hpRegen } : null,
     };
 }
 
@@ -183,41 +168,6 @@ export function getEffectivePlayerEquipmentStats(unitId: number): EffectivePlaye
     return getEffectivePlayerEquipmentStatsFor(unitId, equipment);
 }
 
-/** Get effective damage for a character based on equipment */
-export function getEffectivePlayerDamage(unitId: number): [number, number] {
-    return getEffectivePlayerEquipmentStats(unitId).damage;
-}
-
-/** Get effective damage type for a character based on equipment */
-export function getEffectivePlayerDamageType(unitId: number): DamageType {
-    return getEffectivePlayerEquipmentStats(unitId).damageType;
-}
-
-/** Get effective armor for a character based on equipment */
-export function getEffectivePlayerArmor(unitId: number): number {
-    return getEffectivePlayerEquipmentStats(unitId).armor;
-}
-
-/** Get effective range for a character based on equipment (undefined = melee) */
-export function getEffectivePlayerRange(unitId: number): number | undefined {
-    return getEffectivePlayerEquipmentStats(unitId).range;
-}
-
-/** Get projectile color for a character based on equipped weapon */
-export function getEffectivePlayerProjectileColor(unitId: number): string | undefined {
-    return getEffectivePlayerEquipmentStats(unitId).projectileColor;
-}
-
-/** Get weapon attack cooldown override from equipment */
-export function getEffectivePlayerAttackCooldown(unitId: number): number | undefined {
-    return getEffectivePlayerEquipmentStats(unitId).attackCooldown;
-}
-
-/** Get bonus max HP from equipment */
-export function getEffectivePlayerBonusMaxHp(unitId: number): number {
-    return getEffectivePlayerEquipmentStats(unitId).bonusMaxHp;
-}
-
 /** Get bonus magic damage from equipment */
 export function getEffectivePlayerBonusMagicDamage(unitId: number): number {
     return getEffectivePlayerEquipmentStats(unitId).bonusMagicDamage;
@@ -258,22 +208,10 @@ export function equipItemForCharacter(unitId: number, itemId: string, slot: Equi
         return null;
     }
 
-    const previousStats = getEffectivePlayerEquipmentStatsFor(unitId, previousEquipment);
-    const nextStats = getEffectivePlayerEquipmentStatsFor(unitId, equipped.equipment);
-
     equipmentState[unitId] = cloneEquipment(equipped.equipment);
     inventoryState = cloneInventory(equipped.inventory);
 
-    return {
-        unitId,
-        previousEquipment,
-        nextEquipment: cloneEquipment(equipped.equipment),
-        previousInventory,
-        nextInventory: cloneInventory(equipped.inventory),
-        previousStats: cloneStats(previousStats),
-        nextStats: cloneStats(nextStats),
-        bonusMaxHpDelta: nextStats.bonusMaxHp - previousStats.bonusMaxHp,
-    };
+    return { unitId, previousEquipment };
 }
 
 /** Unequip an item from a character and atomically update both equipment and inventory state. */
@@ -292,22 +230,10 @@ export function unequipItemForCharacter(unitId: number, slot: EquipmentSlot): Eq
         return null;
     }
 
-    const previousStats = getEffectivePlayerEquipmentStatsFor(unitId, previousEquipment);
-    const nextStats = getEffectivePlayerEquipmentStatsFor(unitId, unequipped.equipment);
-
     equipmentState[unitId] = cloneEquipment(unequipped.equipment);
     inventoryState = cloneInventory(unequipped.inventory);
 
-    return {
-        unitId,
-        previousEquipment,
-        nextEquipment: cloneEquipment(unequipped.equipment),
-        previousInventory,
-        nextInventory: cloneInventory(unequipped.inventory),
-        previousStats: cloneStats(previousStats),
-        nextStats: cloneStats(nextStats),
-        bonusMaxHpDelta: nextStats.bonusMaxHp - previousStats.bonusMaxHp,
-    };
+    return { unitId, previousEquipment };
 }
 
 /** Move an already-equipped item to another slot and atomically update equipment + inventory. */
@@ -333,20 +259,8 @@ export function moveEquippedItemForCharacter(unitId: number, fromSlot: Equipment
         return null;
     }
 
-    const previousStats = getEffectivePlayerEquipmentStatsFor(unitId, previousEquipment);
-    const nextStats = getEffectivePlayerEquipmentStatsFor(unitId, afterMove.equipment);
-
     equipmentState[unitId] = cloneEquipment(afterMove.equipment);
     inventoryState = cloneInventory(afterMove.inventory);
 
-    return {
-        unitId,
-        previousEquipment,
-        nextEquipment: cloneEquipment(afterMove.equipment),
-        previousInventory,
-        nextInventory: cloneInventory(afterMove.inventory),
-        previousStats: cloneStats(previousStats),
-        nextStats: cloneStats(nextStats),
-        bonusMaxHpDelta: nextStats.bonusMaxHp - previousStats.bonusMaxHp,
-    };
+    return { unitId, previousEquipment };
 }

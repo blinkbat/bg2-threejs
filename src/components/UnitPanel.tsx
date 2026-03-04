@@ -209,6 +209,9 @@ const EFFECT_INFO: Record<string, { icon: string; color: string; description: st
     hamstrung: { icon: "L", color: COLORS.hamstrungText, description: "Move speed reduced" },
     blind: { icon: "B", color: COLORS.blindText, description: "Hit chance heavily reduced" },
     vanquishing_light: { icon: "⊕", color: COLORS.dmgHoly, description: "Holy aura damages nearby foes and may blind" },
+    sleep: { icon: "💤", color: COLORS.sleepText, description: "Cannot act — wakes on damage" },
+    chilled: { icon: "❄", color: COLORS.chilledText, description: "Move speed halved, cooldowns doubled" },
+    enraged: { icon: "💢", color: COLORS.enragedText, description: "Increased speed and damage" },
 };
 
 /** Renders active status effects as inline icons with tooltips */

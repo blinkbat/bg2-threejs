@@ -95,21 +95,6 @@ export function getMainHandWeapon(equipment: CharacterEquipment): WeaponItem {
     return WEAPONS.fist;
 }
 
-/** Get the weapon equipped in the off-hand, or null if none/disabled */
-export function getOffHandWeapon(equipment: CharacterEquipment): WeaponItem | null {
-    // If main hand is two-handed, off-hand is disabled
-    const mainHand = getMainHandWeapon(equipment);
-    if (mainHand.grip === "twoHand") {
-        return null;
-    }
-
-    const rightHandItem = equipment.rightHand ? getItem(equipment.rightHand) : null;
-    if (rightHandItem && isWeapon(rightHandItem)) {
-        return rightHandItem;
-    }
-    return null;
-}
-
 /** Check if off-hand slot is disabled (2h weapon equipped) */
 export function isOffHandDisabled(equipment: CharacterEquipment): boolean {
     const mainHand = getMainHandWeapon(equipment);
