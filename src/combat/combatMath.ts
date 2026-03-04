@@ -505,13 +505,6 @@ export function getMana(unit: Unit): number {
     return unit.mana ?? 0;
 }
 
-/**
- * Check if unit has enough mana for a skill.
- */
-export function hasEnoughMana(unit: Unit, manaCost: number): boolean {
-    return getMana(unit) >= manaCost;
-}
-
 // =============================================================================
 // COMBAT LOG MESSAGES - Centralized for consistency
 // =============================================================================

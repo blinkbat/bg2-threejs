@@ -615,45 +615,6 @@ export function runTargetingPhase(ctx: TargetingContext): void {
 }
 
 // =============================================================================
-// MOVEMENT TARGET - Single source of truth for where a unit should move
-// =============================================================================
-
-export interface MovementTargetContext {
-    unit: Unit;
-    g: UnitGroup;
-    unitsRef: Record<number, UnitGroup>;
-    unitsState: Unit[];
-    pathsRef: Record<number, { x: number; z: number }[]>;
-}
-
-/**
- * Get the movement target for a unit - single source of truth.
- * Priority: attack target position > path waypoint > current position (idle)
- */
-export function getMovementTarget(ctx: MovementTargetContext): { x: number; z: number; hasTarget: boolean } {
-    const { unit, g, unitsRef, pathsRef } = ctx;
-
-    // Priority 1: If we have an attack target, move toward it
-    if (g.userData.attackTarget !== null && g.userData.attackTarget !== undefined) {
-        const targetG = unitsRef[g.userData.attackTarget];
-        const targetU = getUnitById(g.userData.attackTarget);
-
-        if (targetG && targetU && targetU.hp > 0) {
-            return { x: targetG.position.x, z: targetG.position.z, hasTarget: true };
-        }
-    }
-
-    // Priority 2: If we have a path, follow it
-    const path = pathsRef[unit.id];
-    if (path && path.length > 0) {
-        return { x: path[0].x, z: path[0].z, hasTarget: true };
-    }
-
-    // No target - idle at current position
-    return { x: g.position.x, z: g.position.z, hasTarget: false };
-}
-
-// =============================================================================
 // PATH FOLLOWING PHASE
 // =============================================================================
 

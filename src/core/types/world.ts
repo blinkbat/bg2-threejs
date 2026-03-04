@@ -39,12 +39,6 @@ export interface SelectionBox {
     height: number;
 }
 
-export interface HpBar {
-    bg: THREE.Mesh;
-    fill: THREE.Mesh;
-    maxHp: number;
-}
-
 export interface FogTexture {
     canvas: HTMLCanvasElement;
     ctx: CanvasRenderingContext2D;

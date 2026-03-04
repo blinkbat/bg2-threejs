@@ -65,32 +65,11 @@ function clamp(value: number, min: number, max: number): number {
     return Math.max(min, Math.min(max, value));
 }
 
-function normalizeColor(input: Partial<HslaColor> | undefined, fallback: HslaColor): HslaColor {
-    return {
-        h: clamp(input?.h ?? fallback.h, 0, 360),
-        s: clamp(input?.s ?? fallback.s, 0, 100),
-        l: clamp(input?.l ?? fallback.l, 0, 100),
-        a: clamp(input?.a ?? fallback.a, 0, 1),
-    };
-}
-
 export function createDefaultThemeColorSettings(): ThemeColorSettings {
     return UI_THEME_COLOR_TOKENS.reduce((acc, token) => {
         acc[token.id] = { ...token.defaults };
         return acc;
     }, {} as ThemeColorSettings);
-}
-
-export function normalizeThemeColorSettings(input: unknown): ThemeColorSettings {
-    const defaults = createDefaultThemeColorSettings();
-    if (typeof input !== "object" || input === null) return defaults;
-    const record = input as Record<string, unknown>;
-    for (const token of UI_THEME_COLOR_TOKENS) {
-        const raw = record[token.id];
-        if (typeof raw !== "object" || raw === null) continue;
-        defaults[token.id] = normalizeColor(raw as Partial<HslaColor>, token.defaults);
-    }
-    return defaults;
 }
 
 export function hslaToCss(value: HslaColor): string {

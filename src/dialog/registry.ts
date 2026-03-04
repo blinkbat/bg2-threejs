@@ -9,9 +9,3 @@ export function getDialogDefinitionById(dialogId: string): DialogDefinition | un
 export function getDialogDefinitionIds(): string[] {
     return Object.keys(dialogDefinitionsById).sort((a, b) => a.localeCompare(b));
 }
-
-export function getAllDialogDefinitions(): DialogDefinition[] {
-    return getDialogDefinitionIds()
-        .map(id => dialogDefinitionsById[id])
-        .filter((definition): definition is DialogDefinition => definition !== undefined);
-}

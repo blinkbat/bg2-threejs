@@ -17,7 +17,6 @@ export const PAN_SPEED = 0.4;
 
 // Combat
 export const HIT_DETECTION_RADIUS = 0.3;
-export const ALLY_CLICK_RADIUS = 2;
 export const FLASH_DURATION = 200;
 
 // Status Effects - Poison
@@ -79,7 +78,6 @@ export const VISHAS_EYES_ORB_HEAL_RANGE: [number, number] = [3, 5];
 
 // Status Effects - Doom (kills unit after duration expires, cured by Restoration)
 export const DOOM_DURATION = 10000;          // 10 seconds until death
-export const DOOM_TICK_INTERVAL = 1000;      // Tick every 1 second (for countdown)
 
 // Status Effects - Sleep (prevents action, wakes on damage or Restoration)
 export const SLEEP_MIN_DURATION = 4000;       // 4 seconds minimum
@@ -115,7 +113,6 @@ export const TRAP_ARC_HEIGHT = 2.5;        // Peak height of thrown trap
 export const TRAP_MESH_SIZE = 0.25;        // Size of trap mesh
 
 // Visual Effects
-export const HEAL_FLASH_DURATION = 200;    // ms for green healing flash
 export const RING_EXPAND_DURATION = 400;   // ms for taunt ring animation
 export const DEFAULT_CANDLE_LIGHT_COLOR = "#ffaa44";
 export const DEFAULT_TORCH_LIGHT_COLOR = "#ff8844";
@@ -128,7 +125,6 @@ export const SWING_DURATION = 150;
 export const SWING_ARC_ANGLE = Math.PI * 2 / 3;    // 120° swing arc
 export const SWING_START_OFFSET = Math.PI / 3;      // Start 60° before facing
 export const SWING_DOT_ORBIT_RADIUS = 0.5;          // Distance of swing dot from attacker
-export const AOE_EXPAND_DURATION = 400;
 export const SWIPE_ANIMATE_DURATION = 300;
 
 // Leap Attack
@@ -156,8 +152,6 @@ export const FIRE_BREATH_OPACITY_AMPLITUDE = 0.1;  // Pulse oscillation range
 export const FIRE_BREATH_PULSE_SPEED = 8;          // Sine wave speed
 
 // Magic Wave
-export const MAGIC_WAVE_TARGETING_BUFFER = 1;      // Extra radius for target detection
-export const MAGIC_WAVE_FAN_SPREAD = Math.PI * 0.5; // 90° total fan angle
 export const MAGIC_MISSILE_START_OFFSET = 0.3;      // Spawn offset from caster
 export const MAGIC_MISSILE_SPEED = 0.07;            // Projectile speed
 export const MAGIC_MISSILE_ZIGZAG_PHASE_STEP = 0.25; // Phase stagger per missile
@@ -366,32 +360,6 @@ export function getSkillTextColor(
             return getDamageTypeColor(damageType);
         default:
             return COLORS.logNeutral;
-    }
-}
-
-/** Map skill type to CSS class for styling (kept for existing class hooks) */
-export function getSkillColorClass(skillType: SkillTypeForColor | undefined): string {
-    switch (skillType) {
-        case "damage":
-        case "smite":
-            return "skill-damage";
-        case "heal":
-        case "sanctuary":
-        case "restoration":
-        case "revive":
-            return "skill-heal";
-        case "taunt":
-        case "debuff":
-        case "trap":
-            return "skill-taunt";
-        case "flurry":
-            return "skill-flurry";
-        case "dodge":
-            return "skill-dodge";
-        case "summon":
-            return "skill-buff";
-        default:
-            return "skill-buff";
     }
 }
 

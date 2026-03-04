@@ -67,13 +67,6 @@ export function clearEnemyKiting(unitId: number): void {
 }
 
 /**
- * Clean up all kiting state for a unit (call on unit death).
- */
-export function cleanupEnemyKitingState(unitId: number): void {
-    delete enemyKitingUntil[unitId];
-}
-
-/**
  * Reset all enemy kiting state (for game restart).
  */
 export function resetAllEnemyKitingState(): void {

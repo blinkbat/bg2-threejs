@@ -701,12 +701,3 @@ if (storedRegistryErrors.length > 0 && typeof console !== "undefined" && typeof 
 export function getItem(itemId: string): Item | undefined {
     return ITEMS[itemId];
 }
-
-/** Get an item by ID. Throws if not found. */
-export function getItemOrThrow(itemId: string): Item {
-    const item = ITEMS[itemId];
-    if (!item) {
-        throw new Error(`Item not found: ${itemId}`);
-    }
-    return item;
-}

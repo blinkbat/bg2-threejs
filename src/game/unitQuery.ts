@@ -68,26 +68,6 @@ export function getAliveUnits(units: Unit[], team: "player" | "enemy"): Unit[] {
 }
 
 /**
- * Get all alive units of a specific team with their UnitGroups.
- */
-export function getAliveUnitsWithGroups(
-    units: Unit[],
-    unitsRef: Record<number, UnitGroup>,
-    team: "player" | "enemy"
-): { unit: Unit; group: UnitGroup }[] {
-    const result: { unit: Unit; group: UnitGroup }[] = [];
-
-    for (const unit of units) {
-        if (unit.team !== team || unit.hp <= 0) continue;
-        const g = unitsRef[unit.id];
-        if (!g) continue;
-        result.push({ unit, group: g });
-    }
-
-    return result;
-}
-
-/**
  * Check if any player unit is within aggro range of a position.
  * Used by spawner enemies (brood mother, necromancer) to detect players.
  */

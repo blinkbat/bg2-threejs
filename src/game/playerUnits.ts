@@ -143,14 +143,6 @@ export function getEffectiveMaxMana(unitId: number, unit?: Unit): number {
     return getEffectiveMaxManaForStats(unitId, unit?.stats);
 }
 
-/** Get effective base armor for a player (from equipment). Not status-adjusted. */
-export function getBaseArmor(unitId: number): number {
-    if (!usesEquipmentForUnit(unitId)) {
-        return UNIT_DATA[unitId].armor;
-    }
-    return getEffectivePlayerEquipmentStats(unitId).armor;
-}
-
 /** Get all learned skills for a unit (basic attack + learned special skills) */
 export function getAllSkills(unitId: number, unit?: Unit): Skill[] {
     const data = UNIT_DATA[unitId];

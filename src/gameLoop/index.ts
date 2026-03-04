@@ -3,7 +3,7 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitGroup, DamageText, Projectile, FogTexture, SwingAnimation, EnemyStats } from "../core/types";
+import type { Unit, UnitGroup, DamageText, Projectile, SwingAnimation, EnemyStats } from "../core/types";
 import { SKILL_SINGLE_TARGET_CHANCE, FORMATION_SLOW_SPEED, BUFF_TICK_INTERVAL } from "../core/constants";
 import { getUnitRadius, isInRange } from "../rendering/range";
 import { tryKite, type KiteContext } from "../ai/targeting";
@@ -42,30 +42,6 @@ export { spawnLootBag, removeLootBag, clearAllLootBags, resetLootBagIds } from "
 
 // Re-export unit ID utilities for backwards compatibility
 export { getNextUnitId, initializeUnitIdCounter } from "../core/unitIds";
-
-// =============================================================================
-// TYPES
-// =============================================================================
-
-export interface GameLoopRefs {
-    unitsRef: React.RefObject<Record<number, UnitGroup>>;
-    pathsRef: React.MutableRefObject<Record<number, { x: number; z: number }[]>>;
-    visibilityRef: React.MutableRefObject<number[][]>;
-    actionCooldownRef: React.MutableRefObject<Record<number, number>>;
-    damageTexts: React.MutableRefObject<DamageText[]>;
-    hitFlashRef: React.MutableRefObject<Record<number, number>>;
-    unitMeshRef: React.RefObject<Record<number, THREE.Mesh>>;
-    unitOriginalColorRef: React.RefObject<Record<number, THREE.Color>>;
-    moveStartRef: React.MutableRefObject<Record<number, { time: number; x: number; z: number }>>;
-    projectilesRef: React.MutableRefObject<Projectile[]>;
-    fogTextureRef: React.RefObject<FogTexture | null>;
-    moveMarkerRef: React.RefObject<THREE.Mesh | null>;
-}
-
-export interface GameLoopState {
-    unitsStateRef: React.RefObject<Unit[]>;
-    pausedRef: React.MutableRefObject<boolean>;
-}
 
 // =============================================================================
 // UNIT AI & MOVEMENT

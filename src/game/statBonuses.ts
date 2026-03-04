@@ -7,7 +7,6 @@
 import type { Unit, CharacterStats } from "../core/types";
 import { UNIT_DATA } from "./playerUnits";
 import { ENEMY_STATS } from "./enemyStats";
-import { HP_PER_VITALITY, MP_PER_INTELLIGENCE } from "./progression";
 export { HP_PER_VITALITY, MP_PER_INTELLIGENCE, LEVEL_UP_HP, LEVEL_UP_MANA, LEVEL_UP_STAT_POINTS, LEVEL_UP_SKILL_POINTS } from "./progression";
 
 /** Get character stats with fallback to zero */
@@ -27,12 +26,6 @@ export function getStrengthDamageBonus(unit: Unit): number {
     return Math.floor(stats.strength / 2);
 }
 
-/** +1% hit chance per 2 dexterity points */
-export function getDexterityAccuracyBonus(unit: Unit): number {
-    const stats = getStats(unit);
-    return Math.floor(stats.dexterity / 2);
-}
-
 /** +1% crit chance per 2 dexterity points (plus base crit from class/enemy type) */
 export function getDexterityCritChance(unit: Unit): number {
     const stats = getStats(unit);
@@ -48,18 +41,6 @@ export function getDexterityCritChance(unit: Unit): number {
 
 /** Base crit damage multiplier (1.5x) */
 export const CRIT_MULTIPLIER = 1.5;
-
-/** +HP_PER_VITALITY HP per vitality point */
-export function getVitalityHpBonus(unit: Unit): number {
-    const stats = getStats(unit);
-    return stats.vitality * HP_PER_VITALITY;
-}
-
-/** +MP_PER_INTELLIGENCE MP per intelligence point */
-export function getIntelligenceMpBonus(unit: Unit): number {
-    const stats = getStats(unit);
-    return stats.intelligence * MP_PER_INTELLIGENCE;
-}
 
 /** +1 elemental/chaos damage per 2 intelligence points */
 export function getIntelligenceMagicDamageBonus(unit: Unit): number {

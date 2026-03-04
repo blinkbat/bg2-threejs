@@ -7,7 +7,6 @@ import type { Unit, Skill, UnitGroup, SelectionBox } from "../core/types";
 import { getUnitRadius, isInRange } from "../rendering/range";
 import { findPath } from "../ai/pathfinding";
 import { UNIT_DATA } from "../game/playerUnits";
-import { soundFns } from "../audio";
 import { pauseGameClock, resumeGameClock } from "../core/gameClock";
 import { executeSkill, clearTargetingMode, type SkillExecutionContext } from "../combat/skills";
 import { hasStatusEffect } from "../combat/combatMath";
@@ -165,27 +164,6 @@ export function executeMove(
         }
     });
     updateUnitsWhere(setUnits, u => targetIdSet.has(u.id), { target: null });
-}
-
-export function executeAttack(
-    unitsRef: Record<number, UnitGroup>,
-    pathsRef: Record<number, { x: number; z: number }[]>,
-    setUnits: React.Dispatch<React.SetStateAction<Unit[]>>,
-    unitIds: number[],
-    targetId: number
-): void {
-    const unitIdSet = new Set(unitIds);
-    unitIds.forEach(uid => {
-        const g = unitsRef[uid];
-        if (g) {
-            g.userData.attackTarget = targetId;
-            delete g.userData.moveTarget;
-            delete g.userData.formationRegroupAttempted;
-        }
-        pathsRef[uid] = [];
-    });
-    updateUnitsWhere(setUnits, u => unitIdSet.has(u.id), { target: targetId });
-    soundFns.playAttack();
 }
 
 interface SharedCommandContext {
@@ -829,3 +807,4 @@ export function setupTargetingMode(
         aoeIndicatorRef.current.visible = true;
     }
 }
+

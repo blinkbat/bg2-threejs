@@ -228,13 +228,6 @@ export interface AreaLight {
     decay?: number;
 }
 
-export interface LavaZone {
-    x: number;
-    z: number;
-    w: number;
-    h: number;
-}
-
 export interface AreaData {
     id: AreaId;
     name: string;

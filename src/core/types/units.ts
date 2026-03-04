@@ -320,11 +320,5 @@ export interface EnemyStats {
 // TYPE GUARDS
 // =============================================================================
 
-/** Check if a unit is on the player team */
-export const isPlayerTeam = (unit: Unit): boolean => unit.team === "player";
-
-/** Check if a unit is on the enemy team */
-export const isEnemyTeam = (unit: Unit): boolean => unit.team === "enemy";
-
 /** Check if an enemy has a front shield (requires EnemyStats) */
 export const hasFrontShield = (stats: EnemyStats): boolean => stats.frontShield === true;

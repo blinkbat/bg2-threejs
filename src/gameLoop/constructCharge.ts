@@ -306,13 +306,3 @@ export function clearChargeAttacks(scene?: THREE.Scene): void {
     activeCharges.clear();
 }
 
-/**
- * Cancel a specific unit's charge attack.
- */
-export function cancelChargeAttack(scene: THREE.Scene, unitId: number): void {
-    const charge = activeCharges.get(unitId);
-    if (charge) {
-        cleanupCharge(scene, charge);
-        activeCharges.delete(unitId);
-    }
-}

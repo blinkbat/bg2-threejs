@@ -1,4 +1,4 @@
-﻿import type { SaveSlotData, SaveSlotInfo, SavedPlayer } from "./types";
+import type { SavedPlayer } from "./types";
 
 /** Format timestamp for display */
 export function formatSaveTimestamp(timestamp: number): string {
@@ -26,17 +26,6 @@ export function getPartyLevel(players: SavedPlayer[]): number {
     return Math.round(total / corePlayers.length);
 }
 
-/** Get slot display info */
-export function getSlotInfo(slot: SaveSlotData | null): SaveSlotInfo | null {
-    if (!slot) return null;
-    return {
-        slotName: slot.slotName,
-        timestamp: slot.timestamp,
-        partyLevel: getPartyLevel(slot.players),
-        areaId: slot.currentAreaId,
-    };
-}
-
 /** Get human-readable area name */
 export function getAreaDisplayName(areaId: string): string {
     const names: Record<string, string> = {
@@ -52,3 +41,4 @@ export function getAreaDisplayName(areaId: string): string {
 
     return names[areaId] ?? areaId;
 }
+
