@@ -23,7 +23,7 @@ const EFFECT_ICONS: Record<StatusEffectType, { icon: string; color: string }> = 
     defiance: { icon: "⚔", color: COLORS.defianceText },
     pinned: { icon: "📌", color: COLORS.pinnedText },
     slowed: { icon: "🐌", color: COLORS.slowedText },
-    energyShield: { icon: "🔮", color: COLORS.energyShieldText },
+    energy_shield: { icon: "🔮", color: COLORS.energyShieldText },
     qi_drain: { icon: "💔", color: COLORS.qiDrainText },
     doom: { icon: "💀", color: COLORS.doomText },
     regen: { icon: "💚", color: COLORS.regenText },

@@ -505,7 +505,7 @@ export function applyDamageToUnit(
     if (currentHp <= 0) return;
 
     // Check for energy shield absorption
-    const energyShield = refUnit?.statusEffects?.find(e => e.type === "energyShield");
+    const energyShield = refUnit?.statusEffects?.find(e => e.type === "energy_shield");
 
     let effectiveDamage = damage;
     let shieldAbsorbed = 0;
@@ -693,14 +693,14 @@ export function applyDamageToUnit(
                 // Remove the depleted energy shield
                 updated = {
                     ...updated,
-                    statusEffects: updated.statusEffects.filter(e => e.type !== "energyShield")
+                    statusEffects: updated.statusEffects.filter(e => e.type !== "energy_shield")
                 };
             } else {
                 // Reduce shield amount
                 updated = {
                     ...updated,
                     statusEffects: updated.statusEffects.map(e =>
-                        e.type === "energyShield"
+                        e.type === "energy_shield"
                             ? { ...e, shieldAmount: (e.shieldAmount ?? 0) - shieldAbsorbed }
                             : e
                     )

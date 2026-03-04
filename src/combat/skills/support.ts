@@ -491,7 +491,7 @@ export function executeEnergyShieldSkill(
     skill: Skill
 ): boolean {
     return applyBuffFromTemplate(ctx, casterId, skill, {
-        effectType: "energyShield",
+        effectType: "energy_shield",
         ringColor: "#66ccff",
         ringOpts: { innerRadius: 0.2, outerRadius: 0.6, maxScale: 1.8, duration: 350 },
         sound: soundFns.playEnergyShield,

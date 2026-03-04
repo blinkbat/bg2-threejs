@@ -1,6 +1,6 @@
 import type { Unit } from "../core/types";
 import type { AreaData, AreaDialogTrigger, AreaDialogTriggerStartDialogAction } from "../game/areas/types";
-import { distance } from "../game/geometry";
+import { getUnitRadius, isInRange } from "../rendering/range";
 
 const DEFAULT_UNIT_SEEN_RANGE = 12;
 
@@ -45,7 +45,7 @@ function hasAnyEnemyWithinRange(units: Unit[], range: number): boolean {
     const enemies = units.filter(unit => unit.team === "enemy" && unit.hp > 0);
     for (const player of players) {
         for (const enemy of enemies) {
-            if (distance(player.x, player.z, enemy.x, enemy.z) <= range) {
+            if (isInRange(player.x, player.z, enemy.x, enemy.z, getUnitRadius(enemy), range)) {
                 return true;
             }
         }
@@ -57,9 +57,10 @@ function isUnitSeenByParty(units: Unit[], spawnIndex: number, range: number): bo
     const target = getStaticSpawnUnit(units, spawnIndex);
     if (!target || target.hp <= 0) return false;
     if (target.team !== "enemy" && target.team !== "neutral") return false;
+    const targetRadius = getUnitRadius(target);
     return units.some(player => {
         if (player.team !== "player" || player.hp <= 0) return false;
-        return distance(player.x, player.z, target.x, target.z) <= range;
+        return isInRange(player.x, player.z, target.x, target.z, targetRadius, range);
     });
 }
 

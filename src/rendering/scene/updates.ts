@@ -171,7 +171,7 @@ function getLiquidUpdateCache(waterMesh: THREE.Object3D): LiquidUpdateCache {
                 const childMaterial = child.material;
                 if (!(childMaterial instanceof THREE.MeshBasicMaterial)) continue;
                 const childDataRecord = asRecord(child.userData);
-                const bubbleData = readLavaBubbleNodeData(childDataRecord?.lavaBubble);
+                const bubbleData = readLavaBubbleNodeData(childDataRecord?.bubbleData);
                 if (!bubbleData) continue;
                 bubbles.push({
                     mesh: child,

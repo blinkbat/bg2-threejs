@@ -160,7 +160,7 @@ export function updateEnergyShieldVisuals(
 
         const effects = unit.statusEffects;
         const hasBarrier = effects !== undefined && effects.length > 0
-            && effects.some(e => e.type === "energyShield" || e.type === "divine_lattice");
+            && effects.some(e => e.type === "energy_shield" || e.type === "divine_lattice");
         if (!hasBarrier) {
             // Fast path: remove bubble if present
             const existing = unitGroup.getObjectByName(ENERGY_SHIELD_BUBBLE_NAME) as THREE.Mesh | undefined;

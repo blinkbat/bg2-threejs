@@ -196,7 +196,7 @@ const EFFECT_INFO: Record<string, { icon: string; color: string; description: st
     defiance: { icon: "⚔", color: COLORS.defianceText, description: "+2 armor, cooldowns halved" },
     pinned: { icon: "📌", color: "var(--ui-color-accent-danger)", description: "Cannot move" },
     slowed: { icon: "🐌", color: "var(--ui-color-accent-primary)", description: "Move speed halved, cooldowns +50%" },
-    energyShield: { icon: "🔮", color: "var(--ui-color-accent-arcane)", description: "Absorbs damage" },
+    energy_shield: { icon: "🔮", color: "var(--ui-color-accent-arcane)", description: "Absorbs damage" },
     qi_drain: { icon: "💔", color: "var(--ui-color-accent-danger)", description: "Life force draining" },
     doom: { icon: "💀", color: COLORS.doomText, description: "Death in 10s — cure with Restoration" },
     regen: { icon: "💚", color: COLORS.hpHigh, description: "Healing over time" },
@@ -235,7 +235,7 @@ function EffectsDisplay({ unit, displayTime }: { unit: Unit; displayTime: number
                                 <div className="effect-tooltip-time">
                                     {effect.type === "highland_defense" ? "Until exhausted" : `${remainingSec}s remaining`}
                                 </div>
-                                {effect.type === "energyShield" && effect.shieldAmount !== undefined && (
+                                {effect.type === "energy_shield" && effect.shieldAmount !== undefined && (
                                     <div className="effect-tooltip-extra" style={{ color: info.color }}>
                                         {effect.shieldAmount} HP remaining
                                     </div>

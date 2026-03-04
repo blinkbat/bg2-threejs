@@ -463,15 +463,12 @@ export function processActionQueue(
             if (now < cooldownEnd) {
                 continue; // Don't remove, will try again next frame
             }
-            // Execute consumable via callback
+            // Execute queued consumable once cooldown clears, then always clear queue entry.
+            // Validation failures are terminal for that queued action and should not loop forever.
             if (onConsumeItem) {
-                const success = onConsumeItem(unitId, action.itemId, action.targetId);
-                if (success) {
-                    executedUnits.push(unitId);
-                }
-            } else {
-                executedUnits.push(unitId); // Remove if no handler
+                onConsumeItem(unitId, action.itemId, action.targetId);
             }
+            executedUnits.push(unitId);
         }
     }
 

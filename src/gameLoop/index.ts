@@ -624,8 +624,8 @@ export function updateShieldFacing(
             while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
             while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
 
-            const moveDistX = Math.abs(g.userData.targetX - g.position.x);
-            const moveDistZ = Math.abs(g.userData.targetZ - g.position.z);
+            const moveDistX = Math.abs(targetX - g.position.x);
+            const moveDistZ = Math.abs(targetZ - g.position.z);
             const isMoving = moveDistX > 0.2 || moveDistZ > 0.2;
 
             const baseTurnSpeed = isMoving ? TURN_SPEED_MOVING : TURN_SPEED_STATIONARY;

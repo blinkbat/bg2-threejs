@@ -33,7 +33,7 @@ const STATUS_EFFECT_TYPES: ReadonlySet<StatusEffectType> = new Set([
     "slowed",
     "chilled",
     "qi_drain",
-    "energyShield",
+    "energy_shield",
     "defiance",
     "doom",
     "invul",

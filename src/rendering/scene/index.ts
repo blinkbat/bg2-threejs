@@ -467,7 +467,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                         bubble.name = "lavaBubble";
                         bubble.raycast = skipRaycast;
                         setStaticRenderTier(bubble, "floor");
-                        bubble.userData.lavaBubble = {
+                        bubble.userData.bubbleData = {
                             phaseOffset: hashNoise(x, z, bubbleSeed + 113 + bubbleIndex * 29) * Math.PI * 2,
                             baseScale: bubbleScale,
                             baseY: 0,
@@ -570,7 +570,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                         bubble.name = "waterBubble";
                         bubble.raycast = skipRaycast;
                         setStaticRenderTier(bubble, "floor");
-                        bubble.userData.lavaBubble = {
+                        bubble.userData.bubbleData = {
                             phaseOffset: hashNoise(x, z, bubbleSeed + 113 + bubbleIndex * 29) * Math.PI * 2,
                             baseScale: bubbleScale,
                             baseY: 0,

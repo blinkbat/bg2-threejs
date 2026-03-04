@@ -9,11 +9,59 @@
 export type HotbarAssignments = Record<number, (string | null)[]>;
 
 const HOTBAR_STORAGE_KEY = "skillHotbarAssignments";
+const HOTBAR_SLOT_COUNT = 5;
+const FORMATION_STORAGE_KEY = "formationOrder";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function sanitizeHotbarAssignments(raw: unknown): HotbarAssignments {
+    if (!isRecord(raw)) return {};
+
+    const sanitized: HotbarAssignments = {};
+    for (const [unitIdRaw, slotsRaw] of Object.entries(raw)) {
+        const unitId = Number(unitIdRaw);
+        if (!Number.isFinite(unitId) || unitId <= 0) continue;
+        if (!Array.isArray(slotsRaw)) continue;
+
+        const slots: (string | null)[] = [];
+        for (let i = 0; i < HOTBAR_SLOT_COUNT; i++) {
+            const value = slotsRaw[i];
+            if (typeof value === "string") {
+                const trimmed = value.trim();
+                slots.push(trimmed.length > 0 ? trimmed : null);
+            } else {
+                slots.push(null);
+            }
+        }
+
+        sanitized[Math.floor(unitId)] = slots;
+    }
+
+    return sanitized;
+}
+
+function sanitizeFormationOrder(raw: unknown): number[] {
+    if (!Array.isArray(raw)) return [];
+
+    const sanitized: number[] = [];
+    const seen = new Set<number>();
+    for (const value of raw) {
+        if (typeof value !== "number" || !Number.isFinite(value)) continue;
+        const unitId = Math.floor(value);
+        if (unitId <= 0 || seen.has(unitId)) continue;
+        seen.add(unitId);
+        sanitized.push(unitId);
+    }
+
+    return sanitized;
+}
 
 export function loadHotbarAssignments(): HotbarAssignments {
     try {
         const stored = localStorage.getItem(HOTBAR_STORAGE_KEY);
-        if (stored) return JSON.parse(stored);
+        if (stored) return sanitizeHotbarAssignments(JSON.parse(stored));
     } catch { /* ignore */ }
     return {};
 }
@@ -28,12 +76,10 @@ export function saveHotbarAssignments(assignments: HotbarAssignments): void {
 // Formation Order
 // -----------------------------------------------------------------------------
 
-const FORMATION_STORAGE_KEY = "formationOrder";
-
 export function loadFormationOrder(): number[] {
     try {
         const stored = localStorage.getItem(FORMATION_STORAGE_KEY);
-        if (stored) return JSON.parse(stored);
+        if (stored) return sanitizeFormationOrder(JSON.parse(stored));
     } catch { /* ignore */ }
     return [];
 }

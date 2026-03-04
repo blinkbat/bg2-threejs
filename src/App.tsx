@@ -27,7 +27,7 @@ import {
     unequipItemForCharacter,
     moveEquippedItemForCharacter
 } from "./game/equipmentState";
-import { removeFromInventory } from "./game/equipment";
+import { hasInInventory, removeFromInventory } from "./game/equipment";
 import { getItem } from "./game/items";
 import { isConsumable } from "./core/types";
 import { updateChestStates } from "./rendering/scene";
@@ -752,6 +752,8 @@ function Game({
 
         const userUnit = unitsStateRef.current.find(u => u.id === unitId);
         if (!userUnit || userUnit.hp <= 0) return false;
+        const inventory = getPartyInventory();
+        if (!hasInInventory(inventory, itemId, 1)) return false;
 
         if (item.effect === "heal") {
             const maxHp = getEffectiveMaxHp(unitId, userUnit);
@@ -857,12 +859,13 @@ function Game({
             if (sceneState.scene) {
                 createLightningPillar(sceneState.scene, reviveX, reviveZ, { color: "#ffd700", duration: 600, radius: 0.3, height: 10 });
             }
+        } else {
+            return false;
         }
 
         if (item.sound === "gulp") soundFns.playGulp();
         else if (item.sound === "crunch") soundFns.playCrunch();
 
-        const inventory = getPartyInventory();
         setPartyInventory(removeFromInventory(inventory, itemId, 1));
         actionCooldownRef.current[unitId] = Date.now() + item.cooldown;
         return true;
