@@ -558,7 +558,6 @@ export function useGameLoop({
 
         let animId: number;
         let hpBarFrame = 0;
-        let lastHpBarPublishAt = 0;
         let cachedRect = renderer.domElement.getBoundingClientRect();
         const playerUnitsBuffer: Unit[] = [];
         previousHpByIdRef.current = new Map(stateRefs.unitsStateRef.current.map(unit => [unit.id, unit.hp]));
@@ -895,10 +894,7 @@ export function useGameLoop({
             if (hpBarFrame % 60 === 0) {
                 cachedRect = renderer.domElement.getBoundingClientRect();
             }
-            if (hpBarFrame === 1 || rafNow - lastHpBarPublishAt >= 33) {
-                publishHpBarOverlayFrame(updateHpBarPositions(currentUnits, unitGroups, camera, cachedRect, refs.zoomLevel, maxHp));
-                lastHpBarPublishAt = rafNow;
-            }
+            publishHpBarOverlayFrame(updateHpBarPositions(currentUnits, unitGroups, camera, cachedRect, refs.zoomLevel, maxHp));
             const hpBarsMs = performance.now() - sectionStart;
 
             // Wall/tree/candle transparency

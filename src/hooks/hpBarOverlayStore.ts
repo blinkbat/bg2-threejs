@@ -24,7 +24,7 @@ let currentSnapshot: HpBarOverlaySnapshot = {
     scale: 1,
     version: 0
 };
-const HP_BAR_POSITION_EPSILON = 0.5;
+const HP_BAR_POSITION_EPSILON = 0.05;
 
 function areFramesEquivalent(
     previous: HpBarOverlaySnapshot,
