@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { clampTileTintPercent } from "../../game/areas/tileLayers";
 
-export interface TileCornerRounding {
+interface TileCornerRounding {
     outer: [number, number, number, number];
     inner: [number, number, number, number];
 }

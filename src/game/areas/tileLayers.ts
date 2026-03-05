@@ -3,8 +3,8 @@
 // =============================================================================
 
 export const TILE_EMPTY = ".";
-export const MIN_TILE_TINT_PERCENT = -35;
-export const MAX_TILE_TINT_PERCENT = 35;
+const MIN_TILE_TINT_PERCENT = -35;
+const MAX_TILE_TINT_PERCENT = 35;
 
 export function createEmptyTileGrid(width: number, height: number, fill: string = TILE_EMPTY): string[][] {
     return Array.from({ length: height }, () => Array(width).fill(fill));

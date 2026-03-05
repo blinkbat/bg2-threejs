@@ -8,7 +8,7 @@ export interface CandleLightSource {
     range: number;
 }
 
-export interface CandleLightCluster {
+interface CandleLightCluster {
     colorHex: string;
     members: CandleLightSource[];
     weightedX: number;

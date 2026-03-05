@@ -23,7 +23,7 @@ const FIREBALL_MAX_DISTANCE = 12;   // Max travel distance before expiring
 // TYPES
 // =============================================================================
 
-export interface EnemyAttackContext {
+interface EnemyAttackContext {
     scene: THREE.Scene;
     attacker: Unit;
     attackerG: UnitGroup;

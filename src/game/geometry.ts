@@ -5,7 +5,7 @@
 import { getCurrentArea } from "./areas";
 
 /** Position with x and z coordinates (compatible with THREE.Vector3, UnitGroup.position) */
-export interface Position2D {
+interface Position2D {
     x: number;
     z: number;
 }

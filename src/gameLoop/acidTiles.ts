@@ -203,7 +203,7 @@ export function clearAcidTiles(acidTiles: Map<string, AcidTile>, scene: THREE.Sc
 // ACID AURA - Periodic acid creation around stationary acid-aura enemies
 // =============================================================================
 
-export interface AcidAuraContext {
+interface AcidAuraContext {
     scene: THREE.Scene;
     acidTiles: Map<string, AcidTile>;
     skillCooldowns: Record<string, { end: number; duration: number }>;

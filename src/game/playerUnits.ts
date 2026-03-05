@@ -13,7 +13,7 @@ import {
 // =============================================================================
 
 // XP required to reach each level (index = level, value = total XP needed)
-export const XP_REQUIREMENTS = [0, 0, 200, 500, 900, 1400, 2000, 2800, 3800, 5000, 6400];
+const XP_REQUIREMENTS = [0, 0, 200, 500, 900, 1400, 2000, 2800, 3800, 5000, 6400];
 
 export function getXpForLevel(level: number): number {
     if (level < 1) return 0;
@@ -43,7 +43,7 @@ const ZERO_CHARACTER_STATS: CharacterStats = {
     faith: 0,
 };
 
-export const STARTING_PLAYER_STATS: Record<number, CharacterStats> = {
+const STARTING_PLAYER_STATS: Record<number, CharacterStats> = {
     1: { strength: 4, dexterity: 1, vitality: 5, intelligence: 0, faith: 0 }, // Barbarian
     2: { strength: 2, dexterity: 2, vitality: 3, intelligence: 1, faith: 2 }, // Paladin
     3: { strength: 2, dexterity: 5, vitality: 2, intelligence: 1, faith: 0 }, // Thief

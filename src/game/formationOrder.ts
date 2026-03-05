@@ -20,7 +20,7 @@ export function buildEffectiveFormationOrder(unitIds: number[], formationOrder: 
  * Return a sortable formation rank for the given unit.
  * Unknown units are sorted after known units and then by ID.
  */
-export function getFormationRank(unitId: number, formationOrder: number[]): number {
+function getFormationRank(unitId: number, formationOrder: number[]): number {
     const idx = formationOrder.indexOf(unitId);
     return idx === -1 ? UNKNOWN_FORMATION_BASE + unitId : idx;
 }

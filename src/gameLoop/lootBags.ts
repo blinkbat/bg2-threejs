@@ -14,7 +14,7 @@ import { LOOT_BAG_DROP_HEIGHT, LOOT_BAG_BOUNCE_DURATION, LOOT_BAG_DROP_PHASE, LO
 
 let nextLootBagId = 1;
 
-export function getNextLootBagId(): number {
+function getNextLootBagId(): number {
     return nextLootBagId++;
 }
 

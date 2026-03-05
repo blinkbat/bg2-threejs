@@ -290,7 +290,7 @@ const FAST_RETARGET_SCAN_INTERVAL = 250;
 /**
  * Check if the current attack target is still valid (alive, not defeated, not untargetable).
  */
-export function validateCurrentTarget(
+function validateCurrentTarget(
     currentTarget: number | null | undefined,
     defeatedThisFrame: Set<number>
 ): { valid: boolean; targetUnit: Unit | undefined } {
@@ -310,7 +310,7 @@ export function validateCurrentTarget(
  * If alerted is true, ignores aggro range and searches entire map.
  * Broodlings can also see through their mother's eyes if she's alive.
  */
-export function findNearestTarget(ctx: TargetingContext, alerted: boolean = false): number | null {
+function findNearestTarget(ctx: TargetingContext, alerted: boolean = false): number | null {
     const { unit, g, unitsRef, unitsState, visibility, now, defeatedThisFrame, aggroRange } = ctx;
     const isPlayer = unit.team === "player";
     const enemyTeam = isPlayer ? "enemy" : "player";
@@ -403,7 +403,7 @@ export function findNearestTarget(ctx: TargetingContext, alerted: boolean = fals
  * Acquire a new target and calculate path to it.
  * Returns true if path was found or unit is already in range, false if target is unreachable.
  */
-export function acquireTarget(ctx: TargetingContext, targetId: number): boolean {
+function acquireTarget(ctx: TargetingContext, targetId: number): boolean {
     const { unit, g, unitsRef, pathsRef, moveStartRef, now } = ctx;
     const isPlayer = unit.team === "player";
 

@@ -34,7 +34,7 @@ import { getCurrentArea } from "../game/areas";
 // PROJECTILE CREATION
 // =============================================================================
 
-export type ProjectileType = "aoe" | "ranged" | "enemy";
+type ProjectileType = "aoe" | "ranged" | "enemy";
 type ProjectileVisualType = ProjectileType;
 
 /**
@@ -139,7 +139,7 @@ function getRingGeo(inner: number, outer: number): THREE.RingGeometry {
     return geo;
 }
 
-export interface ExpandingMeshConfig {
+interface ExpandingMeshConfig {
     duration?: number;
     initialOpacity?: number;
     maxScale?: number;

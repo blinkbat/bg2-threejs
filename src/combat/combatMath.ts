@@ -81,7 +81,7 @@ interface SkillHitProfile {
  * Named skills default to 100% unless they explicitly set hitChance.
  * "Attack" falls back to attacker accuracy.
  */
-export function getSkillHitChance(skill: SkillHitProfile | undefined, attackerAccuracy: number): number {
+function getSkillHitChance(skill: SkillHitProfile | undefined, attackerAccuracy: number): number {
     if (!skill) return Math.max(0, Math.min(100, attackerAccuracy));
     if (skill.hitChance !== undefined) return Math.max(0, Math.min(100, skill.hitChance));
     if (skill.name !== "Attack") return 100;
@@ -670,7 +670,7 @@ export function checkEnemyBlockChance(
  * Combined defense check: front shield block + passive block chance.
  * Returns the type of block that occurred, or "none" if the attack gets through.
  */
-export type DefenseResult = "none" | "frontShield" | "blockChance";
+type DefenseResult = "none" | "frontShield" | "blockChance";
 
 export function checkEnemyDefenses(
     enemyStats: { frontShield?: boolean; blockChance?: number },

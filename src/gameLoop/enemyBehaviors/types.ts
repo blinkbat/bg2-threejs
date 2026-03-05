@@ -25,7 +25,7 @@ import type {
 // BASE CONTEXT — shared fields across all enemy behaviors
 // =============================================================================
 
-export interface BehaviorBaseContext {
+interface BehaviorBaseContext {
     unit: Unit;
     g: UnitGroup;
     enemyStats: EnemyStats;

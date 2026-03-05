@@ -22,7 +22,7 @@ import { isEnemyUntargetable } from "../gameLoop/enemyBehaviors";
 // TYPES
 // =============================================================================
 
-export interface InputRefs {
+interface InputRefs {
     cameraOffset: React.MutableRefObject<{ x: number; z: number }>;
     zoomLevel: React.MutableRefObject<number>;
     isDragging: React.MutableRefObject<boolean>;
@@ -41,14 +41,14 @@ export interface InputRefs {
     pauseStartTimeRef: React.MutableRefObject<number | null>;
 }
 
-export interface InputState {
+interface InputState {
     selectedRef: React.RefObject<number[]>;
     unitsStateRef: React.RefObject<Unit[]>;
     pausedRef: React.MutableRefObject<boolean>;
     targetingModeRef: React.RefObject<{ casterId: number; skill: Skill } | null>;
 }
 
-export interface InputSetters {
+interface InputSetters {
     setSelectedIds: React.Dispatch<React.SetStateAction<number[]>>;
     setSelBox: React.Dispatch<React.SetStateAction<SelectionBox | null>>;
     setUnits: React.Dispatch<React.SetStateAction<Unit[]>>;
@@ -60,7 +60,7 @@ export interface InputSetters {
 
 // Per-unit queued action - only ONE action per unit at a time (last one wins)
 // Note: attacks are just skills now - no separate "attack" type
-export type QueuedAction =
+type QueuedAction =
     | { type: "skill"; skill: Skill; targetX: number; targetZ: number; targetId?: number }
     | { type: "move"; targetX: number; targetZ: number; direct?: boolean; notBefore?: number; attackMove?: boolean }
     | { type: "consumable"; itemId: string; targetId?: number };
@@ -99,7 +99,7 @@ export function togglePause(
     }
 }
 
-export function adjustCooldownsForPause(
+function adjustCooldownsForPause(
     actionCooldownRef: React.MutableRefObject<Record<number, number>>,
     setSkillCooldowns: React.Dispatch<React.SetStateAction<Record<string, { end: number; duration: number }>>>,
     pausedDuration: number
@@ -122,7 +122,7 @@ export function adjustCooldownsForPause(
 // PATH & MOVEMENT
 // =============================================================================
 
-export function assignPath(
+function assignPath(
     unitsRef: Record<number, UnitGroup>,
     pathsRef: Record<number, { x: number; z: number }[]>,
     moveStartRef: Record<number, { time: number; x: number; z: number }>,
@@ -147,7 +147,7 @@ export function assignPath(
     }
 }
 
-export function executeMove(
+function executeMove(
     unitsRef: Record<number, UnitGroup>,
     pathsRef: Record<number, { x: number; z: number }[]>,
     moveStartRef: Record<number, { time: number; x: number; z: number }>,
@@ -536,7 +536,7 @@ export function buildMoveTargets(
  * Validate that a target is valid for a skill.
  * Returns an error message if invalid, or null if valid.
  */
-export function validateSkillTarget(
+function validateSkillTarget(
     skill: Skill,
     targetUnit: Unit,
     casterId: number,

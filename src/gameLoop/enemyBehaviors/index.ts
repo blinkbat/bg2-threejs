@@ -2,10 +2,6 @@
 // ENEMY BEHAVIORS - Main entry point and re-exports
 // =============================================================================
 
-// Types
-export type { BehaviorBaseContext, SpawnContext, ChargeContext, LeapContext, VinesContext, TentacleContext, RaiseContext, CurseContext, GlareContext, SleepContext, DreamEaterContext, PhaseShiftContext } from "./types";
-export type { PreAttackContext } from "./preAttack";
-
 // Pre-attack dispatch (fire-and-forget behaviors)
 export { runPreAttackBehaviors } from "./preAttack";
 
@@ -38,7 +34,6 @@ export { tryCurse } from "./curse";
 
 // Acid Slug Patrol
 export { tryAcidSlugPatrol, processAcidTrailAndAura } from "./acidSlug";
-export type { AcidSlugContext } from "./acidSlug";
 
 // Basilisk Glare
 export { tryBasiliskGlare, processGlares, clearGlares, isUnitCastingGlare } from "./basiliskGlare";

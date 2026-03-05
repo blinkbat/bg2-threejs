@@ -5,7 +5,7 @@ import paladinPortrait from "../assets/paladin-portrait.png";
 import thiefPortrait from "../assets/thief-portrait.png";
 import clericPortrait from "../assets/cleric-portrait.png";
 
-export const CLASS_PORTRAITS: Record<string, string> = {
+const CLASS_PORTRAITS: Record<string, string> = {
     Barbarian: barbarianPortrait,
     Wizard: wizardPortrait,
     Paladin: paladinPortrait,

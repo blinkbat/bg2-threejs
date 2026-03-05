@@ -10,7 +10,7 @@ export interface DialogTriggerRuntimeState {
     pendingNpcEngagementSpawnIndexes: Set<number>;
 }
 
-export interface DialogTriggerEvaluationContext {
+interface DialogTriggerEvaluationContext {
     trigger: AreaDialogTrigger;
     area: AreaData;
     units: Unit[];
@@ -68,7 +68,7 @@ export function getDialogTriggerPriority(trigger: AreaDialogTrigger): number {
     return trigger.priority ?? 0;
 }
 
-export function getTriggerStartDialogAction(trigger: AreaDialogTrigger): AreaDialogTriggerStartDialogAction | null {
+function getTriggerStartDialogAction(trigger: AreaDialogTrigger): AreaDialogTriggerStartDialogAction | null {
     const explicitAction = trigger.actions?.find(action => action.type === "start_dialog");
     if (explicitAction) {
         return explicitAction;

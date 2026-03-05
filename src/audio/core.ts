@@ -14,7 +14,7 @@ export const getAudioCtx = () => {
     return audioCtx;
 };
 
-export const rand = (base: number, variance: number) => base * (1 + (Math.random() - 0.5) * variance);
+const rand = (base: number, variance: number) => base * (1 + (Math.random() - 0.5) * variance);
 
 export const playTone = (freq: number, duration: number, volume: number, type: OscillatorType, freqEnd?: number, filterFreq?: number) => {
     if (muted) return;

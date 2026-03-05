@@ -49,20 +49,12 @@ export interface SaveSlotData {
     dialogTriggerProgress?: DialogTriggerProgress;
 }
 
-/** Minimal slot info for UI display */
-export interface SaveSlotInfo {
-    slotName: string;
-    timestamp: number;
-    partyLevel: number;
-    areaId: AreaId;
-}
-
 /** Storage structure in localStorage */
 export interface SaveGameStorage {
     slots: (SaveSlotData | null)[];
 }
 
-export type SaveLoadErrorCode =
+type SaveLoadErrorCode =
     | "invalid_slot"
     | "storage_unavailable"
     | "storage_corrupted"
@@ -71,7 +63,7 @@ export type SaveLoadErrorCode =
     | "invalid_save_data"
     | "unknown_area";
 
-export interface SaveLoadSuccess {
+interface SaveLoadSuccess {
     ok: true;
 }
 
@@ -83,7 +75,7 @@ export interface SaveLoadFailure {
 
 export type SaveLoadOperationResult = SaveLoadSuccess | SaveLoadFailure;
 
-export interface SaveLoadDataSuccess {
+interface SaveLoadDataSuccess {
     ok: true;
     data: SaveSlotData;
 }

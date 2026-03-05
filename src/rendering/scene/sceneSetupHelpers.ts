@@ -36,12 +36,12 @@ export const ENABLE_DOOR_POINT_LIGHTS = false;
 export const RENDERER_MAX_PIXEL_RATIO = 1.25;
 export const RENDER_ORDER_FOG = 1100;
 
-export interface FogFootprintCell {
+interface FogFootprintCell {
     x: number;
     z: number;
 }
 
-export interface FogFootprintData {
+interface FogFootprintData {
     centerX: number;
     centerZ: number;
     radius: number;
@@ -125,7 +125,7 @@ export function applyStaticRenderOrder(scene: THREE.Scene): void {
     });
 }
 
-export function buildFogFootprintCells(
+function buildFogFootprintCells(
     centerX: number,
     centerZ: number,
     radius: number,

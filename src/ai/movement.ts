@@ -44,13 +44,13 @@ const jitterTracking: Record<number, JitterState> = {};
 // STUCK DETECTION
 // =============================================================================
 
-export interface MoveStart {
+interface MoveStart {
     time: number;
     x: number;
     z: number;
 }
 
-export interface StuckResult {
+interface StuckResult {
     isStuck: boolean;
     isReallyStuck: boolean;
     isJittering: boolean;

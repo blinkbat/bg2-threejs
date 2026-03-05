@@ -137,7 +137,7 @@ interface GameProps {
     onReady?: () => void;
 }
 
-export interface SaveableGameState {
+interface SaveableGameState {
     players: PersistedPlayer[];
     currentAreaId: AreaId;
     openedChests: Set<string>;

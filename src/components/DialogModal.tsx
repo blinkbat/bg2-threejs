@@ -1,7 +1,7 @@
 import { useEffect, type CSSProperties } from "react";
 import type { DialogChoice } from "../dialog/types";
 
-export interface DialogChoiceOption {
+interface DialogChoiceOption {
     choice: DialogChoice;
     disabled: boolean;
     disabledReason?: string;

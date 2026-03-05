@@ -4,7 +4,7 @@ import type { AreaId } from "../areas";
 import { SAVE_VERSION } from "./constants";
 import type { DialogTriggerProgress, SaveLoadFailure, SaveSlotData, SavedPlayer } from "./types";
 
-export interface SaveSnapshotState {
+interface SaveSnapshotState {
     players: SavedPlayer[];
     currentAreaId: AreaId;
     openedChests: Set<string>;
@@ -16,7 +16,7 @@ export interface SaveSnapshotState {
     dialogTriggerProgress: DialogTriggerProgress;
 }
 
-export interface BuildSaveSlotDataInput {
+interface BuildSaveSlotDataInput {
     timestamp: number;
     slotName: string;
     state: SaveSnapshotState;
@@ -24,11 +24,11 @@ export interface BuildSaveSlotDataInput {
     inventory: PartyInventory;
 }
 
-export interface LoadableAreaDefinition {
+interface LoadableAreaDefinition {
     defaultSpawn: { x: number; z: number };
 }
 
-export interface ResolvedLoadedSaveState {
+interface ResolvedLoadedSaveState {
     areaId: AreaId;
     spawnPoint: { x: number; z: number };
     players: SavedPlayer[];
@@ -43,7 +43,7 @@ export interface ResolvedLoadedSaveState {
     dialogTriggerProgress: DialogTriggerProgress;
 }
 
-export type ResolveLoadedSaveResult =
+type ResolveLoadedSaveResult =
     | { ok: true; data: ResolvedLoadedSaveState }
     | SaveLoadFailure;
 
@@ -95,7 +95,7 @@ function normalizeStringArray(values: readonly string[]): string[] {
     return normalized;
 }
 
-export function normalizeDialogTriggerProgress(progress: DialogTriggerProgress | undefined): DialogTriggerProgress {
+function normalizeDialogTriggerProgress(progress: DialogTriggerProgress | undefined): DialogTriggerProgress {
     const normalized: DialogTriggerProgress = {};
     if (!progress) return normalized;
 

@@ -321,4 +321,3 @@ export interface EnemyStats {
 // =============================================================================
 
 /** Check if an enemy has a front shield (requires EnemyStats) */
-export const hasFrontShield = (stats: EnemyStats): boolean => stats.frontShield === true;

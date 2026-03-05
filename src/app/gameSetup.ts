@@ -32,7 +32,7 @@ export interface PersistedPlayer {
     summonedBy?: number;
 }
 
-export interface CreateUnitsForAreaOptions {
+interface CreateUnitsForAreaOptions {
     persistedPlayers: PersistedPlayer[] | null;
     spawnPoint: { x: number; z: number } | null;
     spawnDirection?: CardinalDirection;

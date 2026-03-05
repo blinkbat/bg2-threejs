@@ -14,28 +14,28 @@ export interface DialogSpeaker {
     portraitTint: string;
 }
 
-export type DialogMenuId = "controls" | "save_game" | "load_game";
-export type DialogEventId = "spend_the_night";
+type DialogMenuId = "controls" | "save_game" | "load_game";
+type DialogEventId = "spend_the_night";
 
-export interface DialogOpenMenuAction {
+interface DialogOpenMenuAction {
     type: "open_menu";
     menuId: DialogMenuId;
 }
 
-export interface DialogEventAction {
+interface DialogEventAction {
     type: "event";
     eventId: DialogEventId;
 }
 
 export type DialogUiAction = DialogOpenMenuAction | DialogEventAction;
 
-export interface DialogChoicePartyGatheredCondition {
+interface DialogChoicePartyGatheredCondition {
     type: "party_is_gathered";
     maxDistance?: number;
     disabledMessage?: string;
 }
 
-export interface DialogChoicePartyHasGoldCondition {
+interface DialogChoicePartyHasGoldCondition {
     type: "party_has_gold";
     amount: number;
     disabledMessage?: string;

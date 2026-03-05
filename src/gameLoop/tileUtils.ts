@@ -10,7 +10,7 @@ import { disposeBasicMesh } from "../rendering/disposal";
 // =============================================================================
 
 /** Base interface for all tile types (pause-safe with delta time accumulation) */
-export interface BaseTile {
+interface BaseTile {
     mesh: THREE.Mesh;
     x: number;
     z: number;
@@ -20,7 +20,7 @@ export interface BaseTile {
 }
 
 /** Configuration for creating tile meshes */
-export interface TileMeshConfig {
+interface TileMeshConfig {
     color: string;
     opacity: number;
     yPosition: number;

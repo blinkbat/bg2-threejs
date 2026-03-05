@@ -306,7 +306,7 @@ export const COLORS = {
 // =============================================================================
 
 type DamageTypeForColor = "physical" | "fire" | "cold" | "lightning" | "chaos" | "holy";
-export type SkillTypeForColor = "damage" | "heal" | "buff" | "taunt" | "flurry" | "debuff" | "trap" | "sanctuary" | "mana_transfer" | "smite" | "energy_shield" | "aoe_buff" | "restoration" | "revive" | "dodge" | "summon";
+type SkillTypeForColor = "damage" | "heal" | "buff" | "taunt" | "flurry" | "debuff" | "trap" | "sanctuary" | "mana_transfer" | "smite" | "energy_shield" | "aoe_buff" | "restoration" | "revive" | "dodge" | "summon";
 
 /** Canonical color for a raw damage type */
 export function getDamageTypeColor(damageType: DamageTypeForColor | undefined): string {

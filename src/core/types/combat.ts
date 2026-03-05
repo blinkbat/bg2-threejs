@@ -6,8 +6,8 @@ import * as THREE from "three";
 
 // Damage types - armor only reduces physical damage
 export type DamageType = "physical" | "fire" | "cold" | "lightning" | "chaos" | "holy";
-export type SkillDeliveryMode = "melee" | "ranged";
-export type SkillOnHitEffectType = "stun" | "attack_down" | "move_slow";
+type SkillDeliveryMode = "melee" | "ranged";
+type SkillOnHitEffectType = "stun" | "attack_down" | "move_slow";
 
 export interface SkillOnHitEffect {
     type: SkillOnHitEffectType;
@@ -84,7 +84,7 @@ export interface SwingAnimation {
 // PROJECTILES
 // =============================================================================
 
-export interface BaseProjectile {
+interface BaseProjectile {
     mesh: THREE.Mesh;
     attackerId: number;
     speed: number;

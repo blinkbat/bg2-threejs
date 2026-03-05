@@ -96,7 +96,7 @@ export const WEAPONS: Record<string, WeaponItem> = {
 // SHIELDS
 // =============================================================================
 
-export const SHIELDS: Record<string, ShieldItem> = {
+const SHIELDS: Record<string, ShieldItem> = {
     buckler: {
         id: "buckler",
         name: "Buckler",
@@ -117,7 +117,7 @@ export const SHIELDS: Record<string, ShieldItem> = {
 // ARMOR
 // =============================================================================
 
-export const ARMORS: Record<string, ArmorItem> = {
+const ARMORS: Record<string, ArmorItem> = {
     desertGi: {
         id: "desertGi",
         name: "Desert Gi",
@@ -131,7 +131,7 @@ export const ARMORS: Record<string, ArmorItem> = {
 // ACCESSORIES
 // =============================================================================
 
-export const ACCESSORIES: Record<string, AccessoryItem> = {
+const ACCESSORIES: Record<string, AccessoryItem> = {
     ringOfTheDrakeling: {
         id: "ringOfTheDrakeling",
         name: "Ring of the Drakeling",
@@ -174,7 +174,7 @@ export const ACCESSORIES: Record<string, AccessoryItem> = {
 // KEYS
 // =============================================================================
 
-export const KEYS: Record<string, KeyItem> = {
+const KEYS: Record<string, KeyItem> = {
     sulliedBronzeKey: {
         id: "sulliedBronzeKey",
         name: "Sullied Bronze Key",
@@ -188,7 +188,7 @@ export const KEYS: Record<string, KeyItem> = {
 // CONSUMABLES
 // =============================================================================
 
-export const CONSUMABLES: Record<string, ConsumableItem> = {
+const CONSUMABLES: Record<string, ConsumableItem> = {
     smallManaPotion: {
         id: "smallManaPotion",
         name: "Glowfly Tear Vial",
@@ -319,9 +319,9 @@ const VALID_CONSUMABLE_EFFECTS = new Set(KNOWN_CONSUMABLE_EFFECTS);
 const VALID_CONSUMABLE_SOUNDS = new Set(KNOWN_CONSUMABLE_SOUNDS);
 const VALID_CONSUMABLE_TARGET_TYPES = new Set(KNOWN_CONSUMABLE_TARGET_TYPES);
 const ITEM_REGISTRY_STORAGE_VERSION = 1;
-export const ITEM_REGISTRY_STORAGE_KEY = "bg2_item_registry_v1";
+const ITEM_REGISTRY_STORAGE_KEY = "bg2_item_registry_v1";
 
-export interface ItemCategoryGroup {
+interface ItemCategoryGroup {
     category: ItemCategory;
     label: string;
     itemIds: string[];
@@ -391,7 +391,7 @@ function writeStoredRegistry(items: Item[]): void {
     storage.setItem(ITEM_REGISTRY_STORAGE_KEY, JSON.stringify(payload));
 }
 
-export function clearStoredItemRegistry(): void {
+function clearStoredItemRegistry(): void {
     const storage = getBrowserStorage();
     if (!storage) return;
     storage.removeItem(ITEM_REGISTRY_STORAGE_KEY);

@@ -102,7 +102,7 @@ export function isOffHandDisabled(equipment: CharacterEquipment): boolean {
 }
 
 /** Get total armor from equipment (armor slot + shield) */
-export function getEquipmentArmor(equipment: CharacterEquipment): number {
+function getEquipmentArmor(equipment: CharacterEquipment): number {
     let total = 0;
 
     // Armor slot
@@ -134,7 +134,7 @@ export function getEquipmentArmor(equipment: CharacterEquipment): number {
 }
 
 /** Get bonus max HP from accessories */
-export function getEquipmentBonusMaxHp(equipment: CharacterEquipment): number {
+function getEquipmentBonusMaxHp(equipment: CharacterEquipment): number {
     let total = 0;
     const slots: (keyof CharacterEquipment)[] = ["accessory1", "accessory2"];
 
@@ -152,7 +152,7 @@ export function getEquipmentBonusMaxHp(equipment: CharacterEquipment): number {
 }
 
 /** Get HP regen info from accessories (returns first regen item found) */
-export function getEquipmentHpRegen(equipment: CharacterEquipment): { amount: number; interval: number } | null {
+function getEquipmentHpRegen(equipment: CharacterEquipment): { amount: number; interval: number } | null {
     const slots: (keyof CharacterEquipment)[] = ["accessory1", "accessory2"];
 
     for (const slot of slots) {
@@ -169,7 +169,7 @@ export function getEquipmentHpRegen(equipment: CharacterEquipment): { amount: nu
 }
 
 /** Get aggro reduction multiplier from accessories (stacks multiplicatively) */
-export function getEquipmentAggroReduction(equipment: CharacterEquipment): number {
+function getEquipmentAggroReduction(equipment: CharacterEquipment): number {
     let multiplier = 1;
     const slots: (keyof CharacterEquipment)[] = ["accessory1", "accessory2"];
 
@@ -187,7 +187,7 @@ export function getEquipmentAggroReduction(equipment: CharacterEquipment): numbe
 }
 
 /** Get move speed multiplier from accessories (stacks multiplicatively) */
-export function getEquipmentMoveSpeedMultiplier(equipment: CharacterEquipment): number {
+function getEquipmentMoveSpeedMultiplier(equipment: CharacterEquipment): number {
     let multiplier = 1;
     const slots: (keyof CharacterEquipment)[] = ["accessory1", "accessory2"];
 
@@ -205,7 +205,7 @@ export function getEquipmentMoveSpeedMultiplier(equipment: CharacterEquipment): 
 }
 
 /** Get bonus magic damage from accessories */
-export function getEquipmentBonusMagicDamage(equipment: CharacterEquipment): number {
+function getEquipmentBonusMagicDamage(equipment: CharacterEquipment): number {
     let total = 0;
     const slots: (keyof CharacterEquipment)[] = ["accessory1", "accessory2"];
 
@@ -303,12 +303,6 @@ export function removeFromInventory(inventory: PartyInventory, itemId: string, q
 export function hasInInventory(inventory: PartyInventory, itemId: string, quantity: number = 1): boolean {
     const entry = inventory.items.find(e => e.itemId === itemId);
     return entry !== undefined && entry.quantity >= quantity;
-}
-
-/** Get quantity of an item in inventory */
-export function getInventoryQuantity(inventory: PartyInventory, itemId: string): number {
-    const entry = inventory.items.find(e => e.itemId === itemId);
-    return entry?.quantity ?? 0;
 }
 
 // =============================================================================
