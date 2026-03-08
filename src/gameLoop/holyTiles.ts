@@ -9,7 +9,7 @@ import { getUnitStats } from "../game/units";
 import { getUnitRadius, isInRange } from "../rendering/range";
 import { buildDamageContext, applyDamageToUnit } from "../combat/damageEffects";
 import { isUnitAlive } from "../combat/combatMath";
-import { createTileMesh, updateTileFade, removeExpiredTiles, clearAllTiles, getTileKey, type TileProcessConfig } from "./tileUtils";
+import { createTileMesh, updateTileFade, removeExpiredTiles, getTileKey, type TileProcessConfig } from "./tileUtils";
 
 // =============================================================================
 // CONSTANTS
@@ -36,7 +36,7 @@ const HOLY_TILE_HIT_RADIUS = 0.45;
  * Create or refresh a holy tile.
  * Returns the tile, or null if tile limit would be exceeded.
  */
-export function createHolyTile(
+function createHolyTile(
     scene: THREE.Scene,
     holyTiles: Map<string, HolyTile>,
     gridX: number,
@@ -227,11 +227,4 @@ export function processHolyTiles(
     });
 
     removeExpiredTiles(holyTiles, tilesToRemove, scene);
-}
-
-/**
- * Clear all holy tiles from the scene.
- */
-export function clearHolyTiles(holyTiles: Map<string, HolyTile>, scene: THREE.Scene): void {
-    clearAllTiles(holyTiles, scene);
 }

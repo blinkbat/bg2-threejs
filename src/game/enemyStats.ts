@@ -1,4 +1,4 @@
-import type { EnemyStats, EnemyType } from "../core/types";
+import type { EnemyStats, EnemyType, MonsterType } from "../core/types";
 import { DEFAULT_MOVE_SPEED } from "../core/constants";
 
 const AMOEBA_SPLIT_HP_SCALE = 0.7;
@@ -10,6 +10,7 @@ const AMOEBA_SPLIT_HP_SCALE = 0.7;
 export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     acid_slug: {
         name: "Acid Slug",
+        monsterType: "beast",
         hp: 45,
         maxHp: 45,
         damage: [2, 5],
@@ -27,6 +28,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     ancient_construct: {
         name: "Ancient Construct",
+        monsterType: "construct",
         hp: 300,
         maxHp: 300,
         damage: [10, 16],
@@ -50,6 +52,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     armored_crab: {
         name: "Armored Crab",
+        monsterType: "beast",
         hp: 95,
         maxHp: 95,
         damage: [7, 12],
@@ -66,6 +69,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     baby_kraken: {
         name: "Kraken Nymph",
+        monsterType: "beast",
         hp: 150,
         maxHp: 150,
         damage: [8, 14],
@@ -86,6 +90,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     basilisk: {
         name: "Basilisk Youngling",
+        monsterType: "beast",
         hp: 180,
         maxHp: 180,
         damage: [8, 14],
@@ -114,6 +119,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     bat: {
         name: "Vampire Bat",
+        monsterType: "beast",
         hp: 25,
         maxHp: 25,
         damage: [3, 7],
@@ -129,6 +135,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     bloated_corpse: {
         name: "Bloated Corpse",
+        monsterType: "undead",
         hp: 110,
         maxHp: 110,
         damage: [5, 9],
@@ -146,6 +153,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     brood_mother: {
         name: "Brood Mother",
+        monsterType: "beast",
         hp: 45,
         maxHp: 45,
         damage: [3, 8],
@@ -165,6 +173,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     broodling: {
         name: "Broodling",
+        monsterType: "beast",
         hp: 5,
         maxHp: 5,
         damage: [1, 2],  // Low damage
@@ -181,6 +190,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     chittering_crabling: {
         name: "Chittering Crabling",
+        monsterType: "beast",
         hp: 18,
         maxHp: 18,
         damage: [2, 4],
@@ -194,6 +204,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     corrupt_druid: {
         name: "Corrupt Druid",
+        monsterType: "humanoid",
         hp: 125,
         maxHp: 125,
         damage: [5, 9],        // Chaos missile damage
@@ -220,6 +231,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     dire_possum: {
         name: "Dire Possum",
+        monsterType: "beast",
         hp: 35,
         maxHp: 35,
         damage: [3, 7],
@@ -238,6 +250,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     feral_hound: {
         name: "Feral Hound",
+        monsterType: "beast",
         hp: 12,
         maxHp: 12,
         damage: [2, 5],
@@ -258,6 +271,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     giant_amoeba: {
         name: "Giant Amoeba",
+        monsterType: "beast",
         hp: 35,
         maxHp: 35,
         damage: [3, 6],
@@ -273,6 +287,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     innkeeper: {
         name: "Innkeeper",
+        monsterType: "humanoid",
         hp: 9999,
         maxHp: 9999,
         damage: [0, 0],
@@ -286,6 +301,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     kobold: {
         name: "Kobold",
+        monsterType: "humanoid",
         hp: 12,
         maxHp: 12,
         damage: [1, 5],
@@ -298,6 +314,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     kobold_archer: {
         name: "Kobold Archer",
+        monsterType: "humanoid",
         hp: 10,
         maxHp: 10,
         damage: [3, 7],
@@ -317,6 +334,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     kobold_witch_doctor: {
         name: "Kobold Witch Doctor",
+        monsterType: "humanoid",
         hp: 14,
         maxHp: 14,
         damage: [1, 3],
@@ -341,6 +359,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     kraken_tentacle: {
         name: "Kraken Tentacle",
+        monsterType: "beast",
         hp: 20,
         maxHp: 20,
         damage: [4, 8],
@@ -354,6 +373,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     magma_imp: {
         name: "Magma Imp",
+        monsterType: "demon",
         hp: 25,
         maxHp: 25,
         damage: [6, 10],       // Fireball damage
@@ -374,6 +394,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     necromancer: {
         name: "Necromancer",
+        monsterType: "humanoid",
         hp: 60,
         maxHp: 60,
         damage: [4, 8],            // Dark bolt damage
@@ -410,6 +431,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     occultist_dreamwalker: {
         name: "Occultist Dreamwalker",
+        monsterType: "humanoid",
         hp: 55,
         maxHp: 55,
         damage: [3, 6],
@@ -442,6 +464,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     occultist_firebreather: {
         name: "Occultist Firebreather",
+        monsterType: "humanoid",
         hp: 100,
         maxHp: 100,
         damage: [0, 0],
@@ -466,6 +489,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     occultist_pygmy: {
         name: "Occultist Pygmy",
+        monsterType: "humanoid",
         hp: 15,
         maxHp: 15,
         damage: [2, 4],
@@ -479,6 +503,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     ogre: {
         name: "Ogre",
+        monsterType: "humanoid",
         hp: 80,
         maxHp: 80,
         damage: [6, 10],
@@ -500,6 +525,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     skeleton_minion: {
         name: "Zombie",
+        monsterType: "undead",
         hp: 12,
         maxHp: 12,
         damage: [2, 4],
@@ -513,6 +539,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     skeleton_warrior: {
         name: "Skeleton Warrior",
+        monsterType: "undead",
         hp: 35,
         maxHp: 35,
         damage: [6, 10],
@@ -527,6 +554,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     spine_spitter: {
         name: "Spine Spitter",
+        monsterType: "beast",
         hp: 14,
         maxHp: 14,
         damage: [3, 6],
@@ -545,6 +573,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     undead_knight: {
         name: "Undead Knight",
+        monsterType: "undead",
         hp: 120,
         maxHp: 120,
         damage: [8, 18],
@@ -560,6 +589,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
     },
     wandering_shade: {
         name: "Wandering Shade",
+        monsterType: "undead",
         hp: 42,
         maxHp: 42,
         damage: [6, 11],
@@ -580,6 +610,26 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         }
     },
 };
+
+const MONSTER_TYPE_LABELS: Record<MonsterType, string> = {
+    beast: "Beast",
+    construct: "Construct",
+    demon: "Demon",
+    humanoid: "Humanoid",
+    undead: "Undead",
+};
+
+export function getEnemyMonsterType(enemyType: EnemyType): MonsterType {
+    return ENEMY_STATS[enemyType].monsterType;
+}
+
+export function isEnemyMonsterType(enemyType: EnemyType, monsterType: MonsterType): boolean {
+    return getEnemyMonsterType(enemyType) === monsterType;
+}
+
+export function getMonsterTypeLabel(monsterType: MonsterType): string {
+    return MONSTER_TYPE_LABELS[monsterType];
+}
 
 export function getAmoebaMaxHpForSplitCount(splitCount: number): number {
     const stage = Math.max(0, Math.floor(splitCount));

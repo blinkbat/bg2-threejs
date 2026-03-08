@@ -151,12 +151,3 @@ export function removeLootBag(scene: THREE.Scene, bag: LootBag): void {
     });
 }
 
-/**
- * Clear all loot bags (for area transitions or game restart)
- */
-export function clearAllLootBags(scene: THREE.Scene, lootBags: LootBag[]): void {
-    for (const bag of lootBags) {
-        removeLootBag(scene, bag);
-    }
-    resetLootBagIds();
-}

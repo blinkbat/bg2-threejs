@@ -15,9 +15,10 @@ interface SaveLoadModalProps {
     onLoad: (slot: number) => SaveLoadOperationResult;
     onDelete: (slot: number) => SaveLoadOperationResult;
     currentState: SaveSlotData | null;
+    saveDisabledReason: string | null;
 }
 
-export function SaveLoadModal({ mode, onClose, onSave, onLoad, onDelete, currentState }: SaveLoadModalProps) {
+export function SaveLoadModal({ mode, onClose, onSave, onLoad, onDelete, currentState, saveDisabledReason }: SaveLoadModalProps) {
     const slots = getSaveSlots();
     const [error, setError] = useState<string | null>(null);
 
@@ -78,6 +79,11 @@ export function SaveLoadModal({ mode, onClose, onSave, onLoad, onDelete, current
                         {error}
                     </div>
                 )}
+                {!error && mode === "save" && saveDisabledReason && (
+                    <div className="help-section" style={{ color: "var(--ui-color-text-dim)", paddingTop: 0 }}>
+                        {saveDisabledReason}
+                    </div>
+                )}
 
                 <div className="save-slots">
                     {slots.map((slot, index) => (
@@ -90,6 +96,7 @@ export function SaveLoadModal({ mode, onClose, onSave, onLoad, onDelete, current
                             onLoad={() => handleLoad(index)}
                             onDelete={() => handleDelete(index)}
                             canSave={currentState !== null}
+                            saveDisabledReason={saveDisabledReason}
                         />
                     ))}
                 </div>
@@ -112,10 +119,12 @@ interface SaveSlotProps {
     onLoad: () => void;
     onDelete: () => void;
     canSave: boolean;
+    saveDisabledReason: string | null;
 }
 
-function SaveSlot({ slot, index, mode, onSave, onLoad, onDelete, canSave }: SaveSlotProps) {
+function SaveSlot({ slot, index, mode, onSave, onLoad, onDelete, canSave, saveDisabledReason }: SaveSlotProps) {
     const isEmpty = slot === null;
+    const saveBlocked = mode === "save" && !!saveDisabledReason;
 
     return (
         <div className={`save-slot ${isEmpty ? "empty" : ""}`}>
@@ -140,7 +149,12 @@ function SaveSlot({ slot, index, mode, onSave, onLoad, onDelete, canSave }: Save
 
             <div className="save-slot-actions">
                 {mode === "save" && canSave && (
-                    <button className="btn btn-save mono" onClick={onSave}>
+                    <button
+                        className="btn btn-save mono"
+                        onClick={onSave}
+                        disabled={saveBlocked}
+                        title={saveBlocked ? saveDisabledReason ?? undefined : undefined}
+                    >
                         Save
                     </button>
                 )}

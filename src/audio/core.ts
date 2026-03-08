@@ -6,7 +6,6 @@ let audioCtx: AudioContext | null = null;
 let muted = false;
 
 export const isMuted = () => muted;
-export const setMuted = (value: boolean) => { muted = value; };
 export const toggleMute = () => { muted = !muted; return muted; };
 
 export const getAudioCtx = () => {

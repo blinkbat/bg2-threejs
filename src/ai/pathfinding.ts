@@ -263,7 +263,7 @@ function markVisibleFromUnit(visibility: number[][], ux: number, uz: number): bo
     return changed;
 }
 
-export function hasLineOfSight(x0: number, z0: number, x1: number, z1: number): boolean {
+function hasLineOfSight(x0: number, z0: number, x1: number, z1: number): boolean {
     // Bresenham's line - returns false if any blocked cell between start and end
     const dx = Math.abs(x1 - x0), dz = Math.abs(z1 - z0);
     const sx = x0 < x1 ? 1 : -1, sz = z0 < z1 ? 1 : -1;

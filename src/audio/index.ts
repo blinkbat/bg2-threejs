@@ -2,14 +2,14 @@
 // AUDIO INDEX - Re-exports all sound functions
 // =============================================================================
 
-import { isMuted, setMuted, toggleMute, playTone } from "./core";
+import { isMuted, toggleMute, playTone } from "./core";
 import { playFireball, playExplosion, playDeath, playBlock } from "./combat";
 import { playScreech, playBroodMotherScreech, playGush, playBark, playSplash, playMetallicSqueal, startFireBreathScratch } from "./creatures";
 import { playHeal, playWarcry, playMagicWave, playEnergyShield, playThunder, playHolyStrike, playVines } from "./spells";
 import { playDialogBlip, playGulp, playLevelUp, playGameStartFanfare, playSecretDiscovered, playCrunch, playGold, playFootsteps } from "./ui";
 
 // Re-export mute controls
-export { isMuted, setMuted, toggleMute };
+export { isMuted, toggleMute };
 
 // Export all sound functions as a single object
 export const soundFns = {

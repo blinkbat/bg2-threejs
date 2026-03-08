@@ -49,7 +49,7 @@ interface EnemyAttackContext {
 /**
  * Execute a ranged basic attack (spawns a projectile).
  */
-export function executeEnemyRangedAttack(ctx: EnemyAttackContext): void {
+function executeEnemyRangedAttack(ctx: EnemyAttackContext): void {
     const { scene, attackerG, target, attackerStats, projectilesRef, attacker } = ctx;
 
     const projectile = createProjectile(scene, "enemy", attackerG.position.x, attackerG.position.z, attackerStats.projectileColor!);
@@ -105,7 +105,7 @@ function createFireballMesh(scene: THREE.Scene, x: number, z: number): THREE.Mes
 /**
  * Execute a fireball attack (slow-moving projectile that hurts everything).
  */
-export function executeEnemyFireballAttack(ctx: EnemyAttackContext): void {
+function executeEnemyFireballAttack(ctx: EnemyAttackContext): void {
     const { scene, attacker, attackerG, targetG, attackerStats, projectilesRef } = ctx;
 
     // Calculate direction to target
@@ -146,7 +146,7 @@ export function executeEnemyFireballAttack(ctx: EnemyAttackContext): void {
 /**
  * Execute a melee basic attack with damage, poison, slow, and lifesteal handling.
  */
-export function executeEnemyMeleeAttack(ctx: EnemyAttackContext): void {
+function executeEnemyMeleeAttack(ctx: EnemyAttackContext): void {
     const {
         scene, attacker, attackerG, target, targetG, attackerStats,
         damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now,

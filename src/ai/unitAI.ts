@@ -917,7 +917,7 @@ export function updateAvoidanceCache(
  * Calculate avoidance vector from nearby units.
  * Player formation moves keep steering at reduced strength for cohesion.
  */
-export function calculateAvoidance(ctx: MovementContext, desiredX: number, desiredZ: number): { avoidX: number; avoidZ: number } {
+function calculateAvoidance(ctx: MovementContext, desiredX: number, desiredZ: number): { avoidX: number; avoidZ: number } {
     const { unit, g } = ctx;
 
     // Player formation movement keeps steering mild instead of fully disabled.
@@ -1049,7 +1049,7 @@ function resolveWallClearance(
 /**
  * Try to move with wall sliding - if direct movement blocked, try sliding along walls.
  */
-export function applyWallSliding(
+function applyWallSliding(
     unit: Unit,
     g: UnitGroup,
     moveX: number,

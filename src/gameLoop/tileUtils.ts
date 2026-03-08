@@ -116,19 +116,6 @@ export function removeExpiredTiles<T extends BaseTile>(
 }
 
 /**
- * Clear all tiles from a tile map.
- */
-export function clearAllTiles<T extends BaseTile>(
-    tiles: Map<string, T>,
-    scene: THREE.Scene
-): void {
-    tiles.forEach(tile => {
-        disposeBasicMesh(scene, tile.mesh);
-    });
-    tiles.clear();
-}
-
-/**
  * Get tile key from grid coordinates.
  */
 export function getTileKey(gridX: number, gridZ: number): string {

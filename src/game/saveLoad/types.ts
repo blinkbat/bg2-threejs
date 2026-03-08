@@ -6,6 +6,8 @@ import type { HotbarAssignments } from "../../hooks/localStorage";
 export interface SavedPlayer {
     id: number;
     hp: number;
+    x?: number;
+    z?: number;
     mana?: number;
     level?: number;
     exp?: number;
@@ -20,6 +22,7 @@ export interface SavedPlayer {
 }
 
 export type DialogTriggerProgress = Partial<Record<AreaId, string[]>>;
+export type EnemyPositionMap = Partial<Record<string, { x: number; z: number }>>;
 
 /** Complete save slot data */
 export interface SaveSlotData {
@@ -47,6 +50,8 @@ export interface SaveSlotData {
 
     // Dialog progression state by area
     dialogTriggerProgress?: DialogTriggerProgress;
+    // Current-area static enemy spawn positions keyed by `${areaId}-${spawnIndex}`
+    enemyPositions?: EnemyPositionMap;
 }
 
 /** Storage structure in localStorage */

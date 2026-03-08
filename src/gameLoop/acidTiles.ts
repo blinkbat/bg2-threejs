@@ -8,7 +8,7 @@ import { COLORS, ACID_TILE_DURATION, ACID_TICK_INTERVAL, ACID_DAMAGE_PER_TICK, A
 import type { EnemyStats } from "../core/types";
 import { getUnitStats } from "../game/units";
 import { applyDamageToUnit, buildDamageContext } from "../combat/damageEffects";
-import { createTileMesh, updateTileFade, removeExpiredTiles, clearAllTiles, getTileKey, isUnitOnTile, forEachTileInRadius, type TileProcessConfig } from "./tileUtils";
+import { createTileMesh, updateTileFade, removeExpiredTiles, getTileKey, isUnitOnTile, forEachTileInRadius, type TileProcessConfig } from "./tileUtils";
 import { isUnitAlive, setSkillCooldown } from "../combat/combatMath";
 
 // =============================================================================
@@ -189,14 +189,6 @@ export function processAcidTiles(
     });
 
     removeExpiredTiles(acidTiles, tilesToRemove, scene);
-}
-
-/**
- * Clear all acid tiles from the scene.
- * Called on game restart.
- */
-export function clearAcidTiles(acidTiles: Map<string, AcidTile>, scene: THREE.Scene): void {
-    clearAllTiles(acidTiles, scene);
 }
 
 // =============================================================================

@@ -5,11 +5,8 @@
 // Types
 export * from "./types";
 
-// Helpers
-export { computeAreaData } from "./helpers";
-
 // All areas loaded from .txt files
-import { TEXT_AREAS, getAllAreaIds, hasArea, registerArea, registerAreaFromText, getTextArea } from "./textLoader";
+import { TEXT_AREAS, getAllAreaIds, registerAreaFromText } from "./textLoader";
 
 import type { AreaId, AreaData, ComputedAreaData } from "./types";
 import { computeAreaData } from "./helpers";
@@ -18,7 +15,7 @@ import { computeAreaData } from "./helpers";
 export const AREAS: Record<string, AreaData> = TEXT_AREAS;
 
 // Re-export dynamic area functions for editor use
-export { getAllAreaIds, hasArea, registerArea, registerAreaFromText, getTextArea };
+export { getAllAreaIds, registerAreaFromText };
 
 // =============================================================================
 // AREA STATE MANAGEMENT

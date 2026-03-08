@@ -43,7 +43,7 @@ function cloneAreaDialogNode(node: AreaDialogNode): DialogNode {
     };
 }
 
-export function areaDialogToRuntimeDefinition(areaDialog: AreaDialogDefinition): DialogDefinition {
+function areaDialogToRuntimeDefinition(areaDialog: AreaDialogDefinition): DialogDefinition {
     const nodes: Record<string, DialogNode> = {};
 
     for (const node of Object.values(areaDialog.nodes)) {

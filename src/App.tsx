@@ -14,7 +14,7 @@ import type { Unit, Skill, CombatLogEntry, SelectionBox, CharacterStats, StatusE
 import { getCurrentArea, getCurrentAreaId, setCurrentArea, AREAS, DEFAULT_STARTING_AREA, type AreaId, type AreaTransition } from "./game/areas";
 import { UNIT_DATA, CORE_PLAYER_IDS, getEffectiveMaxHp, getEffectiveMaxMana, getXpForLevel, isCorePlayerId } from "./game/playerUnits";
 import { LEVEL_UP_HP, LEVEL_UP_MANA, LEVEL_UP_STAT_POINTS, LEVEL_UP_SKILL_POINTS, HP_PER_VITALITY, MP_PER_INTELLIGENCE } from "./game/statBonuses";
-import { ENEMY_STATS } from "./game/enemyStats";
+import { ENEMY_STATS, getMonsterTypeLabel } from "./game/enemyStats";
 import { SKILLS } from "./game/skills";
 import { rollEnemyLoot } from "./game/enemyLoot";
 import {
@@ -83,7 +83,7 @@ import {
 import { clearFogVisibilityMemory } from "./game/fogMemory";
 import { buildAreaDialogDefinitionMap } from "./dialog/areaDialogs";
 import { getDialogDefinitionById } from "./dialog/registry";
-import { isInRange } from "./rendering/range";
+import { getUnitRadius, isInRange } from "./rendering/range";
 import {
     getDialogTriggerPriority,
     getTriggerStartDialogId,
@@ -132,6 +132,7 @@ interface GameProps {
     initialOpenedSecretDoors: Set<string> | null;
     initialGold: number | null;
     initialKilledEnemies: Set<string> | null;
+    initialEnemyPositions: Partial<Record<string, { x: number; z: number }>> | null;
     initialDialogTriggerProgress: DialogTriggerProgress | null;
     dialogTriggersEnabled: boolean;
     onReady?: () => void;
@@ -144,9 +145,11 @@ interface SaveableGameState {
     openedSecretDoors: Set<string>;
     gold: number;
     killedEnemies: Set<string>;
+    enemyPositions: Partial<Record<string, { x: number; z: number }>>;
     hotbarAssignments: HotbarAssignments;
     formationOrder: number[];
     dialogTriggerProgress: DialogTriggerProgress;
+    saveLockReason: string | null;
 }
 
 interface LightingTuningSettings {
@@ -212,7 +215,7 @@ function serializeDialogTriggerProgressForSave(progress: Record<string, Set<stri
 function Game({
     onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, saveLoadOpen,
     persistedPlayers, spawnPoint, spawnDirection, onSaveClick, onLoadClick, gameStateRef,
-    initialOpenedChests, initialOpenedSecretDoors, initialGold, initialKilledEnemies, initialDialogTriggerProgress, dialogTriggersEnabled, onReady
+    initialOpenedChests, initialOpenedSecretDoors, initialGold, initialKilledEnemies, initialEnemyPositions, initialDialogTriggerProgress, dialogTriggersEnabled, onReady
 }: GameProps) {
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -229,9 +232,10 @@ function Game({
             spawnPoint,
             spawnDirection,
             initialKilledEnemies,
+            initialEnemyPositions,
             playtestUnlockAllSkills,
         }),
-        [persistedPlayers, spawnPoint, spawnDirection, initialKilledEnemies, playtestUnlockAllSkills]
+        [persistedPlayers, spawnPoint, spawnDirection, initialKilledEnemies, initialEnemyPositions, playtestUnlockAllSkills]
     );
 
     // =============================================================================
@@ -1164,14 +1168,20 @@ function Game({
         return () => window.clearInterval(intervalId);
     }, [addLog, currentAreaId, dialogTriggersEnabled, isDialogOpen, killedEnemies, playtestSkipDialogs, sceneState.unitGroups, startDialog, units]);
 
-    const buildPersistedPlayers = useCallback((allUnits: Unit[]): PersistedPlayer[] => {
+    const buildPersistedPlayers = useCallback((allUnits: Unit[], includePositions: boolean): PersistedPlayer[] => {
         const players = allUnits.filter(u => u.team === "player");
         const corePlayers = players.filter(u => !u.summonType);
         const summon = players.find(u => u.summonType === "ancestor_warrior" && u.hp > 0);
 
-        const toPersisted = (u: Unit): PersistedPlayer => ({
+        const toPersisted = (u: Unit): PersistedPlayer => {
+            const unitGroup = sceneState.unitGroups[u.id];
+            const x = unitGroup?.position.x ?? u.x;
+            const z = unitGroup?.position.z ?? u.z;
+            return {
             id: u.id,
             hp: u.hp,
+            x: includePositions ? x : undefined,
+            z: includePositions ? z : undefined,
             mana: u.mana,
             level: u.level,
             exp: u.exp,
@@ -1183,13 +1193,36 @@ function Game({
             cantripUses: u.cantripUses,
             summonType: u.summonType,
             summonedBy: u.summonedBy
-        });
+            };
+        };
 
         return [
             ...corePlayers.map(toPersisted),
             ...(summon ? [toPersisted(summon)] : [])
         ];
-    }, []);
+    }, [sceneState.unitGroups]);
+
+    const buildPersistedEnemyPositions = useCallback((allUnits: Unit[]): Partial<Record<string, { x: number; z: number }>> => {
+        const enemyPositions: Partial<Record<string, { x: number; z: number }>> = {};
+        const areaId = getCurrentAreaId();
+        const maxStaticEnemyId = 99 + getCurrentArea().enemySpawns.length;
+
+        for (const unit of allUnits) {
+            const isStaticEnemySpawn = unit.id >= 100 && unit.id <= maxStaticEnemyId;
+            const isEnemyOrNeutral = unit.team === "enemy" || unit.team === "neutral";
+            if (!isStaticEnemySpawn || !isEnemyOrNeutral || unit.hp <= 0) continue;
+
+            const spawnIndex = unit.id - 100;
+            const enemyKey = `${areaId}-${spawnIndex}`;
+            const unitGroup = sceneState.unitGroups[unit.id];
+            enemyPositions[enemyKey] = {
+                x: unitGroup?.position.x ?? unit.x,
+                z: unitGroup?.position.z ?? unit.z,
+            };
+        }
+
+        return enemyPositions;
+    }, [sceneState.unitGroups]);
 
     // Area transition handler
     const handleAreaTransition = useCallback((transition: AreaTransition) => {
@@ -1197,7 +1230,7 @@ function Game({
             addLog(`The way forward is blocked (unknown area: ${transition.targetArea}).`, "#ef4444");
             return;
         }
-        const persistedState = buildPersistedPlayers(unitsStateRef.current);
+        const persistedState = buildPersistedPlayers(unitsStateRef.current, false);
         onAreaTransition(persistedState, transition.targetArea, transition.targetSpawn, transition.direction);
     }, [addLog, buildPersistedPlayers, onAreaTransition]);
 
@@ -1403,23 +1436,93 @@ function Game({
         prevAliveEnemiesRef.current = currentAlive;
     }, [units, sceneState.scene, sceneState.unitGroups, gameRefs, addLog]);
 
+    const getSaveLockReason = useCallback((): string | null => {
+        const refs = gameRefs.current;
+        if (refs.projectiles.length > 0 || refs.swingAnimations.length > 0) {
+            return "Cannot save during active combat actions.";
+        }
+
+        const currentUnits = unitsStateRef.current;
+        const unitGroups = sceneState.unitGroups;
+        const aliveUnitsById = new Map<number, Unit>();
+        const alivePlayers: Unit[] = [];
+        const aliveEnemies: Unit[] = [];
+
+        for (const unit of currentUnits) {
+            if (unit.hp <= 0) continue;
+            aliveUnitsById.set(unit.id, unit);
+
+            if (unit.team === "player") {
+                alivePlayers.push(unit);
+                continue;
+            }
+
+            if (unit.team === "enemy" && unit.enemyType) {
+                aliveEnemies.push(unit);
+            }
+        }
+
+        for (const unit of currentUnits) {
+            if (unit.hp <= 0) continue;
+            const group = unitGroups[unit.id];
+            if (!group) continue;
+
+            const attackTarget = group.userData.attackTarget;
+            if (typeof attackTarget !== "number") continue;
+
+            const targetUnit = aliveUnitsById.get(attackTarget);
+            if (!targetUnit || targetUnit.team === unit.team) continue;
+            return "Cannot save while units are engaged in combat.";
+        }
+
+        for (const enemy of aliveEnemies) {
+            const enemyType = enemy.enemyType;
+            if (!enemyType) continue;
+            const enemyStats = ENEMY_STATS[enemyType];
+            const enemyGroup = unitGroups[enemy.id];
+            const enemyX = enemyGroup?.position.x ?? enemy.x;
+            const enemyZ = enemyGroup?.position.z ?? enemy.z;
+
+            for (const player of alivePlayers) {
+                const playerGroup = unitGroups[player.id];
+                const playerX = playerGroup?.position.x ?? player.x;
+                const playerZ = playerGroup?.position.z ?? player.z;
+                const inAggroRange = isInRange(
+                    enemyX,
+                    enemyZ,
+                    playerX,
+                    playerZ,
+                    getUnitRadius(player),
+                    enemyStats.aggroRange
+                );
+                if (inAggroRange) {
+                    return "Cannot save while enemies are nearby.";
+                }
+            }
+        }
+
+        return null;
+    }, [gameRefs, sceneState.unitGroups]);
+
     // Expose game state for save
     useEffect(() => {
         gameStateRef.current = () => {
             return {
-                players: buildPersistedPlayers(unitsStateRef.current),
+                players: buildPersistedPlayers(unitsStateRef.current, true),
                 currentAreaId: getCurrentAreaId(),
                 openedChests: openedChestsRef.current,
                 openedSecretDoors,
                 gold,
                 killedEnemies,
+                enemyPositions: buildPersistedEnemyPositions(unitsStateRef.current),
                 hotbarAssignments: hotbarAssignmentsRef.current,
                 formationOrder: formationOrderRef.current,
                 dialogTriggerProgress: serializeDialogTriggerProgressForSave(dialogTriggerProgressByAreaRef.current),
+                saveLockReason: getSaveLockReason(),
             };
         };
         return () => { gameStateRef.current = null; };
-    }, [buildPersistedPlayers, gameStateRef, openedSecretDoors, gold, killedEnemies]);
+    }, [buildPersistedPlayers, buildPersistedEnemyPositions, gameStateRef, openedSecretDoors, gold, killedEnemies, getSaveLockReason]);
 
     // Update selection rings
     useEffect(() => {
@@ -1667,7 +1770,7 @@ function Game({
     }, [units, paused, addLog, executeConsumable, consumableTargetingMode]);
 
     const handleWarpToArea = useCallback((areaId: AreaId) => {
-        const persistedState = buildPersistedPlayers(unitsStateRef.current);
+        const persistedState = buildPersistedPlayers(unitsStateRef.current, false);
         onAreaTransition(persistedState, areaId, AREAS[areaId].defaultSpawn);
     }, [buildPersistedPlayers, onAreaTransition]);
 
@@ -1975,12 +2078,16 @@ function Game({
                 const enemy = hoveredEnemyUnit;
                 if (!enemy?.enemyType || enemy.hp <= 0) return null;
                 const stats = ENEMY_STATS[enemy.enemyType];
+                const monsterTypeLabel = getMonsterTypeLabel(stats.monsterType);
                 const pct = enemy.hp / stats.maxHp;
                 const status = pct >= 1 ? "Unharmed" : pct > 0.75 ? "Scuffed" : pct > 0.5 ? "Injured" : pct > 0.25 ? "Badly wounded" : "Near death";
                 const statusColor = getHealthStatusColor(pct);
                 return (
                     <div className="enemy-tooltip" style={{ left: hoveredEnemy.x + 12, top: hoveredEnemy.y - 10 }}>
-                        <div className="enemy-tooltip-name">{stats.name}</div>
+                        <div className="enemy-tooltip-name">
+                            {stats.name}
+                            <span style={{ color: "var(--ui-color-text-dim)" }}>{` (${monsterTypeLabel})`}</span>
+                        </div>
                         <div className="enemy-tooltip-status" style={{ color: statusColor }}>{status}</div>
                         {debug && <div className="enemy-tooltip-status" style={{ color: "var(--ui-color-text-dim)" }}>{enemy.hp}/{stats.maxHp} HP</div>}
                     </div>
@@ -2145,8 +2252,10 @@ export default function App() {
     const [initialOpenedSecretDoors, setInitialOpenedSecretDoors] = useState<Set<string> | null>(null);
     const [initialGold, setInitialGold] = useState<number | null>(null);
     const [initialKilledEnemies, setInitialKilledEnemies] = useState<Set<string> | null>(null);
+    const [initialEnemyPositions, setInitialEnemyPositions] = useState<Partial<Record<string, { x: number; z: number }>> | null>(null);
     const [initialDialogTriggerProgress, setInitialDialogTriggerProgress] = useState<DialogTriggerProgress | null>(null);
     const [savePreviewState, setSavePreviewState] = useState<SaveSlotData | null>(null);
+    const [saveDisabledReason, setSaveDisabledReason] = useState<string | null>(null);
     const gameStateRef = useRef<(() => SaveableGameState) | null>(null);
     const [startupPhase, setStartupPhase] = useState<StartupPhase>(skipIntroByDefault ? "running" : "title");
     const [gameMounted, setGameMounted] = useState(skipIntroByDefault);
@@ -2210,6 +2319,7 @@ export default function App() {
         setInitialOpenedSecretDoors(null);
         setInitialGold(null);
         setInitialKilledEnemies(null);
+        setInitialEnemyPositions(null);
         setInitialDialogTriggerProgress(null);
         clearFogVisibilityMemory();
         initializeEquipmentState();
@@ -2226,6 +2336,7 @@ export default function App() {
         }
 
         // Persist world progression across the forced Game remount on area transitions.
+        setInitialEnemyPositions(null);
         const worldState = gameStateRef.current?.();
         if (worldState) {
             setInitialOpenedChests(new Set(worldState.openedChests));
@@ -2313,13 +2424,15 @@ export default function App() {
     useEffect(() => {
         if (!showSaveLoad) return;
         const interval = setInterval(() => {
+            const saveState = gameStateRef.current?.();
+            setSaveDisabledReason(saveLoadMode === "save" ? (saveState?.saveLockReason ?? null) : null);
             const preview = buildCurrentSavePreview(Date.now());
             if (preview) {
                 setSavePreviewState(preview);
             }
         }, 1000);
         return () => clearInterval(interval);
-    }, [showSaveLoad, buildCurrentSavePreview]);
+    }, [showSaveLoad, saveLoadMode, buildCurrentSavePreview]);
 
     const handleSave = (slot: number): SaveLoadOperationResult => {
         if (!gameStateRef.current) {
@@ -2330,6 +2443,13 @@ export default function App() {
             };
         }
         const state = gameStateRef.current();
+        if (state.saveLockReason) {
+            return {
+                ok: false,
+                code: "invalid_save_data",
+                error: state.saveLockReason,
+            };
+        }
         const areaData = AREAS[state.currentAreaId];
         const saveData = buildSaveSlotData({
             timestamp: Date.now(),
@@ -2349,7 +2469,6 @@ export default function App() {
         if (!resolved.ok) return resolved;
 
         const saveData = resolved.data;
-        clearFogVisibilityMemory();
         setAllEquipment(saveData.equipment);
         setPartyInventory(saveData.inventory);
         setCurrentAreaWithPathReset(saveData.areaId);
@@ -2357,6 +2476,7 @@ export default function App() {
         setInitialOpenedSecretDoors(new Set(saveData.openedSecretDoors));
         setInitialKilledEnemies(new Set(saveData.killedEnemies));
         setInitialGold(saveData.gold);
+        setInitialEnemyPositions(saveData.enemyPositions ?? null);
         setPersistedPlayers(saveData.players);
         setInitialDialogTriggerProgress(saveData.dialogTriggerProgress);
         setSpawnPoint(saveData.spawnPoint);
@@ -2374,12 +2494,15 @@ export default function App() {
     const openSaveLoadModal = useCallback((mode: "save" | "load") => {
         setSaveLoadMode(mode);
         setShowSaveLoad(true);
+        const saveState = gameStateRef.current?.();
+        setSaveDisabledReason(mode === "save" ? (saveState?.saveLockReason ?? null) : null);
         setSavePreviewState(buildCurrentSavePreview(Date.now()));
     }, [buildCurrentSavePreview]);
 
     const closeSaveLoadModal = useCallback(() => {
         setShowSaveLoad(false);
         setSavePreviewState(null);
+        setSaveDisabledReason(null);
     }, []);
 
     useEffect(() => {
@@ -2407,14 +2530,14 @@ export default function App() {
                     onLoadClick={() => openSaveLoadModal("load")}
                     gameStateRef={gameStateRef}
                     initialOpenedChests={initialOpenedChests} initialOpenedSecretDoors={initialOpenedSecretDoors}
-                    initialGold={initialGold} initialKilledEnemies={initialKilledEnemies}
+                    initialGold={initialGold} initialKilledEnemies={initialKilledEnemies} initialEnemyPositions={initialEnemyPositions}
                     initialDialogTriggerProgress={initialDialogTriggerProgress}
                     dialogTriggersEnabled={dialogTriggersEnabled}
                     onReady={handleSceneReady}
                 />
             )}
             {gameMounted && showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
-            {gameMounted && showSaveLoad && <SaveLoadModal mode={saveLoadMode} onClose={closeSaveLoadModal} onSave={handleSave} onLoad={handleLoad} onDelete={handleDelete} currentState={savePreviewState} />}
+            {gameMounted && showSaveLoad && <SaveLoadModal mode={saveLoadMode} onClose={closeSaveLoadModal} onSave={handleSave} onLoad={handleLoad} onDelete={handleDelete} currentState={savePreviewState} saveDisabledReason={saveDisabledReason} />}
             {startupPhase === "title" && (
                 <div className="startup-title-screen">
                     <div className="startup-title-card">

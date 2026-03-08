@@ -65,7 +65,7 @@ export function locationContainsCell(location: AreaLocation, x: number, z: numbe
         && z < location.z + location.h;
 }
 
-export function cloneDialogCondition(condition: AreaDialogTriggerCondition): AreaDialogTriggerCondition {
+function cloneDialogCondition(condition: AreaDialogTriggerCondition): AreaDialogTriggerCondition {
     if (condition.type === "on_area_load") {
         return { type: "on_area_load" };
     }
@@ -122,7 +122,7 @@ export function cloneDialogTrigger(trigger: AreaDialogTrigger): AreaDialogTrigge
     };
 }
 
-export function cloneDialogChoice(choice: AreaDialogChoice): AreaDialogChoice {
+function cloneDialogChoice(choice: AreaDialogChoice): AreaDialogChoice {
     return {
         id: choice.id,
         label: choice.label,
@@ -161,11 +161,11 @@ export function createDefaultDialogCondition(): AreaDialogTriggerCondition {
     return { type: "on_area_load" };
 }
 
-export function mapTriggerDialogId(dialogId: string, dialogIdRemap: Record<string, string>): string {
+function mapTriggerDialogId(dialogId: string, dialogIdRemap: Record<string, string>): string {
     return dialogIdRemap[dialogId] ?? dialogId;
 }
 
-export function remapTriggerDialogTargets(trigger: AreaDialogTrigger, dialogIdRemap: Record<string, string>): AreaDialogTrigger {
+function remapTriggerDialogTargets(trigger: AreaDialogTrigger, dialogIdRemap: Record<string, string>): AreaDialogTrigger {
     let didChange = false;
     const nextDialogId = trigger.dialogId
         ? mapTriggerDialogId(trigger.dialogId, dialogIdRemap)
@@ -195,7 +195,7 @@ export function remapTriggerDialogTargetsInList(triggers: AreaDialogTrigger[], d
     return triggers.map(trigger => remapTriggerDialogTargets(trigger, dialogIdRemap));
 }
 
-export function getNormalizedEnemySpawnOrderIndex(entity: EntityDef): number | null {
+function getNormalizedEnemySpawnOrderIndex(entity: EntityDef): number | null {
     if (typeof entity.enemySpawnIndex !== "number" || !Number.isFinite(entity.enemySpawnIndex)) {
         return null;
     }

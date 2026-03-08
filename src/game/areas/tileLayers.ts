@@ -6,7 +6,7 @@ export const TILE_EMPTY = ".";
 const MIN_TILE_TINT_PERCENT = -35;
 const MAX_TILE_TINT_PERCENT = 35;
 
-export function createEmptyTileGrid(width: number, height: number, fill: string = TILE_EMPTY): string[][] {
+function createEmptyTileGrid(width: number, height: number, fill: string = TILE_EMPTY): string[][] {
     return Array.from({ length: height }, () => Array(width).fill(fill));
 }
 
@@ -14,11 +14,11 @@ export function createEmptyTintGrid(width: number, height: number, fill: number 
     return Array.from({ length: height }, () => Array(width).fill(fill));
 }
 
-export function cloneTileGrid(grid: string[][]): string[][] {
+function cloneTileGrid(grid: string[][]): string[][] {
     return grid.map(row => [...row]);
 }
 
-export function cloneTintGrid(grid: number[][]): number[][] {
+function cloneTintGrid(grid: number[][]): number[][] {
     return grid.map(row => [...row]);
 }
 

@@ -2,7 +2,7 @@
 import type { HotbarAssignments } from "../../hooks/localStorage";
 import type { AreaId } from "../areas";
 import { SAVE_VERSION } from "./constants";
-import type { DialogTriggerProgress, SaveLoadFailure, SaveSlotData, SavedPlayer } from "./types";
+import type { DialogTriggerProgress, EnemyPositionMap, SaveLoadFailure, SaveSlotData, SavedPlayer } from "./types";
 
 interface SaveSnapshotState {
     players: SavedPlayer[];
@@ -14,6 +14,7 @@ interface SaveSnapshotState {
     hotbarAssignments: HotbarAssignments;
     formationOrder: number[];
     dialogTriggerProgress: DialogTriggerProgress;
+    enemyPositions: EnemyPositionMap;
 }
 
 interface BuildSaveSlotDataInput {
@@ -41,6 +42,7 @@ interface ResolvedLoadedSaveState {
     hotbarAssignments?: HotbarAssignments;
     formationOrder?: number[];
     dialogTriggerProgress: DialogTriggerProgress;
+    enemyPositions: EnemyPositionMap;
 }
 
 type ResolveLoadedSaveResult =
@@ -111,6 +113,20 @@ function normalizeDialogTriggerProgress(progress: DialogTriggerProgress | undefi
     return normalized;
 }
 
+function normalizeEnemyPositions(enemyPositions: EnemyPositionMap | undefined): EnemyPositionMap {
+    const normalized: EnemyPositionMap = {};
+    if (!enemyPositions) return normalized;
+
+    for (const [enemyKey, position] of Object.entries(enemyPositions)) {
+        const trimmedEnemyKey = enemyKey.trim();
+        if (trimmedEnemyKey.length === 0 || !position) continue;
+        if (!Number.isFinite(position.x) || !Number.isFinite(position.z)) continue;
+        normalized[trimmedEnemyKey] = { x: position.x, z: position.z };
+    }
+
+    return normalized;
+}
+
 export function buildSaveSlotData(input: BuildSaveSlotDataInput): SaveSlotData {
     const { timestamp, slotName, state, equipment, inventory } = input;
 
@@ -129,6 +145,7 @@ export function buildSaveSlotData(input: BuildSaveSlotDataInput): SaveSlotData {
         hotbarAssignments: cloneHotbarAssignments(state.hotbarAssignments),
         formationOrder: [...state.formationOrder],
         dialogTriggerProgress: normalizeDialogTriggerProgress(state.dialogTriggerProgress),
+        enemyPositions: normalizeEnemyPositions(state.enemyPositions),
     };
 }
 
@@ -146,11 +163,19 @@ export function resolveLoadedSaveState(
         return createFailure("unknown_area", `Save references unknown area "${saveData.currentAreaId}".`);
     }
 
+    const savedCorePlayerWithPosition = saveData.players.find(player =>
+        player.summonType === undefined && Number.isFinite(player.x) && Number.isFinite(player.z)
+    );
+    let spawnPoint = { x: area.defaultSpawn.x, z: area.defaultSpawn.z };
+    if (savedCorePlayerWithPosition && savedCorePlayerWithPosition.x !== undefined && savedCorePlayerWithPosition.z !== undefined) {
+        spawnPoint = { x: savedCorePlayerWithPosition.x, z: savedCorePlayerWithPosition.z };
+    }
+
     return {
         ok: true,
         data: {
             areaId: saveData.currentAreaId,
-            spawnPoint: { x: area.defaultSpawn.x, z: area.defaultSpawn.z },
+            spawnPoint,
             players: saveData.players.map(player => ({ ...player })),
             openedChests: new Set(saveData.openedChests),
             openedSecretDoors: new Set(saveData.openedSecretDoors),
@@ -161,6 +186,7 @@ export function resolveLoadedSaveState(
             hotbarAssignments: saveData.hotbarAssignments ? cloneHotbarAssignments(saveData.hotbarAssignments) : undefined,
             formationOrder: saveData.formationOrder ? [...saveData.formationOrder] : undefined,
             dialogTriggerProgress: normalizeDialogTriggerProgress(saveData.dialogTriggerProgress),
+            enemyPositions: normalizeEnemyPositions(saveData.enemyPositions),
         },
     };
 }

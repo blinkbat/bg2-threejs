@@ -33,7 +33,7 @@ export function getDirectionAndDistance(
  * @param targetZ - Target's Z position
  * @param targetFacing - Target's facing direction in radians (0 = +Z direction)
  */
-export function isBlockedByFrontShield(
+function isBlockedByFrontShield(
     attackerX: number, attackerZ: number,
     targetX: number, targetZ: number,
     targetFacing: number
@@ -97,7 +97,7 @@ export function rollSkillHit(skill: SkillHitProfile | undefined, attackerAccurac
  * Check if an attack is a critical hit based on unit's dexterity.
  * @returns true if crit occurs
  */
-export function rollCrit(attacker: Unit | undefined): boolean {
+function rollCrit(attacker: Unit | undefined): boolean {
     if (!attacker) return false;
     const critChance = getDexterityCritChance(attacker);
     return rollChance(critChance);
@@ -107,7 +107,7 @@ export function rollCrit(attacker: Unit | undefined): boolean {
  * Roll damage with potential critical hit.
  * @returns object with final damage and whether it was a crit
  */
-export function rollDamageWithCrit(
+function rollDamageWithCrit(
     min: number,
     max: number,
     attacker: Unit | undefined
@@ -636,7 +636,7 @@ export function isUnitAlive(unit: Unit, defeatedThisFrame?: Set<number>): boolea
  * @param targetZ - Target's Z position
  * @param blockModifier - Optional modifier to reduce block effectiveness (e.g., 0.5 for magic projectiles)
  */
-export function checkFrontShieldBlock(
+function checkFrontShieldBlock(
     enemyStats: { frontShield?: boolean },
     enemyFacing: number | undefined,
     attackerX: number,
@@ -658,7 +658,7 @@ export function checkFrontShieldBlock(
  * @param enemyStats - The enemy's stats (from ENEMY_STATS lookup)
  * @param damageType - The type of damage being dealt
  */
-export function checkEnemyBlockChance(
+function checkEnemyBlockChance(
     enemyStats: { blockChance?: number },
     damageType: DamageType
 ): boolean {

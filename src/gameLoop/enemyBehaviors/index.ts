@@ -5,9 +5,6 @@
 // Pre-attack dispatch (fire-and-forget behaviors)
 export { runPreAttackBehaviors } from "./preAttack";
 
-// Brood Mother
-export { trySpawnMinion } from "./broodMother";
-
 // Construct Charge
 export { tryStartChargeAttack } from "./charge";
 
@@ -19,42 +16,24 @@ export { tryVinesSkill } from "./vines";
 
 // Baby Kraken Tentacle
 export {
-    trySpawnTentacle,
     updateTentacles,
-    handleTentacleDeath,
-    isTentacleUnit,
     clearTentacles
 } from "./tentacle";
-
-// Necromancer Raise Dead
-export { tryRaiseDead } from "./necromancer";
-
-// Necromancer Curse
-export { tryCurse } from "./curse";
 
 // Acid Slug Patrol
 export { tryAcidSlugPatrol, processAcidTrailAndAura } from "./acidSlug";
 
 // Basilisk Glare
-export { tryBasiliskGlare, processGlares, clearGlares, isUnitCastingGlare } from "./basiliskGlare";
-
-// Occultist Dreamwalker Sleep
-export { trySleep } from "./sleep";
-
-// Occultist Dreamwalker Dream Eater
-export { tryDreamEater } from "./dreamEater";
+export { processGlares, clearGlares, isUnitCastingGlare } from "./basiliskGlare";
 
 // Baby Kraken Submerge
 export {
-    trySubmergeKraken,
-    isKrakenSubmerged,
-    isKrakenFullySubmerged,
     updateSubmergedKrakens,
     clearSubmergedKrakens
 } from "./submerge";
 
 // Wandering Shade Phase Shift
-export { tryShadePhase, isShadePhased, processShadePhases, clearShadePhases } from "./shadePhase";
+export { isShadePhased, processShadePhases, clearShadePhases } from "./shadePhase";
 
 // Shared untargetable/hidden state helpers
 export { isEnemyUntargetable, isEnemyHiddenFromView } from "./untargetable";

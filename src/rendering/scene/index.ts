@@ -54,7 +54,7 @@ import {
 } from "./sceneSetupHelpers";
 
 // Re-export types
-export type { DoorMesh, SecretDoorMesh, ChestMeshData, SceneRefs } from "./types";
+export type { DoorMesh, SecretDoorMesh, ChestMeshData } from "./types";
 import type { DoorMesh, SecretDoorMesh, ChestMeshData, SceneRefs } from "./types";
 
 // Re-export update functions
@@ -70,7 +70,7 @@ export {
 } from "./updates";
 
 // Re-export unit functions
-export { getEffectiveSize, addUnitToScene, createUnitSceneGroup, ensureTexturesLoaded } from "./units";
+export { addUnitToScene } from "./units";
 import { createUnitSceneGroup, ensureTexturesLoaded } from "./units";
 
 // =============================================================================

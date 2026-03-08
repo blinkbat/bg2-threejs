@@ -47,7 +47,7 @@ import undeadKnightSpriteUrl from "../../assets/undead_knight.png";
 /**
  * Calculate effective size for a unit, accounting for amoeba split scaling
  */
-export function getEffectiveSize(unit: Unit, baseSize: number): number {
+function getEffectiveSize(unit: Unit, baseSize: number): number {
     if (unit.enemyType === "giant_amoeba" && unit.splitCount !== undefined) {
         // Each split reduces size: 2.0 → 1.4 → 1.0 → 0.7
         const scaleFactor = Math.pow(0.7, unit.splitCount);

@@ -3,16 +3,15 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitGroup, DamageText } from "../../core/types";
+import type { Unit, UnitGroup } from "../../core/types";
 import { ENEMY_STATS } from "../../game/enemyStats";
 import { isInRange, getUnitRadius } from "../../rendering/range";
 import { getNextUnitId } from "../../core/unitIds";
 import { soundFns } from "../../audio";
 import { setSkillCooldown } from "../../combat/combatMath";
-import { COLORS, TENTACLE_EMERGE_DURATION, TENTACLE_START_Y, MAX_LIFETIME_TENTACLES, TENTACLE_SPAWN_BUFFER } from "../../core/constants";
+import { TENTACLE_EMERGE_DURATION, TENTACLE_START_Y, MAX_LIFETIME_TENTACLES, TENTACLE_SPAWN_BUFFER } from "../../core/constants";
 import { getGameTime } from "../../core/gameClock";
 import { scheduleEffectAnimation } from "../../core/effectScheduler";
-import { applyDamageToUnit, type DamageContext } from "../../combat/damageEffects";
 import { getUnitById } from "../../game/unitQuery";
 import type { TentacleContext } from "./types";
 
@@ -205,65 +204,6 @@ export function updateTentacles(
             addLog("A tentacle retreats back underground.", "#888888");
         }
     }
-}
-
-// =============================================================================
-// TENTACLE DEATH HANDLING
-// =============================================================================
-
-/**
- * Handle tentacle death - damage the parent kraken.
- * Call this when a kraken_tentacle dies.
- */
-export function handleTentacleDeath(
-    tentacleUnit: Unit,
-    unitsState: Unit[],
-    unitsRef: Record<number, UnitGroup>,
-    scene: THREE.Scene,
-    damageTexts: DamageText[],
-    hitFlashRef: Record<number, number>,
-    unitsStateRef: React.RefObject<Unit[]>,
-    setUnits: React.Dispatch<React.SetStateAction<Unit[]>>,
-    addLog: (text: string, color?: string) => void,
-    now: number,
-    defeatedThisFrame: Set<number>
-): void {
-    void unitsState; // Kept for API compat; lookup uses cached getUnitById
-    if (!tentacleUnit.spawnedBy) return;
-
-    const parentKrakenCandidate = getUnitById(tentacleUnit.spawnedBy!);
-    const parentKraken = parentKrakenCandidate && parentKrakenCandidate.hp > 0 ? parentKrakenCandidate : undefined;
-    if (!parentKraken) return;
-
-    const krakenG = unitsRef[parentKraken.id];
-    if (!krakenG) return;
-
-    const krakenStats = ENEMY_STATS.baby_kraken;
-    const damage = krakenStats.tentacleSkill?.damageToParent ?? 15;
-
-    const dmgCtx: DamageContext = {
-        scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef,
-        setUnits, addLog, now, defeatedThisFrame
-    };
-
-    applyDamageToUnit(dmgCtx, parentKraken.id, krakenG, damage, krakenStats.name, {
-        color: COLORS.damageEnemy,
-        hitMessage: { text: `The severed tentacle damages ${krakenStats.name} for ${damage}!`, color: "#ff6600" },
-        targetUnit: parentKraken
-    });
-
-    // Remove from tracking
-    const idx = activeTentacles.findIndex(t => t.unitId === tentacleUnit.id);
-    if (idx !== -1) {
-        activeTentacles.splice(idx, 1);
-    }
-}
-
-/**
- * Check if a unit is a tentacle that should damage its parent on death.
- */
-export function isTentacleUnit(unit: Unit): boolean {
-    return unit.enemyType === "kraken_tentacle" && unit.spawnedBy !== undefined;
 }
 
 // =============================================================================

@@ -60,25 +60,6 @@ export function getAllAreaIds(): string[] {
     return Array.from(areaMap.keys());
 }
 
-// Get text area by ID
-export function getTextArea(areaId: AreaId): AreaData | undefined {
-    return areaMap.get(areaId);
-}
-
-// Check if an area exists
-export function hasArea(areaId: string): boolean {
-    return areaMap.has(areaId);
-}
-
-// Register a new area at runtime (for editor use)
-export function registerArea(areaId: string, areaData: AreaData): void {
-    if (areaData.id !== areaId) {
-        upsertArea({ ...areaData, id: areaId as AreaId });
-        return;
-    }
-    upsertArea(areaData);
-}
-
 // Register area from text content (for editor save)
 export function registerAreaFromText(areaId: string, textContent: string): AreaData {
     const parsedArea = textToAreaData(textContent);

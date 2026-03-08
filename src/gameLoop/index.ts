@@ -25,23 +25,23 @@ import { isEnemyKiting, clearEnemyKiting } from "../game/enemyState";
 export { updateDamageTexts, updateHitFlash, updatePoisonVisuals, updateEnergyShieldVisuals, updateFogOfWar, resetFogCache, updateSpriteFacing, updateAncestorGhostVisuals, resetSpriteFacing } from "./visuals";
 export { processStatusEffects } from "./statusEffects";
 export { updateProjectiles, pruneStaleVolleys } from "./projectiles";
-export { spawnSwingIndicator, updateSwingAnimations } from "./swingAnimations";
-export { processAcidTiles, createAcidTile, createAcidPool, clearAcidTiles } from "./acidTiles";
-export { processSanctuaryTiles, createSanctuaryTile, clearSanctuaryTiles } from "./sanctuaryTiles";
-export { processHolyTiles, createHolyTile, createHolyCross, clearHolyTiles } from "./holyTiles";
-export { processChargeAttacks, clearChargeAttacks, isUnitCharging } from "./constructCharge";
-export { processFireBreaths, clearFireBreaths, isUnitBreathing } from "./fireBreath";
+export { updateSwingAnimations } from "./swingAnimations";
+export { processAcidTiles, createAcidPool } from "./acidTiles";
+export { processSanctuaryTiles } from "./sanctuaryTiles";
+export { processHolyTiles } from "./holyTiles";
+export { processChargeAttacks, clearChargeAttacks } from "./constructCharge";
+export { processFireBreaths, clearFireBreaths } from "./fireBreath";
 export { processCurses, clearCurses } from "./necromancerCurse";
 import { executeEnemySwipe, executeEnemyHeal } from "./enemySkills";
 import { executeEnemyBasicAttack } from "./enemyAttack";
 import { isUnitCharging } from "./constructCharge";
 import { isUnitBreathing, startFireBreath } from "./fireBreath";
 import { tryStartChargeAttack, tryLeapToTarget, isUnitLeaping, tryVinesSkill, tryAcidSlugPatrol, processAcidTrailAndAura, runPreAttackBehaviors, isShadePhased, isUnitCastingGlare } from "./enemyBehaviors";
-export { clearLeaps, updateLeaps, isUnitLeaping, updateTentacles, clearTentacles, trySubmergeKraken, isKrakenSubmerged, isKrakenFullySubmerged, updateSubmergedKrakens, clearSubmergedKrakens, processGlares, clearGlares, isUnitCastingGlare, processShadePhases, clearShadePhases, isShadePhased } from "./enemyBehaviors";
-export { spawnLootBag, removeLootBag, clearAllLootBags, resetLootBagIds } from "./lootBags";
+export { clearLeaps, updateLeaps, updateTentacles, clearTentacles, updateSubmergedKrakens, clearSubmergedKrakens, processGlares, clearGlares, processShadePhases, clearShadePhases } from "./enemyBehaviors";
+export { spawnLootBag, removeLootBag, resetLootBagIds } from "./lootBags";
 
 // Re-export unit ID utilities for backwards compatibility
-export { getNextUnitId, initializeUnitIdCounter } from "../core/unitIds";
+export { initializeUnitIdCounter } from "../core/unitIds";
 
 // =============================================================================
 // UNIT AI & MOVEMENT

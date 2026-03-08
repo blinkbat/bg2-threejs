@@ -107,7 +107,7 @@ export type DamageDelivery =
  * - smite: lightning pillar, front-shield-only defense check, hit roll + damage
  * - ranged: spawns projectile (hit resolved on impact, no roll here)
  */
-export function executeTargetedDamageSkill(
+function executeTargetedDamageSkill(
     ctx: SkillExecutionContext,
     casterId: number,
     skill: Skill,

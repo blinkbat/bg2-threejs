@@ -10,7 +10,7 @@
 } from "../../core/types";
 import type { HotbarAssignments } from "../../hooks/localStorage";
 import { MAX_SLOTS, SAVE_VERSION } from "./constants";
-import type { DialogTriggerProgress, SaveSlotData, SavedPlayer } from "./types";
+import type { DialogTriggerProgress, EnemyPositionMap, SaveSlotData, SavedPlayer } from "./types";
 
 const HOTBAR_SLOT_COUNT = 5;
 
@@ -257,6 +257,13 @@ function sanitizeSavedPlayer(raw: unknown): SavedPlayer | null {
         hp: Math.max(0, hpRaw),
     };
 
+    const x = readFiniteNumber(raw, "x");
+    const z = readFiniteNumber(raw, "z");
+    if (x !== undefined && z !== undefined) {
+        player.x = x;
+        player.z = z;
+    }
+
     const mana = readFiniteNumber(raw, "mana");
     if (mana !== undefined) player.mana = Math.max(0, mana);
 
@@ -417,6 +424,23 @@ function sanitizeDialogTriggerProgress(raw: unknown): DialogTriggerProgress {
     return sanitized;
 }
 
+function sanitizeEnemyPositions(raw: unknown): EnemyPositionMap {
+    if (!isRecord(raw)) return {};
+
+    const sanitized: EnemyPositionMap = {};
+    for (const [enemyKeyRaw, positionRaw] of Object.entries(raw)) {
+        const enemyKey = enemyKeyRaw.trim();
+        if (enemyKey.length === 0) continue;
+        if (!isRecord(positionRaw)) continue;
+        const x = readFiniteNumber(positionRaw, "x");
+        const z = readFiniteNumber(positionRaw, "z");
+        if (x === undefined || z === undefined) continue;
+        sanitized[enemyKey] = { x, z };
+    }
+
+    return sanitized;
+}
+
 function parseVersion(raw: Record<string, unknown>): number | null {
     const version = readFiniteNumber(raw, "version");
     if (version === undefined) return SAVE_VERSION;
@@ -456,6 +480,10 @@ function sanitizeSaveSlotV1(raw: Record<string, unknown>): SaveSlotData | null {
 
     if (hasField(raw, "dialogTriggerProgress")) {
         saveData.dialogTriggerProgress = sanitizeDialogTriggerProgress(getField(raw, "dialogTriggerProgress"));
+    }
+
+    if (hasField(raw, "enemyPositions")) {
+        saveData.enemyPositions = sanitizeEnemyPositions(getField(raw, "enemyPositions"));
     }
 
     return saveData;

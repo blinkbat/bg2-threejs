@@ -22,31 +22,31 @@ export const ENEMY_TYPES: EnemyType[] = (Object.keys(ENEMY_STATS) as EnemyType[]
 // Adding a new tile type only requires adding it to the relevant array below.
 // =============================================================================
 
-export interface BrushDef {
+interface BrushDef {
     char: string;
     label: string;
     color: string;
 }
 
-export interface PropBrushDef extends BrushDef {
+interface PropBrushDef extends BrushDef {
     decorationType?: DecorationDef["type"];
     isTree?: boolean;
     treeType?: TreeType;
 }
 
-export const GEOMETRY_BRUSHES: BrushDef[] = [
+const GEOMETRY_BRUSHES: BrushDef[] = [
     { char: "#", label: "Wall", color: "#444" },
     { char: ".", label: "Floor", color: "" },
 ];
 
-export const TERRAIN_BRUSHES: BrushDef[] = [
+const TERRAIN_BRUSHES: BrushDef[] = [
     { char: ".", label: "Empty", color: "" },
     { char: "~", label: "Lava", color: "#f40" },
     { char: "w", label: "Water", color: "#48f" },
     { char: "a", label: "Acid", color: "#8f0" },
 ];
 
-export const FLOOR_BRUSHES: BrushDef[] = [
+const FLOOR_BRUSHES: BrushDef[] = [
     { char: ".", label: "Default", color: "" },
     { char: "s", label: "Sand", color: "#c2b280" },
     { char: "S", label: "Lt Sand", color: "#d4c490" },
@@ -60,7 +60,7 @@ export const FLOOR_BRUSHES: BrushDef[] = [
     { char: "T", label: "Dk Stone", color: "#606060" },
 ];
 
-export const PROP_BRUSHES: PropBrushDef[] = [
+const PROP_BRUSHES: PropBrushDef[] = [
     { char: ".", label: "Empty", color: "" },
     { char: "T", label: "Pine", color: "#2a5", isTree: true, treeType: "pine" },
     { char: "P", label: "Palm", color: "#4a6", isTree: true, treeType: "palm" },
@@ -82,7 +82,7 @@ export const PROP_BRUSHES: PropBrushDef[] = [
     { char: "b", label: "Bed", color: "#6f5a6f", decorationType: "bed" },
 ];
 
-export const ENTITY_BRUSHES: BrushDef[] = [
+const ENTITY_BRUSHES: BrushDef[] = [
     { char: ".", label: "Empty", color: "" },
     { char: "@", label: "Spawn", color: "#4af" },
     { char: "E", label: "Enemy", color: "#f44" },
@@ -94,7 +94,7 @@ export const ENTITY_BRUSHES: BrushDef[] = [
     { char: "S", label: "Secret Door", color: "#4aa" },
 ];
 
-export const LOCATION_BRUSHES: BrushDef[] = [
+const LOCATION_BRUSHES: BrushDef[] = [
     { char: "L", label: "Location", color: "#b98cff" },
 ];
 
@@ -160,7 +160,7 @@ for (const brush of PROP_BRUSHES) {
 // =============================================================================
 
 // Popup dimensions
-export const POPUP_WIDTH = 280;
+const POPUP_WIDTH = 280;
 export const POPUP_MARGIN = 16;
 
 // Base cell size for editor grid

@@ -40,7 +40,7 @@ export function findClosestUnit(
 }
 
 /** Find closest unit of a specific team to target position - combines getAliveUnits + findClosestUnit */
-export function findClosestTargetByTeam(
+function findClosestTargetByTeam(
     units: Unit[],
     unitsRef: Record<number, UnitGroup>,
     team: "player" | "enemy",

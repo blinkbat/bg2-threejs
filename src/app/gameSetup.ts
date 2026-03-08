@@ -19,6 +19,8 @@ const INITIAL_XP_VALUES = [0, 10, 15, 20, 25, 30];
 export interface PersistedPlayer {
     id: number;
     hp: number;
+    x?: number;
+    z?: number;
     mana?: number;
     level?: number;
     exp?: number;
@@ -37,11 +39,12 @@ interface CreateUnitsForAreaOptions {
     spawnPoint: { x: number; z: number } | null;
     spawnDirection?: CardinalDirection;
     initialKilledEnemies: Set<string> | null;
+    initialEnemyPositions: Partial<Record<string, { x: number; z: number }>> | null;
     playtestUnlockAllSkills: boolean;
 }
 
 export function createUnitsForArea(options: CreateUnitsForAreaOptions): Unit[] {
-    const { persistedPlayers, spawnPoint, spawnDirection, initialKilledEnemies, playtestUnlockAllSkills } = options;
+    const { persistedPlayers, spawnPoint, spawnDirection, initialKilledEnemies, initialEnemyPositions, playtestUnlockAllSkills } = options;
     const area = getCurrentArea();
     const spawn = spawnPoint ?? area.defaultSpawn;
 
@@ -57,7 +60,12 @@ export function createUnitsForArea(options: CreateUnitsForAreaOptions): Unit[] {
     const players: Unit[] = playerIds.map((id, index) => {
         const data = UNIT_DATA[id];
         const persisted = persistedPlayers?.find(player => player.id === id);
-        const pos = spawnPositions[index] ?? { x: spawn.x, z: spawn.z };
+        const persistedX = persisted?.x;
+        const persistedZ = persisted?.z;
+        const hasPersistedPosition = persistedX !== undefined && persistedZ !== undefined;
+        const pos = hasPersistedPosition
+            ? { x: persistedX, z: persistedZ }
+            : (spawnPositions[index] ?? { x: spawn.x, z: spawn.z });
         const initialExp = persisted?.exp ?? (INITIAL_XP_VALUES[id] ?? 0);
         const startingStats = persisted?.stats ?? getStartingPlayerStats(id);
         const effectiveMaxHp = getEffectiveMaxHpForStats(id, startingStats);
@@ -97,11 +105,16 @@ export function createUnitsForArea(options: CreateUnitsForAreaOptions): Unit[] {
     summonPersisted.forEach((persisted, index) => {
         const data = UNIT_DATA[persisted.id];
         if (!data) return;
-        const rank = Math.floor(index / 2);
-        const lane = index % 2 === 0 ? -1 : 1;
-        const desiredX = spawn.x - forward.x * (3.3 + rank * 1.2) + side.x * lane * 1.2;
-        const desiredZ = spawn.z - forward.z * (3.3 + rank * 1.2) + side.z * lane * 1.2;
-        const pos = findNearestPassable(desiredX, desiredZ, 5) ?? { x: spawn.x, z: spawn.z };
+        let pos: { x: number; z: number };
+        if (persisted.x !== undefined && persisted.z !== undefined) {
+            pos = { x: persisted.x, z: persisted.z };
+        } else {
+            const rank = Math.floor(index / 2);
+            const lane = index % 2 === 0 ? -1 : 1;
+            const desiredX = spawn.x - forward.x * (3.3 + rank * 1.2) + side.x * lane * 1.2;
+            const desiredZ = spawn.z - forward.z * (3.3 + rank * 1.2) + side.z * lane * 1.2;
+            pos = findNearestPassable(desiredX, desiredZ, 5) ?? { x: spawn.x, z: spawn.z };
+        }
         summons.push({
             id: persisted.id,
             x: pos.x,
@@ -140,11 +153,14 @@ export function createUnitsForArea(options: CreateUnitsForAreaOptions): Unit[] {
         const enemyKey = `${areaId}-${spawnIndex}`;
         if (killedSet.has(enemyKey)) return;
         const stats = ENEMY_STATS[spawnDef.type];
+        const savedEnemyPosition = initialEnemyPositions?.[enemyKey];
+        const enemyX = savedEnemyPosition?.x ?? spawnDef.x;
+        const enemyZ = savedEnemyPosition?.z ?? spawnDef.z;
         if (spawnDef.type === "innkeeper") {
             enemies.push({
                 id: 100 + spawnIndex,
-                x: spawnDef.x,
-                z: spawnDef.z,
+                x: enemyX,
+                z: enemyZ,
                 hp: stats.maxHp,
                 team: "neutral" as const,
                 enemyType: spawnDef.type,
@@ -156,8 +172,8 @@ export function createUnitsForArea(options: CreateUnitsForAreaOptions): Unit[] {
         }
         enemies.push({
             id: 100 + spawnIndex,
-            x: spawnDef.x,
-            z: spawnDef.z,
+            x: enemyX,
+            z: enemyZ,
             hp: stats.maxHp,
             team: "enemy" as const,
             enemyType: spawnDef.type,

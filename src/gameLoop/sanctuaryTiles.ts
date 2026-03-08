@@ -9,7 +9,7 @@ import { getUnitStats } from "../game/units";
 import { getEffectiveMaxHp } from "../game/playerUnits";
 import { spawnDamageNumber } from "../combat/damageEffects";
 import { disposeBasicMesh } from "../rendering/disposal";
-import { createTileMesh, updateTileFade, removeExpiredTiles, clearAllTiles, getTileKey, isUnitOnTile, type TileProcessConfig } from "./tileUtils";
+import { createTileMesh, updateTileFade, removeExpiredTiles, getTileKey, isUnitOnTile, type TileProcessConfig } from "./tileUtils";
 
 // =============================================================================
 // CONSTANTS
@@ -187,12 +187,4 @@ export function processSanctuaryTiles(
     }
 
     removeExpiredTiles(sanctuaryTiles, tilesToRemove, scene);
-}
-
-/**
- * Clear all sanctuary tiles from the scene.
- * Called on game restart.
- */
-export function clearSanctuaryTiles(sanctuaryTiles: Map<string, SanctuaryTile>, scene: THREE.Scene): void {
-    clearAllTiles(sanctuaryTiles, scene);
 }

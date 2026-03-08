@@ -168,6 +168,7 @@ describe("combatMath", () => {
         });
         const stats: EnemyStats = {
             name: "Test",
+            monsterType: "beast",
             hp: 10,
             maxHp: 10,
             damage: [1, 2],
@@ -193,6 +194,7 @@ describe("combatMath", () => {
         });
         const stats: EnemyStats = {
             name: "Test",
+            monsterType: "beast",
             hp: 10,
             maxHp: 10,
             damage: [1, 2],
