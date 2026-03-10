@@ -208,6 +208,18 @@ function serializeDialogTriggerProgressForSave(progress: Record<string, Set<stri
     return serialized;
 }
 
+function formatStatusEffectLabel(statusType: StatusEffect["type"]): string {
+    return statusType
+        .split("_")
+        .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ");
+}
+
+function getPrimaryStatusLabel(statusEffects: StatusEffect[] | undefined): string | null {
+    if (!statusEffects || statusEffects.length === 0) return null;
+    return formatStatusEffectLabel(statusEffects[0].type);
+}
+
 // =============================================================================
 // GAME COMPONENT
 // =============================================================================
@@ -2079,16 +2091,27 @@ function Game({
                 if (!enemy?.enemyType || enemy.hp <= 0) return null;
                 const stats = ENEMY_STATS[enemy.enemyType];
                 const monsterTypeLabel = getMonsterTypeLabel(stats.monsterType);
+                const primaryStatusLabel = getPrimaryStatusLabel(enemy.statusEffects);
                 const pct = enemy.hp / stats.maxHp;
                 const status = pct >= 1 ? "Unharmed" : pct > 0.75 ? "Scuffed" : pct > 0.5 ? "Injured" : pct > 0.25 ? "Badly wounded" : "Near death";
                 const statusColor = getHealthStatusColor(pct);
                 return (
-                    <div className="enemy-tooltip" style={{ left: hoveredEnemy.x + 12, top: hoveredEnemy.y - 10 }}>
-                        <div className="enemy-tooltip-name">
+                    <div className="enemy-tooltip enemy-tooltip--enemy" style={{ left: hoveredEnemy.x + 12, top: hoveredEnemy.y - 10 }}>
+                        <div className="enemy-tooltip-name enemy-tooltip-name--enemy">
                             {stats.name}
-                            <span style={{ color: "var(--ui-color-text-dim)" }}>{` (${monsterTypeLabel})`}</span>
                         </div>
-                        <div className="enemy-tooltip-status" style={{ color: statusColor }}>{status}</div>
+                        <div className="enemy-tooltip-type">
+                            {monsterTypeLabel}
+                        </div>
+                        <div className="enemy-tooltip-status enemy-tooltip-status-line">
+                            {primaryStatusLabel && (
+                                <>
+                                    <span className="enemy-tooltip-effect">{primaryStatusLabel}</span>
+                                    <span className="enemy-tooltip-separator">&middot;</span>
+                                </>
+                            )}
+                            <span style={{ color: statusColor }}>{status}</span>
+                        </div>
                         {debug && <div className="enemy-tooltip-status" style={{ color: "var(--ui-color-text-dim)" }}>{enemy.hp}/{stats.maxHp} HP</div>}
                     </div>
                 );

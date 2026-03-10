@@ -79,7 +79,7 @@ import { createUnitSceneGroup, ensureTexturesLoaded } from "./units";
 
 export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs {
     // Front-load texture decoding before building meshes
-    ensureTexturesLoaded();
+    ensureTexturesLoaded(units);
 
     const area = getCurrentArea();
     const computed = getComputedAreaData();

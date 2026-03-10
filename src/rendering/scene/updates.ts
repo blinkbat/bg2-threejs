@@ -1127,8 +1127,9 @@ function applyFogOpacity(
 export function updateTreeFogVisibility(
     treeMeshes: THREE.Mesh[],
     visibility: number[][]
-): void {
+): boolean {
     const now = Date.now();
+    let hasActiveTransitions = false;
 
     for (const mesh of treeMeshes) {
         const meshData = mesh.userData as FogMeshUserData;
@@ -1164,6 +1165,9 @@ export function updateTreeFogVisibility(
             mesh.position.y = fullY;
             applyFogOpacity(mesh, mat, transition.opacity);
             meshData.fogResolvedOpacity = mat.opacity;
+            if (transition.progress < 1) {
+                hasActiveTransitions = true;
+            }
 
             if (fogState === FOG_STATE_UNEXPLORED && transition.progress >= 1 && mat.opacity <= 0.01) {
                 mesh.visible = false;
@@ -1200,6 +1204,9 @@ export function updateTreeFogVisibility(
             mesh.position.y = fullY;
             applyFogOpacity(mesh, mat, transition.opacity);
             meshData.fogResolvedOpacity = mat.opacity;
+            if (transition.progress < 1) {
+                hasActiveTransitions = true;
+            }
 
             if (fogState === FOG_STATE_UNEXPLORED && transition.progress >= 1 && mat.opacity <= 0.01) {
                 mesh.visible = false;
@@ -1208,6 +1215,8 @@ export function updateTreeFogVisibility(
             }
         }
     }
+
+    return hasActiveTransitions;
 }
 
 function getFogOccluderMaterial(mesh: THREE.Mesh): THREE.MeshStandardMaterial | THREE.MeshBasicMaterial | null {
@@ -1228,10 +1237,11 @@ function getFogOccluderMaterial(mesh: THREE.Mesh): THREE.MeshStandardMaterial | 
 export function updateFogOccluderVisibility(
     fogOccluderMeshes: THREE.Mesh[],
     visibility: number[][]
-): void {
+): boolean {
     const now = Date.now();
     const FOG_Y = 2.6;
     const MAX_HEIGHT_UNEXPLORED = FOG_Y - 0.1;
+    let hasActiveTransitions = false;
 
     for (const mesh of fogOccluderMeshes) {
         const meshData = mesh.userData as FogMeshUserData;
@@ -1297,6 +1307,9 @@ export function updateFogOccluderVisibility(
             targetScaleY,
             targetPosY
         );
+        if (transition.progress < 1) {
+            hasActiveTransitions = true;
+        }
 
         mesh.scale.y = transition.scaleY;
         mesh.position.y = transition.posY;
@@ -1318,4 +1331,6 @@ export function updateFogOccluderVisibility(
             mesh.visible = true;
         }
     }
+
+    return hasActiveTransitions;
 }

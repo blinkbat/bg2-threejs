@@ -936,6 +936,31 @@
     font-size: 11px;
 }
 
+.enemy-tooltip--enemy {
+    white-space: pre-line;
+}
+
+.enemy-tooltip-name--enemy {
+    letter-spacing: 0.04em;
+}
+
+.enemy-tooltip-type {
+    color: var(--ui-color-text-dim);
+    margin-top: -1px;
+    margin-bottom: 2px;
+}
+
+.enemy-tooltip-status-line {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.enemy-tooltip-effect,
+.enemy-tooltip-separator {
+    color: var(--ui-color-text-dim);
+}
+
 /* Mana cost */
 .mana-cost {
     color: var(--ui-color-accent-primary);

@@ -57,98 +57,164 @@ function getEffectiveSize(unit: Unit, baseSize: number): number {
 }
 
 // =============================================================================
-// SPRITE TEXTURES (loaded once, reused)
+// SPRITE TEXTURES (lazy-loaded and reused)
 // =============================================================================
 
-let texturesLoaded = false;
-let wizardTexture: THREE.Texture;
-let barbarianTexture: THREE.Texture;
-let clericTexture: THREE.Texture;
-let paladinTexture: THREE.Texture;
-let thiefTexture: THREE.Texture;
-let monkTexture: THREE.Texture;
-let vampireBatTexture: THREE.Texture;
-let basiliskYounglingTexture: THREE.Texture;
-let bloatedCorpseTexture: THREE.Texture;
-let fireImpTexture: THREE.Texture;
-let occultistPygmyTexture: THREE.Texture;
-let wanderingShadeTexture: THREE.Texture;
-let acidSlugTexture: THREE.Texture;
-let amoebaLgTexture: THREE.Texture;
-let amoebaMdTexture: THREE.Texture;
-let amoebaSmTexture: THREE.Texture;
-let armoredCrabTexture: THREE.Texture;
-let broodlingTexture: THREE.Texture;
-let broodMotherTexture: THREE.Texture;
-let corruptedDruidTexture: THREE.Texture;
-let crablingTexture: THREE.Texture;
-let feralHoundTexture: THREE.Texture;
-let koboldArcherTexture: THREE.Texture;
-let koboldWarriorTexture: THREE.Texture;
-let koboldWitchDoctorTexture: THREE.Texture;
-let krakenTentacleTexture: THREE.Texture;
-let krakenBodyTexture: THREE.Texture;
-let undeadKnightTexture: THREE.Texture;
+type SpriteTextureKey =
+    | "wizard"
+    | "barbarian"
+    | "cleric"
+    | "paladin"
+    | "thief"
+    | "monk"
+    | "vampire_bat"
+    | "basilisk_youngling"
+    | "bloated_corpse"
+    | "fire_imp"
+    | "occultist_pygmy"
+    | "wandering_shade"
+    | "acid_slug"
+    | "amoeba_lg"
+    | "amoeba_md"
+    | "amoeba_sm"
+    | "armored_crab"
+    | "broodling"
+    | "brood_mother"
+    | "corrupted_druid"
+    | "crabling"
+    | "feral_hound"
+    | "kobold_archer"
+    | "kobold_warrior"
+    | "kobold_witch_doctor"
+    | "kraken_tentacle"
+    | "kraken_body"
+    | "undead_knight";
+
+const SPRITE_TEXTURE_URLS: Record<SpriteTextureKey, string> = {
+    wizard: wizardSpriteUrl,
+    barbarian: barbarianSpriteUrl,
+    cleric: clericSpriteUrl,
+    paladin: paladinSpriteUrl,
+    thief: thiefSpriteUrl,
+    monk: monkSpriteUrl,
+    vampire_bat: vampireBatSpriteUrl,
+    basilisk_youngling: basiliskYounglingSpriteUrl,
+    bloated_corpse: bloatedCorpseSpriteUrl,
+    fire_imp: fireImpSpriteUrl,
+    occultist_pygmy: occultistPygmySpriteUrl,
+    wandering_shade: wanderingShadeSpriteUrl,
+    acid_slug: acidSlugSpriteUrl,
+    amoeba_lg: amoebaLgSpriteUrl,
+    amoeba_md: amoebaMdSpriteUrl,
+    amoeba_sm: amoebaSmSpriteUrl,
+    armored_crab: armoredCrabSpriteUrl,
+    broodling: broodlingSpriteUrl,
+    brood_mother: broodMotherSpriteUrl,
+    corrupted_druid: corruptedDruidSpriteUrl,
+    crabling: crablingSpriteUrl,
+    feral_hound: feralHoundSpriteUrl,
+    kobold_archer: koboldArcherSpriteUrl,
+    kobold_warrior: koboldWarriorSpriteUrl,
+    kobold_witch_doctor: koboldWitchDoctorSpriteUrl,
+    kraken_tentacle: krakenTentacleSpriteUrl,
+    kraken_body: krakenBodySpriteUrl,
+    undead_knight: undeadKnightSpriteUrl,
+};
+
+const loadedSpriteTextures: Partial<Record<SpriteTextureKey, THREE.Texture>> = {};
+const sharedTextureLoader = new THREE.TextureLoader();
 
 function loadFilteredTexture(url: string): THREE.Texture {
-    const tex = new THREE.TextureLoader().load(url);
+    const tex = sharedTextureLoader.load(url);
     tex.magFilter = THREE.LinearFilter;
     tex.minFilter = THREE.LinearFilter;
     return tex;
 }
 
-/** Dispose all cached sprite textures. Call during scene cleanup. */
-export function disposeLoadedTextures(): void {
-    if (!texturesLoaded) return;
-    const textures = [
-        wizardTexture, barbarianTexture, clericTexture, paladinTexture, thiefTexture, monkTexture,
-        vampireBatTexture, basiliskYounglingTexture, bloatedCorpseTexture, fireImpTexture,
-        occultistPygmyTexture, wanderingShadeTexture, acidSlugTexture,
-        amoebaLgTexture, amoebaMdTexture, amoebaSmTexture,
-        armoredCrabTexture, broodlingTexture, broodMotherTexture, corruptedDruidTexture,
-        crablingTexture, feralHoundTexture, koboldArcherTexture, koboldWarriorTexture,
-        koboldWitchDoctorTexture, krakenTentacleTexture, krakenBodyTexture, undeadKnightTexture
-    ];
-    for (const tex of textures) {
-        if (tex) tex.dispose();
-    }
-    texturesLoaded = false;
+function getOrLoadSpriteTexture(textureKey: SpriteTextureKey): THREE.Texture {
+    const cached = loadedSpriteTextures[textureKey];
+    if (cached) return cached;
+    const next = loadFilteredTexture(SPRITE_TEXTURE_URLS[textureKey]);
+    loadedSpriteTextures[textureKey] = next;
+    return next;
 }
 
-/** Eagerly load all sprite textures. Call early to avoid first-frame pop-in. */
-export function ensureTexturesLoaded(): void {
-    if (texturesLoaded) return;
+/** Dispose all cached sprite textures. */
+export function disposeLoadedTextures(): void {
+    for (const textureKey of Object.keys(loadedSpriteTextures) as SpriteTextureKey[]) {
+        const texture = loadedSpriteTextures[textureKey];
+        if (texture) {
+            texture.dispose();
+        }
+        delete loadedSpriteTextures[textureKey];
+    }
+}
 
-    wizardTexture = loadFilteredTexture(wizardSpriteUrl);
-    barbarianTexture = loadFilteredTexture(barbarianSpriteUrl);
-    clericTexture = loadFilteredTexture(clericSpriteUrl);
-    paladinTexture = loadFilteredTexture(paladinSpriteUrl);
-    thiefTexture = loadFilteredTexture(thiefSpriteUrl);
-    monkTexture = loadFilteredTexture(monkSpriteUrl);
-    vampireBatTexture = loadFilteredTexture(vampireBatSpriteUrl);
-    basiliskYounglingTexture = loadFilteredTexture(basiliskYounglingSpriteUrl);
-    bloatedCorpseTexture = loadFilteredTexture(bloatedCorpseSpriteUrl);
-    fireImpTexture = loadFilteredTexture(fireImpSpriteUrl);
-    occultistPygmyTexture = loadFilteredTexture(occultistPygmySpriteUrl);
-    wanderingShadeTexture = loadFilteredTexture(wanderingShadeSpriteUrl);
-    acidSlugTexture = loadFilteredTexture(acidSlugSpriteUrl);
-    amoebaLgTexture = loadFilteredTexture(amoebaLgSpriteUrl);
-    amoebaMdTexture = loadFilteredTexture(amoebaMdSpriteUrl);
-    amoebaSmTexture = loadFilteredTexture(amoebaSmSpriteUrl);
-    armoredCrabTexture = loadFilteredTexture(armoredCrabSpriteUrl);
-    broodlingTexture = loadFilteredTexture(broodlingSpriteUrl);
-    broodMotherTexture = loadFilteredTexture(broodMotherSpriteUrl);
-    corruptedDruidTexture = loadFilteredTexture(corruptedDruidSpriteUrl);
-    crablingTexture = loadFilteredTexture(crablingSpriteUrl);
-    feralHoundTexture = loadFilteredTexture(feralHoundSpriteUrl);
-    koboldArcherTexture = loadFilteredTexture(koboldArcherSpriteUrl);
-    koboldWarriorTexture = loadFilteredTexture(koboldWarriorSpriteUrl);
-    koboldWitchDoctorTexture = loadFilteredTexture(koboldWitchDoctorSpriteUrl);
-    krakenTentacleTexture = loadFilteredTexture(krakenTentacleSpriteUrl);
-    krakenBodyTexture = loadFilteredTexture(krakenBodySpriteUrl);
-    undeadKnightTexture = loadFilteredTexture(undeadKnightSpriteUrl);
+function resolveSpriteTextureKey(unit: Unit): SpriteTextureKey | null {
+    if (unit.team === "player") {
+        const playerTextureByUnitId: Partial<Record<number, SpriteTextureKey>> = {
+            1: "barbarian",
+            2: "paladin",
+            3: "thief",
+            4: "wizard",
+            5: "monk",
+            6: "cleric",
+            7: "barbarian",
+        };
+        return playerTextureByUnitId[unit.id] ?? null;
+    }
 
-    texturesLoaded = true;
+    if (!unit.enemyType) {
+        return null;
+    }
+
+    if (unit.enemyType === "giant_amoeba") {
+        const splitCount = unit.splitCount ?? 0;
+        if (splitCount === 0) return "amoeba_lg";
+        if (splitCount === 1) return "amoeba_md";
+        return "amoeba_sm";
+    }
+
+    const enemyTextureByType: Record<string, SpriteTextureKey> = {
+        acid_slug: "acid_slug",
+        armored_crab: "armored_crab",
+        baby_kraken: "kraken_body",
+        basilisk: "basilisk_youngling",
+        bat: "vampire_bat",
+        bloated_corpse: "bloated_corpse",
+        brood_mother: "brood_mother",
+        broodling: "broodling",
+        chittering_crabling: "crabling",
+        corrupt_druid: "corrupted_druid",
+        feral_hound: "feral_hound",
+        innkeeper: "monk",
+        kobold: "kobold_warrior",
+        kobold_archer: "kobold_archer",
+        kobold_witch_doctor: "kobold_witch_doctor",
+        kraken_tentacle: "kraken_tentacle",
+        magma_imp: "fire_imp",
+        occultist_pygmy: "occultist_pygmy",
+        undead_knight: "undead_knight",
+        wandering_shade: "wandering_shade",
+    };
+
+    return enemyTextureByType[unit.enemyType] ?? null;
+}
+
+function ensureTextureLoadedForUnit(unit: Unit): void {
+    const textureKey = resolveSpriteTextureKey(unit);
+    if (!textureKey) return;
+    getOrLoadSpriteTexture(textureKey);
+}
+
+/**
+ * Load textures required by currently active units.
+ * Keeps startup cost proportional to the current area content.
+ */
+export function ensureTexturesLoaded(units: Unit[]): void {
+    for (const unit of units) {
+        ensureTextureLoadedForUnit(unit);
+    }
 }
 
 interface SpriteConfig {
@@ -166,18 +232,19 @@ interface SpriteConfig {
     toneMix?: number;       // 0-1 grayscale-to-color remap strength
 }
 
-function getSpriteConfigs(): Record<number, SpriteConfig> {
-    ensureTexturesLoaded();
-    return {
-        1: { texture: barbarianTexture, width: 196, height: 195, color: 0xdda298, spriteHeight: 1.8, offsetX: -0.1 },  // Barbarian - moderate brighten
-        2: { texture: paladinTexture, width: 128, height: 196, color: 0xe3c07a, spriteHeight: 1.8 },    // Paladin - moderate brighten
-        3: { texture: thiefTexture, width: 128, height: 196, color: 0xc49ccd, spriteHeight: 1.8, offsetX: 0.1 },  // Thief - moderate brighten
-        4: { texture: wizardTexture, width: 110, height: 196, color: 0x84bfdc, spriteHeight: 1.8 },     // Wizard - moderate brighten
-        5: { texture: monkTexture, width: 128, height: 196, color: 0x79c59c, spriteHeight: 1.8, offsetX: -0.1 },  // Monk - moderate brighten
-        6: { texture: clericTexture, width: 128, height: 196, color: 0xc4ccd2, spriteHeight: 1.8 },   // Cleric - lightly desaturated
-        7: { texture: barbarianTexture, width: 196, height: 195, color: 0xdfcfbb, spriteHeight: 2.0, offsetX: -0.1, brightness: 0.09, opacity: 0.3 }, // Ancestor summon - moderate brighten
-    };
+interface SpriteTemplate extends Omit<SpriteConfig, "texture"> {
+    textureKey: SpriteTextureKey;
 }
+
+const PLAYER_SPRITE_TEMPLATES: Partial<Record<number, SpriteTemplate>> = {
+    1: { textureKey: "barbarian", width: 196, height: 195, color: 0xdda298, spriteHeight: 1.8, offsetX: -0.1 },  // Barbarian - moderate brighten
+    2: { textureKey: "paladin", width: 128, height: 196, color: 0xe3c07a, spriteHeight: 1.8 },    // Paladin - moderate brighten
+    3: { textureKey: "thief", width: 128, height: 196, color: 0xc49ccd, spriteHeight: 1.8, offsetX: 0.1 },  // Thief - moderate brighten
+    4: { textureKey: "wizard", width: 110, height: 196, color: 0x84bfdc, spriteHeight: 1.8 },     // Wizard - moderate brighten
+    5: { textureKey: "monk", width: 128, height: 196, color: 0x79c59c, spriteHeight: 1.8, offsetX: -0.1 },  // Monk - moderate brighten
+    6: { textureKey: "cleric", width: 128, height: 196, color: 0xc4ccd2, spriteHeight: 1.8 },   // Cleric - lightly desaturated
+    7: { textureKey: "barbarian", width: 196, height: 195, color: 0xdfcfbb, spriteHeight: 2.0, offsetX: -0.1, brightness: 0.09, opacity: 0.3 }, // Ancestor summon - moderate brighten
+};
 
 function applySpriteEdgeBlur(
     material: THREE.MeshStandardMaterial,
@@ -234,32 +301,49 @@ function applySpriteEdgeBlur(
     };
 }
 
-function getEnemySpriteConfigs(): Record<string, SpriteConfig> {
-    ensureTexturesLoaded();
+const ENEMY_SPRITE_TEMPLATES: Record<string, SpriteTemplate> = {
+    acid_slug: { textureKey: "acid_slug", width: 160, height: 128, color: 0xa9e735, spriteHeight: 1.4, offsetY: -0.3, shadowSize: 0.6 },
+    armored_crab: { textureKey: "armored_crab", width: 160, height: 128, color: 0xdf8fb3, spriteHeight: 1.8, offsetY: -0.22, shadowSize: 0.7 }, // slightly lighter and less saturated; lowered on shadow
+    baby_kraken: { textureKey: "kraken_body", width: 128, height: 128, color: 0xa85ae3, spriteHeight: 2.5, offsetY: -0.16 },
+    basilisk: { textureKey: "basilisk_youngling", width: 238, height: 191, color: 0xd8e381, spriteHeight: 2.95, offsetY: -0.14, emissiveIntensity: 0.0, shadowSize: 1.05, toneMix: 1.0 }, // brighter, paler yellow-green; slightly smaller and lower
+    bat: { textureKey: "vampire_bat", width: 128, height: 128, color: 0xba8678, spriteHeight: 1.4 }, // light red-brown
+    bloated_corpse: { textureKey: "bloated_corpse", width: 128, height: 128, color: 0x7ab13b, spriteHeight: 2.05, shadowSize: 0.62 },
+    brood_mother: { textureKey: "brood_mother", width: 164, height: 128, color: 0xae7ac2, spriteHeight: 2.25, offsetY: -0.12, shadowSize: 0.74 }, // lowered on shadow
+    broodling: { textureKey: "broodling", width: 128, height: 128, color: 0xa079b4, spriteHeight: 1.0, shadowSize: 0.32 },
+    chittering_crabling: { textureKey: "crabling", width: 128, height: 128, color: 0xec816c, spriteHeight: 1.15, offsetY: -0.14, shadowSize: 0.45 }, // lighter red
+    corrupt_druid: { textureKey: "corrupted_druid", width: 96, height: 128, color: 0x598950, spriteHeight: 2.35 }, // brighter, less saturated
+    feral_hound: { textureKey: "feral_hound", width: 188, height: 128, color: 0xc2a17a, spriteHeight: 1.45, shadowSize: 0.55 },
+    giant_amoeba_lg: { textureKey: "amoeba_lg", width: 128, height: 128, color: 0x14e063, spriteHeight: 2.4, opacity: 0.42 },
+    giant_amoeba_md: { textureKey: "amoeba_md", width: 128, height: 128, color: 0x14e063, spriteHeight: 1.7, offsetY: -0.10, opacity: 0.42 },
+    giant_amoeba_sm: { textureKey: "amoeba_sm", width: 128, height: 128, color: 0x14e063, spriteHeight: 1.2, offsetY: -0.14, opacity: 0.42 },
+    innkeeper: { textureKey: "monk", width: 128, height: 196, color: 0xc18a52, spriteHeight: 1.95, shadowSize: 0.45 },
+    kobold: { textureKey: "kobold_warrior", width: 128, height: 128, color: 0xc39976, spriteHeight: 1.61, offsetX: 0.06, shadowSize: 0.4 }, // light brown; slightly right
+    kobold_archer: { textureKey: "kobold_archer", width: 128, height: 128, color: 0xad611c, spriteHeight: 1.61, shadowSize: 0.4 }, // touch brighter
+    kobold_witch_doctor: { textureKey: "kobold_witch_doctor", width: 128, height: 128, color: 0x9576bf, spriteHeight: 1.61, shadowSize: 0.4 }, // brighter, less saturated
+    magma_imp: { textureKey: "fire_imp", width: 128, height: 128, color: 0xf68b5a, spriteHeight: 1.85, shadowSize: 0.42 }, // lighter orange-red; larger sprite
+    occultist_pygmy: { textureKey: "occultist_pygmy", width: 128, height: 128, color: 0x8d4a07, spriteHeight: 1.0, shadowSize: 0.32 },
+    kraken_tentacle: { textureKey: "kraken_tentacle", width: 80, height: 128, color: 0x924adb, spriteHeight: 2.0 },
+    undead_knight: { textureKey: "undead_knight", width: 105, height: 128, color: 0x6f8bb5, spriteHeight: 3.5, shadowSize: 0.7 }, // less saturated blue
+    wandering_shade: { textureKey: "wandering_shade", width: 128, height: 128, color: 0x748ec9, spriteHeight: 2.05, shadowSize: 0.44, opacity: 0.68 },
+};
+
+function resolveEnemySpriteTemplate(unit: Unit): SpriteTemplate | undefined {
+    if (!unit.enemyType) return undefined;
+    if (unit.enemyType === "giant_amoeba") {
+        const splitCount = unit.splitCount ?? 0;
+        if (splitCount === 0) return ENEMY_SPRITE_TEMPLATES.giant_amoeba_lg;
+        if (splitCount === 1) return ENEMY_SPRITE_TEMPLATES.giant_amoeba_md;
+        return ENEMY_SPRITE_TEMPLATES.giant_amoeba_sm;
+    }
+    return ENEMY_SPRITE_TEMPLATES[unit.enemyType];
+}
+
+function toSpriteConfig(template: SpriteTemplate | undefined): SpriteConfig | undefined {
+    if (!template) return undefined;
+    const { textureKey, ...rest } = template;
     return {
-        acid_slug: { texture: acidSlugTexture, width: 160, height: 128, color: 0xa9e735, spriteHeight: 1.4, offsetY: -0.3, shadowSize: 0.6 },
-        armored_crab: { texture: armoredCrabTexture, width: 160, height: 128, color: 0xdf8fb3, spriteHeight: 1.8, offsetY: -0.22, shadowSize: 0.7 }, // slightly lighter and less saturated; lowered on shadow
-        baby_kraken: { texture: krakenBodyTexture, width: 128, height: 128, color: 0xa85ae3, spriteHeight: 2.5, offsetY: -0.16 },
-        basilisk: { texture: basiliskYounglingTexture, width: 238, height: 191, color: 0xd8e381, spriteHeight: 2.95, offsetY: -0.14, emissiveIntensity: 0.0, shadowSize: 1.05, toneMix: 1.0 }, // brighter, paler yellow-green; slightly smaller and lower
-        bat: { texture: vampireBatTexture, width: 128, height: 128, color: 0xba8678, spriteHeight: 1.4 }, // light red-brown
-        bloated_corpse: { texture: bloatedCorpseTexture, width: 128, height: 128, color: 0x7ab13b, spriteHeight: 2.05, shadowSize: 0.62 },
-        brood_mother: { texture: broodMotherTexture, width: 164, height: 128, color: 0xae7ac2, spriteHeight: 2.25, offsetY: -0.12, shadowSize: 0.74 }, // lowered on shadow
-        broodling: { texture: broodlingTexture, width: 128, height: 128, color: 0xa079b4, spriteHeight: 1.0, shadowSize: 0.32 },
-        chittering_crabling: { texture: crablingTexture, width: 128, height: 128, color: 0xec816c, spriteHeight: 1.15, offsetY: -0.14, shadowSize: 0.45 }, // lighter red
-        corrupt_druid: { texture: corruptedDruidTexture, width: 96, height: 128, color: 0x598950, spriteHeight: 2.35 }, // brighter, less saturated
-        feral_hound: { texture: feralHoundTexture, width: 188, height: 128, color: 0xc2a17a, spriteHeight: 1.45, shadowSize: 0.55 },
-        giant_amoeba_lg: { texture: amoebaLgTexture, width: 128, height: 128, color: 0x14e063, spriteHeight: 2.4, opacity: 0.42 },
-        giant_amoeba_md: { texture: amoebaMdTexture, width: 128, height: 128, color: 0x14e063, spriteHeight: 1.7, offsetY: -0.10, opacity: 0.42 },
-        giant_amoeba_sm: { texture: amoebaSmTexture, width: 128, height: 128, color: 0x14e063, spriteHeight: 1.2, offsetY: -0.14, opacity: 0.42 },
-        innkeeper: { texture: monkTexture, width: 128, height: 196, color: 0xc18a52, spriteHeight: 1.95, shadowSize: 0.45 },
-        kobold: { texture: koboldWarriorTexture, width: 128, height: 128, color: 0xc39976, spriteHeight: 1.61, offsetX: 0.06, shadowSize: 0.4 }, // light brown; slightly right
-        kobold_archer: { texture: koboldArcherTexture, width: 128, height: 128, color: 0xad611c, spriteHeight: 1.61, shadowSize: 0.4 }, // touch brighter
-        kobold_witch_doctor: { texture: koboldWitchDoctorTexture, width: 128, height: 128, color: 0x9576bf, spriteHeight: 1.61, shadowSize: 0.4 }, // brighter, less saturated
-        magma_imp: { texture: fireImpTexture, width: 128, height: 128, color: 0xf68b5a, spriteHeight: 1.85, shadowSize: 0.42 }, // lighter orange-red; larger sprite
-        occultist_pygmy: { texture: occultistPygmyTexture, width: 128, height: 128, color: 0x8d4a07, spriteHeight: 1.0, shadowSize: 0.32 },
-        kraken_tentacle: { texture: krakenTentacleTexture, width: 80, height: 128, color: 0x924adb, spriteHeight: 2.0 },
-        undead_knight: { texture: undeadKnightTexture, width: 105, height: 128, color: 0x6f8bb5, spriteHeight: 3.5, shadowSize: 0.7 }, // less saturated blue
-        wandering_shade: { texture: wanderingShadeTexture, width: 128, height: 128, color: 0x748ec9, spriteHeight: 2.05, shadowSize: 0.44, opacity: 0.68 },
+        ...rest,
+        texture: getOrLoadSpriteTexture(textureKey),
     };
 }
 
@@ -268,23 +352,14 @@ function getEnemySpriteConfigs(): Record<string, SpriteConfig> {
 // =============================================================================
 
 function resolveSpriteConfig(unit: Unit): SpriteConfig | undefined {
-    const playerSpriteConfigs = getSpriteConfigs();
-    const enemySpriteConfigs = getEnemySpriteConfigs();
+    ensureTextureLoadedForUnit(unit);
 
     // Player sprites are keyed by unit ID, but only for the player team.
     if (unit.team === "player") {
-        return playerSpriteConfigs[unit.id];
+        return toSpriteConfig(PLAYER_SPRITE_TEMPLATES[unit.id]);
     }
 
-    // Enemy sprites keyed by type (amoebas vary by split count)
-    let enemySpriteKey: string | undefined = unit.enemyType;
-    if (unit.enemyType === "giant_amoeba") {
-        const splitCount = unit.splitCount ?? 0;
-        if (splitCount === 0) enemySpriteKey = "giant_amoeba_lg";
-        else if (splitCount === 1) enemySpriteKey = "giant_amoeba_md";
-        else enemySpriteKey = "giant_amoeba_sm";
-    }
-    return enemySpriteKey ? enemySpriteConfigs[enemySpriteKey] : undefined;
+    return toSpriteConfig(resolveEnemySpriteTemplate(unit));
 }
 
 // =============================================================================

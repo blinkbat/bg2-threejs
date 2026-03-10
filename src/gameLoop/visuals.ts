@@ -21,7 +21,9 @@ export function updateDamageTexts(
     scene: THREE.Scene,
     paused: boolean
 ): DamageText[] {
-    return damageTexts.filter(dt => {
+    let writeIndex = 0;
+    for (let i = 0; i < damageTexts.length; i++) {
+        const dt = damageTexts[i];
         dt.mesh.quaternion.copy(camera.quaternion);
         if (!paused) {
             dt.mesh.position.y += 0.02;
@@ -29,11 +31,14 @@ export function updateDamageTexts(
             (dt.mesh.material as THREE.MeshBasicMaterial).opacity = dt.life / 1000;
             if (dt.life <= 0) {
                 recycleDamageNumber(scene, dt.mesh);
-                return false;
+                continue;
             }
         }
-        return true;
-    });
+        damageTexts[writeIndex] = dt;
+        writeIndex++;
+    }
+    damageTexts.length = writeIndex;
+    return damageTexts;
 }
 
 // =============================================================================
@@ -387,7 +392,7 @@ export function updateFogOfWar(
     fogTexture: FogTexture,
     unitsState: Unit[],
     fogMesh: THREE.Mesh
-): void {
+): boolean {
     const area = getCurrentArea();
     if (lastFogAreaId !== area.id) {
         lastFogAreaId = area.id;
@@ -410,7 +415,7 @@ export function updateFogOfWar(
             }
             updateEnemyGroupFade(g, !isEnemyHiddenFromView(u.id));
         }
-        return;
+        return false;
     }
 
     // Ensure fog mesh is visible for areas with fog
@@ -418,12 +423,14 @@ export function updateFogOfWar(
 
     const visibilityKey = computePlayerVisibilityKey(playerUnits, unitsRef);
     const shouldRecomputeVisibility = !hasFogVisibilityKey || visibilityKey !== lastFogVisibilityKey;
+    let visibilityChanged = false;
 
     if (shouldRecomputeVisibility) {
         hasFogVisibilityKey = true;
         lastFogVisibilityKey = visibilityKey;
 
         const fogChanged = updateVisibility(visibility, playerUnits, { current: unitsRef });
+        visibilityChanged = fogChanged;
 
         // Only redraw fog texture if visibility actually changed
         if (fogChanged) {
@@ -463,6 +470,8 @@ export function updateFogOfWar(
         const shouldBeVisible = vis === 2 && !isEnemyHiddenFromView(u.id);
         updateEnemyGroupFade(g, shouldBeVisible);
     }
+
+    return visibilityChanged;
 }
 
 // =============================================================================

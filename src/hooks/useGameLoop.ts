@@ -25,6 +25,7 @@ import { publishHpBarOverlayFrame, resetHpBarOverlayFrame } from "./hpBarOverlay
 import { updateCamera, updateWater, updateWallTransparency, updateTreeFogVisibility, updateFogOccluderVisibility, updateLightLOD, addUnitToScene, updateBillboards } from "../rendering/scene";
 import { updateDynamicObstacles } from "../ai/pathfinding";
 import { updateAvoidanceCache, updateTargetingCache } from "../ai/unitAI";
+import { buildUnitSpatialFrame, type UnitSpatialEntry } from "../ai/spatialCache";
 import { updateUnitCache } from "../game/unitQuery";
 import { clearUnitStatsCache } from "../game/units";
 import { getUnitRadius, isInRange } from "../rendering/range";
@@ -560,6 +561,9 @@ export function useGameLoop({
         let hpBarFrame = 0;
         let cachedRect = renderer.domElement.getBoundingClientRect();
         const playerUnitsBuffer: Unit[] = [];
+        const spatialAliveEntriesBuffer: UnitSpatialEntry[] = [];
+        const spatialTargetingEntriesBuffer: UnitSpatialEntry[] = [];
+        let fogVisualTransitionsActive = true;
         previousHpByIdRef.current = new Map(stateRefs.unitsStateRef.current.map(unit => [unit.id, unit.hp]));
         const setUnitsLive = createLiveUnitsDispatch(callbacks.setUnits, stateRefs.unitsStateRef);
 
@@ -811,14 +815,21 @@ export function useGameLoop({
                 if (u.team === "player" && u.hp > 0) playerUnitsBuffer.push(u);
             }
             const playerUnits = playerUnitsBuffer;
+            let fogVisibilityChanged = false;
             if (fogTexture && fogMesh) {
-                updateFogOfWar(refs.visibility, playerUnits, unitGroups, fogTexture, currentUnits, fogMesh);
+                fogVisibilityChanged = updateFogOfWar(refs.visibility, playerUnits, unitGroups, fogTexture, currentUnits, fogMesh);
             }
 
             if (getCurrentArea().hasFogOfWar) {
-                // Update tree and tall obstacle visibility based on fog
-                updateTreeFogVisibility(treeMeshes, refs.visibility);
-                updateFogOccluderVisibility(fogOccluderMeshes, refs.visibility);
+                // Update tree and tall obstacle visibility only when visibility changes
+                // or while previous transitions are still animating.
+                if (fogVisibilityChanged || fogVisualTransitionsActive) {
+                    const treeTransitionsActive = updateTreeFogVisibility(treeMeshes, refs.visibility);
+                    const occluderTransitionsActive = updateFogOccluderVisibility(fogOccluderMeshes, refs.visibility);
+                    fogVisualTransitionsActive = treeTransitionsActive || occluderTransitionsActive;
+                }
+            } else {
+                fogVisualTransitionsActive = false;
             }
             const fogMs = performance.now() - sectionStart;
             let aiMs = 0;
@@ -850,9 +861,18 @@ export function useGameLoop({
                 }
 
                 // Update pathfinding obstacles
-                updateDynamicObstacles(currentUnits, unitGroups);
-                updateTargetingCache(currentUnits, unitGroups, defeatedThisFrame);
-                updateAvoidanceCache(currentUnits, unitGroups);
+                const spatialFrame = buildUnitSpatialFrame(
+                    currentUnits,
+                    unitGroups,
+                    defeatedThisFrame,
+                    {
+                        aliveEntries: spatialAliveEntriesBuffer,
+                        targetingEntries: spatialTargetingEntriesBuffer
+                    }
+                );
+                updateDynamicObstacles(currentUnits, unitGroups, undefined, spatialFrame);
+                updateTargetingCache(currentUnits, unitGroups, defeatedThisFrame, spatialFrame);
+                updateAvoidanceCache(currentUnits, unitGroups, spatialFrame);
 
                 // Update each unit's AI
                 sectionStart = performance.now();

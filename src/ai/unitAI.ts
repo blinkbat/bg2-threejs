@@ -12,6 +12,7 @@ import {
     DEFAULT_UNIT_RADIUS
 } from "../core/constants";
 import { findPath, isBlocked, isPassable } from "./pathfinding";
+import type { UnitSpatialFrame } from "./spatialCache";
 import {
     canScanForTargets, recordTargetScan, getBlockedTargets,
     recentlyGaveUp, checkPathNeedsRecalc, createPathToTarget,
@@ -122,11 +123,47 @@ function forEachCachedTargetsInRange(
 export function updateTargetingCache(
     unitsState: Unit[],
     unitsRef: Record<number, UnitGroup>,
-    defeatedThisFrame: Set<number>
+    defeatedThisFrame: Set<number>,
+    spatialFrame?: UnitSpatialFrame
 ): void {
     if (lastTargetingUnitsRef !== unitsRef) {
         hasTargetingCacheKey = false;
         lastTargetingUnitsRef = unitsRef;
+    }
+
+    if (spatialFrame) {
+        const key = spatialFrame.targetingHash;
+        const entryCount = spatialFrame.targetingCount;
+
+        if (hasTargetingCacheKey && key === lastTargetingCacheKey && entryCount === lastTargetingEntryCount) {
+            targetingCacheReady = true;
+            return;
+        }
+
+        targetingCacheReady = true;
+        playerTargetBuckets.clear();
+        enemyTargetBuckets.clear();
+        allPlayerTargetEntries.length = 0;
+        allEnemyTargetEntries.length = 0;
+
+        for (const entry of spatialFrame.targetingEntries) {
+            const unit = entry.unit;
+            const cellX = getTargetingCell(entry.group.position.x);
+            const cellZ = getTargetingCell(entry.group.position.z);
+
+            if (unit.team === "player") {
+                allPlayerTargetEntries.push(entry);
+                pushTargetingEntry(playerTargetBuckets, cellX, cellZ, entry);
+            } else {
+                allEnemyTargetEntries.push(entry);
+                pushTargetingEntry(enemyTargetBuckets, cellX, cellZ, entry);
+            }
+        }
+
+        hasTargetingCacheKey = true;
+        lastTargetingCacheKey = key;
+        lastTargetingEntryCount = entryCount;
+        return;
     }
 
     let key = TARGETING_HASH_SEED;
@@ -866,21 +903,30 @@ function getAvoidanceCell(coord: number): number {
  */
 export function updateAvoidanceCache(
     unitsState: Unit[],
-    unitsRef: Record<number, UnitGroup>
+    unitsRef: Record<number, UnitGroup>,
+    spatialFrame?: UnitSpatialFrame
 ): void {
-    // Quick dirty check: hash all alive unit cell positions
-    let positionKey = 2166136261;
+    let positionKey = 0;
     let aliveCount = 0;
-    for (const unit of unitsState) {
-        if (unit.hp <= 0) continue;
-        const group = unitsRef[unit.id];
-        if (!group) continue;
-        aliveCount++;
-        const cx = getAvoidanceCell(group.position.x);
-        const cz = getAvoidanceCell(group.position.z);
-        positionKey = Math.imul(positionKey ^ (unit.id * 1024 + cx * 32 + cz), 16777619);
+
+    if (spatialFrame) {
+        positionKey = spatialFrame.positionHash;
+        aliveCount = spatialFrame.aliveCount;
+    } else {
+        // Quick dirty check: hash all alive unit cell positions
+        positionKey = 2166136261;
+        aliveCount = 0;
+        for (const unit of unitsState) {
+            if (unit.hp <= 0) continue;
+            const group = unitsRef[unit.id];
+            if (!group) continue;
+            aliveCount++;
+            const cx = getAvoidanceCell(group.position.x);
+            const cz = getAvoidanceCell(group.position.z);
+            positionKey = Math.imul(positionKey ^ (unit.id * 1024 + cx * 32 + cz), 16777619);
+        }
+        positionKey = positionKey >>> 0;
     }
-    positionKey = positionKey >>> 0;
 
     if (positionKey === lastAvoidancePositionKey && aliveCount === lastAvoidanceUnitCount) {
         return;
@@ -890,6 +936,27 @@ export function updateAvoidanceCache(
 
     avoidanceBuckets.clear();
     maxAvoidanceRadius = DEFAULT_UNIT_RADIUS;
+
+    if (spatialFrame) {
+        for (const entry of spatialFrame.aliveEntries) {
+            const unit = entry.unit;
+            const group = entry.group;
+
+            const unitRadius = getUnitRadius(unit);
+            if (unitRadius > maxAvoidanceRadius) {
+                maxAvoidanceRadius = unitRadius;
+            }
+
+            const key = getAvoidanceBucketKey(getAvoidanceCell(group.position.x), getAvoidanceCell(group.position.z));
+            const bucket = avoidanceBuckets.get(key);
+            if (bucket) {
+                bucket.push({ unit, group });
+            } else {
+                avoidanceBuckets.set(key, [{ unit, group }]);
+            }
+        }
+        return;
+    }
 
     for (const unit of unitsState) {
         if (unit.hp <= 0) continue;

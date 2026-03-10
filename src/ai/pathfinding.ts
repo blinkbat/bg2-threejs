@@ -3,6 +3,7 @@ import { blocked } from "../game/dungeon";
 import { isTreeBlocked, isTerrainBlocked, isWaterTerrain } from "../game/areas";
 import { isWithinGrid } from "../game/geometry";
 import type { PathNode, Unit, UnitGroup } from "../core/types";
+import type { UnitSpatialFrame } from "./spatialCache";
 
 // =============================================================================
 // NUMERIC KEY HELPER — eliminates string allocation in hot paths
@@ -33,6 +34,9 @@ const dynamicCostMap: Map<number, number> = new Map();
 let lastUnitPositions: Map<number, number> = new Map();
 let scratchUnitPositions: Map<number, number> = new Map();
 let dynamicObstaclesDirty = true;
+let hasDynamicSpatialSnapshot = false;
+let lastDynamicSpatialHash = 0;
+let lastDynamicSpatialCount = -1;
 
 /**
  * Update the dynamic obstacle map based on current unit positions.
@@ -42,8 +46,53 @@ let dynamicObstaclesDirty = true;
 export function updateDynamicObstacles(
     units: Unit[],
     unitsRef: Record<number, UnitGroup>,
-    excludeUnitId?: number
+    excludeUnitId?: number,
+    spatialFrame?: UnitSpatialFrame
 ): void {
+    if (spatialFrame && excludeUnitId === undefined) {
+        const spatialUnchanged = hasDynamicSpatialSnapshot
+            && spatialFrame.positionHash === lastDynamicSpatialHash
+            && spatialFrame.aliveCount === lastDynamicSpatialCount;
+        if (!dynamicObstaclesDirty && spatialUnchanged) {
+            return;
+        }
+
+        hasDynamicSpatialSnapshot = true;
+        lastDynamicSpatialHash = spatialFrame.positionHash;
+        lastDynamicSpatialCount = spatialFrame.aliveCount;
+        dynamicObstaclesDirty = false;
+        dynamicCostMap.clear();
+
+        for (const entry of spatialFrame.aliveEntries) {
+            const centerX = entry.cellX;
+            const centerZ = entry.cellZ;
+
+            // Add cost to cells near this unit
+            for (let dx = -UNIT_AVOIDANCE_RADIUS; dx <= UNIT_AVOIDANCE_RADIUS; dx++) {
+                for (let dz = -UNIT_AVOIDANCE_RADIUS; dz <= UNIT_AVOIDANCE_RADIUS; dz++) {
+                    const x = centerX + dx;
+                    const z = centerZ + dz;
+                    if (!isWithinGrid(x, z)) continue;
+                    if (isBlocked(x, z)) continue; // Don't add cost to walls
+
+                    const distSq = dx * dx + dz * dz;
+                    if (distSq <= UNIT_AVOIDANCE_RADIUS_SQ) {
+                        // Higher cost for cells closer to unit center
+                        const dist = Math.sqrt(distSq);
+                        const cost = UNIT_PROXIMITY_COST * (1 - dist / (UNIT_AVOIDANCE_RADIUS + 1));
+                        const key = cellKey(x, z);
+                        const existing = dynamicCostMap.get(key) || 0;
+                        dynamicCostMap.set(key, Math.max(existing, cost));
+                    }
+                }
+            }
+        }
+
+        return;
+    }
+
+    hasDynamicSpatialSnapshot = false;
+
     // Check if any unit has moved
     let needsUpdate = false;
     const newPositions = scratchUnitPositions;
@@ -118,6 +167,9 @@ export function invalidateDynamicObstacles(): void {
     dynamicObstaclesDirty = true;
     lastUnitPositions.clear();
     scratchUnitPositions.clear();
+    hasDynamicSpatialSnapshot = false;
+    lastDynamicSpatialHash = 0;
+    lastDynamicSpatialCount = -1;
 }
 
 /**
@@ -331,14 +383,15 @@ const DIAGONALS = [
  * Adds dynamic cost for cells near other units (for wider berth pathfinding).
  * Flying units can pass over terrain hazards.
  */
-function getNeighbors(
+function collectNeighbors(
     x: number,
     z: number,
     diagonalCost: number,
+    out: Neighbor[],
     flying: boolean = false,
     canTraverseWaterTerrain: boolean = false
-): Neighbor[] {
-    const neighbors: Neighbor[] = [];
+): number {
+    let count = 0;
 
     // Add cardinal neighbors
     for (const { dx, dz } of CARDINALS) {
@@ -346,7 +399,15 @@ function getNeighbors(
         if (isPassable(nx, nz, flying, canTraverseWaterTerrain)) {
             // Base cost + dynamic cost from nearby units
             const cost = 1 + getDynamicCost(nx, nz);
-            neighbors.push({ x: nx, z: nz, cost });
+            const existing = out[count];
+            if (existing) {
+                existing.x = nx;
+                existing.z = nz;
+                existing.cost = cost;
+            } else {
+                out[count] = { x: nx, z: nz, cost };
+            }
+            count++;
         }
     }
 
@@ -360,10 +421,18 @@ function getNeighbors(
 
         // Base diagonal cost + dynamic cost from nearby units
         const cost = diagonalCost + getDynamicCost(nx, nz);
-        neighbors.push({ x: nx, z: nz, cost });
+        const existing = out[count];
+        if (existing) {
+            existing.x = nx;
+            existing.z = nz;
+            existing.cost = cost;
+        } else {
+            out[count] = { x: nx, z: nz, cost };
+        }
+        count++;
     }
 
-    return neighbors;
+    return count;
 }
 
 // =============================================================================
@@ -407,8 +476,8 @@ function getCachedPath(
     const key = getPathCacheKey(sx, sz, ex, ez, flying, canTraverseWaterTerrain);
     const cached = pathCache.get(key);
     if (cached && now - cached.timestamp < PATH_CACHE_DURATION) {
-        // Return a copy to prevent mutation issues
-        return cached.path.map(p => ({ x: p.x, z: p.z }));
+        // Return a shallow copy so callers can mutate array shape without touching cache.
+        return cached.path.slice();
     }
     return null;
 }
@@ -430,7 +499,7 @@ function setCachedPath(
     }
 
     const key = getPathCacheKey(sx, sz, ex, ez, flying, canTraverseWaterTerrain);
-    pathCache.set(key, { path: path.map(p => ({ x: p.x, z: p.z })), timestamp: now });
+    pathCache.set(key, { path: path.slice(), timestamp: now });
 }
 
 /**
@@ -586,6 +655,7 @@ export function findPath(
     const open = new OpenList();
     open.insert(startNode);
     const closed = new Set<number>();
+    const neighborsBuffer: Neighbor[] = [];
 
     while (open.length > 0) {
         const current = open.shift()!;
@@ -594,9 +664,10 @@ export function findPath(
             const path: { x: number; z: number }[] = [];
             let node: PathNode | null = current;
             while (node) {
-                path.unshift({ x: node.x + 0.5, z: node.z + 0.5 });
+                path.push({ x: node.x + 0.5, z: node.z + 0.5 });
                 node = node.parent;
             }
+            path.reverse();
             path[path.length - 1] = { x: endX, z: endZ };
 
             // Cache the result
@@ -607,9 +678,17 @@ export function findPath(
         closed.add(cellKey(current.x, current.z));
 
         // Get valid neighbors (handles bounds, blocking, and corner-cutting)
-        const neighbors = getNeighbors(current.x, current.z, ASTAR_DIAGONAL_COST, flying, canTraverseWaterTerrain);
+        const neighborCount = collectNeighbors(
+            current.x,
+            current.z,
+            ASTAR_DIAGONAL_COST,
+            neighborsBuffer,
+            flying,
+            canTraverseWaterTerrain
+        );
 
-        for (const n of neighbors) {
+        for (let i = 0; i < neighborCount; i++) {
+            const n = neighborsBuffer[i];
             if (closed.has(cellKey(n.x, n.z))) continue;
 
             const g = current.g + n.cost;
