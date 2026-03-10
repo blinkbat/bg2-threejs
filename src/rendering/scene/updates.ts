@@ -571,6 +571,9 @@ let lastOcclusionCameraKey = Number.NaN;
 let lastOcclusionPlayerHash = 0;
 let lastOcclusionPlayerCount = -1;
 let occlusionDirty = true;
+let wallOpacityTransitionsActive = true;
+let candleOpacityTransitionsActive = true;
+let flameOpacityTransitionsActive = true;
 
 function syncMaterialTransparency(
     material: THREE.MeshStandardMaterial | THREE.MeshBasicMaterial,
@@ -624,6 +627,7 @@ export function updateWallTransparency(
     candleMeshes?: THREE.Mesh[],
     flameMeshes?: THREE.Mesh[]
 ): void {
+    let occlusionRecomputedThisFrame = false;
     const qCameraX = Math.round(camera.position.x * OCCLUSION_CAMERA_QUANT);
     const qCameraZ = Math.round(camera.position.z * OCCLUSION_CAMERA_QUANT);
     const cameraKey = qCameraX * 65536 + qCameraZ;
@@ -648,8 +652,12 @@ export function updateWallTransparency(
 
     // Only recalculate occlusion every N frames (expensive ray-box tests)
     if (occlusionDirty && wallCheckFrame >= WALL_CHECK_INTERVAL) {
+        occlusionRecomputedThisFrame = true;
         wallCheckFrame = 0;
         occlusionDirty = false;
+        wallOpacityTransitionsActive = true;
+        candleOpacityTransitionsActive = true;
+        flameOpacityTransitionsActive = true;
         cachedOccludingMeshes.clear();
         cachedOccludingTreeGroups.clear();
         cachedOccludingColumnGroups.clear();
@@ -787,16 +795,21 @@ export function updateWallTransparency(
         }
     }
 
-    // Update wall opacities every frame (smooth lerp using cached occlusion data)
-    for (const mesh of wallMeshes) {
-        const mat = mesh.material as THREE.MeshStandardMaterial;
-        const targetOpacity = cachedOccludingMeshes.has(mesh) ? WALL_OPACITY_OCCLUDING : WALL_OPACITY_NORMAL;
-        syncMaterialTransparency(mat, targetOpacity, mat.opacity);
-        const delta = targetOpacity - mat.opacity;
-        if (Math.abs(delta) < 0.0005) continue;
-        mat.opacity += delta * WALL_OPACITY_LERP_SPEED;
-        if (Math.abs(mat.opacity - targetOpacity) < 0.01) mat.opacity = targetOpacity;
-        syncMaterialTransparency(mat, targetOpacity, mat.opacity);
+    // Update wall opacities while transitions are active or occlusion changed.
+    if (occlusionRecomputedThisFrame || wallOpacityTransitionsActive) {
+        let nextWallTransitionsActive = false;
+        for (const mesh of wallMeshes) {
+            const mat = mesh.material as THREE.MeshStandardMaterial;
+            const targetOpacity = cachedOccludingMeshes.has(mesh) ? WALL_OPACITY_OCCLUDING : WALL_OPACITY_NORMAL;
+            syncMaterialTransparency(mat, targetOpacity, mat.opacity);
+            const delta = targetOpacity - mat.opacity;
+            if (Math.abs(delta) < 0.0005) continue;
+            nextWallTransitionsActive = true;
+            mat.opacity += delta * WALL_OPACITY_LERP_SPEED;
+            if (Math.abs(mat.opacity - targetOpacity) < 0.01) mat.opacity = targetOpacity;
+            syncMaterialTransparency(mat, targetOpacity, mat.opacity);
+        }
+        wallOpacityTransitionsActive = nextWallTransitionsActive;
     }
 
     // Update tree opacities if provided
@@ -856,21 +869,29 @@ export function updateWallTransparency(
     }
 
     // Update candle opacities if provided
-    if (candleMeshes) {
+    if (!candleMeshes || candleMeshes.length === 0) {
+        candleOpacityTransitionsActive = false;
+    } else if (occlusionRecomputedThisFrame || candleOpacityTransitionsActive) {
+        let nextCandleTransitionsActive = false;
         for (const mesh of candleMeshes) {
             const mat = mesh.material as THREE.MeshStandardMaterial;
             const targetOpacity = cachedOccludingMeshes.has(mesh) ? WALL_OPACITY_OCCLUDING : WALL_OPACITY_NORMAL;
             syncMaterialTransparency(mat, targetOpacity, mat.opacity);
             const delta = targetOpacity - mat.opacity;
             if (Math.abs(delta) < 0.0005) continue;
+            nextCandleTransitionsActive = true;
             mat.opacity += delta * WALL_OPACITY_LERP_SPEED;
             if (Math.abs(mat.opacity - targetOpacity) < 0.01) mat.opacity = targetOpacity;
             syncMaterialTransparency(mat, targetOpacity, mat.opacity);
         }
+        candleOpacityTransitionsActive = nextCandleTransitionsActive;
     }
 
     // Update flame opacities if provided (use MeshBasicMaterial)
-    if (flameMeshes) {
+    if (!flameMeshes || flameMeshes.length === 0) {
+        flameOpacityTransitionsActive = false;
+    } else if (occlusionRecomputedThisFrame || flameOpacityTransitionsActive) {
+        let nextFlameTransitionsActive = false;
         for (const mesh of flameMeshes) {
             const mat = mesh.material as THREE.MeshBasicMaterial;
             const baseOpacity = 0.85;  // Flame's normal opacity
@@ -878,10 +899,12 @@ export function updateWallTransparency(
             syncMaterialTransparency(mat, targetOpacity, mat.opacity);
             const delta = targetOpacity - mat.opacity;
             if (Math.abs(delta) < 0.0005) continue;
+            nextFlameTransitionsActive = true;
             mat.opacity += delta * WALL_OPACITY_LERP_SPEED;
             if (Math.abs(mat.opacity - targetOpacity) < 0.01) mat.opacity = targetOpacity;
             syncMaterialTransparency(mat, targetOpacity, mat.opacity);
         }
+        flameOpacityTransitionsActive = nextFlameTransitionsActive;
     }
 }
 

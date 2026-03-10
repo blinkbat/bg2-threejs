@@ -534,6 +534,9 @@ const TURN_SPEED_MOVING = 0.10;      // Slower turn when moving
 const DAMAGE_SOURCE_PRIORITY_TIME = 2000;  // ms - prioritize damage source for 2 seconds
 // Only sync facing to React state when visual differs from committed state by this much
 const FACING_REACT_THRESHOLD = 0.05;  // ~3 degrees
+const FACING_REACT_FORCE_SYNC_THRESHOLD = 0.35; // ~20 degrees
+const FACING_REACT_SYNC_MIN_INTERVAL_MS = 34;
+let lastFacingReactSyncAt = 0;
 
 /**
  * Update shield facing for front-shielded enemies.
@@ -549,6 +552,7 @@ export function updateShieldFacing(
 ): void {
     const facingUpdates = new Map<number, number>();
     const now = Date.now();
+    let requiresImmediateReactSync = false;
 
     for (const unit of unitsState) {
         if (unit.team !== "enemy" || unit.hp <= 0) continue;
@@ -626,13 +630,21 @@ export function updateShieldFacing(
         let reactDiff = currentFacing - reactFacing;
         while (reactDiff > Math.PI) reactDiff -= Math.PI * 2;
         while (reactDiff < -Math.PI) reactDiff += Math.PI * 2;
-        if (Math.abs(reactDiff) > FACING_REACT_THRESHOLD) {
+        const absReactDiff = Math.abs(reactDiff);
+        if (absReactDiff > FACING_REACT_THRESHOLD) {
             facingUpdates.set(unit.id, currentFacing);
+            if (absReactDiff > FACING_REACT_FORCE_SYNC_THRESHOLD) {
+                requiresImmediateReactSync = true;
+            }
         }
     }
 
     // Batch update unit facing values (Map.get is O(1) vs .find O(n))
     if (facingUpdates.size > 0) {
+        if (!requiresImmediateReactSync && (now - lastFacingReactSyncAt) < FACING_REACT_SYNC_MIN_INTERVAL_MS) {
+            return;
+        }
+        lastFacingReactSyncAt = now;
         setUnits(prev => prev.map(u => {
             const facing = facingUpdates.get(u.id);
             return facing !== undefined ? { ...u, facing } : u;

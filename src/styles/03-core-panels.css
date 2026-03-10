@@ -924,6 +924,8 @@
     pointer-events: none;
     z-index: 1000;
     white-space: nowrap;
+    transition: left 70ms linear, top 70ms linear;
+    will-change: left, top;
 }
 
 .enemy-tooltip-name {

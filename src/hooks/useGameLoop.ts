@@ -581,6 +581,7 @@ export function useGameLoop({
 
             // Snapshot units and populate O(1) lookup caches for all systems this frame
             let currentUnits = stateRefs.unitsStateRef.current;
+            const initialUnitsSnapshot = currentUnits;
             let sectionStart = performance.now();
             updateUnitCache(currentUnits);
             clearUnitStatsCache();
@@ -797,8 +798,10 @@ export function useGameLoop({
 
             // Re-snapshot after combat mutations so FoW/AI consume fresh unit state.
             currentUnits = stateRefs.unitsStateRef.current;
-            updateUnitCache(currentUnits);
-            clearUnitStatsCache();
+            if (currentUnits !== initialUnitsSnapshot) {
+                updateUnitCache(currentUnits);
+                clearUnitStatsCache();
+            }
 
             // Visual updates (run even when paused)
             sectionStart = performance.now();

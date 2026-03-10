@@ -136,6 +136,12 @@ export interface UseInputHandlersOptions {
 const DIRECT_MOVE_SAMPLE_DENSITY = 4;
 const NPC_ENGAGE_RANGE = 3.5;
 const HOVER_ROOT_REBUILD_INTERVAL_MS = 140;
+const TOOLTIP_ENEMY_HEIGHT_OFFSET = 1.35;
+const TOOLTIP_PLAYER_HEIGHT_OFFSET = 1.45;
+const TOOLTIP_CHEST_HEIGHT = 0.9;
+const TOOLTIP_DOOR_HEIGHT = 1.0;
+const TOOLTIP_SECRET_DOOR_HEIGHT = 1.2;
+const TOOLTIP_LOOT_BAG_HEIGHT = 0.7;
 
 interface ChestHitData {
     chestIndex: number;
@@ -193,11 +199,12 @@ export function useInputHandlers({
 }: UseInputHandlersOptions): void {
     const raycasterRef = useRef(new THREE.Raycaster());
     const mouseRef = useRef(new THREE.Vector2());
-    const lastHoverUpdateRef = useRef(0);
     const lastHoverRootsBuildRef = useRef(0);
-    const lastHoverPositionRef = useRef<{ x: number; y: number }>({ x: Number.NaN, y: Number.NaN });
     const staticHoverRaycastRootsRef = useRef<THREE.Object3D[]>([]);
     const hoverRaycastRootsRef = useRef<THREE.Object3D[]>([]);
+    const unitRaycastRootsRef = useRef<THREE.Object3D[]>([]);
+    const interactionRaycastRootsRef = useRef<THREE.Object3D[]>([]);
+    const aliveHoverUnitIdsRef = useRef<Set<number>>(new Set());
     const hoveredEnemyRef = useRef<{ id: number; x: number; y: number } | null>(null);
     const hoveredChestRef = useRef<{ x: number; y: number; chestIndex: number; chestX: number; chestZ: number } | null>(null);
     const hoveredPlayerRef = useRef<{ id: number; x: number; y: number } | null>(null);
@@ -211,6 +218,7 @@ export function useInputHandlers({
         const { scene, camera, renderer, unitGroups, targetRings, moveMarker, rangeIndicator, aoeIndicator, secretDoorMeshes } = sceneRefs;
         const raycaster = raycasterRef.current;
         const mouse = mouseRef.current;
+        const tooltipProjection = new THREE.Vector3();
         const staticHoverNames = new Set(["ground", "chest", "door", "secretDoor"]);
         const staticHoverRaycastRoots: THREE.Object3D[] = [];
         scene.traverse(obj => {
@@ -220,6 +228,49 @@ export function useInputHandlers({
         });
         staticHoverRaycastRootsRef.current = staticHoverRaycastRoots;
         lastHoverRootsBuildRef.current = 0;
+
+        const refreshAliveUnitIds = (): Set<number> => {
+            const aliveUnitIds = aliveHoverUnitIdsRef.current;
+            aliveUnitIds.clear();
+            for (const unit of stateRefs.unitsStateRef.current) {
+                if (unit.hp <= 0) continue;
+                aliveUnitIds.add(unit.id);
+            }
+            return aliveUnitIds;
+        };
+
+        const rebuildUnitRaycastRoots = (): THREE.Object3D[] => {
+            const unitRaycastRoots = unitRaycastRootsRef.current;
+            unitRaycastRoots.length = 0;
+            const aliveUnitIds = refreshAliveUnitIds();
+
+            for (const unitIdKey in unitGroups) {
+                const unitId = Number(unitIdKey);
+                const unitGroup = unitGroups[unitId];
+                if (!unitGroup || !unitGroup.visible) continue;
+                if (!aliveUnitIds.has(unitId)) continue;
+                unitRaycastRoots.push(unitGroup);
+            }
+
+            return unitRaycastRoots;
+        };
+
+        const rebuildInteractionRaycastRoots = (): THREE.Object3D[] => {
+            const interactionRaycastRoots = interactionRaycastRootsRef.current;
+            interactionRaycastRoots.length = 0;
+
+            for (const staticRoot of staticHoverRaycastRootsRef.current) {
+                interactionRaycastRoots.push(staticRoot);
+            }
+            for (const bag of gameRefs.current.lootBags) {
+                interactionRaycastRoots.push(bag.mesh);
+            }
+            for (const secretDoor of secretDoorMeshes) {
+                interactionRaycastRoots.push(secretDoor);
+            }
+
+            return interactionRaycastRoots;
+        };
 
         const updateCam = () => updateCamera(camera, gameRefs.current.cameraOffset);
         const closeAllTooltips = () => {
@@ -252,15 +303,7 @@ export function useInputHandlers({
                 mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
                 mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
                 raycaster.setFromCamera(mouse, camera);
-                let hitUnit = false;
-                for (const h of raycaster.intersectObjects(scene.children, true)) {
-                    let o: THREE.Object3D | null = h.object;
-                    while (o) {
-                        if (o.userData.unitId !== undefined) { hitUnit = true; break; }
-                        o = o.parent;
-                    }
-                    if (hitUnit) break;
-                }
+                const hitUnit = raycaster.intersectObjects(rebuildUnitRaycastRoots(), true).length > 0;
                 if (!hitUnit) {
                     mutableRefs.isBoxSel.current = true;
                     mutableRefs.boxStart.current = { x: e.clientX, y: e.clientY };
@@ -306,18 +349,14 @@ export function useInputHandlers({
             }
 
             const hoverNow = performance.now();
-            const hoverIntervalMs = stateRefs.targetingModeRef.current ? 16 : 33;
-            if (hoverNow - lastHoverUpdateRef.current < hoverIntervalMs) {
-                return;
-            }
-            const lastHoverPos = lastHoverPositionRef.current;
-            if (lastHoverPos.x === e.clientX && lastHoverPos.y === e.clientY) {
-                return;
-            }
-            lastHoverUpdateRef.current = hoverNow;
-            lastHoverPositionRef.current = { x: e.clientX, y: e.clientY };
-
             const rect = renderer.domElement.getBoundingClientRect();
+            const projectTooltipPosition = (worldX: number, worldY: number, worldZ: number): { x: number; y: number } => {
+                tooltipProjection.set(worldX, worldY, worldZ).project(camera);
+                return {
+                    x: rect.left + (tooltipProjection.x + 1) * rect.width * 0.5,
+                    y: rect.top + (-tooltipProjection.y + 1) * rect.height * 0.5
+                };
+            };
             mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
             mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
             raycaster.setFromCamera(mouse, camera);
@@ -327,27 +366,11 @@ export function useInputHandlers({
                 || hoverNow - lastHoverRootsBuildRef.current >= HOVER_ROOT_REBUILD_INTERVAL_MS
             ) {
                 hoverRoots.length = 0;
-                const unitsById = new Map<number, Unit>();
-                for (const unit of stateRefs.unitsStateRef.current) {
-                    unitsById.set(unit.id, unit);
+                for (const unitRoot of rebuildUnitRaycastRoots()) {
+                    hoverRoots.push(unitRoot);
                 }
-
-                for (const unitIdKey in unitGroups) {
-                    const unitId = Number(unitIdKey);
-                    const unitGroup = unitGroups[unitId];
-                    if (!unitGroup || !unitGroup.visible) continue;
-                    const unit = unitsById.get(unitId);
-                    if (unit && unit.hp <= 0) continue;
-                    hoverRoots.push(unitGroup);
-                }
-                for (const secretDoor of secretDoorMeshes) {
-                    hoverRoots.push(secretDoor);
-                }
-                for (const staticRoot of staticHoverRaycastRootsRef.current) {
-                    hoverRoots.push(staticRoot);
-                }
-                for (const bag of gameRefs.current.lootBags) {
-                    hoverRoots.push(bag.mesh);
+                for (const interactionRoot of rebuildInteractionRaycastRoots()) {
+                    hoverRoots.push(interactionRoot);
                 }
                 lastHoverRootsBuildRef.current = hoverNow;
             }
@@ -399,11 +422,24 @@ export function useInputHandlers({
                                 const cz = Math.floor(g.position.z);
                                 const vis = gameRefs.current.visibility[cx]?.[cz] ?? 0;
                                 if (vis === 2) {
-                                    foundEnemy = { id: unitId, x: e.clientX, y: e.clientY };
+                                    const anchor = projectTooltipPosition(
+                                        g.position.x,
+                                        g.position.y + TOOLTIP_ENEMY_HEIGHT_OFFSET,
+                                        g.position.z
+                                    );
+                                    foundEnemy = { id: unitId, x: anchor.x, y: anchor.y };
                                 }
                             }
                         } else if (unit.team === "player") {
-                            foundPlayer = { id: unitId, x: e.clientX, y: e.clientY };
+                            const g = unitGroups[unitId];
+                            if (g) {
+                                const anchor = projectTooltipPosition(
+                                    g.position.x,
+                                    g.position.y + TOOLTIP_PLAYER_HEIGHT_OFFSET,
+                                    g.position.z
+                                );
+                                foundPlayer = { id: unitId, x: anchor.x, y: anchor.y };
+                            }
                         }
                         break;
                     }
@@ -411,27 +447,44 @@ export function useInputHandlers({
                 if (hit.object.name === "chest" && hit.object.userData?.chestIndex !== undefined) {
                     const { chestIndex, chestX, chestZ, chestDecorOnly } = hit.object.userData as ChestHitData;
                     if (chestDecorOnly) continue;
-                    foundChest = { x: e.clientX, y: e.clientY, chestIndex, chestX, chestZ };
+                    const anchor = projectTooltipPosition(chestX + 0.5, TOOLTIP_CHEST_HEIGHT, chestZ + 0.5);
+                    foundChest = { x: anchor.x, y: anchor.y, chestIndex, chestX, chestZ };
                     break;
                 }
                 if (hit.object.name === "door") {
                     const transition = hit.object.userData?.transition as AreaTransition | undefined;
                     if (transition) {
-                        foundDoor = { targetArea: transition.targetArea, x: e.clientX, y: e.clientY };
+                        const anchor = projectTooltipPosition(
+                            transition.x + transition.w * 0.5,
+                            TOOLTIP_DOOR_HEIGHT,
+                            transition.z + transition.h * 0.5
+                        );
+                        foundDoor = { targetArea: transition.targetArea, x: anchor.x, y: anchor.y };
                     }
                     break;
                 }
-                if (hit.object.name === "secretDoor") {
-                    foundSecretDoor = { x: e.clientX, y: e.clientY };
+                if (hit.object.name === "secretDoor" && hit.object.userData?.secretDoor?.blockingWall) {
+                    const blockingWall = (hit.object.userData as {
+                        secretDoor?: { blockingWall?: { x: number; z: number; w: number; h: number } };
+                    }).secretDoor?.blockingWall;
+                    if (blockingWall) {
+                        const anchor = projectTooltipPosition(
+                            blockingWall.x + blockingWall.w * 0.5,
+                            TOOLTIP_SECRET_DOOR_HEIGHT,
+                            blockingWall.z + blockingWall.h * 0.5
+                        );
+                        foundSecretDoor = { x: anchor.x, y: anchor.y };
+                    }
                     break;
                 }
                 if (hit.object.name === "lootBag" && hit.object.userData?.lootBagId !== undefined) {
                     const bagId = hit.object.userData.lootBagId;
                     const bag = gameRefs.current.lootBags.find(b => b.id === bagId);
                     if (bag) {
+                        const anchor = projectTooltipPosition(bag.x, TOOLTIP_LOOT_BAG_HEIGHT, bag.z);
                         foundLootBag = {
-                            x: e.clientX,
-                            y: e.clientY,
+                            x: anchor.x,
+                            y: anchor.y,
                             gold: bag.gold,
                             hasItems: (bag.items?.length ?? 0) > 0
                         };
@@ -523,7 +576,7 @@ export function useInputHandlers({
                     mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
                     mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
                     raycaster.setFromCamera(mouse, camera);
-                    for (const h of raycaster.intersectObjects(scene.children, true)) {
+                    for (const h of raycaster.intersectObjects(rebuildInteractionRaycastRoots(), true)) {
                         if (h.object.name === "obstacle") continue;
                         if (h.object.name === "ground" && stateRefs.selectedRef.current.length > 0) {
                             const gx = Math.floor(h.point.x) + 0.5;
@@ -636,7 +689,11 @@ export function useInputHandlers({
 
             // Handle targeting mode
             if (stateRefs.targetingModeRef.current) {
-                for (const hit of raycaster.intersectObjects(scene.children, true)) {
+                const targetingRaycastRoots = rebuildInteractionRaycastRoots();
+                for (const unitRoot of rebuildUnitRaycastRoots()) {
+                    targetingRaycastRoots.push(unitRoot);
+                }
+                for (const hit of raycaster.intersectObjects(targetingRaycastRoots, true)) {
                     if (handleTargetingClick(
                         hit,
                         stateRefs.targetingModeRef.current,
@@ -650,7 +707,7 @@ export function useInputHandlers({
             }
 
             // Check for interactable objects
-            for (const h of raycaster.intersectObjects(scene.children, true)) {
+            for (const h of raycaster.intersectObjects(rebuildInteractionRaycastRoots(), true)) {
                 // Door click
                 if (h.object.name === "door") {
                     const transition = h.object.userData?.transition as AreaTransition | undefined;
@@ -701,7 +758,7 @@ export function useInputHandlers({
             }
 
             // Unit click (selection/attack)
-            for (const h of raycaster.intersectObjects(scene.children, true)) {
+            for (const h of raycaster.intersectObjects(rebuildUnitRaycastRoots(), true)) {
                 let o: THREE.Object3D | null = h.object;
                 while (o) {
                     if (o.userData.unitId !== undefined) {

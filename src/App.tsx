@@ -1085,8 +1085,8 @@ function Game({
 
             // Trigger conditions that depend on position must read live scene transforms,
             // not potentially stale React unit coordinates.
-            const triggerUnits = units.map(unit => {
-                const group = sceneState.unitGroups[unit.id];
+            const triggerUnits = unitsStateRef.current.map(unit => {
+                const group = unitGroupsRef.current[unit.id];
                 if (!group) return unit;
                 return {
                     ...unit,
@@ -1178,7 +1178,7 @@ function Game({
         evaluateDialogTriggers();
         const intervalId = window.setInterval(evaluateDialogTriggers, DIALOG_TRIGGER_POLL_MS);
         return () => window.clearInterval(intervalId);
-    }, [addLog, currentAreaId, dialogTriggersEnabled, isDialogOpen, killedEnemies, playtestSkipDialogs, sceneState.unitGroups, startDialog, units]);
+    }, [addLog, currentAreaId, dialogTriggersEnabled, isDialogOpen, killedEnemies, playtestSkipDialogs, startDialog]);
 
     const buildPersistedPlayers = useCallback((allUnits: Unit[], includePositions: boolean): PersistedPlayer[] => {
         const players = allUnits.filter(u => u.team === "player");
