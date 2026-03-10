@@ -239,7 +239,7 @@ interface SpriteTemplate extends Omit<SpriteConfig, "texture"> {
 const PLAYER_SPRITE_TEMPLATES: Partial<Record<number, SpriteTemplate>> = {
     1: { textureKey: "barbarian", width: 196, height: 195, color: 0xdda298, spriteHeight: 1.8, offsetX: -0.1 },  // Barbarian - moderate brighten
     2: { textureKey: "paladin", width: 128, height: 196, color: 0xe3c07a, spriteHeight: 1.8 },    // Paladin - moderate brighten
-    3: { textureKey: "thief", width: 128, height: 196, color: 0xc49ccd, spriteHeight: 1.8, offsetX: 0.1 },  // Thief - moderate brighten
+    3: { textureKey: "thief", width: 128, height: 196, color: 0xc49ccd, spriteHeight: 1.8, offsetX: 0.06 },  // Thief - moderate brighten
     4: { textureKey: "wizard", width: 110, height: 196, color: 0x84bfdc, spriteHeight: 1.8 },     // Wizard - moderate brighten
     5: { textureKey: "monk", width: 128, height: 196, color: 0x79c59c, spriteHeight: 1.8, offsetX: -0.1 },  // Monk - moderate brighten
     6: { textureKey: "cleric", width: 128, height: 196, color: 0xc4ccd2, spriteHeight: 1.8 },   // Cleric - lightly desaturated
