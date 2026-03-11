@@ -90,6 +90,65 @@ export const WEAPONS: Record<string, WeaponItem> = {
         damage: [5, 12],
         damageType: "physical",
     },
+    boneSceptre: {
+        id: "boneSceptre",
+        name: "Bone Sceptre",
+        description: "Carved from something that was once alive, and may still be.",
+        category: "weapon",
+        grip: "oneHand",
+        damage: [4, 8],
+        damageType: "chaos",
+    },
+    corpsemaker: {
+        id: "corpsemaker",
+        name: "Corpsemaker",
+        description: "Forged in a siege camp from melted-down horseshoes. It has since found better use.",
+        category: "weapon",
+        grip: "twoHand",
+        damage: [6, 14],
+        damageType: "physical",
+    },
+    ashenLongbow: {
+        id: "ashenLongbow",
+        name: "Ashen Longbow",
+        description: "The bowstring smolders faintly. Arrows char the air as they fly.",
+        category: "weapon",
+        grip: "twoHand",
+        damage: [3, 6],
+        damageType: "fire",
+        range: 10,
+        projectileColor: "#cc5522",
+    },
+    pilgrimsMace: {
+        id: "pilgrimsMace",
+        name: "Pilgrim's Mace",
+        description: "Blessed by three temples and cursed by one. The blessings won.",
+        category: "weapon",
+        grip: "oneHand",
+        damage: [3, 7],
+        damageType: "holy",
+    },
+    staffOfThePaleCircuit: {
+        id: "staffOfThePaleCircuit",
+        name: "Staff of the Pale Circuit",
+        description: "It hums in the rain. Wizards who carry it learn to love storms.",
+        category: "weapon",
+        grip: "twoHand",
+        damage: [2, 5],
+        damageType: "lightning",
+        range: 7,
+        projectileColor: "#aaccff",
+    },
+    widowsNeedle: {
+        id: "widowsNeedle",
+        name: "Widow's Needle",
+        description: "Thin as a hatpin. The Thief's Guild calls it a 'letter opener' — and every letter says the same thing.",
+        category: "weapon",
+        grip: "oneHand",
+        damage: [3, 5],
+        damageType: "physical",
+        attackCooldown: 1200,
+    },
 };
 
 // =============================================================================
@@ -111,6 +170,20 @@ const SHIELDS: Record<string, ShieldItem> = {
         category: "shield",
         armor: 2,
     },
+    thornwallBuckler: {
+        id: "thornwallBuckler",
+        name: "Thornwall Buckler",
+        description: "The brambles woven into its face are not decorative.",
+        category: "shield",
+        armor: 1,
+    },
+    towerShield: {
+        id: "towerShield",
+        name: "Tower Shield",
+        description: "You can hide behind it. Most do.",
+        category: "shield",
+        armor: 4,
+    },
 };
 
 // =============================================================================
@@ -118,12 +191,33 @@ const SHIELDS: Record<string, ShieldItem> = {
 // =============================================================================
 
 const ARMORS: Record<string, ArmorItem> = {
+    chainmailHauberk: {
+        id: "chainmailHauberk",
+        name: "Chainmail Hauberk",
+        description: "Heavy and loud. You'll never sneak in it, but you'll live long enough not to care.",
+        category: "armor",
+        armor: 4,
+    },
     desertGi: {
         id: "desertGi",
         name: "Desert Gi",
         description: "Light cloth armor worn by desert monks. Allows freedom of movement.",
         category: "armor",
         armor: 2,
+    },
+    leatherBrigandine: {
+        id: "leatherBrigandine",
+        name: "Leather Brigandine",
+        description: "Layered leather plates riveted to canvas. A soldier's compromise between weight and protection.",
+        category: "armor",
+        armor: 3,
+    },
+    threadbareRobes: {
+        id: "threadbareRobes",
+        name: "Threadbare Robes",
+        description: "The enchantment faded long ago, but the silk still turns a blade — barely.",
+        category: "armor",
+        armor: 1,
     },
 };
 
@@ -132,6 +226,20 @@ const ARMORS: Record<string, ArmorItem> = {
 // =============================================================================
 
 const ACCESSORIES: Record<string, AccessoryItem> = {
+    bloodstonePendant: {
+        id: "bloodstonePendant",
+        name: "Bloodstone Pendant",
+        description: "The stone pulses faintly, in time with the wearer's heartbeat.",
+        category: "accessory",
+        bonusMaxHp: 10,
+    },
+    ironhideBangle: {
+        id: "ironhideBangle",
+        name: "Ironhide Bangle",
+        description: "Dwarven metalwork. The runes say 'stand firm' — or possibly 'lunch is at noon.' The dialect is unclear.",
+        category: "accessory",
+        bonusArmor: 2,
+    },
     ringOfTheDrakeling: {
         id: "ringOfTheDrakeling",
         name: "Ring of the Drakeling",
@@ -198,6 +306,38 @@ const CONSUMABLES: Record<string, ConsumableItem> = {
         value: 15,
         cooldown: 5000,
         sound: "gulp",
+    },
+    dustyElixir: {
+        id: "dustyElixir",
+        name: "Dusty Elixir",
+        description: "The label peeled off years ago. It tastes like regret and ozone.",
+        category: "consumable",
+        effect: "mana",
+        value: 30,
+        cooldown: 5000,
+        sound: "gulp",
+    },
+    honeydFig: {
+        id: "honeydFig",
+        name: "Honeyed Fig",
+        description: "Sweet and filling. A rare comfort in the wild.",
+        category: "consumable",
+        effect: "heal",
+        value: 12,
+        cooldown: 5000,
+        sound: "crunch",
+    },
+    ironbarkTonic: {
+        id: "ironbarkTonic",
+        name: "Ironbark Tonic",
+        description: "Brewed from boiled bark and swamp water. Effective, but the aftertaste lingers — in your stomach, violently.",
+        category: "consumable",
+        effect: "heal",
+        value: 25,
+        cooldown: 5000,
+        sound: "gulp",
+        poisonChanceOnUse: 30,
+        poisonDamageOnUse: 3,
     },
     blightberry: {
         id: "blightberry",
