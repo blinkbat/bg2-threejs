@@ -67,7 +67,7 @@ export const HIGHLAND_DEFENSE_RANGE = 4.5;               // nearby ally radius
 
 // Summons - Ancestor Warrior aura
 export const ANCESTOR_AURA_RANGE = 4.5;
-export const ANCESTOR_AURA_DAMAGE_BONUS = 2;
+export const ANCESTOR_AURA_DAMAGE_BONUS = 1;
 
 // Summons - Visha's Eyes (cleric cantrip)
 export const VISHAS_EYES_ORB_COUNT = 3;

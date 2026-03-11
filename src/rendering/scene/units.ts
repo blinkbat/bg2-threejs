@@ -246,56 +246,35 @@ const PLAYER_SPRITE_TEMPLATES: Partial<Record<number, SpriteTemplate>> = {
     7: { textureKey: "barbarian", width: 196, height: 195, color: 0xdfcfbb, spriteHeight: 2.0, offsetX: -0.1, brightness: 0.09, opacity: 0.3 }, // Ancestor summon - moderate brighten
 };
 
-function applySpriteEdgeBlur(
+function applySpriteToneMix(
     material: THREE.MeshStandardMaterial,
-    textureWidth: number,
-    textureHeight: number,
     toneMix: number = 0
 ): void {
-    const texelX = (1 / textureWidth).toFixed(8);
-    const texelY = (1 / textureHeight).toFixed(8);
     const clampedToneMix = Math.max(0, Math.min(1, toneMix));
+    if (clampedToneMix <= 0.0001) {
+        return;
+    }
+
     const toneMixLiteral = clampedToneMix.toFixed(4);
-    material.customProgramCacheKey = () => `sprite_edge_blur_${textureWidth}x${textureHeight}_${toneMixLiteral}`;
+    material.customProgramCacheKey = () => `sprite_tone_mix_${toneMixLiteral}`;
     material.onBeforeCompile = (shader) => {
         shader.fragmentShader = shader.fragmentShader.replace(
             "#include <common>",
             [
                 "#include <common>",
-                `#define SPRITE_TEXEL_X ${texelX}`,
-                `#define SPRITE_TEXEL_Y ${texelY}`,
                 `#define SPRITE_TONE_MIX ${toneMixLiteral}`,
             ].join("\n")
         );
-        // 2D Gaussian blur over a 5-texel-wide kernel (13 samples):
-        // center + 4 cardinal at 1tx + 4 diagonal at 1tx + 4 cardinal at 2tx
-        // Weights approximate a Gaussian: center=4, card1=2, diag1=1, card2=1 → /20
+
+        // Keep alpha test behavior on the default one-sample texture path,
+        // then apply optional grayscale-to-color remap.
         shader.fragmentShader = shader.fragmentShader.replace(
             "#include <alphatest_fragment>",
             [
-                "{",
-                "    float am = opacity;",
-                "    vec2 ts = vec2(SPRITE_TEXEL_X, SPRITE_TEXEL_Y);",
-                "    float a   = texture2D(map, vMapUv).a * am;",
-                "    float aL1 = texture2D(map, vMapUv + vec2(-1.0, 0.0) * ts).a * am;",
-                "    float aR1 = texture2D(map, vMapUv + vec2( 1.0, 0.0) * ts).a * am;",
-                "    float aU1 = texture2D(map, vMapUv + vec2(0.0,  1.0) * ts).a * am;",
-                "    float aD1 = texture2D(map, vMapUv + vec2(0.0, -1.0) * ts).a * am;",
-                "    float aL2 = texture2D(map, vMapUv + vec2(-2.0, 0.0) * ts).a * am;",
-                "    float aR2 = texture2D(map, vMapUv + vec2( 2.0, 0.0) * ts).a * am;",
-                "    float aU2 = texture2D(map, vMapUv + vec2(0.0,  2.0) * ts).a * am;",
-                "    float aD2 = texture2D(map, vMapUv + vec2(0.0, -2.0) * ts).a * am;",
-                "    float aDL = texture2D(map, vMapUv + vec2(-1.0, -1.0) * ts).a * am;",
-                "    float aDR = texture2D(map, vMapUv + vec2( 1.0, -1.0) * ts).a * am;",
-                "    float aUL = texture2D(map, vMapUv + vec2(-1.0,  1.0) * ts).a * am;",
-                "    float aUR = texture2D(map, vMapUv + vec2( 1.0,  1.0) * ts).a * am;",
-                "    float blurA = (a * 4.0 + (aL1 + aR1 + aU1 + aD1) * 2.0 + (aDL + aDR + aUL + aUR) + (aL2 + aR2 + aU2 + aD2)) / 20.0;",
-                "    if (blurA < 0.15) discard;",
-                "    diffuseColor.a = blurA;",
-                "    float gray = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));",
-                "    vec3 toned = gray * diffuse;",
-                "    diffuseColor.rgb = mix(diffuseColor.rgb, toned, SPRITE_TONE_MIX);",
-                "}",
+                "if ( diffuseColor.a < alphaTest ) discard;",
+                "float gray = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));",
+                "vec3 toned = gray * diffuse;",
+                "diffuseColor.rgb = mix(diffuseColor.rgb, toned, SPRITE_TONE_MIX);",
             ].join("\n")
         );
     };
@@ -433,7 +412,7 @@ function buildUnitGroup(
         });
         planeMat.userData.spriteLightingBase = spriteLightingBase;
         planeMat.userData.spriteBaseColor = new THREE.Color(spriteColor);
-        applySpriteEdgeBlur(planeMat, spriteConfig.width, spriteConfig.height, spriteConfig.toneMix ?? 0);
+        applySpriteToneMix(planeMat, spriteConfig.toneMix ?? 0);
         const plane = new THREE.Mesh(new THREE.PlaneGeometry(spriteWidth, spriteHeight), planeMat);
         plane.position.y = spriteHeight / 2 + (spriteConfig.offsetY ?? 0);
         plane.position.x = spriteConfig.offsetX ?? 0;
@@ -634,3 +613,4 @@ export function addUnitToScene(
         shieldIndicators[unit.id] = result.shieldIndicator;
     }
 }
+

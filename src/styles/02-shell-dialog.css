@@ -3,8 +3,6 @@
    ----------------------------------------------------------------------------- */
 .glass-panel {
     background: var(--ui-color-panel-glass);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
     border: 1px solid var(--ui-color-border-muted);
     border-radius: 8px;
     color: var(--ui-color-text-secondary);
@@ -12,8 +10,6 @@
 
 .glass-panel-light {
     background: var(--ui-color-glass);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
     border: 1px solid var(--ui-color-border-soft);
     border-radius: 6px;
 }

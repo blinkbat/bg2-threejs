@@ -187,6 +187,9 @@ const DIALOG_TRIGGER_REPEAT_GUARD_MS = 1500;
 const DIALOG_PARTY_GATHERED_DEFAULT_MAX_DISTANCE = 8;
 const SPEND_NIGHT_FADE_MS = 420;
 const SPEND_NIGHT_BLACK_HOLD_MS = 260;
+const DIALOG_TRIGGER_SNAPSHOT_HASH_SEED = 2166136261;
+const DIALOG_TRIGGER_SNAPSHOT_HASH_PRIME = 16777619;
+const DIALOG_TRIGGER_POSITION_QUANT = 4;
 
 function cloneDialogTriggerProgressForRuntime(progress: DialogTriggerProgress | null): Record<string, Set<string>> {
     const clone: Record<string, Set<string>> = {};
@@ -213,6 +216,68 @@ function formatStatusEffectLabel(statusType: StatusEffect["type"]): string {
         .split("_")
         .map(part => part.charAt(0).toUpperCase() + part.slice(1))
         .join(" ");
+}
+
+function getDialogTriggerTeamCode(team: Unit["team"]): number {
+    if (team === "player") return 1;
+    if (team === "enemy") return 2;
+    return 3;
+}
+
+function buildDialogTriggerUnitsHash(
+    units: Unit[],
+    unitGroups: Record<number, { position: { x: number; z: number } }>
+): number {
+    let hash = Math.imul(
+        DIALOG_TRIGGER_SNAPSHOT_HASH_SEED ^ units.length,
+        DIALOG_TRIGGER_SNAPSHOT_HASH_PRIME
+    );
+
+    for (const unit of units) {
+        const group = unitGroups[unit.id];
+        const x = group?.position.x ?? unit.x;
+        const z = group?.position.z ?? unit.z;
+        const qx = Math.round(x * DIALOG_TRIGGER_POSITION_QUANT);
+        const qz = Math.round(z * DIALOG_TRIGGER_POSITION_QUANT);
+
+        hash = Math.imul(hash ^ unit.id, DIALOG_TRIGGER_SNAPSHOT_HASH_PRIME);
+        hash = Math.imul(hash ^ Math.round(unit.hp), DIALOG_TRIGGER_SNAPSHOT_HASH_PRIME);
+        hash = Math.imul(hash ^ getDialogTriggerTeamCode(unit.team), DIALOG_TRIGGER_SNAPSHOT_HASH_PRIME);
+        hash = Math.imul(hash ^ qx, DIALOG_TRIGGER_SNAPSHOT_HASH_PRIME);
+        hash = Math.imul(hash ^ qz, DIALOG_TRIGGER_SNAPSHOT_HASH_PRIME);
+    }
+
+    return hash >>> 0;
+}
+
+function buildDialogTriggerUnitsSnapshot(
+    units: Unit[],
+    unitGroups: Record<number, { position: { x: number; z: number } }>
+): Unit[] {
+    const snapshot: Unit[] = [];
+
+    for (const unit of units) {
+        const group = unitGroups[unit.id];
+        if (!group) {
+            snapshot.push(unit);
+            continue;
+        }
+
+        const liveX = group.position.x;
+        const liveZ = group.position.z;
+        if (unit.x === liveX && unit.z === liveZ) {
+            snapshot.push(unit);
+            continue;
+        }
+
+        snapshot.push({
+            ...unit,
+            x: liveX,
+            z: liveZ,
+        });
+    }
+
+    return snapshot;
 }
 
 function getPrimaryStatusLabel(statusEffects: StatusEffect[] | undefined): string | null {
@@ -1070,38 +1135,51 @@ function Game({
 
     useEffect(() => {
         if (!dialogTriggersEnabled) return;
+        const area = getCurrentArea();
+        const triggers = area.dialogTriggers ?? [];
+        const sortedTriggers = [...triggers].sort((a, b) => getDialogTriggerPriority(b) - getDialogTriggerPriority(a));
+        const areaDialogDefinitionsById = buildAreaDialogDefinitionMap(area.dialogs);
+        let hasCachedTriggerUnitsHash = false;
+        let cachedTriggerUnitsHash = 0;
+        let cachedTriggerUnitsSnapshot: Unit[] | null = null;
+
+        const getCachedTriggerUnitsSnapshot = (): Unit[] => {
+            const units = unitsStateRef.current;
+            const unitGroups = unitGroupsRef.current;
+            const nextHash = buildDialogTriggerUnitsHash(units, unitGroups);
+            if (hasCachedTriggerUnitsHash && cachedTriggerUnitsSnapshot && nextHash === cachedTriggerUnitsHash) {
+                return cachedTriggerUnitsSnapshot;
+            }
+
+            const nextSnapshot = buildDialogTriggerUnitsSnapshot(units, unitGroups);
+            cachedTriggerUnitsHash = nextHash;
+            hasCachedTriggerUnitsHash = true;
+            cachedTriggerUnitsSnapshot = nextSnapshot;
+            return nextSnapshot;
+        };
 
         const evaluateDialogTriggers = () => {
             if (isDialogOpen) return;
 
-            const area = getCurrentArea();
             const runtimeState = dialogTriggerRuntimeStateRef.current;
-            const triggers = area.dialogTriggers ?? [];
-            if (triggers.length === 0) {
+            if (sortedTriggers.length === 0) {
                 runtimeState.pendingNpcEngagementSpawnIndexes.clear();
                 return;
             }
-            const areaDialogDefinitionsById = buildAreaDialogDefinitionMap(area.dialogs);
-
-            // Trigger conditions that depend on position must read live scene transforms,
-            // not potentially stale React unit coordinates.
-            const triggerUnits = unitsStateRef.current.map(unit => {
-                const group = unitGroupsRef.current[unit.id];
-                if (!group) return unit;
-                return {
-                    ...unit,
-                    x: group.position.x,
-                    z: group.position.z,
-                };
-            });
 
             const now = Date.now();
             const firedIds = firedDialogTriggerIdsRef.current;
             const lastFiredAtByTriggerId = dialogTriggerLastFiredAtRef.current;
-            const sortedTriggers = [...triggers].sort((a, b) => getDialogTriggerPriority(b) - getDialogTriggerPriority(a));
             const markTriggerFired = (triggerId: string): void => {
                 firedIds.add(triggerId);
                 dialogTriggerProgressByAreaRef.current[currentAreaId] = new Set(firedIds);
+            };
+            let triggerUnits: Unit[] | null = null;
+            const getTriggerUnits = (): Unit[] => {
+                if (!triggerUnits) {
+                    triggerUnits = getCachedTriggerUnitsSnapshot();
+                }
+                return triggerUnits;
             };
 
             for (const trigger of sortedTriggers) {
@@ -1124,7 +1202,7 @@ function Game({
                 const satisfied = isDialogTriggerSatisfied({
                     trigger,
                     area,
-                    units: triggerUnits,
+                    units: getTriggerUnits(),
                     killedEnemies,
                     now,
                     areaLoadedAt: dialogTriggerAreaLoadedAtRef.current,

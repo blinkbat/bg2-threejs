@@ -201,6 +201,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     const floorMatPool: Record<string, THREE.MeshStandardMaterial> = {};
     const waterMatPool: Record<string, THREE.MeshStandardMaterial> = {};
     const lavaMatPool: Record<string, THREE.MeshStandardMaterial> = {};
+    const roundedTileMatPool: Record<string, THREE.MeshStandardMaterial> = {};
     const batchedTileMatrices = new Map<THREE.MeshStandardMaterial, THREE.Matrix4[]>();
     const lavaBubbleGeo = new THREE.RingGeometry(0.046, 0.074, 16);
     const areaIdUnitRange = hashAreaIdToUnitRange(area.id);
@@ -261,6 +262,39 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
             });
         }
         return lavaMatPool[color];
+    }
+    function serializeCornerMask(mask: [number, number, number, number]): string {
+        return `${mask[0]}${mask[1]}${mask[2]}${mask[3]}`;
+    }
+    function getRoundedTileMat(
+        color: string,
+        outerCorners: [number, number, number, number],
+        innerCorners: [number, number, number, number],
+        radius: number,
+        metalness: number,
+        roughness: number
+    ): THREE.MeshStandardMaterial {
+        const key = [
+            color,
+            serializeCornerMask(outerCorners),
+            serializeCornerMask(innerCorners),
+            radius.toFixed(3),
+            metalness.toFixed(3),
+            roughness.toFixed(3)
+        ].join("|");
+        const cached = roundedTileMatPool[key];
+        if (cached) return cached;
+
+        const next = createRoundedFloorMaterial(
+            color,
+            outerCorners,
+            innerCorners,
+            radius,
+            metalness,
+            roughness
+        );
+        roundedTileMatPool[key] = next;
+        return next;
     }
     function queueBatchedTile(
         material: THREE.MeshStandardMaterial,
@@ -338,7 +372,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 let tileMaterial: THREE.MeshStandardMaterial;
                 if (hasRounding) {
                     const innerCorners = [0, 0, 0, 0] as [number, number, number, number];
-                    tileMaterial = createRoundedFloorMaterial(
+                    tileMaterial = getRoundedTileMat(
                         color,
                         rounding.outer,
                         innerCorners,
@@ -386,7 +420,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                     const rounding = getNaturalTileCornerRounding(layer, x, z, "~");
                     const hasRounding = rounding.outer.some(value => value > 0) || rounding.inner.some(value => value > 0);
                     const lavaMat = hasRounding
-                        ? createRoundedFloorMaterial(
+                        ? getRoundedTileMat(
                             lavaColor,
                             rounding.outer,
                             [0, 0, 0, 0],
@@ -488,7 +522,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                     const rounding = getNaturalTileCornerRounding(layer, x, z, "w");
                     const hasRounding = rounding.outer.some(value => value > 0) || rounding.inner.some(value => value > 0);
                     const waterMat = hasRounding
-                        ? createRoundedFloorMaterial(
+                        ? getRoundedTileMat(
                             terrainWaterColor,
                             rounding.outer,
                             [0, 0, 0, 0],
