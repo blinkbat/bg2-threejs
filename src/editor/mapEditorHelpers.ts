@@ -142,6 +142,7 @@ export function cloneDialogNode(node: AreaDialogNode): AreaDialogNode {
         ...(node.nextNodeId ? { nextNodeId: node.nextNodeId } : {}),
         ...(node.continueLabel ? { continueLabel: node.continueLabel } : {}),
         ...(node.onDialogEndAction ? { onDialogEndAction: { ...node.onDialogEndAction } } : {}),
+        ...(node.isMenuNode ? { isMenuNode: true } : {}),
     };
 }
 

@@ -1,13 +1,12 @@
 import { useEffect } from "react";
-
-interface LootPickupModalEntry {
-    label: string;
-    tone: "gold" | "item";
-}
+import Tippy from "@tippyjs/react";
+import type { LootPickupEntry, LootPickupSourceLabel } from "../core/types";
+import { getItem } from "../game/items";
+import { ItemTooltip } from "./EquipmentModal";
 
 interface LootPickupModalProps {
-    sourceLabel: string;
-    entries: LootPickupModalEntry[];
+    sourceLabel: LootPickupSourceLabel;
+    entries: LootPickupEntry[];
     onTake: () => void;
 }
 
@@ -36,19 +35,35 @@ export function LootPickupModal({
             <div className="modal-content loot-pickup-modal" onClick={event => event.stopPropagation()}>
                 <div className="loot-pickup-header">
                     <div className="loot-pickup-title">{sourceLabel}</div>
-                    <div className="loot-pickup-subtitle">You receive:</div>
+                    <div className="loot-pickup-subtitle">You found these items:</div>
                 </div>
 
                 <div className="loot-pickup-body">
                     <div className="loot-pickup-list">
-                        {entries.map((entry, index) => (
-                            <div
-                                key={`${entry.label}-${index}`}
-                                className={`loot-pickup-entry loot-pickup-entry--${entry.tone}`}
-                            >
-                                {entry.label}
-                            </div>
-                        ))}
+                        {entries.map((entry, index) => {
+                            const item = entry.itemId ? getItem(entry.itemId) : undefined;
+                            const entryDiv = (
+                                <div
+                                    key={`${entry.label}-${index}`}
+                                    className={`loot-pickup-entry loot-pickup-entry--${entry.tone}`}
+                                >
+                                    {entry.label}
+                                </div>
+                            );
+
+                            if (!item) return entryDiv;
+
+                            return (
+                                <Tippy
+                                    key={`${entry.label}-${index}`}
+                                    content={<ItemTooltip item={item} />}
+                                    placement="right"
+                                    delay={[0, 0]}
+                                >
+                                    {entryDiv}
+                                </Tippy>
+                            );
+                        })}
                     </div>
                 </div>
 

@@ -8,6 +8,7 @@ function cloneDialogUiAction(action: AreaDialogUiAction | undefined): DialogUiAc
         return {
             type: "open_menu",
             menuId: action.menuId,
+            ...(action.chainAction ? { chainAction: { ...action.chainAction } } : {}),
         };
     }
     return {
@@ -40,6 +41,7 @@ function cloneAreaDialogNode(node: AreaDialogNode): DialogNode {
         ...(nextNodeId ? { nextNodeId } : {}),
         ...(node.continueLabel ? { continueLabel: node.continueLabel } : {}),
         ...(node.onDialogEndAction ? { onDialogEndAction: cloneDialogUiAction(node.onDialogEndAction) } : {}),
+        ...(node.isMenuNode ? { isMenuNode: true } : {}),
     };
 }
 

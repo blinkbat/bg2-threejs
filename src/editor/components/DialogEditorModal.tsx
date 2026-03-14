@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type {
     AreaDialogChoiceCondition,
     AreaDialogDefinition,
+    AreaDialogEventId,
+    AreaDialogMenuId,
     AreaDialogNode,
     AreaLocation,
     AreaDialogTrigger,
@@ -28,15 +30,17 @@ import {
     createConditionByType,
     createDefaultDialog,
     createDefaultNode,
+    createMenuNode,
     createUniqueId,
     describeTriggerCondition,
-    DIALOG_END_MENU_OPTIONS,
+    getMenuNodeLabel,
     getNodePreview,
     getTriggerConditionTypeLabel,
     getTriggerStartDialogId,
     isDialogConditionValid,
     isDialogSpeakerId,
     listNodeIds,
+    MENU_NODE_OPTIONS,
     SAVE_FEEDBACK_MS,
     stripInvalidNodeLinks,
     toDialogEndAction,
@@ -437,6 +441,30 @@ export function DialogEditorModal({
         setSelectedNodeId(nodeId);
     };
 
+    const addMenuNodeToSelectedDialog = (menuId: AreaDialogMenuId | AreaDialogEventId): void => {
+        if (!selectedDialog) return;
+        const existingNodeIds = new Set(Object.keys(selectedDialog.nodes));
+        const nodeId = createUniqueId(menuId, existingNodeIds);
+        const nextNode = createMenuNode(nodeId, menuId);
+        updateDialogById(selectedDialog.id, dialog => ({
+            ...dialog,
+            nodes: {
+                ...dialog.nodes,
+                [nodeId]: nextNode,
+            },
+        }));
+        setSelectedNodeId(nodeId);
+    };
+
+    const updateMenuNodeAction = (menuId: string): void => {
+        if (!selectedNode?.isMenuNode) return;
+        const action = toDialogEndAction(menuId);
+        updateSelectedNode(node => ({
+            ...node,
+            ...(action ? { onDialogEndAction: action } : { onDialogEndAction: undefined }),
+        }));
+    };
+
     const duplicateSelectedNode = (): void => {
         if (!selectedDialog || !selectedNode) return;
         const existingNodeIds = new Set(Object.keys(selectedDialog.nodes));
@@ -590,22 +618,6 @@ export function DialogEditorModal({
                         ...(nextNodeId ? { nextNodeId } : {}),
                         ...(choice.conditions && choice.conditions.length > 0 ? { conditions: choice.conditions.map(condition => ({ ...condition })) } : {}),
                         ...(choice.onDialogEndAction ? { onDialogEndAction: { ...choice.onDialogEndAction } } : {}),
-                    }
-                    : choice
-            ));
-            return { ...node, choices: nextChoices };
-        });
-    };
-
-    const updateChoiceDialogEndAction = (choiceId: string, menuId: string): void => {
-        updateSelectedNode(node => {
-            const nextAction = toDialogEndAction(menuId);
-            const choices = node.choices ?? [];
-            const nextChoices = choices.map(choice => (
-                choice.id === choiceId
-                    ? {
-                        ...choice,
-                        ...(nextAction ? { onDialogEndAction: nextAction } : { onDialogEndAction: undefined }),
                     }
                     : choice
             ));
@@ -1217,14 +1229,38 @@ export function DialogEditorModal({
                         <div style={{ border: "1px solid #3f475b", borderRadius: 8, background: "#252b3c", padding: 14, display: "flex", flexDirection: "column", gap: 8 }}>
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                                 <div style={{ fontSize: 15, fontWeight: 700 }}>Nodes</div>
-                                <button title="Create node" onClick={addNodeToSelectedDialog} disabled={!selectedDialog} style={{ padding: "4px 8px", fontSize: 13, background: selectedDialog ? "#3484d0" : "#5b6276", color: "#fff", border: "none", borderRadius: 4, cursor: selectedDialog ? "pointer" : "not-allowed" }}>
-                                    <PlusIcon size={13} />
-                                </button>
+                                <select
+                                    title="Add node"
+                                    disabled={!selectedDialog}
+                                    value=""
+                                    onChange={event => {
+                                        const val = event.target.value;
+                                        if (!val) return;
+                                        if (val === "__dialog__") { addNodeToSelectedDialog(); }
+                                        else { addMenuNodeToSelectedDialog(val as AreaDialogMenuId | AreaDialogEventId); }
+                                    }}
+                                    style={{ padding: "4px 8px", fontSize: 13, background: selectedDialog ? "#3484d0" : "#5b6276", color: "#fff", border: "none", borderRadius: 4, cursor: selectedDialog ? "pointer" : "not-allowed" }}
+                                >
+                                    <option value="">+ Node</option>
+                                    <option value="__dialog__">Dialog Node</option>
+                                    {MENU_NODE_OPTIONS.map(option => (
+                                        <option key={`add-menu-${option.value}`} value={option.value}>{option.label}</option>
+                                    ))}
+                                </select>
                             </div>
                             <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 520, overflowY: "auto" }}>
                                 {!selectedDialog && <div style={{ fontSize: 14, color: "#9aa6c5", padding: "6px 2px" }}>Select a dialog.</div>}
                                 {selectedDialog && nodeIds.map(nodeId => {
                                     const node = selectedDialog.nodes[nodeId];
+                                    if (node.isMenuNode) {
+                                        const menuLabel = getMenuNodeLabel(node);
+                                        return (
+                                            <button key={`${selectedDialog.id}-${node.id}`} onClick={() => setSelectedNodeId(node.id)} style={{ textAlign: "left", padding: "10px 14px", borderRadius: 6, border: resolvedSelectedNodeId === node.id ? "1px solid #5ea5ff" : "1px solid #6b5b95", background: resolvedSelectedNodeId === node.id ? "#3a2d5c" : "#302841", color: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", gap: 3 }}>
+                                                <span style={{ fontSize: 14, fontWeight: 600 }}>{node.id}</span>
+                                                <span style={{ fontSize: 13, color: "#c4a8e0" }}>{menuLabel}</span>
+                                            </button>
+                                        );
+                                    }
                                     const preview = node.text.trim().length > 0 ? getNodePreview(node.text) : "(empty)";
                                     return (
                                         <button key={`${selectedDialog.id}-${node.id}`} onClick={() => setSelectedNodeId(node.id)} style={{ textAlign: "left", padding: "10px 14px", borderRadius: 6, border: resolvedSelectedNodeId === node.id ? "1px solid #5ea5ff" : "1px solid #4b5369", background: resolvedSelectedNodeId === node.id ? "#2d3d5c" : "#2a3041", color: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", gap: 3 }}>
@@ -1246,7 +1282,34 @@ export function DialogEditorModal({
                         {/* Node Editor */}
                         <div style={{ border: "1px solid #3f475b", borderRadius: 8, background: "#252b3c", padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
                             {!selectedNode && <div style={{ fontSize: 15, color: "#9aa6c5", padding: 6 }}>Select a node to edit.</div>}
-                            {selectedNode && selectedDialog && (
+                            {selectedNode && selectedDialog && selectedNode.isMenuNode && (
+                                <>
+                                    <div style={{ display: "flex", gap: 8 }}>
+                                        <label style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
+                                            <span style={{ fontSize: 14, color: "#b8c2d9" }}>Node ID</span>
+                                            <input key={`node-id-${selectedNode.id}`} defaultValue={selectedNode.id} onBlur={event => commitNodeIdDraft(event.currentTarget.value)} onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }} style={{ padding: 8, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 14 }} />
+                                        </label>
+                                        <label style={{ width: 220, display: "flex", flexDirection: "column", gap: 4 }}>
+                                            <span style={{ fontSize: 14, color: "#b8c2d9" }}>Action</span>
+                                            <select value={toDialogEndActionMenuId(selectedNode.onDialogEndAction)} onChange={event => updateMenuNodeAction(event.target.value)} style={{ padding: 8, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 14 }}>
+                                                <option value="">(none)</option>
+                                                {MENU_NODE_OPTIONS.map(option => (<option key={`menu-action-${option.value}`} value={option.value}>{option.label}</option>))}
+                                            </select>
+                                        </label>
+                                    </div>
+                                    <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                        <span style={{ fontSize: 14, color: "#b8c2d9" }}>After Menu Closes</span>
+                                        <select value={selectedNode.nextNodeId ?? ""} onChange={event => { const nextNodeId = event.target.value; updateSelectedNode(node => ({ ...node, ...(nextNodeId ? { nextNodeId } : { nextNodeId: undefined }) })); }} style={{ padding: 8, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 14 }}>
+                                            <option value="">(nothing)</option>
+                                            {nodeIds.filter(nid => nid !== selectedNode.id).map(nodeId => (<option key={`menu-next-${nodeId}`} value={nodeId}>{nodeId}</option>))}
+                                        </select>
+                                    </label>
+                                    <div style={{ fontSize: 13, color: "#9aa6c5", padding: "4px 2px" }}>
+                                        This is a menu/event node. When the dialog reaches this node, it closes and opens the selected menu or fires the event. Link to this node from other nodes or choices via their "Next Node" dropdown.
+                                    </div>
+                                </>
+                            )}
+                            {selectedNode && selectedDialog && !selectedNode.isMenuNode && (
                                 <>
                                     <div style={{ display: "flex", gap: 8 }}>
                                         <label style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
@@ -1275,13 +1338,6 @@ export function DialogEditorModal({
                                         <label style={{ width: 220, display: "flex", flexDirection: "column", gap: 4 }}>
                                             <span style={{ fontSize: 14, color: "#b8c2d9" }}>Continue Button Label</span>
                                             <input value={selectedNode.continueLabel ?? ""} onChange={event => updateSelectedNode(node => ({ ...node, ...(event.target.value.trim().length > 0 ? { continueLabel: event.target.value } : { continueLabel: undefined }) }))} placeholder="Continue" style={{ padding: 8, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 14 }} />
-                                        </label>
-                                        <label style={{ width: 220, display: "flex", flexDirection: "column", gap: 4 }}>
-                                            <span style={{ fontSize: 14, color: "#b8c2d9" }}>After Dialog Ends</span>
-                                            <select value={toDialogEndActionMenuId(selectedNode.onDialogEndAction)} onChange={event => updateSelectedNode(node => { const nextAction = toDialogEndAction(event.target.value); return { ...node, ...(nextAction ? { onDialogEndAction: nextAction } : { onDialogEndAction: undefined }) }; })} style={{ padding: 8, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 14 }}>
-                                                <option value="">(none)</option>
-                                                {DIALOG_END_MENU_OPTIONS.map(option => (<option key={`dialog-end-action-${option.value}`} value={option.value}>{option.label}</option>))}
-                                            </select>
                                         </label>
                                     </div>
                                     <div style={{ borderTop: "1px solid #3d465b", paddingTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
@@ -1332,19 +1388,6 @@ export function DialogEditorModal({
                                                                 <option value="">(end dialog)</option>
                                                                 {nodeIds.map(nodeId => (
                                                                     <option key={`choice-next-${choice.id}-${nodeId}`} value={nodeId}>{nodeId}</option>
-                                                                ))}
-                                                            </select>
-                                                        </label>
-                                                        <label className="editor-choice-field">
-                                                            <span className="editor-choice-label">End Action</span>
-                                                            <select
-                                                                value={toDialogEndActionMenuId(choice.onDialogEndAction)}
-                                                                onChange={event => updateChoiceDialogEndAction(choice.id, event.target.value)}
-                                                                className="editor-trigger-input editor-choice-input"
-                                                            >
-                                                                <option value="">(no end action)</option>
-                                                                {DIALOG_END_MENU_OPTIONS.map(option => (
-                                                                    <option key={`choice-end-action-${choice.id}-${option.value}`} value={option.value}>{option.label}</option>
                                                                 ))}
                                                             </select>
                                                         </label>

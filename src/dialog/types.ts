@@ -14,12 +14,17 @@ export interface DialogSpeaker {
     portraitTint: string;
 }
 
-type DialogMenuId = "controls" | "save_game" | "load_game";
+export type DialogMenuId = "controls" | "startup_controls" | "help" | "equipment" | "save_game" | "load_game" | "menu" | "jukebox";
 type DialogEventId = "spend_the_night";
+
+export type MenuChainAction =
+    | { type: "open_menu"; menuId: DialogMenuId }
+    | { type: "open_dialog"; dialogId: string; startNodeId?: string };
 
 interface DialogOpenMenuAction {
     type: "open_menu";
     menuId: DialogMenuId;
+    chainAction?: MenuChainAction;
 }
 
 interface DialogEventAction {
@@ -61,6 +66,7 @@ export interface DialogNode {
     nextNodeId?: string;
     continueLabel?: string;
     onDialogEndAction?: DialogUiAction;
+    isMenuNode?: boolean;  // When true, dialog auto-closes and fires onDialogEndAction immediately
 }
 
 export interface DialogDefinition {

@@ -15,7 +15,8 @@
       "Bash(dir:*)",
       "Bash(python -c:*)",
       "Bash(pip install:*)",
-      "Bash(npm run lint)"
+      "Bash(npm run lint)",
+      "Bash(npx vitest:*)"
     ]
   }
 }

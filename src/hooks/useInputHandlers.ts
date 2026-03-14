@@ -6,7 +6,7 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { hideAll as hideAllTippy } from "tippy.js";
-import type { Unit, Skill, UnitGroup, SelectionBox } from "../core/types";
+import type { Unit, Skill, UnitGroup, SelectionBox, LootPickupEntry, LootPickupRequest } from "../core/types";
 import type { SecretDoorMesh } from "../rendering/scene";
 import type { LootBag } from "../core/types";
 import { updateCamera } from "../rendering/scene";
@@ -71,7 +71,7 @@ export interface InputStateRefs {
     targetingModeRef: React.MutableRefObject<{ casterId: number; skill: Skill; displacementTargetId?: number } | null>;
     consumableTargetingModeRef: React.MutableRefObject<{ userId: number; itemId: string } | null>;
     showPanelRef: React.MutableRefObject<boolean>;
-    helpOpenRef: React.MutableRefObject<boolean>;
+    infoModalOpenRef: React.MutableRefObject<boolean>;
     openedChestsRef: React.MutableRefObject<Set<string>>;
     hotbarAssignmentsRef: React.MutableRefObject<HotbarAssignments>;
     pauseStartTimeRef: React.MutableRefObject<number | null>;
@@ -118,8 +118,8 @@ export interface InputCallbacks {
     getSkillContext: (defeatedThisFrame?: Set<number>) => SkillExecutionContext;
     handleAreaTransition: (transition: AreaTransition) => void;
     onNpcEngaged: (unitId: number) => void;
-    onCloseHelp: () => void;
-    openLootPickupModal: (request: LootPickupModalRequest) => void;
+    onCloseInfoModal: () => void;
+    openLootPickupModal: (request: LootPickupRequest) => void;
     processActionQueue: (defeatedThisFrame: Set<number>) => void;
     handleCastSkillRef: React.MutableRefObject<((unitId: number, skill: Skill) => void) | null>;
 }
@@ -149,17 +149,6 @@ interface ChestHitData {
     chestX: number;
     chestZ: number;
     chestDecorOnly?: boolean;
-}
-
-interface LootPickupModalEntry {
-    label: string;
-    tone: "gold" | "item";
-}
-
-interface LootPickupModalRequest {
-    sourceLabel: "Chest" | "Loot Bag";
-    entries: LootPickupModalEntry[];
-    onTake: () => void;
 }
 
 /**
@@ -839,8 +828,8 @@ export function useInputHandlers({
                     setters.setConsumableTargetingMode(null);
                 } else if (stateRefs.targetingModeRef.current) {
                     clearTargetingMode(setters.setTargetingMode, { current: rangeIndicator }, { current: aoeIndicator });
-                } else if (stateRefs.helpOpenRef.current) {
-                    callbacks.onCloseHelp();
+                } else if (stateRefs.infoModalOpenRef.current) {
+                    callbacks.onCloseInfoModal();
                 } else if (stateRefs.showPanelRef.current) {
                     setters.setShowPanel(false);
                 } else if (stateRefs.selectedRef.current.length > 0) {
@@ -1039,7 +1028,7 @@ function handleChestClick(
     if (chest.decorOnly) return;
 
     const chestGold = chest.gold ?? 0;
-    const lootEntries: LootPickupModalEntry[] = [];
+    const lootEntries: LootPickupEntry[] = [];
     const lootMessages: string[] = [];
     let keyItemIdToConsume: string | null = null;
     let keyItemName = "key";
@@ -1068,7 +1057,7 @@ function handleChestClick(
         const item = getItem(content.itemId);
         if (item) {
             const itemLabel = formatLootLabel(item.name, content.quantity);
-            lootEntries.push({ label: itemLabel, tone: "item" });
+            lootEntries.push({ label: itemLabel, tone: "item", itemId: content.itemId });
             lootMessages.push(itemLabel);
         }
     }
@@ -1143,7 +1132,7 @@ function handleLootBagClick(
 
     const bag = gameRefs.current.lootBags[bagIndex];
     const lootMessages: string[] = [];
-    const lootEntries: LootPickupModalEntry[] = [];
+    const lootEntries: LootPickupEntry[] = [];
     const bagItems = bag.items ?? [];
     const itemCounts = new Map<string, number>();
 
@@ -1161,7 +1150,7 @@ function handleLootBagClick(
         const item = getItem(itemId);
         const itemName = item?.name ?? itemId;
         const itemLabel = formatLootLabel(itemName, quantity);
-        lootEntries.push({ label: itemLabel, tone: "item" });
+        lootEntries.push({ label: itemLabel, tone: "item", itemId });
         lootMessages.push(itemLabel);
     }
 
@@ -1195,7 +1184,7 @@ function handleLootBagClick(
     }
 
     callbacks.openLootPickupModal({
-        sourceLabel: "Loot Bag",
+        sourceLabel: "Looted Corpse",
         entries: lootEntries,
         onTake: applyLootBagLoot
     });

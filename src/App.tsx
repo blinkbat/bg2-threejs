@@ -8,7 +8,7 @@ import * as THREE from "three";
 
 // Constants & Types
 import { BUFF_TICK_INTERVAL, getSkillTextColor, setDebugSpeedMultiplier } from "./core/constants";
-import type { Unit, Skill, CombatLogEntry, SelectionBox, CharacterStats, StatusEffect, EquipmentSlot } from "./core/types";
+import type { Unit, Skill, CombatLogEntry, SelectionBox, CharacterStats, StatusEffect, EquipmentSlot, LootPickupRequest } from "./core/types";
 
 // Game Logic
 import { getCurrentArea, getCurrentAreaId, setCurrentArea, AREAS, DEFAULT_STARTING_AREA, type AreaId, type AreaTransition } from "./game/areas";
@@ -67,6 +67,7 @@ import { HUD } from "./components/HUD";
 import { FormationIndicator } from "./components/FormationIndicator";
 import { HpBarsOverlay } from "./components/HpBarsOverlay";
 import { loadFormationOrder, saveFormationOrder } from "./hooks/formationStorage";
+import { ControlsModal } from "./components/ControlsModal";
 import { HelpModal } from "./components/HelpModal";
 import { SaveLoadModal } from "./components/SaveLoadModal";
 import { DialogModal } from "./components/DialogModal";
@@ -91,7 +92,7 @@ import {
     isDialogTriggerSatisfied,
     type DialogTriggerRuntimeState
 } from "./dialog/triggerRuntime";
-import type { DialogChoiceCondition, DialogDefinition, DialogNode, DialogSpeaker, DialogState, DialogUiAction } from "./dialog/types";
+import type { DialogChoiceCondition, DialogDefinition, DialogNode, DialogSpeaker, DialogState, DialogUiAction, MenuChainAction } from "./dialog/types";
 import {
     formatPerfLogLine,
     PERF_LOG_BUFFER_LIMIT,
@@ -119,16 +120,26 @@ const PORTRAIT_URLS = [monkPortrait, barbarianPortrait, wizardPortrait, paladinP
 interface GameProps {
     onRestart: () => void;
     onAreaTransition: (players: PersistedPlayer[], targetArea: AreaId, spawn: { x: number; z: number }, direction?: "north" | "south" | "east" | "west") => void;
-    onShowHelp: () => void;
-    onCloseHelp: () => void;
-    helpOpen: boolean;
+    onShowControls: (options?: { chainAction?: MenuChainAction }) => void;
+    onShowHelp: (options?: { chainAction?: MenuChainAction }) => void;
+    onCloseInfoModal: () => void;
+    infoModalOpen: boolean;
     saveLoadOpen: boolean;
+    menuOpen: boolean;
+    jukeboxOpen: boolean;
     persistedPlayers: PersistedPlayer[] | null;
     spawnPoint: { x: number; z: number } | null;
     spawnDirection?: "north" | "south" | "east" | "west";
-    onSaveClick: () => void;
-    onLoadClick: () => void;
+    onSaveClick: (options?: { chainAction?: MenuChainAction }) => void;
+    onLoadClick: (options?: { chainAction?: MenuChainAction }) => void;
+    onOpenMenu: (options?: { chainAction?: MenuChainAction }) => void;
+    onCloseMenu: () => void;
+    onOpenJukebox: (options?: { chainAction?: MenuChainAction }) => void;
+    onCloseJukebox: () => void;
+    onOpenEquipment: (options?: { chainAction?: MenuChainAction }) => void;
+    onCloseEquipment: () => void;
     gameStateRef: React.MutableRefObject<(() => SaveableGameState) | null>;
+    startDialogRef: React.MutableRefObject<((definition: DialogDefinition) => void) | null>;
     initialOpenedChests: Set<string> | null;
     initialOpenedSecretDoors: Set<string> | null;
     initialGold: number | null;
@@ -167,15 +178,7 @@ interface LightingTuningSettings {
     spriteMetalness: number;
 }
 
-interface LootPickupModalEntry {
-    label: string;
-    tone: "gold" | "item";
-}
-
-interface LootPickupModalState {
-    sourceLabel: "Chest" | "Loot Bag";
-    entries: LootPickupModalEntry[];
-}
+type LootPickupModalState = Pick<LootPickupRequest, "sourceLabel" | "entries">;
 
 const DEFAULT_LIGHTING_TUNING: LightingTuningSettings = {
     shadowsEnabled: false,
@@ -301,8 +304,11 @@ function getPrimaryStatusLabel(statusEffects: StatusEffect[] | undefined): strin
 // =============================================================================
 
 function Game({
-    onRestart, onAreaTransition, onShowHelp, onCloseHelp, helpOpen, saveLoadOpen,
-    persistedPlayers, spawnPoint, spawnDirection, onSaveClick, onLoadClick, gameStateRef,
+    onRestart, onAreaTransition, onShowControls, onShowHelp, onCloseInfoModal, infoModalOpen, saveLoadOpen,
+    menuOpen, jukeboxOpen,
+    persistedPlayers, spawnPoint, spawnDirection, onSaveClick, onLoadClick,
+    onOpenMenu, onCloseMenu, onOpenJukebox, onCloseJukebox, onOpenEquipment, onCloseEquipment,
+    gameStateRef, startDialogRef,
     initialOpenedChests, initialOpenedSecretDoors, initialGold, initialKilledEnemies, initialEnemyPositions, initialDialogTriggerProgress, dialogTriggersEnabled, onReady
 }: GameProps) {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -365,7 +371,7 @@ function Game({
     const [dialogState, setDialogState] = useState<DialogState | null>(null);
     const [dialogTypedChars, setDialogTypedChars] = useState(0);
     const [sleepFadeOpacity, setSleepFadeOpacity] = useState(0);
-    const [hudMenuModalOpen, setHudMenuModalOpen] = useState(false);
+    // hudMenuModalOpen replaced by menuOpen/jukeboxOpen props from App
     const [equipmentModalUnitId, setEquipmentModalUnitId] = useState<number | null>(null);
     const [lootPickupModalState, setLootPickupModalState] = useState<LootPickupModalState | null>(null);
 
@@ -381,7 +387,7 @@ function Game({
     const consumableTargetingModeRef = useRef(consumableTargetingMode);
     const pauseStartTimeRef = useRef<number | null>(null);
     const showPanelRef = useRef(showPanel);
-    const helpOpenRef = useRef(helpOpen);
+    const infoModalOpenRef = useRef(infoModalOpen);
     const skillCooldownsRef = useRef(skillCooldowns);
     const openedChestsRef = useRef(openedChests);
     const hotbarAssignmentsRef = useRef(hotbarAssignments);
@@ -390,6 +396,7 @@ function Game({
     const handleCastSkillRef = useRef<((unitId: number, skill: Skill) => void) | null>(null);
     const unitGroupsRef = useRef<Record<number, { position: { x: number; z: number } }>>({});
     const dialogPauseForcedRef = useRef(false);
+    const runDialogUiActionRef = useRef<(action: DialogUiAction | undefined) => void>(() => {});
     const lootPickupPauseForcedRef = useRef(false);
     const lootPickupOnTakeRef = useRef<(() => void) | null>(null);
     const dialogLastBlipAtRef = useRef(0);
@@ -414,7 +421,7 @@ function Game({
     useEffect(() => { targetingModeRef.current = targetingMode; }, [targetingMode]);
     useEffect(() => { consumableTargetingModeRef.current = consumableTargetingMode; }, [consumableTargetingMode]);
     useEffect(() => { showPanelRef.current = showPanel; }, [showPanel]);
-    useEffect(() => { helpOpenRef.current = helpOpen; }, [helpOpen]);
+    useEffect(() => { infoModalOpenRef.current = infoModalOpen; }, [infoModalOpen]);
     useEffect(() => { skillCooldownsRef.current = skillCooldowns; }, [skillCooldowns]);
     useEffect(() => { openedChestsRef.current = openedChests; }, [openedChests]);
     useEffect(() => { hotbarAssignmentsRef.current = hotbarAssignments; }, [hotbarAssignments]);
@@ -516,7 +523,7 @@ function Game({
     const isDialogTyping = currentDialogNode !== null && dialogTypedChars < currentDialogNode.text.length;
     const dialogVisibleText = currentDialogNode ? currentDialogNode.text.slice(0, dialogTypedChars) : "";
     const canContinueWithoutChoices = !isDialogTyping && dialogChoiceOptions.length === 0 && currentDialogNode !== null;
-    const anyMenuOpen = isDialogOpen || isLootPickupModalOpen || helpOpen || saveLoadOpen || hudMenuModalOpen || equipmentModalOpen;
+    const anyMenuOpen = isDialogOpen || isLootPickupModalOpen || infoModalOpen || saveLoadOpen || menuOpen || jukeboxOpen || equipmentModalOpen;
 
     useEffect(() => {
         pauseToggleLockedRef.current = anyMenuOpen;
@@ -1022,7 +1029,7 @@ function Game({
         lootPickupPauseForcedRef.current = false;
     }, [doProcessQueue]);
 
-    const openLootPickupModal = useCallback((request: { sourceLabel: "Chest" | "Loot Bag"; entries: LootPickupModalEntry[]; onTake: () => void }) => {
+    const openLootPickupModal = useCallback((request: LootPickupRequest) => {
         if (!pausedRef.current) {
             lootPickupPauseForcedRef.current = true;
             togglePause(
@@ -1062,8 +1069,21 @@ function Game({
             return;
         }
 
-        if (!definition.nodes[definition.startNodeId]) {
+        const startNode = definition.nodes[definition.startNodeId];
+        if (!startNode) {
             addLog(`Dialog "${definition.id}" is missing start node "${definition.startNodeId}".`, "#ef4444");
+            return;
+        }
+
+        // Menu nodes fire their action immediately without displaying dialog
+        if (startNode.isMenuNode) {
+            const action = startNode.onDialogEndAction;
+            if (action && startNode.nextNodeId && definition.nodes[startNode.nextNodeId]) {
+                const chainAction: MenuChainAction = { type: "open_dialog", dialogId: definition.id, startNodeId: startNode.nextNodeId };
+                runDialogUiActionRef.current(action.type === "open_menu" ? { ...action, chainAction } : action);
+            } else {
+                runDialogUiActionRef.current(action);
+            }
             return;
         }
 
@@ -1146,18 +1166,41 @@ function Game({
             return;
         }
 
+        const chainAction = action.chainAction;
+
+        if (action.menuId === "startup_controls") {
+            onShowControls({ chainAction: { type: "open_menu", menuId: "help" } });
+            return;
+        }
         if (action.menuId === "controls") {
-            onShowHelp();
+            onShowControls({ chainAction });
+            return;
+        }
+        if (action.menuId === "help") {
+            onShowHelp({ chainAction });
             return;
         }
         if (action.menuId === "save_game") {
-            onSaveClick();
+            onSaveClick({ chainAction });
             return;
         }
         if (action.menuId === "load_game") {
-            onLoadClick();
+            onLoadClick({ chainAction });
+            return;
         }
-    }, [onShowHelp, onSaveClick, onLoadClick, runSpendNightEvent]);
+        if (action.menuId === "equipment") {
+            onOpenEquipment({ chainAction });
+            return;
+        }
+        if (action.menuId === "menu") {
+            onOpenMenu({ chainAction });
+            return;
+        }
+        if (action.menuId === "jukebox") {
+            onOpenJukebox({ chainAction });
+        }
+    }, [onShowControls, onShowHelp, onSaveClick, onLoadClick, onOpenEquipment, onOpenMenu, onOpenJukebox, runSpendNightEvent]);
+    runDialogUiActionRef.current = runDialogUiAction;
 
     const closeDialogWithAction = useCallback((action: DialogUiAction | undefined) => {
         if (action) {
@@ -1168,16 +1211,34 @@ function Game({
         closeDialog();
     }, [closeDialog, runDialogUiAction]);
 
+    const navigateToDialogNode = useCallback((definition: DialogDefinition, nodeId: string) => {
+        const targetNode = definition.nodes[nodeId];
+        if (targetNode?.isMenuNode) {
+            const action = targetNode.onDialogEndAction;
+            if (action && targetNode.nextNodeId && definition.nodes[targetNode.nextNodeId]) {
+                const chainAction: MenuChainAction = { type: "open_dialog", dialogId: definition.id, startNodeId: targetNode.nextNodeId };
+                closeDialogWithAction(action.type === "open_menu"
+                    ? { ...action, chainAction }
+                    : action
+                );
+            } else {
+                closeDialogWithAction(action);
+            }
+            return;
+        }
+        setDialogState({ definition, nodeId });
+    }, [closeDialogWithAction]);
+
     const continueDialogWithoutChoices = useCallback(() => {
         if (!dialogState || !currentDialogNode) return;
 
         if (currentDialogNode.nextNodeId && dialogState.definition.nodes[currentDialogNode.nextNodeId]) {
-            setDialogState({ definition: dialogState.definition, nodeId: currentDialogNode.nextNodeId });
+            navigateToDialogNode(dialogState.definition, currentDialogNode.nextNodeId);
             return;
         }
 
         closeDialogWithAction(currentDialogNode.onDialogEndAction);
-    }, [dialogState, currentDialogNode, closeDialogWithAction]);
+    }, [dialogState, currentDialogNode, closeDialogWithAction, navigateToDialogNode]);
 
     const chooseDialogOption = useCallback((choiceId: string) => {
         if (!dialogState || !currentDialogNode) return;
@@ -1186,12 +1247,12 @@ function Game({
         const choice = selectedChoice.choice;
 
         if (choice.nextNodeId && dialogState.definition.nodes[choice.nextNodeId]) {
-            setDialogState({ definition: dialogState.definition, nodeId: choice.nextNodeId });
+            navigateToDialogNode(dialogState.definition, choice.nextNodeId);
             return;
         }
 
         closeDialogWithAction(choice.onDialogEndAction ?? currentDialogNode.onDialogEndAction);
-    }, [dialogState, currentDialogNode, dialogChoiceOptionsById, closeDialogWithAction]);
+    }, [dialogState, currentDialogNode, dialogChoiceOptionsById, closeDialogWithAction, navigateToDialogNode]);
 
     useEffect(() => {
         if (!dialogTriggersEnabled) return;
@@ -1411,7 +1472,7 @@ function Game({
         targetingModeRef,
         consumableTargetingModeRef,
         showPanelRef,
-        helpOpenRef,
+        infoModalOpenRef,
         openedChestsRef,
         hotbarAssignmentsRef,
         pauseStartTimeRef,
@@ -1468,11 +1529,11 @@ function Game({
         getSkillContext,
         handleAreaTransition,
         onNpcEngaged: handleNpcEngaged,
-        onCloseHelp,
+        onCloseInfoModal,
         openLootPickupModal,
         processActionQueue: doProcessQueue,
         handleCastSkillRef
-    }), [addLog, getSkillContext, handleAreaTransition, handleNpcEngaged, onCloseHelp, openLootPickupModal, doProcessQueue]);
+    }), [addLog, getSkillContext, handleAreaTransition, handleNpcEngaged, onCloseInfoModal, openLootPickupModal, doProcessQueue]);
 
     useInputHandlers({
         containerRef,
@@ -1674,6 +1735,12 @@ function Game({
         };
         return () => { gameStateRef.current = null; };
     }, [buildPersistedPlayers, buildPersistedEnemyPositions, gameStateRef, openedSecretDoors, gold, killedEnemies, getSaveLockReason]);
+
+    // Expose startDialog for chain actions
+    useEffect(() => {
+        startDialogRef.current = startDialog;
+        return () => { startDialogRef.current = null; };
+    }, [startDialogRef, startDialog]);
 
     // Update selection rings
     useEffect(() => {
@@ -2085,7 +2152,10 @@ function Game({
     const handleToggleFastMove = useCallback(() => setFastMove(f => !f), []);
     const handleAttackMove = useCallback(() => setCommandMode("attackMove"), []);
     const handleClosePanel = useCallback(() => setShowPanel(false), []);
-    const handleCloseEquipmentModal = useCallback(() => setEquipmentModalUnitId(null), []);
+    const handleCloseEquipmentModal = useCallback(() => {
+        setEquipmentModalUnitId(null);
+        onCloseEquipment();
+    }, [onCloseEquipment]);
 
     const handleTargetUnit = useCallback((targetUnitId: number) => {
         if (consumableTargetingModeRef.current) {
@@ -2158,7 +2228,7 @@ function Game({
         setSelectedIds([id]);
     }, []);
 
-    const otherModalOpen = helpOpen || saveLoadOpen || isDialogOpen || isLootPickupModalOpen || hudMenuModalOpen || equipmentModalOpen || sleepFadeOpacity > 0;
+    const otherModalOpen = infoModalOpen || saveLoadOpen || isDialogOpen || isLootPickupModalOpen || menuOpen || jukeboxOpen || equipmentModalOpen || sleepFadeOpacity > 0;
 
     // =============================================================================
     // RENDER
@@ -2285,7 +2355,7 @@ function Game({
 
             {hoveredLootBag && (
                 <div className="enemy-tooltip" style={{ left: hoveredLootBag.x + 12, top: hoveredLootBag.y - 10 }}>
-                    <div className="enemy-tooltip-name">Loot Bag</div>
+                    <div className="enemy-tooltip-name">Looted Corpse</div>
                     <div className="enemy-tooltip-status" style={{ color: "var(--ui-color-accent-gold)" }}>
                         {hoveredLootBag.gold > 0
                             ? `${hoveredLootBag.gold} Gold`
@@ -2337,7 +2407,7 @@ function Game({
             <div style={{ position: "absolute", top: 10, right: 10, color: "var(--ui-color-text-dim)", fontSize: 11, opacity: 0.6 }}>{fps} fps</div>
 
             {/* UI Components */}
-            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onShowHelp={onShowHelp} onRestart={onRestart} onSaveClick={onSaveClick} onLoadClick={onLoadClick} debug={debug} onToggleDebug={handleToggleDebug} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} onStatBoost={handleStatBoost} onTogglePlaytestUnlockAllSkills={handleTogglePlaytestUnlockAllSkills} playtestUnlockAllSkillsEnabled={playtestSettings.unlockAllSkills} onTogglePlaytestSkipDialogs={handleTogglePlaytestSkipDialogs} playtestSkipDialogsEnabled={playtestSettings.skipDialogs} onToggleFastMove={handleToggleFastMove} fastMoveEnabled={fastMove} lightingTuning={lightingTuning} onUpdateLightingTuning={handleUpdateLightingTuning} onResetLightingTuning={handleResetLightingTuning} lightingTuningOutput={lightingTuningOutput} otherModalOpen={otherModalOpen} hasSelection={selectedIds.length > 0} onModalOpenStateChange={setHudMenuModalOpen} />
+            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onShowControls={onShowControls} onShowHelp={onShowHelp} onRestart={onRestart} onSaveClick={onSaveClick} onLoadClick={onLoadClick} debug={debug} onToggleDebug={handleToggleDebug} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} onStatBoost={handleStatBoost} onTogglePlaytestUnlockAllSkills={handleTogglePlaytestUnlockAllSkills} playtestUnlockAllSkillsEnabled={playtestSettings.unlockAllSkills} onTogglePlaytestSkipDialogs={handleTogglePlaytestSkipDialogs} playtestSkipDialogsEnabled={playtestSettings.skipDialogs} onToggleFastMove={handleToggleFastMove} fastMoveEnabled={fastMove} lightingTuning={lightingTuning} onUpdateLightingTuning={handleUpdateLightingTuning} onResetLightingTuning={handleResetLightingTuning} lightingTuningOutput={lightingTuningOutput} menuOpen={menuOpen} jukeboxOpen={jukeboxOpen} onOpenMenu={onOpenMenu} onCloseMenu={onCloseMenu} onOpenJukebox={onOpenJukebox} onCloseJukebox={onCloseJukebox} otherModalOpen={otherModalOpen} hasSelection={selectedIds.length > 0} />
             <CombatLog log={combatLog} />
             <FormationIndicator units={playerUnits} formationOrder={formationOrder} />
             <div className="bottom-bar-container">
@@ -2404,6 +2474,7 @@ const STARTUP_SCENE_FADE_IN_DURATION = 1400; // ms for initial black-to-scene fa
 const STARTUP_FANFARE_LEAD_IN_MS = 550;
 const DIALOG_TRIGGER_POLL_MS = 120;
 type StartupPhase = "title" | "booting" | "running";
+type InfoModalKind = "controls" | "help";
 
 function shouldSkipGameIntro(): boolean {
     return loadPlaytestSettings().skipDialogs;
@@ -2412,7 +2483,10 @@ function shouldSkipGameIntro(): boolean {
 export default function App() {
     const [skipIntroByDefault] = useState<boolean>(shouldSkipGameIntro);
     const [gameKey, setGameKey] = useState(0);
-    const [showHelp, setShowHelp] = useState(false);
+    const [openInfoModal, setOpenInfoModal] = useState<InfoModalKind | null>(null);
+    const [menuOpen, setMenuOpen] = useState(false);
+    const [jukeboxOpen, setJukeboxOpen] = useState(false);
+    const pendingChainActionRef = useRef<MenuChainAction | null>(null);
     const [persistedPlayers, setPersistedPlayers] = useState<PersistedPlayer[] | null>(null);
     const [spawnPoint, setSpawnPoint] = useState<{ x: number; z: number } | null>(null);
     const [spawnDirection, setSpawnDirection] = useState<"north" | "south" | "east" | "west" | undefined>(undefined);
@@ -2427,6 +2501,7 @@ export default function App() {
     const [savePreviewState, setSavePreviewState] = useState<SaveSlotData | null>(null);
     const [saveDisabledReason, setSaveDisabledReason] = useState<string | null>(null);
     const gameStateRef = useRef<(() => SaveableGameState) | null>(null);
+    const startDialogRef = useRef<((definition: DialogDefinition) => void) | null>(null);
     const [startupPhase, setStartupPhase] = useState<StartupPhase>(skipIntroByDefault ? "running" : "title");
     const [gameMounted, setGameMounted] = useState(skipIntroByDefault);
     const [dialogTriggersEnabled, setDialogTriggersEnabled] = useState(skipIntroByDefault);
@@ -2459,6 +2534,79 @@ export default function App() {
         }, STARTUP_FANFARE_LEAD_IN_MS);
     }, [startupPhase]);
 
+    const executePendingChain = useCallback(() => {
+        const action = pendingChainActionRef.current;
+        pendingChainActionRef.current = null;
+        if (!action) return;
+        if (action.type === "open_menu") {
+            // Dispatch without passing a chain to prevent infinite loops
+            const id = action.menuId;
+            if (id === "controls" || id === "startup_controls") { setOpenInfoModal("controls"); }
+            else if (id === "help") { setOpenInfoModal("help"); }
+            else if (id === "save_game") { setSaveLoadMode("save"); setShowSaveLoad(true); }
+            else if (id === "load_game") { setSaveLoadMode("load"); setShowSaveLoad(true); }
+            else if (id === "equipment") { /* equipment needs a unit — skip if no obvious target */ }
+            else if (id === "menu") { setMenuOpen(true); }
+            else if (id === "jukebox") { setJukeboxOpen(true); }
+        }
+        if (action.type === "open_dialog") {
+            const area = getCurrentArea();
+            const areaDialogs = buildAreaDialogDefinitionMap(area.dialogs);
+            const definition = areaDialogs.get(action.dialogId) ?? getDialogDefinitionById(action.dialogId);
+            if (definition) {
+                const overriddenDefinition = action.startNodeId && definition.nodes[action.startNodeId]
+                    ? { ...definition, startNodeId: action.startNodeId }
+                    : definition;
+                startDialogRef.current?.(overriddenDefinition);
+            }
+        }
+    }, []);
+
+    const handleShowControls = useCallback((options?: { chainAction?: MenuChainAction }) => {
+        pendingChainActionRef.current = options?.chainAction ?? null;
+        setOpenInfoModal("controls");
+    }, []);
+
+    const handleShowHelp = useCallback((options?: { chainAction?: MenuChainAction }) => {
+        pendingChainActionRef.current = options?.chainAction ?? null;
+        setOpenInfoModal("help");
+    }, []);
+
+    const handleCloseInfoModal = useCallback(() => {
+        pendingChainActionRef.current = null;
+        setOpenInfoModal(null);
+    }, []);
+
+    const handleCloseHelpModal = useCallback(() => {
+        setOpenInfoModal(null);
+        executePendingChain();
+    }, [executePendingChain]);
+
+    const handleConfirmControlsModal = useCallback(() => {
+        setOpenInfoModal(null);
+        executePendingChain();
+    }, [executePendingChain]);
+
+    const handleOpenMenu = useCallback((options?: { chainAction?: MenuChainAction }) => {
+        pendingChainActionRef.current = options?.chainAction ?? null;
+        setMenuOpen(true);
+    }, []);
+
+    const handleCloseMenu = useCallback(() => {
+        setMenuOpen(false);
+        executePendingChain();
+    }, [executePendingChain]);
+
+    const handleOpenJukebox = useCallback((options?: { chainAction?: MenuChainAction }) => {
+        pendingChainActionRef.current = options?.chainAction ?? null;
+        setJukeboxOpen(true);
+    }, []);
+
+    const handleCloseJukebox = useCallback(() => {
+        setJukeboxOpen(false);
+        executePendingChain();
+    }, [executePendingChain]);
+
     const handleFullRestart = () => {
         const skipIntro = shouldSkipGameIntro();
 
@@ -2479,7 +2627,10 @@ export default function App() {
         setGameMounted(skipIntro);
         setDialogTriggersEnabled(skipIntro);
         setTransitionOpacity(skipIntro ? 0 : 1);
-        setShowHelp(false);
+        setOpenInfoModal(null);
+        setMenuOpen(false);
+        setJukeboxOpen(false);
+        pendingChainActionRef.current = null;
         setShowSaveLoad(false);
         setSavePreviewState(null);
         setPersistedPlayers(null);
@@ -2661,7 +2812,8 @@ export default function App() {
         return deleteSave(slot);
     };
 
-    const openSaveLoadModal = useCallback((mode: "save" | "load") => {
+    const openSaveLoadModal = useCallback((mode: "save" | "load", options?: { chainAction?: MenuChainAction }) => {
+        pendingChainActionRef.current = options?.chainAction ?? null;
         setSaveLoadMode(mode);
         setShowSaveLoad(true);
         const saveState = gameStateRef.current?.();
@@ -2673,7 +2825,19 @@ export default function App() {
         setShowSaveLoad(false);
         setSavePreviewState(null);
         setSaveDisabledReason(null);
+        executePendingChain();
+    }, [executePendingChain]);
+
+    const handleOpenEquipment = useCallback((options?: { chainAction?: MenuChainAction }) => {
+        pendingChainActionRef.current = options?.chainAction ?? null;
+        // Equipment modal needs a unitId — opened via unit panel in standalone mode;
+        // from dialog, just set chain and let the existing equipment open flow handle it.
+        // For now, we don't auto-open equipment from dialog (needs a selected unit).
     }, []);
+
+    const handleCloseEquipment = useCallback(() => {
+        executePendingChain();
+    }, [executePendingChain]);
 
     useEffect(() => {
         if (startupPhase !== "title") return;
@@ -2693,12 +2857,16 @@ export default function App() {
             {gameMounted && (
                 <Game
                     key={gameKey} onRestart={handleFullRestart} onAreaTransition={handleAreaTransition}
-                    onShowHelp={() => setShowHelp(true)} onCloseHelp={() => setShowHelp(false)}
-                    helpOpen={showHelp} saveLoadOpen={showSaveLoad}
+                    onShowControls={handleShowControls} onShowHelp={handleShowHelp} onCloseInfoModal={handleCloseInfoModal}
+                    infoModalOpen={openInfoModal !== null} saveLoadOpen={showSaveLoad}
+                    menuOpen={menuOpen} jukeboxOpen={jukeboxOpen}
                     persistedPlayers={persistedPlayers} spawnPoint={spawnPoint} spawnDirection={spawnDirection}
-                    onSaveClick={() => openSaveLoadModal("save")}
-                    onLoadClick={() => openSaveLoadModal("load")}
-                    gameStateRef={gameStateRef}
+                    onSaveClick={(opts) => openSaveLoadModal("save", opts)}
+                    onLoadClick={(opts) => openSaveLoadModal("load", opts)}
+                    onOpenMenu={handleOpenMenu} onCloseMenu={handleCloseMenu}
+                    onOpenJukebox={handleOpenJukebox} onCloseJukebox={handleCloseJukebox}
+                    onOpenEquipment={handleOpenEquipment} onCloseEquipment={handleCloseEquipment}
+                    gameStateRef={gameStateRef} startDialogRef={startDialogRef}
                     initialOpenedChests={initialOpenedChests} initialOpenedSecretDoors={initialOpenedSecretDoors}
                     initialGold={initialGold} initialKilledEnemies={initialKilledEnemies} initialEnemyPositions={initialEnemyPositions}
                     initialDialogTriggerProgress={initialDialogTriggerProgress}
@@ -2706,7 +2874,8 @@ export default function App() {
                     onReady={handleSceneReady}
                 />
             )}
-            {gameMounted && showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
+            {gameMounted && openInfoModal === "controls" && <ControlsModal onClose={handleCloseInfoModal} onConfirm={handleConfirmControlsModal} />}
+            {gameMounted && openInfoModal === "help" && <HelpModal onClose={handleCloseHelpModal} />}
             {gameMounted && showSaveLoad && <SaveLoadModal mode={saveLoadMode} onClose={closeSaveLoadModal} onSave={handleSave} onLoad={handleLoad} onDelete={handleDelete} currentState={savePreviewState} saveDisabledReason={saveDisabledReason} />}
             {startupPhase === "title" && (
                 <div className="startup-title-screen">
@@ -2723,7 +2892,7 @@ export default function App() {
                 style={{
                     position: "fixed",
                     inset: 0,
-                    backgroundColor: "var(--ui-color-overlay-strong)",
+                    backgroundColor: startupPhase === "running" ? "var(--ui-color-overlay-strong)" : "#000000",
                     opacity: transitionOpacity,
                     pointerEvents: transitionOpacity > 0 ? "all" : "none",
                     transition: `opacity ${transitionDurationMs}ms ease-in-out`,

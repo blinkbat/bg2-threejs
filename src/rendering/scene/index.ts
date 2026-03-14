@@ -977,7 +977,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
             const starSpikes = 10 + Math.floor(Math.random() * 11);  // 10-20 points
             const starInnerRatio = 0.1 + Math.random() * 0.22;     // deeper spike insets into canopy core
             const palmFoliageHeight = foliageHeight * (1.03 + Math.random() * 0.22);
-            const fullFoliageY = palmTopY + palmFoliageHeight * 0.18;
+            const fullFoliageY = palmTopY;
             const starOuterRadius = foliageRadius * 1.22 * canopyScale;
             const starInnerRadius = starOuterRadius * starInnerRatio;
             const starThickness = Math.max(0.06, foliageRadius * (0.14 + Math.random() * 0.09) * canopyScale);
@@ -1068,11 +1068,19 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 : foliageRadius * 0.99;
         const treeShadow = new THREE.Mesh(
             new THREE.CircleGeometry(shadowRadius, 16),
-            new THREE.MeshBasicMaterial({ color: "#000000", transparent: true, opacity: 0.25, side: THREE.DoubleSide })
+            new THREE.MeshBasicMaterial({ color: "#000000", transparent: true, opacity: 0.25, depthWrite: false, side: THREE.DoubleSide })
         );
+        treeShadow.renderOrder = 10;
         treeShadow.rotation.x = -Math.PI / 2;
         treeShadow.position.set(tree.x, 0.005, tree.z);
+        treeShadow.name = "tree";
+        treeShadow.userData.treeX = tree.x;
+        treeShadow.userData.treeZ = tree.z;
+        treeShadow.userData.isShadow = true;
+        treeShadow.visible = false;
         scene.add(treeShadow);
+        treeMeshes.push(treeShadow);
+        treePartMeshes.push(treeShadow);
     });
 
     // Decorations - columns, broken walls, etc.

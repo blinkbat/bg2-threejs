@@ -19,6 +19,7 @@ import {
     type AreaDialogMenuId,
     type AreaLocation,
     type AreaDialogNode,
+    type AreaDialogOpenMenuAction,
     type AreaDialogUiAction,
     type AreaId,
     type AreaDialogTriggerAction,
@@ -759,7 +760,7 @@ function parseLightLine(line: string, lights: AreaLight[]) {
 }
 
 const DIALOG_SPEAKER_IDS = new Set<string>(Object.keys(DIALOG_SPEAKERS));
-const DIALOG_MENU_IDS = new Set<AreaDialogMenuId>(["controls", "save_game", "load_game"]);
+const DIALOG_MENU_IDS = new Set<AreaDialogMenuId>(["controls", "startup_controls", "help", "equipment", "save_game", "load_game", "menu", "jukebox"]);
 const DIALOG_EVENT_IDS = new Set<AreaDialogEventId>(["spend_the_night"]);
 
 function isDialogSpeakerId(value: string): value is DialogSpeakerId {
@@ -771,10 +772,19 @@ function sanitizeAreaDialogUiAction(raw: unknown): AreaDialogUiAction | undefine
     if (raw.type === "open_menu") {
         if (typeof raw.menuId !== "string") return undefined;
         if (!DIALOG_MENU_IDS.has(raw.menuId as AreaDialogMenuId)) return undefined;
-        return {
+        const action: AreaDialogOpenMenuAction = {
             type: "open_menu",
             menuId: raw.menuId as AreaDialogMenuId,
         };
+        if (isRecord(raw.chainAction)) {
+            const chain = raw.chainAction;
+            if (chain.type === "open_menu" && typeof chain.menuId === "string" && DIALOG_MENU_IDS.has(chain.menuId as AreaDialogMenuId)) {
+                action.chainAction = { type: "open_menu", menuId: chain.menuId as AreaDialogMenuId };
+            } else if (chain.type === "open_dialog" && typeof chain.dialogId === "string" && chain.dialogId.length > 0) {
+                action.chainAction = { type: "open_dialog", dialogId: chain.dialogId };
+            }
+        }
+        return action;
     }
     if (raw.type === "event") {
         if (typeof raw.eventId !== "string") return undefined;
@@ -851,8 +861,19 @@ function sanitizeAreaDialogChoice(raw: unknown): AreaDialogChoice | null {
 function sanitizeAreaDialogNode(raw: unknown): AreaDialogNode | null {
     if (!isRecord(raw)) return null;
     if (typeof raw.id !== "string" || raw.id.trim().length === 0) return null;
-    if (typeof raw.speakerId !== "string" || !isDialogSpeakerId(raw.speakerId)) return null;
-    if (typeof raw.text !== "string") return null;
+
+    const isMenuNode = raw.isMenuNode === true;
+
+    // Menu nodes only need an id and onDialogEndAction; regular nodes need speakerId + text
+    if (!isMenuNode) {
+        if (typeof raw.speakerId !== "string" || !isDialogSpeakerId(raw.speakerId)) return null;
+        if (typeof raw.text !== "string") return null;
+    }
+
+    const speakerId = typeof raw.speakerId === "string" && isDialogSpeakerId(raw.speakerId)
+        ? raw.speakerId
+        : "innkeeper";
+    const text = typeof raw.text === "string" ? raw.text : "";
 
     const nextNodeId = typeof raw.nextNodeId === "string" && raw.nextNodeId.trim().length > 0
         ? raw.nextNodeId.trim()
@@ -870,12 +891,13 @@ function sanitizeAreaDialogNode(raw: unknown): AreaDialogNode | null {
 
     return {
         id: raw.id.trim(),
-        speakerId: raw.speakerId,
-        text: raw.text,
+        speakerId,
+        text,
         ...(choices.length > 0 ? { choices } : {}),
         ...(nextNodeId ? { nextNodeId } : {}),
         ...(continueLabel ? { continueLabel } : {}),
         ...(onDialogEndAction ? { onDialogEndAction } : {}),
+        ...(isMenuNode ? { isMenuNode: true } : {}),
     };
 }
 

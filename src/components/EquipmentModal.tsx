@@ -86,7 +86,7 @@ function getItemTooltipLines(item: Item): TooltipLine[] {
     return lines;
 }
 
-function ItemTooltip({ item }: { item: Item }) {
+export function ItemTooltip({ item }: { item: Item }) {
     const lines = getItemTooltipLines(item);
     return (
         <div className="skill-tooltip">

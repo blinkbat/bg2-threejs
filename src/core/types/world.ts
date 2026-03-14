@@ -139,3 +139,17 @@ export interface LootBag {
     gold: number;        // Gold contained in bag
     items?: string[];    // Optional item IDs contained in bag
 }
+
+export type LootPickupSourceLabel = "Chest" | "Looted Corpse";
+
+export interface LootPickupEntry {
+    label: string;
+    tone: "gold" | "item";
+    itemId?: string;
+}
+
+export interface LootPickupRequest {
+    sourceLabel: LootPickupSourceLabel;
+    entries: LootPickupEntry[];
+    onTake: () => void;
+}

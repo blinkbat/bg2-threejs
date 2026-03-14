@@ -25,6 +25,7 @@ interface HUDProps {
     alivePlayers: number;
     paused: boolean;
     onTogglePause: () => void;
+    onShowControls: () => void;
     onShowHelp: () => void;
     onRestart: () => void;
     onSaveClick: () => void;
@@ -44,9 +45,14 @@ interface HUDProps {
     onUpdateLightingTuning?: (patch: Partial<LightingTuningSettings>) => void;
     onResetLightingTuning?: () => void;
     lightingTuningOutput?: string;
+    menuOpen: boolean;
+    jukeboxOpen: boolean;
+    onOpenMenu: () => void;
+    onCloseMenu: () => void;
+    onOpenJukebox: () => void;
+    onCloseJukebox: () => void;
     otherModalOpen?: boolean;
     hasSelection?: boolean;
-    onModalOpenStateChange?: (isOpen: boolean) => void;
 }
 
 export const HUD = memo(function HUD({
@@ -55,6 +61,7 @@ export const HUD = memo(function HUD({
     alivePlayers,
     paused,
     onTogglePause,
+    onShowControls,
     onShowHelp,
     onRestart,
     onSaveClick,
@@ -74,14 +81,17 @@ export const HUD = memo(function HUD({
     onUpdateLightingTuning,
     onResetLightingTuning,
     lightingTuningOutput,
+    menuOpen,
+    jukeboxOpen,
+    onOpenMenu,
+    onCloseMenu,
+    onOpenJukebox,
+    onCloseJukebox,
     otherModalOpen,
-    hasSelection,
-    onModalOpenStateChange
+    hasSelection
 }: HUDProps) {
     const TESTING_ROOM_ID = "testing_room" as AreaId;
-    const [menuOpen, setMenuOpen] = useState(false);
     const [debugPanelOpen, setDebugPanelOpen] = useState(false);
-    const [jukeboxOpen, setJukeboxOpen] = useState(false);
     const [lightingCopied, setLightingCopied] = useState(false);
     const [lightingExpanded, setLightingExpanded] = useState(false);
 
@@ -103,29 +113,6 @@ export const HUD = memo(function HUD({
     const isDefeat = alivePlayers === 0;
     const anyModalOpen = menuOpen || jukeboxOpen || otherModalOpen;
 
-    useEffect(() => {
-        if (!onModalOpenStateChange) return;
-        onModalOpenStateChange(menuOpen || jukeboxOpen);
-    }, [menuOpen, jukeboxOpen, onModalOpenStateChange]);
-
-    useEffect(() => {
-        if (!onModalOpenStateChange) return;
-        return () => onModalOpenStateChange(false);
-    }, [onModalOpenStateChange]);
-
-    // Handle opening menu - pause and open
-    const handleOpenMenu = useCallback(() => {
-        if (!paused) {
-            onTogglePause();
-        }
-        setMenuOpen(true);
-    }, [paused, onTogglePause]);
-
-    // Handle closing menu
-    const handleCloseMenu = useCallback(() => {
-        setMenuOpen(false);
-    }, []);
-
     // Handle pause/resume button - only allow resume if no modals open
     const handlePauseResume = useCallback(() => {
         if (paused && anyModalOpen) {
@@ -146,18 +133,18 @@ export const HUD = memo(function HUD({
                 } else if (menuOpen) {
                     e.preventDefault();
                     e.stopPropagation();
-                    handleCloseMenu();
+                    onCloseMenu();
                 } else if (!otherModalOpen && !hasSelection) {
                     e.preventDefault();
                     e.stopPropagation();
-                    handleOpenMenu();
+                    onOpenMenu();
                 }
             }
         };
 
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [debugPanelOpen, menuOpen, otherModalOpen, hasSelection, handleCloseMenu, handleOpenMenu]);
+    }, [debugPanelOpen, menuOpen, otherModalOpen, hasSelection, onCloseMenu, onOpenMenu]);
 
     const copyLightingOutput = useCallback(() => {
         if (!lightingTuningOutput) return;
@@ -190,7 +177,7 @@ export const HUD = memo(function HUD({
                     </button>
                     <button
                         className="btn btn-with-icon"
-                        onClick={handleOpenMenu}
+                        onClick={onOpenMenu}
                         title="Menu (Esc)"
                     >
                         <Menu size={16} />
@@ -241,7 +228,7 @@ export const HUD = memo(function HUD({
                                         if (!paused) {
                                             onTogglePause();
                                         }
-                                        setJukeboxOpen(true);
+                                        onOpenJukebox();
                                     }}
                                 >
                                     Jukebox
@@ -454,7 +441,8 @@ export const HUD = memo(function HUD({
 
             {menuOpen && (
                 <MenuModal
-                    onClose={handleCloseMenu}
+                    onClose={onCloseMenu}
+                    onShowControls={onShowControls}
                     onShowHelp={onShowHelp}
                     onRestart={onRestart}
                     onSaveClick={onSaveClick}
@@ -463,7 +451,7 @@ export const HUD = memo(function HUD({
             )}
 
             {jukeboxOpen && (
-                <JukeboxModal onClose={() => setJukeboxOpen(false)} />
+                <JukeboxModal onClose={onCloseJukebox} />
             )}
         </>
     );

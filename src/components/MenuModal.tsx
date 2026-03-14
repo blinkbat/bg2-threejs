@@ -3,6 +3,7 @@ import {
     Save,
     FolderOpen,
     RotateCcw,
+    Keyboard,
     Volume2,
     VolumeX,
     HelpCircle,
@@ -12,6 +13,7 @@ import { toggleMute, isMuted } from "../audio";
 
 interface MenuModalProps {
     onClose: () => void;
+    onShowControls: () => void;
     onShowHelp: () => void;
     onRestart: () => void;
     onSaveClick: () => void;
@@ -20,6 +22,7 @@ interface MenuModalProps {
 
 export function MenuModal({
     onClose,
+    onShowControls,
     onShowHelp,
     onRestart,
     onSaveClick,
@@ -39,6 +42,11 @@ export function MenuModal({
 
     const handleLoad = () => {
         onLoadClick();
+        onClose();
+    };
+
+    const handleControls = () => {
+        onShowControls();
         onClose();
     };
 
@@ -89,9 +97,13 @@ export function MenuModal({
                             {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
                             <span>{muted ? "Unmute" : "Mute"}</span>
                         </button>
+                        <button className="menu-btn" onClick={handleControls}>
+                            <Keyboard size={18} />
+                            <span>Controls</span>
+                        </button>
                         <button className="menu-btn" onClick={handleHelp}>
                             <HelpCircle size={18} />
-                            <span>Controls</span>
+                            <span>Help</span>
                         </button>
                     </div>
                 </div>

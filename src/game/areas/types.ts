@@ -38,12 +38,17 @@ export interface AreaDialogChoice {
     onDialogEndAction?: AreaDialogUiAction;
 }
 
-export type AreaDialogMenuId = "controls" | "save_game" | "load_game";
+export type AreaDialogMenuId = "controls" | "startup_controls" | "help" | "equipment" | "save_game" | "load_game" | "menu" | "jukebox";
 export type AreaDialogEventId = "spend_the_night";
+
+export type AreaMenuChainAction =
+    | { type: "open_menu"; menuId: AreaDialogMenuId }
+    | { type: "open_dialog"; dialogId: string; startNodeId?: string };
 
 export interface AreaDialogOpenMenuAction {
     type: "open_menu";
     menuId: AreaDialogMenuId;
+    chainAction?: AreaMenuChainAction;
 }
 
 export interface AreaDialogEventAction {
@@ -77,6 +82,7 @@ export interface AreaDialogNode {
     nextNodeId?: string;
     continueLabel?: string;
     onDialogEndAction?: AreaDialogUiAction;
+    isMenuNode?: boolean;  // When true, dialog auto-closes and fires onDialogEndAction immediately
 }
 
 export interface AreaDialogDefinition {

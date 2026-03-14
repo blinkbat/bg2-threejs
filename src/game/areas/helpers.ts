@@ -3,7 +3,7 @@
 // =============================================================================
 
 import type { CandlePosition, MergedObstacle } from "../../core/types";
-import { MAX_PINE_TREE_SIZE, MAX_TREE_SIZE, MIN_TREE_SIZE, type AreaData, type ComputedAreaData } from "./types";
+import type { AreaData, ComputedAreaData } from "./types";
 
 /**
  * Build blocked grid from geometry grid.
@@ -61,70 +61,6 @@ function mergeObstacles(blocked: boolean[][], gridWidth: number, gridHeight: num
     }
 
     return obstacles;
-}
-
-/**
- * Estimate canopy footprint radius for LOS blocking.
- * The formulas mirror rendered tree proportions (with average variance) so LOS
- * feels aligned with what the player actually sees.
- */
-function estimateTreeLosRadius(areaId: string, treeSize: number, treeType: "pine" | "palm" | "oak"): number {
-    const treeSizeMultiplier = areaId === "forest" ? 1.5 : 1.0;
-    const clampedSize = Math.max(MIN_TREE_SIZE, Math.min(MAX_TREE_SIZE, treeSize));
-    const effectiveSize = treeType === "pine"
-        ? Math.min(clampedSize, MAX_PINE_TREE_SIZE)
-        : clampedSize;
-    const scale = effectiveSize * treeSizeMultiplier;
-    const skinnyFactor = Math.min(1, 1 / Math.sqrt(Math.max(scale, 0.0001)));
-
-    if (treeType === "palm") {
-        // Palm LOS radius includes canopy spread + average lean offset.
-        const palmCanopyRadius = 0.58 * scale * 1.22 * 1.225;
-        const averageLeanOffset = (2.5 * scale * 1.325) * Math.sin(8 * (Math.PI / 180));
-        return Math.max(0.85, palmCanopyRadius + averageLeanOffset + 0.15);
-    }
-
-    if (treeType === "oak") {
-        const foliageRadius = 1.0 * scale * skinnyFactor;
-        return Math.max(0.75, foliageRadius * 1.1 + 0.15);
-    }
-
-    // Pine (default)
-    const foliageRadius = 0.8 * scale * skinnyFactor;
-    return Math.max(0.65, foliageRadius * 1.05 + 0.12);
-}
-
-/**
- * Add a circular LOS footprint to the blocked set.
- * Uses cell centers to produce natural round-ish silhouettes on the grid.
- */
-function addTreeLosFootprint(
-    treeBlocked: Set<string>,
-    centerX: number,
-    centerZ: number,
-    radius: number,
-    gridWidth: number,
-    gridHeight: number
-): void {
-    const influenceRadius = radius + 0.35;
-    const radiusSq = influenceRadius * influenceRadius;
-
-    const minX = Math.max(0, Math.floor(centerX - influenceRadius - 1));
-    const maxX = Math.min(gridWidth - 1, Math.ceil(centerX + influenceRadius + 1));
-    const minZ = Math.max(0, Math.floor(centerZ - influenceRadius - 1));
-    const maxZ = Math.min(gridHeight - 1, Math.ceil(centerZ + influenceRadius + 1));
-
-    for (let x = minX; x <= maxX; x++) {
-        for (let z = minZ; z <= maxZ; z++) {
-            const cx = x + 0.5;
-            const cz = z + 0.5;
-            const dx = cx - centerX;
-            const dz = cz - centerZ;
-            if (dx * dx + dz * dz <= radiusSq) {
-                treeBlocked.add(`${x},${z}`);
-            }
-        }
-    }
 }
 
 /**
@@ -207,7 +143,8 @@ export function computeAreaData(area: AreaData): ComputedAreaData {
         }
     }
 
-    // Block tree positions for pathing and LOS (after wall merging)
+    // Block tree positions for pathing and LOS (after wall merging).
+    // Trees behave like tall poles: one blocked cell centered on the tree.
     const treeBlocked = new Set<string>();
     area.trees.forEach(tree => {
         const tx = Math.floor(tree.x);
@@ -218,11 +155,6 @@ export function computeAreaData(area: AreaData): ComputedAreaData {
             blocked[tx][tz] = true;
             treeBlocked.add(`${tx},${tz}`);
         }
-
-        // LOS blocking follows visual canopy footprint (size/type aware), not a fixed 3x3.
-        const treeType = tree.type ?? "pine";
-        const losRadius = estimateTreeLosRadius(area.id, tree.size, treeType);
-        addTreeLosFootprint(treeBlocked, tree.x, tree.z, losRadius, area.gridWidth, area.gridHeight);
     });
 
     // Block decoration positions for pathing (large types) and LOS (tall things only)

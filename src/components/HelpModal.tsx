@@ -4,13 +4,35 @@ interface HelpModalProps {
     onClose: () => void;
 }
 
+const HELP_SECTIONS: ReadonlyArray<{ title: string; body: string }> = [
+    {
+        title: "On Pausing",
+        body: "The game proceeds in real-time but can be paused at any moment to issue commands. A character's actions, from attacking to using items to complex spells, can be selected while paused or unpaused. Most actions have a cooldown, but the next action can be queued during this time."
+    },
+    {
+        title: "Stat Points",
+        body: "Characters gain stat points when they level up. Open a character's Status tab and spend them to raise Strength, Dexterity, Vitality, Intelligence, or Faith. The bonuses apply immediately and are permanent."
+    },
+    {
+        title: "Status Effects",
+        body: "Status effects are temporary conditions that change how a character fights or survives. Poison, stun, slow, regeneration, and similar effects take hold immediately, then wear off or get removed by other abilities. Active effects are shown on the party bar and in the character panel."
+    },
+    {
+        title: "Death",
+        body: "A character at 0 HP is dead and cannot act. Dead allies remain down until revived by a skill or item. If the entire party dies, the fight is lost."
+    },
+    {
+        title: "Save/Load",
+        body: "The game can be saved or loaded from the menu. Saving is disabled while units are engaged in combat or enemies are nearby. Loading replaces the current run with the selected save."
+    }
+];
+
 export function HelpModal({ onClose }: HelpModalProps) {
-    // ESC key to close
     useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === "Escape") {
-                e.preventDefault();
-                e.stopPropagation();
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
                 onClose();
             }
         };
@@ -21,67 +43,27 @@ export function HelpModal({ onClose }: HelpModalProps) {
 
     return (
         <div className="modal-overlay" onClick={onClose}>
-            <div className="modal-content help-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-content help-modal" onClick={event => event.stopPropagation()}>
                 <div className="help-header">
-                    <h2 className="help-title">Controls</h2>
+                    <h2 className="help-title">Help</h2>
                     <div className="close-btn" onClick={onClose}>&times;</div>
                 </div>
 
-                <div className="help-layout">
-                    <div className="help-column">
-                        <Section title="Camera">
-                            <Item keys="Arrow keys" desc="Pan camera" />
-                            <Item keys="Right-click drag" desc="Pan camera" />
-                            <Item keys="Scroll wheel" desc="Zoom in/out" />
-                        </Section>
-
-                        <Section title="Selection & Movement">
-                            <Item keys="Left-click" desc="Select unit" />
-                            <Item keys="Shift + click" desc="Add/remove unit from selection" />
-                            <Item keys="Left-click drag (ground)" desc="Box select units" />
-                            <Item keys="Left-click ground" desc="Move selected units" />
-                            <Item keys="Left-click enemy" desc="Attack with selected units" />
-                            <Item keys="Left-click object" desc="Interact with nearby world objects" />
-                        </Section>
-                    </div>
-
-                    <div className="help-column">
-                        <Section title="Commands & Skills">
-                            <Item keys="Space" desc="Pause / Unpause (when no menu is open)" />
-                            <Item keys="A" desc="Attack-move mode (then click ground)" />
-                            <Item keys="M" desc="Return to normal move mode" />
-                            <Item keys="S" desc="Stop selected units" />
-                            <Item keys="H" desc="Toggle hold position for selected units" />
-                            <Item keys="1-5" desc="Cast assigned hotbar skill (single selected unit)" />
-                            <Item keys="F1-F6" desc="Select party member by formation slot" />
-                        </Section>
-                    </div>
+                <div className="help-copy-layout">
+                    {HELP_SECTIONS.map(section => (
+                        <div key={section.title} className="help-section help-copy-section">
+                            <div className="help-section-title">{section.title}</div>
+                            <p className="help-copy-text">{section.body}</p>
+                        </div>
+                    ))}
                 </div>
 
                 <div className="help-footer">
                     <button className="btn btn-primary mono help-confirm-btn" onClick={onClose}>
-                        Got it
+                        Got It
                     </button>
                 </div>
             </div>
-        </div>
-    );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-    return (
-        <div className="help-section">
-            <div className="help-section-title">{title}</div>
-            <div className="help-items">{children}</div>
-        </div>
-    );
-}
-
-function Item({ keys, desc }: { keys: string; desc: string }) {
-    return (
-        <div className="help-item">
-            <span className="help-key">{keys}</span>
-            <span className="help-desc">{desc}</span>
         </div>
     );
 }
