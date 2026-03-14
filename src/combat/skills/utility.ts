@@ -7,6 +7,7 @@ import type { Skill, StatusEffect, TrapProjectile, Unit, UnitGroup } from "../..
 import {
     COLORS,
     BUFF_TICK_INTERVAL,
+    DOOM_DURATION,
     TRAP_FLIGHT_DURATION,
     TRAP_ARC_HEIGHT,
     TRAP_MESH_SIZE,
@@ -27,6 +28,7 @@ import { getUnitRadius, isInRange } from "../../rendering/range";
 import { getAliveUnits } from "../../game/unitQuery";
 import { soundFns } from "../../audio";
 import { createAnimatedRing, applyDamageToUnit, type DamageContext } from "../damageEffects";
+import { spawnSwingIndicator } from "../../gameLoop/swingAnimations";
 import { createSanctuaryTile } from "../../gameLoop/sanctuaryTiles";
 import { createSmokeTile } from "../../gameLoop/smokeTiles";
 import { forEachTileInRadius } from "../../gameLoop/tileUtils";
@@ -981,6 +983,349 @@ export function executeSmokeBombSkill(
 
     addLog(`${casterData.name} hurls a ${skill.name}!`, getSkillTextColor(skill.type, skill.damageType));
     soundFns.playAttack();
+
+    return true;
+}
+
+// =============================================================================
+// INTIMIDATE SKILL (AoE fear)
+// =============================================================================
+
+/**
+ * Execute Intimidate — self-centered AoE that fears nearby enemies.
+ */
+export function executeIntimidateSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill
+): boolean {
+    const { scene, unitsStateRef, unitsRef, setUnits, addLog } = ctx;
+
+    const casterG = unitsRef.current[casterId];
+    if (!casterG) return false;
+
+    consumeSkill(ctx, casterId, skill);
+
+    const casterData = UNIT_DATA[casterId];
+    const now = Date.now();
+    const fearDuration = skill.duration ?? 4000;
+    const fearRange = skill.range;
+
+    const enemies = getAliveUnits(unitsStateRef.current, "enemy");
+    const fearedIds = new Set<number>();
+
+    for (const enemy of enemies) {
+        const enemyG = unitsRef.current[enemy.id];
+        if (!enemyG) continue;
+        const enemyRadius = getUnitRadius(enemy);
+        if (!isInRange(casterG.position.x, casterG.position.z, enemyG.position.x, enemyG.position.z, enemyRadius, fearRange)) continue;
+        if (hasStatusEffect(enemy, "feared")) continue;
+        fearedIds.add(enemy.id);
+    }
+
+    if (fearedIds.size > 0) {
+        setUnits(prev => prev.map(unit => {
+            if (!fearedIds.has(unit.id) || unit.hp <= 0) return unit;
+            const fearedEffect: StatusEffect = {
+                type: "feared",
+                duration: fearDuration,
+                tickInterval: BUFF_TICK_INTERVAL,
+                timeSinceTick: 0,
+                lastUpdateTime: now,
+                damagePerTick: 0,
+                sourceId: casterId,
+                fearSourceX: casterG.position.x,
+                fearSourceZ: casterG.position.z
+            };
+            return { ...unit, statusEffects: applyStatusEffect(unit.statusEffects, fearedEffect) };
+        }));
+    }
+
+    // Visual: expanding ring from caster
+    createAnimatedRing(scene, casterG.position.x, casterG.position.z, COLORS.fearedText, {
+        innerRadius: 0.5, outerRadius: 0.7, maxScale: fearRange, duration: 400
+    });
+    soundFns.playWarcry();
+
+    const skillLogColor = getSkillTextColor(skill.type, skill.damageType);
+    if (fearedIds.size > 0) {
+        addLog(`${casterData.name}'s ${skill.name} sends ${fearedIds.size} ${fearedIds.size === 1 ? "enemy" : "enemies"} fleeing!`, skillLogColor);
+    } else {
+        addLog(`${casterData.name}'s ${skill.name} has no effect!`, COLORS.logNeutral);
+    }
+
+    return true;
+}
+
+// =============================================================================
+// FIVE-POINT PALM SKILL (melee debuff: weakened + damage)
+// =============================================================================
+
+/**
+ * Execute Five-Point Palm — melee strike that deals damage and applies weakened.
+ */
+export function executeFivePointPalmSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill,
+    targetX: number,
+    targetZ: number,
+    targetUnitId?: number
+): boolean {
+    const { scene, unitsStateRef, unitsRef, hitFlashRef, damageTexts, setUnits, addLog, defeatedThisFrame, swingAnimationsRef } = ctx;
+
+    let targetEnemy: Unit | undefined;
+    let targetG: UnitGroup | undefined;
+    if (targetUnitId !== undefined) {
+        targetEnemy = unitsStateRef.current.find(u => u.id === targetUnitId && u.team === "enemy" && u.hp > 0);
+        targetG = unitsRef.current[targetUnitId];
+        if (!targetEnemy || !targetG) return false;
+    } else {
+        const target = findAndValidateEnemyTarget(ctx, casterId, targetX, targetZ);
+        if (!target) return false;
+        targetEnemy = target.unit;
+        targetG = target.group;
+    }
+
+    const casterG = unitsRef.current[casterId];
+    if (!casterG) return false;
+
+    const targetRadius = getUnitRadius(targetEnemy);
+    if (!isInRange(casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, targetRadius, skill.range + 0.5)) {
+        addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, COLORS.logNeutral);
+        return false;
+    }
+
+    const now = Date.now();
+    consumeSkill(ctx, casterId, skill);
+
+    const casterData = UNIT_DATA[casterId];
+    const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
+    const targetData = getUnitStats(targetEnemy);
+    const targetId = targetEnemy.id;
+
+    // Swing animation
+    spawnSwingIndicator(scene, casterG, targetG, true, swingAnimationsRef.current, now);
+    createAnimatedRing(scene, casterG.position.x, casterG.position.z, COLORS.weakenedText, {
+        innerRadius: 0.14, outerRadius: 0.28, maxScale: 1.0, duration: 180
+    });
+
+    // Defense check
+    if (targetEnemy.enemyType) {
+        const enemyStats = ENEMY_STATS[targetEnemy.enemyType];
+        const defense = checkEnemyDefenses(enemyStats, targetEnemy.facing, casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, skill.damageType);
+        if (defense !== "none") {
+            soundFns.playBlock();
+            addLog(defense === "frontShield"
+                ? `${casterData.name}'s ${skill.name} is blocked by ${targetData.name}'s shield!`
+                : `${targetData.name} blocks ${casterData.name}'s ${skill.name}!`,
+                defense === "frontShield" ? COLORS.mana : COLORS.logNeutral);
+            return true;
+        }
+    }
+
+    // Hit resolution
+    const skillLogColor = getSkillTextColor(skill.type, skill.damageType);
+    if (rollSkillHit(skill, casterData.accuracy, casterUnit)) {
+        // Deal damage
+        const statBonus = calculateStatBonus(casterUnit, skill.damageType);
+        const { damage: dmg, isCrit } = calculateDamageWithCrit(
+            skill.damageRange![0] + statBonus, skill.damageRange![1] + statBonus,
+            getEffectiveArmor(targetEnemy, targetData.armor), skill.damageType, casterUnit
+        );
+
+        const dmgCtx: DamageContext = {
+            scene, damageTexts: damageTexts.current, hitFlashRef: hitFlashRef.current,
+            unitsRef: unitsRef.current, unitsStateRef, setUnits, addLog, now, defeatedThisFrame
+        };
+
+        applyDamageToUnit(dmgCtx, targetId, targetG, dmg, targetData.name, {
+            color: COLORS.damagePlayer,
+            attackerName: casterData.name,
+            targetUnit: targetEnemy,
+            attackerPosition: { x: casterG.position.x, z: casterG.position.z },
+            damageType: skill.damageType,
+            isCrit,
+            attackerId: casterId,
+            isMeleeHit: true
+        });
+
+        soundFns.playHit();
+        addLog(`${casterData.name}'s ${skill.name} strikes ${targetData.name} for ${dmg}!${isCrit ? " Critical hit!" : ""}`, skillLogColor);
+
+        // Apply weakened if not already weakened and target survived
+        if (!defeatedThisFrame.has(targetId) && !hasStatusEffect(targetEnemy, "weakened")) {
+            const weakenedEffect: StatusEffect = {
+                type: "weakened",
+                duration: skill.duration!,
+                tickInterval: BUFF_TICK_INTERVAL,
+                timeSinceTick: 0,
+                lastUpdateTime: now,
+                damagePerTick: 0,
+                sourceId: casterId
+            };
+            setUnits(prev => prev.map(u =>
+                u.id === targetId ? { ...u, statusEffects: applyStatusEffect(u.statusEffects, weakenedEffect) } : u
+            ));
+
+            addLog(`${targetData.name}'s attacks are weakened!`, COLORS.weakenedText);
+
+            // Visual: brown ring on target
+            createAnimatedRing(scene, targetG.position.x, targetG.position.z, COLORS.weakenedText, {
+                innerRadius: 0.2, outerRadius: 0.45, maxScale: 1.4, duration: 320
+            });
+
+            const mesh = ctx.unitMeshRef.current[targetId];
+            if (mesh) {
+                (mesh.material as THREE.MeshStandardMaterial).color.set(COLORS.weakenedText);
+                hitFlashRef.current[targetId] = now;
+            }
+        }
+    } else {
+        soundFns.playMiss();
+        addLog(`${casterData.name}'s ${skill.name} misses ${targetData.name}!`, COLORS.logNeutral);
+    }
+
+    return true;
+}
+
+// =============================================================================
+// DIM MAK SKILL (melee cantrip: doom on hit)
+// =============================================================================
+
+const DIM_MAK_DOOM_CHANCE = 80; // 80% chance to inflict doom
+
+/**
+ * Execute Dim Mak — melee strike with high chance to inflict Doom.
+ * Minibosses and bosses are immune to doom.
+ */
+export function executeDimMakSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill,
+    targetX: number,
+    targetZ: number,
+    targetUnitId?: number
+): boolean {
+    const { scene, unitsStateRef, unitsRef, hitFlashRef, damageTexts, setUnits, addLog, defeatedThisFrame, swingAnimationsRef } = ctx;
+
+    let targetEnemy: Unit | undefined;
+    let targetG: UnitGroup | undefined;
+    if (targetUnitId !== undefined) {
+        targetEnemy = unitsStateRef.current.find(u => u.id === targetUnitId && u.team === "enemy" && u.hp > 0);
+        targetG = unitsRef.current[targetUnitId];
+        if (!targetEnemy || !targetG) return false;
+    } else {
+        const target = findAndValidateEnemyTarget(ctx, casterId, targetX, targetZ);
+        if (!target) return false;
+        targetEnemy = target.unit;
+        targetG = target.group;
+    }
+
+    const casterG = unitsRef.current[casterId];
+    if (!casterG) return false;
+
+    const targetRadius = getUnitRadius(targetEnemy);
+    if (!isInRange(casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, targetRadius, skill.range + 0.5)) {
+        addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, COLORS.logNeutral);
+        return false;
+    }
+
+    // Check doom immunity (miniboss/boss)
+    const enemyStats = targetEnemy.enemyType ? ENEMY_STATS[targetEnemy.enemyType] : undefined;
+    if (enemyStats && (enemyStats.tier === "miniboss" || enemyStats.tier === "boss")) {
+        addLog(`${UNIT_DATA[casterId].name}: ${getUnitStats(targetEnemy).name} is immune to Doom!`, COLORS.logNeutral);
+        return false;
+    }
+
+    const now = Date.now();
+    consumeSkill(ctx, casterId, skill);
+
+    const casterData = UNIT_DATA[casterId];
+    const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
+    const targetData = getUnitStats(targetEnemy);
+    const targetId = targetEnemy.id;
+
+    // Swing animation
+    spawnSwingIndicator(scene, casterG, targetG, true, swingAnimationsRef.current, now);
+    createAnimatedRing(scene, casterG.position.x, casterG.position.z, COLORS.doomText, {
+        innerRadius: 0.14, outerRadius: 0.28, maxScale: 1.0, duration: 180
+    });
+
+    // Defense check
+    if (enemyStats) {
+        const defense = checkEnemyDefenses(enemyStats, targetEnemy.facing, casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, skill.damageType);
+        if (defense !== "none") {
+            soundFns.playBlock();
+            addLog(defense === "frontShield"
+                ? `${casterData.name}'s ${skill.name} is blocked by ${targetData.name}'s shield!`
+                : `${targetData.name} blocks ${casterData.name}'s ${skill.name}!`,
+                defense === "frontShield" ? COLORS.mana : COLORS.logNeutral);
+            return true;
+        }
+    }
+
+    const skillLogColor = getSkillTextColor(skill.type, skill.damageType);
+
+    if (rollSkillHit(skill, casterData.accuracy, casterUnit)) {
+        // Deal minor damage
+        const statBonus = calculateStatBonus(casterUnit, skill.damageType);
+        const { damage: dmg, isCrit } = calculateDamageWithCrit(
+            skill.damageRange![0] + statBonus, skill.damageRange![1] + statBonus,
+            getEffectiveArmor(targetEnemy, targetData.armor), skill.damageType, casterUnit
+        );
+
+        const dmgCtx: DamageContext = {
+            scene, damageTexts: damageTexts.current, hitFlashRef: hitFlashRef.current,
+            unitsRef: unitsRef.current, unitsStateRef, setUnits, addLog, now, defeatedThisFrame
+        };
+
+        applyDamageToUnit(dmgCtx, targetId, targetG, dmg, targetData.name, {
+            color: COLORS.damagePlayer,
+            attackerName: casterData.name,
+            targetUnit: targetEnemy,
+            attackerPosition: { x: casterG.position.x, z: casterG.position.z },
+            damageType: skill.damageType,
+            isCrit,
+            attackerId: casterId,
+            isMeleeHit: true
+        });
+
+        soundFns.playHit();
+
+        // Roll doom
+        if (!defeatedThisFrame.has(targetId) && rollChance(DIM_MAK_DOOM_CHANCE) && !hasStatusEffect(targetEnemy, "doom")) {
+            const doomEffect: StatusEffect = {
+                type: "doom",
+                duration: DOOM_DURATION,
+                tickInterval: BUFF_TICK_INTERVAL,
+                timeSinceTick: 0,
+                lastUpdateTime: now,
+                damagePerTick: 0,
+                sourceId: casterId
+            };
+            setUnits(prev => prev.map(u =>
+                u.id === targetId ? { ...u, statusEffects: applyStatusEffect(u.statusEffects, doomEffect) } : u
+            ));
+
+            addLog(`${casterData.name}'s ${skill.name} marks ${targetData.name} with Doom!`, COLORS.doomText);
+
+            createAnimatedRing(scene, targetG.position.x, targetG.position.z, COLORS.doomText, {
+                innerRadius: 0.2, outerRadius: 0.5, maxScale: 1.6, duration: 360
+            });
+
+            const mesh = ctx.unitMeshRef.current[targetId];
+            if (mesh) {
+                (mesh.material as THREE.MeshStandardMaterial).color.set(COLORS.doomText);
+                hitFlashRef.current[targetId] = now;
+            }
+        } else if (!defeatedThisFrame.has(targetId)) {
+            addLog(`${casterData.name}'s ${skill.name} strikes ${targetData.name}, but fails to inflict Doom.`, skillLogColor);
+        }
+    } else {
+        soundFns.playMiss();
+        addLog(`${casterData.name}'s ${skill.name} misses ${targetData.name}!`, COLORS.logNeutral);
+    }
 
     return true;
 }

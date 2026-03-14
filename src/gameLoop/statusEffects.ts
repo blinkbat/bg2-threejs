@@ -11,6 +11,7 @@ import { getUnitRadius, isInRange } from "../rendering/range";
 import { applyDamageToUnit, buildDamageContext, handleUnitDefeat, showDamageVisual, spawnDamageNumber } from "../combat/damageEffects";
 import { hasStatusEffect, isUnitAlive, rollChance, applyStatusEffect } from "../combat/combatMath";
 import { getUnitById } from "../game/unitQuery";
+import { ENEMY_STATS } from "../game/enemyStats";
 
 // =============================================================================
 // DOT VISUAL CONFIG (for effects that deal damage)
@@ -207,10 +208,19 @@ export function processStatusEffects(
                         });
                     }
                 } else if (effect.type === "doom" && effect.duration - effect.tickInterval <= 0 && !hasDivineLattice) {
-                    doom = true;
+                    // Miniboss/boss enemies are immune to doom death
+                    const enemyStats = unit.enemyType ? ENEMY_STATS[unit.enemyType] : undefined;
+                    const doomImmune = enemyStats && (enemyStats.tier === "miniboss" || enemyStats.tier === "boss");
+                    if (!doomImmune) {
+                        doom = true;
+                    }
                     tickEffectInPlace(effect, now);
                     const name = data.name;
-                    sideEffects.push(() => addLog(`${name} succumbs to Doom!`, COLORS.doomText));
+                    if (doom) {
+                        sideEffects.push(() => addLog(`${name} succumbs to Doom!`, COLORS.doomText));
+                    } else if (doomImmune) {
+                        sideEffects.push(() => addLog(`${name} resists Doom!`, COLORS.logNeutral));
+                    }
                 } else {
                     tickEffectInPlace(effect, now);
                 }

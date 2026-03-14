@@ -178,7 +178,7 @@ function HotbarSlot({
                     />
                 )}
                 <span className="hotbar-slot-key">{slotIndex + 1}</span>
-                {skill && (
+                {skill && !onCooldown && (
                     <span className="hotbar-slot-abbrev" style={{ color: skillColor }}>{abbrev}</span>
                 )}
                 {onCooldown && cooldownRemaining > 0 && (

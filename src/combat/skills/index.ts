@@ -13,9 +13,9 @@ export type { SkillExecutionContext } from "./types";
 
 // Import for internal use
 import type { SkillExecutionContext } from "./types";
-import { executeAoeSkill, executeMeleeSkill, executeSmiteSkill, executeRangedSkill, executeFlurrySkill, executeMagicWaveSkill, executeChainLightningSkill, executeForcePushSkill, executeWellOfGravitySkill, executeHolyCrossSkill, executeHolyStrikeSkill, executeGlacialWhorlSkill } from "./damage";
+import { executeAoeSkill, executeMeleeSkill, executeSmiteSkill, executeRangedSkill, executeFlurrySkill, executeMagicWaveSkill, executeChainLightningSkill, executeForcePushSkill, executeWellOfGravitySkill, executeHolyCrossSkill, executeHolyStrikeSkill, executeGlacialWhorlSkill, executeCleaveSkill, executeSmiteStrikeSkill, executeLeapStrikeSkill } from "./damage";
 import { executeHealSkill, executeMassHealSkill, executeManaTransferSkill, executeBuffSkill, executeAoeBuffSkill, executeEnergyShieldSkill, executeCleanseSkill, executeRestorationSkill, executeReviveSkill, executeSunStanceSkill, executePangolinStanceSkill, executeHighlandDefenseSkill, executeDivineLatticeSkill, executeVanquishingLightSkill } from "./support";
-import { executeTauntSkill, executeDebuffSkill, executeBloodMarkSkill, executeElorasGraspSkill, executeTrapSkill, executeSanctuarySkill, executeSummonSkill, executeTurnUndeadSkill, executeSmokeBombSkill } from "./utility";
+import { executeTauntSkill, executeDebuffSkill, executeBloodMarkSkill, executeElorasGraspSkill, executeTrapSkill, executeSanctuarySkill, executeSummonSkill, executeTurnUndeadSkill, executeSmokeBombSkill, executeIntimidateSkill, executeFivePointPalmSkill, executeDimMakSkill } from "./utility";
 import { executeDodgeSkill, executeBodySwapSkill, executeDisplacementSkill } from "./movement";
 
 // =============================================================================
@@ -47,7 +47,13 @@ export function executeSkill(
         return false;
     }
 
-    if (skill.type === "damage" && skill.targetType === "aoe") {
+    if (skill.type === "cleave" && skill.targetType === "self") {
+        return executeCleaveSkill(ctx, casterId, skill);
+    } else if (skill.type === "intimidate" && skill.targetType === "self") {
+        return executeIntimidateSkill(ctx, casterId, skill);
+    } else if (skill.type === "leap_strike" && skill.targetType === "enemy") {
+        return executeLeapStrikeSkill(ctx, casterId, skill, targetX, targetZ, targetId);
+    } else if (skill.type === "damage" && skill.targetType === "aoe") {
         // Magic Wave - multi-target zig-zag projectiles that fan out
         if (skill.name === "Magic Wave") {
             return executeMagicWaveSkill(ctx, casterId, skill, targetX, targetZ);
@@ -82,6 +88,9 @@ export function executeSkill(
     } else if (skill.type === "damage" && skill.targetType === "enemy") {
         if (skill.delivery === "ranged") {
             return executeRangedSkill(ctx, casterId, skill, targetX, targetZ, targetId);
+        }
+        if (skill.name === "Smite") {
+            return executeSmiteStrikeSkill(ctx, casterId, skill, targetX, targetZ, targetId);
         }
         if (skill.delivery === "melee") {
             return executeMeleeSkill(ctx, casterId, skill, targetX, targetZ, targetId);
@@ -130,6 +139,12 @@ export function executeSkill(
     } else if (skill.type === "debuff" && skill.targetType === "enemy") {
         if (skill.name === "Blood Mark") {
             return executeBloodMarkSkill(ctx, casterId, skill, targetX, targetZ, targetId);
+        }
+        if (skill.name === "Five-Point Palm") {
+            return executeFivePointPalmSkill(ctx, casterId, skill, targetX, targetZ, targetId);
+        }
+        if (skill.name === "Dim Mak") {
+            return executeDimMakSkill(ctx, casterId, skill, targetX, targetZ, targetId);
         }
         return executeDebuffSkill(ctx, casterId, skill, targetX, targetZ, targetId);
     } else if (skill.type === "debuff" && skill.targetType === "aoe") {

@@ -17,6 +17,9 @@ import { soundFns } from "../../audio";
 import { createProjectile, getProjectileSpeed, applyDamageToUnit, createAnimatedRing, createLightningPillar, animateExpandingMesh, type DamageContext } from "../damageEffects";
 import { spawnSwingIndicator } from "../../gameLoop/swingAnimations";
 import { createHolyCross } from "../../gameLoop/holyTiles";
+import { updateUnitWith } from "../../core/stateUtils";
+import { getGameTime } from "../../core/gameClock";
+import { scheduleEffectAnimation } from "../../core/effectScheduler";
 import type { SkillExecutionContext } from "./types";
 import { findAndValidateEnemyTarget, consumeSkill } from "./helpers";
 
@@ -1582,6 +1585,405 @@ export function executeGlacialWhorlSkill(
 
     addLog(logCast(casterData.name, skill.name), getSkillTextColor(skill.type, skill.damageType));
     soundFns.playAttack();
+
+    return true;
+}
+
+// =============================================================================
+// CLEAVE SKILL (frontal arc melee AoE)
+// =============================================================================
+
+/**
+ * Execute Cleave — melee frontal arc that hits all enemies in a cone in front of the caster.
+ * Uses the caster's current facing (toward their attack target or last movement direction).
+ */
+export function executeCleaveSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill
+): boolean {
+    const { scene, unitsStateRef, unitsRef, hitFlashRef, damageTexts, setUnits, addLog, defeatedThisFrame, swingAnimationsRef } = ctx;
+
+    const casterG = unitsRef.current[casterId];
+    if (!casterG) return false;
+    const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
+
+    // Find all enemies within melee arc range
+    const enemies = getAliveUnits(unitsStateRef.current, "enemy");
+    const cleaveRange = skill.range;
+
+    // Get facing direction: toward current target or last movement direction
+    const target = casterUnit?.target;
+    let facingX = 0;
+    let facingZ = -1;
+    if (target !== null && target !== undefined) {
+        const targetG = unitsRef.current[target];
+        if (targetG) {
+            facingX = targetG.position.x - casterG.position.x;
+            facingZ = targetG.position.z - casterG.position.z;
+            const len = Math.hypot(facingX, facingZ);
+            if (len > 0) { facingX /= len; facingZ /= len; }
+        }
+    }
+
+    const coneHalfAngle = Math.PI * 0.55; // ~100° half-angle = 200° total arc
+    const enemiesInArc: { unit: Unit; group: UnitGroup }[] = [];
+
+    for (const enemy of enemies) {
+        if (defeatedThisFrame.has(enemy.id)) continue;
+        const enemyG = unitsRef.current[enemy.id];
+        if (!enemyG) continue;
+        const enemyRadius = getUnitRadius(enemy);
+        if (!isInRange(casterG.position.x, casterG.position.z, enemyG.position.x, enemyG.position.z, enemyRadius, cleaveRange)) continue;
+
+        // Check angle
+        const dx = enemyG.position.x - casterG.position.x;
+        const dz = enemyG.position.z - casterG.position.z;
+        const dot = facingX * dx + facingZ * dz;
+        const dist = Math.hypot(dx, dz);
+        if (dist > 0 && Math.acos(Math.min(1, Math.max(-1, dot / dist))) <= coneHalfAngle) {
+            enemiesInArc.push({ unit: enemy, group: enemyG });
+        }
+    }
+
+    if (enemiesInArc.length === 0) {
+        addLog(`${UNIT_DATA[casterId].name}: No enemies in range!`, COLORS.logNeutral);
+        return false;
+    }
+
+    consumeSkill(ctx, casterId, skill);
+
+    const casterData = UNIT_DATA[casterId];
+    const now = Date.now();
+    const statBonus = calculateStatBonus(casterUnit, skill.damageType);
+
+    const dmgCtx: DamageContext = {
+        scene, damageTexts: damageTexts.current, hitFlashRef: hitFlashRef.current,
+        unitsRef: unitsRef.current, unitsStateRef, setUnits, addLog, now, defeatedThisFrame
+    };
+
+    let hitCount = 0;
+    let totalDamage = 0;
+
+    // Swing animation toward first enemy
+    if (enemiesInArc.length > 0) {
+        spawnSwingIndicator(scene, casterG, enemiesInArc[0].group, true, swingAnimationsRef.current, now);
+    }
+
+    for (const { unit: enemy, group: enemyG } of enemiesInArc) {
+        if (defeatedThisFrame.has(enemy.id)) continue;
+        const targetData = getUnitStats(enemy);
+
+        if (!rollSkillHit(skill, casterData.accuracy, casterUnit)) {
+            addLog(logAoeMiss(casterData.name, skill.name), COLORS.logNeutral);
+            continue;
+        }
+
+        const { damage: dmg, isCrit } = calculateDamageWithCrit(
+            skill.damageRange![0] + statBonus, skill.damageRange![1] + statBonus,
+            getEffectiveArmor(enemy, targetData.armor), skill.damageType, casterUnit
+        );
+
+        applyDamageToUnit(dmgCtx, enemy.id, enemyG, dmg, targetData.name, {
+            color: COLORS.damagePlayer,
+            attackerName: casterData.name,
+            targetUnit: enemy,
+            attackerPosition: { x: casterG.position.x, z: casterG.position.z },
+            damageType: skill.damageType,
+            isCrit,
+            attackerId: casterId,
+            isMeleeHit: true
+        });
+
+        hitCount++;
+        totalDamage += dmg;
+    }
+
+    // Visual: wide arc ring
+    createAnimatedRing(scene, casterG.position.x, casterG.position.z, COLORS.damagePlayer, {
+        innerRadius: 0.4,
+        outerRadius: cleaveRange,
+        maxScale: 1.0,
+        duration: 300
+    });
+    soundFns.playHit();
+
+    const skillLogColor = getSkillTextColor(skill.type, skill.damageType);
+    if (hitCount > 0) {
+        addLog(logAoeHit(casterData.name, skill.name, hitCount, totalDamage), skillLogColor);
+    }
+
+    return true;
+}
+
+// =============================================================================
+// SMITE STRIKE SKILL (melee holy damage, bonus vs undead/demon)
+// =============================================================================
+
+/**
+ * Execute Smite — melee strike that deals bonus damage to undead and demon enemies.
+ * Wraps the standard melee pipeline with a follow-up bonus holy hit.
+ */
+export function executeSmiteStrikeSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill,
+    targetX: number,
+    targetZ: number,
+    targetUnitId?: number
+): boolean {
+    const { scene, unitsStateRef, unitsRef, hitFlashRef, damageTexts, setUnits, addLog, defeatedThisFrame, swingAnimationsRef } = ctx;
+
+    // --- Find target ---
+    let targetEnemy: Unit | undefined;
+    let targetG: UnitGroup | undefined;
+
+    if (targetUnitId !== undefined) {
+        targetEnemy = unitsStateRef.current.find(u => u.id === targetUnitId && u.team === "enemy" && u.hp > 0);
+        targetG = unitsRef.current[targetUnitId];
+        if (!targetEnemy || !targetG) return false;
+    } else {
+        const closest = findAndValidateEnemyTarget(ctx, casterId, targetX, targetZ);
+        if (!closest) return false;
+        targetEnemy = closest.unit;
+        targetG = closest.group;
+    }
+
+    const casterG = unitsRef.current[casterId];
+    if (!casterG) return false;
+
+    const targetRadius = getUnitRadius(targetEnemy);
+    if (!isInRange(casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, targetRadius, skill.range + 0.5)) {
+        addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, COLORS.logNeutral);
+        return false;
+    }
+
+    const now = Date.now();
+    consumeSkill(ctx, casterId, skill);
+
+    const casterData = UNIT_DATA[casterId];
+    const targetData = getUnitStats(targetEnemy);
+    const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
+    const targetId = targetEnemy.id;
+
+    // Swing animation
+    spawnSwingIndicator(scene, casterG, targetG, true, swingAnimationsRef.current, now);
+    createAnimatedRing(scene, casterG.position.x, casterG.position.z, COLORS.dmgHoly, {
+        innerRadius: 0.14,
+        outerRadius: 0.3,
+        maxScale: 1.0,
+        duration: 180
+    });
+
+    // Defense check
+    if (targetEnemy.enemyType) {
+        const enemyStats = ENEMY_STATS[targetEnemy.enemyType];
+        const defense = checkEnemyDefenses(enemyStats, targetEnemy.facing, casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, skill.damageType);
+        if (defense !== "none") {
+            soundFns.playBlock();
+            addLog(defense === "frontShield"
+                ? `${casterData.name}'s ${skill.name} is blocked by ${targetData.name}'s shield!`
+                : `${targetData.name} blocks ${casterData.name}'s ${skill.name}!`,
+                defense === "frontShield" ? COLORS.mana : COLORS.logNeutral);
+            return true;
+        }
+    }
+
+    // Hit resolution
+    if (rollSkillHit(skill, casterData.accuracy, casterUnit)) {
+        const statBonus = calculateStatBonus(casterUnit, skill.damageType);
+
+        // Check if target is undead or demon for bonus damage
+        const enemyStats = targetEnemy.enemyType ? ENEMY_STATS[targetEnemy.enemyType] : undefined;
+        const isBonusTarget = enemyStats?.monsterType === "undead" || enemyStats?.monsterType === "demon";
+        const bonusMultiplier = isBonusTarget ? 1.5 : 1.0;
+
+        const minDmg = Math.floor((skill.damageRange![0] + statBonus) * bonusMultiplier);
+        const maxDmg = Math.floor((skill.damageRange![1] + statBonus) * bonusMultiplier);
+
+        const { damage: dmg, isCrit } = calculateDamageWithCrit(
+            minDmg, maxDmg,
+            getEffectiveArmor(targetEnemy, targetData.armor), skill.damageType, casterUnit
+        );
+
+        const dmgCtx: DamageContext = {
+            scene, damageTexts: damageTexts.current, hitFlashRef: hitFlashRef.current,
+            unitsRef: unitsRef.current, unitsStateRef, setUnits, addLog, now, defeatedThisFrame
+        };
+
+        const hitMsg = isBonusTarget
+            ? `${casterData.name}'s ${skill.name} sears ${targetData.name} for ${dmg}!${isCrit ? " Critical hit!" : ""}`
+            : logHit(casterData.name, skill.name, targetData.name, dmg) + (isCrit ? " Critical hit!" : "");
+
+        applyDamageToUnit(dmgCtx, targetId, targetG, dmg, targetData.name, {
+            color: COLORS.dmgHoly,
+            attackerName: casterData.name,
+            hitMessage: { text: hitMsg, color: isCrit ? COLORS.damageCrit : COLORS.dmgHoly },
+            targetUnit: targetEnemy,
+            attackerPosition: { x: casterG.position.x, z: casterG.position.z },
+            damageType: skill.damageType,
+            isCrit,
+            attackerId: casterId,
+            isMeleeHit: true
+        });
+
+        // Holy flash on target
+        createAnimatedRing(scene, targetG.position.x, targetG.position.z, COLORS.dmgHoly, {
+            innerRadius: 0.2,
+            outerRadius: 0.45,
+            maxScale: isBonusTarget ? 1.8 : 1.3,
+            duration: isBonusTarget ? 350 : 260
+        });
+
+        soundFns.playHit();
+    } else {
+        soundFns.playMiss();
+        addLog(logMiss(casterData.name, skill.name, targetData.name), COLORS.logNeutral);
+    }
+
+    return true;
+}
+
+// =============================================================================
+// LEAP STRIKE SKILL (Flying Kick - dash to enemy + damage)
+// =============================================================================
+
+/**
+ * Execute Flying Kick — leap to a distant enemy, striking on arrival.
+ */
+export function executeLeapStrikeSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill,
+    targetX: number,
+    targetZ: number,
+    targetUnitId?: number
+): boolean {
+    const { scene, unitsStateRef, unitsRef, hitFlashRef, damageTexts, setUnits, addLog, defeatedThisFrame, swingAnimationsRef } = ctx;
+
+    // --- Find target ---
+    let targetEnemy: Unit | undefined;
+    let targetG: UnitGroup | undefined;
+
+    if (targetUnitId !== undefined) {
+        targetEnemy = unitsStateRef.current.find(u => u.id === targetUnitId && u.team === "enemy" && u.hp > 0);
+        targetG = unitsRef.current[targetUnitId];
+        if (!targetEnemy || !targetG) return false;
+    } else {
+        const closest = findAndValidateEnemyTarget(ctx, casterId, targetX, targetZ);
+        if (!closest) return false;
+        targetEnemy = closest.unit;
+        targetG = closest.group;
+    }
+
+    const casterG = unitsRef.current[casterId];
+    if (!casterG) return false;
+
+    const targetRadius = getUnitRadius(targetEnemy);
+    if (!isInRange(casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, targetRadius, skill.range + 0.5)) {
+        addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, COLORS.logNeutral);
+        return false;
+    }
+
+    const originX = casterG.position.x;
+    const originZ = casterG.position.z;
+
+    consumeSkill(ctx, casterId, skill);
+
+    const casterData = UNIT_DATA[casterId];
+    const targetData = getUnitStats(targetEnemy);
+    const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
+    const targetId = targetEnemy.id;
+    const now = Date.now();
+
+    // Move caster to melee range of target
+    const dx = targetG.position.x - originX;
+    const dz = targetG.position.z - originZ;
+    const dist = Math.hypot(dx, dz);
+    const landingOffset = 1.4; // Land just outside melee range
+    const landX = dist > landingOffset ? targetG.position.x - (dx / dist) * landingOffset : originX;
+    const landZ = dist > landingOffset ? targetG.position.z - (dz / dist) * landingOffset : originZ;
+
+    // Find nearest passable cell at landing position
+    const passableLanding = findNearestPassable(landX, landZ, 3);
+    const finalX = passableLanding?.x ?? landX;
+    const finalZ = passableLanding?.z ?? landZ;
+
+    // Update logical position
+    updateUnitWith(setUnits, casterId, () => ({ x: finalX, z: finalZ }));
+
+    // Set 3D position
+    casterG.userData.targetX = finalX;
+    casterG.userData.targetZ = finalZ;
+    casterG.userData.attackTarget = targetId;
+
+    // Animate dash
+    const flyHeight = casterG.userData.flyHeight ?? 0;
+    const startTime = getGameTime();
+    const dashDuration = 250;
+
+    scheduleEffectAnimation((gameNow: number) => {
+        const elapsed = gameNow - startTime;
+        const t = Math.min(1, elapsed / dashDuration);
+        const eased = 1 - (1 - t) * (1 - t);
+
+        const x = originX + (finalX - originX) * eased;
+        const z = originZ + (finalZ - originZ) * eased;
+        // Arc height during leap
+        const arcHeight = Math.sin(t * Math.PI) * 1.5;
+        casterG.position.set(x, flyHeight + arcHeight, z);
+
+        if (t < 1) return false;
+        casterG.position.set(finalX, flyHeight, finalZ);
+        return true;
+    });
+
+    // Trail rings along path
+    for (let i = 1; i <= 3; i++) {
+        const frac = i / 4;
+        createAnimatedRing(scene, originX + (finalX - originX) * frac, originZ + (finalZ - originZ) * frac, "#ff9933", {
+            innerRadius: 0.1, outerRadius: 0.25, maxScale: 1.0, duration: 200
+        });
+    }
+
+    // Landing ring
+    createAnimatedRing(scene, finalX, finalZ, "#ff6600", {
+        innerRadius: 0.3, outerRadius: 0.6, maxScale: 1.5, duration: 300
+    });
+
+    // Swing animation
+    spawnSwingIndicator(scene, casterG, targetG, true, swingAnimationsRef.current, now);
+
+    // Hit resolution
+    if (rollSkillHit(skill, casterData.accuracy, casterUnit)) {
+        const statBonus = calculateStatBonus(casterUnit, skill.damageType);
+        const { damage: dmg, isCrit } = calculateDamageWithCrit(
+            skill.damageRange![0] + statBonus, skill.damageRange![1] + statBonus,
+            getEffectiveArmor(targetEnemy, targetData.armor), skill.damageType, casterUnit
+        );
+
+        const dmgCtx: DamageContext = {
+            scene, damageTexts: damageTexts.current, hitFlashRef: hitFlashRef.current,
+            unitsRef: unitsRef.current, unitsStateRef, setUnits, addLog, now, defeatedThisFrame
+        };
+
+        applyDamageToUnit(dmgCtx, targetId, targetG, dmg, targetData.name, {
+            color: COLORS.damagePlayer,
+            attackerName: casterData.name,
+            hitMessage: { text: logHit(casterData.name, skill.name, targetData.name, dmg) + (isCrit ? " Critical hit!" : ""), color: isCrit ? COLORS.damageCrit : COLORS.damagePlayer },
+            targetUnit: targetEnemy,
+            attackerPosition: { x: finalX, z: finalZ },
+            damageType: skill.damageType,
+            isCrit,
+            attackerId: casterId,
+            isMeleeHit: true
+        });
+
+        soundFns.playHit();
+    } else {
+        soundFns.playMiss();
+        addLog(logMiss(casterData.name, skill.name, targetData.name), COLORS.logNeutral);
+    }
 
     return true;
 }

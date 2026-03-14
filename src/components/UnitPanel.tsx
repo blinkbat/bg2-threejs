@@ -433,6 +433,9 @@ function SkillTooltip({ skill, isShielded, cantripUses }: { skill: Skill; isShie
             lines.push({ label: "Damage", value: `${skill.damageRange![0]}-${skill.damageRange![1]}`, color: dmgInfo.color });
             lines.push({ label: "Type", value: dmgInfo.name, color: dmgInfo.color });
         }
+        if (skill.name === "Smite") {
+            lines.push({ label: "Bonus", value: "×1.5 vs undead & demons", color: COLORS.dmgHoly });
+        }
     } else if (skill.type === "heal") {
         lines.push({ label: "Heal", value: `${skill.healRange![0]}-${skill.healRange![1]}`, color: COLORS.hpHigh });
     } else if (skill.type === "taunt") {
@@ -482,9 +485,20 @@ function SkillTooltip({ skill, isShielded, cantripUses }: { skill: Skill; isShie
         lines.push({ label: "Radius", value: `${skill.range}`, color: "var(--ui-color-accent-warning)" });
     } else if (skill.type === "debuff") {
         const durationSec = Math.round(skill.duration! / 1000);
-        lines.push({ label: "Duration", value: `${durationSec}s`, color: COLORS.stunnedText });
-        if (skill.stunChance) {
-            lines.push({ label: "Stun chance", value: `${skill.stunChance}%`, color: COLORS.stunnedText });
+        if (skill.name === "Five-Point Palm") {
+            const dmgInfo = getDamageTypeInfo(skill.damageType);
+            lines.push({ label: "Damage", value: `${skill.damageRange![0]}-${skill.damageRange![1]}`, color: dmgInfo.color });
+            lines.push({ label: "Weakened", value: `${durationSec}s`, color: COLORS.weakenedText });
+            lines.push({ label: "Effect", value: "+35% attack cooldowns", color: COLORS.weakenedText });
+        } else if (skill.name === "Dim Mak") {
+            lines.push({ label: "Doom chance", value: "80%", color: COLORS.doomText });
+            lines.push({ label: "Doom timer", value: `${durationSec}s until death`, color: COLORS.doomText });
+            lines.push({ label: "Immune", value: "Minibosses & bosses", color: COLORS.logNeutral });
+        } else {
+            lines.push({ label: "Duration", value: `${durationSec}s`, color: COLORS.stunnedText });
+            if (skill.stunChance) {
+                lines.push({ label: "Stun chance", value: `${skill.stunChance}%`, color: COLORS.stunnedText });
+            }
         }
     } else if (skill.type === "trap") {
         const durationSec = Math.round(skill.duration! / 1000);
@@ -542,10 +556,25 @@ function SkillTooltip({ skill, isShielded, cantripUses }: { skill: Skill; isShie
             lines.push({ label: "Effect", value: "Summons Ancestor warrior", color: "var(--ui-color-text-secondary)" });
             lines.push({ label: "Limit", value: "1 active summon", color: "var(--ui-color-text-secondary)" });
         }
+    } else if (skill.type === "cleave") {
+        const dmgInfo = getDamageTypeInfo(skill.damageType);
+        lines.push({ label: "Damage", value: `${skill.damageRange![0]}-${skill.damageRange![1]}`, color: dmgInfo.color });
+        lines.push({ label: "Type", value: dmgInfo.name, color: dmgInfo.color });
+        lines.push({ label: "Radius", value: `${skill.range}`, color: "var(--ui-color-accent-warning)" });
+        lines.push({ label: "Area", value: "Frontal arc", color: "var(--ui-color-accent-warning)" });
+    } else if (skill.type === "intimidate") {
+        const durationSec = Math.round(skill.duration! / 1000);
+        lines.push({ label: "Fear duration", value: `${durationSec}s`, color: COLORS.fearedText });
+        lines.push({ label: "Radius", value: `${skill.range}`, color: "var(--ui-color-accent-warning)" });
+    } else if (skill.type === "leap_strike") {
+        const dmgInfo = getDamageTypeInfo(skill.damageType);
+        lines.push({ label: "Damage", value: `${skill.damageRange![0]}-${skill.damageRange![1]}`, color: dmgInfo.color });
+        lines.push({ label: "Type", value: dmgInfo.name, color: dmgInfo.color });
+        lines.push({ label: "Leap range", value: `${skill.range}`, color: "var(--ui-color-accent-warning)" });
     }
 
     // Range (skip for self-targeted AOE skills that use range as radius, and dodge which shows it inline)
-    const skipRange = skill.type === "dodge" || (skill.targetType === "self" && (skill.type === "taunt" || skill.type === "flurry" || skill.type === "aoe_buff"));
+    const skipRange = skill.type === "dodge" || skill.type === "leap_strike" || (skill.targetType === "self" && (skill.type === "taunt" || skill.type === "flurry" || skill.type === "aoe_buff" || skill.type === "cleave" || skill.type === "intimidate"));
     if (skill.range > 0 && !skipRange) {
         lines.push({ label: isRanged ? "Range" : "Melee", value: `${skill.range}` });
     }

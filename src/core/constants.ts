@@ -317,7 +317,7 @@ export const COLORS = {
 // =============================================================================
 
 type DamageTypeForColor = "physical" | "fire" | "cold" | "lightning" | "chaos" | "holy";
-type SkillTypeForColor = "damage" | "heal" | "buff" | "taunt" | "flurry" | "debuff" | "trap" | "sanctuary" | "mana_transfer" | "smite" | "energy_shield" | "aoe_buff" | "restoration" | "revive" | "dodge" | "summon" | "displacement" | "turn_undead" | "smoke";
+type SkillTypeForColor = "damage" | "heal" | "buff" | "taunt" | "flurry" | "debuff" | "trap" | "sanctuary" | "mana_transfer" | "smite" | "energy_shield" | "aoe_buff" | "restoration" | "revive" | "dodge" | "summon" | "displacement" | "turn_undead" | "smoke" | "cleave" | "intimidate" | "leap_strike";
 
 /** Canonical color for a raw damage type */
 export function getDamageTypeColor(damageType: DamageTypeForColor | undefined): string {
@@ -372,7 +372,11 @@ export function getSkillTextColor(
         case "debuff":
         case "trap":
         case "turn_undead":
+        case "cleave":
+        case "leap_strike":
             return getDamageTypeColor(damageType);
+        case "intimidate":
+            return COLORS.fearedText;
         default:
             return COLORS.logNeutral;
     }
