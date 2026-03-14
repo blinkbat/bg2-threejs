@@ -21,7 +21,7 @@ export interface Skill {
     flavor?: string;       // Flavor text for tooltip
     manaCost: number;
     cooldown: number;  // ms
-    type: "damage" | "heal" | "buff" | "taunt" | "flurry" | "debuff" | "trap" | "sanctuary" | "mana_transfer" | "smite" | "energy_shield" | "aoe_buff" | "restoration" | "revive" | "dodge" | "summon";
+    type: "damage" | "heal" | "buff" | "taunt" | "flurry" | "debuff" | "trap" | "sanctuary" | "mana_transfer" | "smite" | "energy_shield" | "aoe_buff" | "restoration" | "revive" | "dodge" | "summon" | "displacement" | "turn_undead" | "smoke";
     targetType: "enemy" | "ally" | "self" | "aoe" | "unit";
     range: number;
     aoeRadius?: number;
@@ -49,6 +49,7 @@ export interface Skill {
     lineWidth?: number;               // Width of line-shaped AOE (rectangle instead of circle)
     chillChance?: number;             // 0-100 percent chance to apply chilled on hit
     knockbackDistance?: number;       // Push distance in world units
+    pullDistance?: number;             // Pull distance toward AoE center in world units
     blindChance?: number;             // 0-100 percent chance to apply blind
     blindDuration?: number;           // Blind duration in ms
     hitChance?: number;               // Optional base hit chance override (0-100)

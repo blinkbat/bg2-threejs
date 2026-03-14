@@ -39,13 +39,15 @@ const EFFECT_ICONS: Record<StatusEffectType, { icon: string; color: string }> = 
     blind: { icon: "👁", color: COLORS.blindText },
     vanquishing_light: { icon: "⊕", color: COLORS.holyGroundText },
     enraged: { icon: "💢", color: COLORS.enragedText },
+    feared: { icon: "😱", color: COLORS.fearedText },
+    blood_marked: { icon: "🩸", color: COLORS.bloodMarkedText },
 };
 
 interface PartyBarProps {
     units: Unit[];
     selectedIds: number[];
     onSelect: React.Dispatch<React.SetStateAction<number[]>>;
-    targetingMode?: { casterId: number; skill: Skill } | null;
+    targetingMode?: { casterId: number; skill: Skill; displacementTargetId?: number } | null;
     consumableTargetingMode?: { userId: number; itemId: string } | null;
     onTargetUnit?: (targetUnitId: number) => void;
     // Hotbar props

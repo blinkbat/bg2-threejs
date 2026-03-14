@@ -16,17 +16,19 @@ import {
     VISHAS_EYES_ORB_COUNT,
     VISHAS_EYES_ORB_DURATION,
     VISHAS_EYES_ORB_FLY_HEIGHT,
+    BLOOD_MARK_LIFESTEAL,
     getSkillTextColor
 } from "../../core/constants";
 import { UNIT_DATA, ANCESTOR_SUMMON_ID, VISHAS_EYE_SUMMON_IDS, getEffectiveMaxHp } from "../../game/playerUnits";
 import { getUnitStats } from "../../game/units";
-import { rollChance, rollSkillHit, hasStatusEffect, logTaunt, logTauntMiss, logStunned, logTrapThrown, applyStatusEffect, checkEnemyDefenses } from "../combatMath";
+import { rollChance, rollSkillHit, hasStatusEffect, logTaunt, logTauntMiss, logStunned, logTrapThrown, applyStatusEffect, checkEnemyDefenses, calculateStatBonus, getEffectiveArmor, calculateDamageWithCrit, logAoeHit, logAoeMiss, logCast } from "../combatMath";
 import { ENEMY_STATS } from "../../game/enemyStats";
 import { getUnitRadius, isInRange } from "../../rendering/range";
 import { getAliveUnits } from "../../game/unitQuery";
 import { soundFns } from "../../audio";
-import { createAnimatedRing } from "../damageEffects";
+import { createAnimatedRing, applyDamageToUnit, type DamageContext } from "../damageEffects";
 import { createSanctuaryTile } from "../../gameLoop/sanctuaryTiles";
+import { createSmokeTile } from "../../gameLoop/smokeTiles";
 import { forEachTileInRadius } from "../../gameLoop/tileUtils";
 import { findNearestPassable } from "../../ai/pathfinding";
 import { getGameTime } from "../../core/gameClock";
@@ -221,6 +223,99 @@ export function executeDebuffSkill(
     } else {
         soundFns.playMiss();
         addLog(`${casterData.name}'s ${skill.name} misses ${targetData.name}!`, skillLogColor);
+    }
+
+    return true;
+}
+
+// =============================================================================
+// BLOOD MARK SKILL (melee debuff: lifesteal on hit)
+// =============================================================================
+
+/**
+ * Execute Blood Mark — brand an enemy with a crimson sigil.
+ * Melee hits against the marked enemy heal the attacker.
+ */
+export function executeBloodMarkSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill,
+    targetX: number,
+    targetZ: number,
+    targetUnitId?: number
+): boolean {
+    const { scene, unitsRef, unitMeshRef, hitFlashRef, setUnits, addLog } = ctx;
+
+    let targetEnemy: Unit | undefined;
+    let targetG: UnitGroup | undefined;
+    if (targetUnitId !== undefined) {
+        targetEnemy = ctx.unitsStateRef.current.find(u => u.id === targetUnitId && u.team === "enemy" && u.hp > 0);
+        targetG = unitsRef.current[targetUnitId];
+        if (!targetEnemy || !targetG) return false;
+    } else {
+        const target = findAndValidateEnemyTarget(ctx, casterId, targetX, targetZ);
+        if (!target) return false;
+        targetEnemy = target.unit;
+        targetG = target.group;
+    }
+
+    const casterG = unitsRef.current[casterId];
+    if (!casterG) return false;
+
+    const targetRadius = getUnitRadius(targetEnemy);
+    if (!isInRange(casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, targetRadius, skill.range + 0.5)) {
+        addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, COLORS.logNeutral);
+        return false;
+    }
+
+    if (hasStatusEffect(targetEnemy, "blood_marked")) {
+        addLog(`${UNIT_DATA[casterId].name}: Target is already marked!`, COLORS.logNeutral);
+        return false;
+    }
+
+    consumeSkill(ctx, casterId, skill);
+
+    const now = Date.now();
+    const casterData = UNIT_DATA[casterId];
+    const targetData = getUnitStats(targetEnemy);
+    const targetId = targetEnemy.id;
+
+    const bloodMarkEffect: StatusEffect = {
+        type: "blood_marked",
+        duration: skill.duration!,
+        tickInterval: BUFF_TICK_INTERVAL,
+        timeSinceTick: 0,
+        lastUpdateTime: now,
+        damagePerTick: 0,
+        sourceId: casterId,
+        lifestealPercent: BLOOD_MARK_LIFESTEAL
+    };
+
+    setUnits(prev => prev.map(u =>
+        u.id === targetId ? { ...u, statusEffects: applyStatusEffect(u.statusEffects, bloodMarkEffect) } : u
+    ));
+
+    soundFns.playHit();
+    addLog(`${casterData.name} brands ${targetData.name} with ${skill.name}!`, getSkillTextColor(skill.type, skill.damageType));
+
+    // Visual: crimson ring on target
+    createAnimatedRing(scene, targetG.position.x, targetG.position.z, COLORS.bloodMarkedText, {
+        innerRadius: 0.2,
+        outerRadius: 0.45,
+        maxScale: 1.4,
+        duration: 320
+    });
+    createAnimatedRing(scene, casterG.position.x, casterG.position.z, COLORS.bloodMarkedText, {
+        innerRadius: 0.14,
+        outerRadius: 0.28,
+        maxScale: 1.0,
+        duration: 180
+    });
+
+    const mesh = unitMeshRef.current[targetId];
+    if (mesh) {
+        (mesh.material as THREE.MeshStandardMaterial).color.set(COLORS.bloodMarkedText);
+        hitFlashRef.current[targetId] = now;
     }
 
     return true;
@@ -591,5 +686,301 @@ export function executeSummonSkill(
             : `${casterData.name} summons an Ancestor.`,
         getSkillTextColor(skill.type, skill.damageType)
     );
+    return true;
+}
+
+// =============================================================================
+// TURN UNDEAD SKILL (self-centered holy AoE: fear undead, damage all)
+// =============================================================================
+
+/**
+ * Execute Turn Undead — holy burst centered on caster.
+ * Undead enemies: full damage + feared status effect.
+ * Non-undead enemies: half damage, no fear.
+ */
+export function executeTurnUndeadSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill
+): boolean {
+    const { scene, unitsStateRef, unitsRef, setUnits, addLog, hitFlashRef, damageTexts, defeatedThisFrame } = ctx;
+
+    const casterG = unitsRef.current[casterId];
+    if (!casterG) return false;
+
+    consumeSkill(ctx, casterId, skill);
+
+    const casterData = UNIT_DATA[casterId];
+    const now = Date.now();
+    const aoeRadius = skill.range;
+    const fearDuration = skill.duration ?? 6000;
+
+    const enemies = getAliveUnits(unitsStateRef.current, "enemy");
+    const enemiesInArea: { unit: Unit; group: UnitGroup; isUndead: boolean }[] = [];
+
+    for (const enemy of enemies) {
+        if (defeatedThisFrame.has(enemy.id)) continue;
+        const enemyG = unitsRef.current[enemy.id];
+        if (!enemyG) continue;
+        const dist = Math.hypot(enemyG.position.x - casterG.position.x, enemyG.position.z - casterG.position.z);
+        if (dist <= aoeRadius + getUnitRadius(enemy)) {
+            const enemyStats = enemy.enemyType ? ENEMY_STATS[enemy.enemyType] : undefined;
+            const isUndead = enemyStats?.monsterType === "undead";
+            enemiesInArea.push({ unit: enemy, group: enemyG, isUndead });
+        }
+    }
+
+    // Visual: holy burst from caster
+    createAnimatedRing(scene, casterG.position.x, casterG.position.z, "#ffffaa", {
+        innerRadius: 0.3,
+        outerRadius: aoeRadius,
+        maxScale: 1.0,
+        duration: 400
+    });
+    createAnimatedRing(scene, casterG.position.x, casterG.position.z, "#ffdd66", {
+        innerRadius: 0.15,
+        outerRadius: 0.5,
+        maxScale: 1.5,
+        duration: 300
+    });
+    soundFns.playWarcry();
+
+    const dmgCtx: DamageContext = {
+        scene, damageTexts: damageTexts.current, hitFlashRef: hitFlashRef.current,
+        unitsRef: unitsRef.current, unitsStateRef, setUnits, addLog, now, defeatedThisFrame
+    };
+
+    const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
+    const statBonus = calculateStatBonus(casterUnit, skill.damageType);
+    const skillLogColor = getSkillTextColor(skill.type, skill.damageType);
+
+    const fearedIds = new Set<number>();
+    let hitCount = 0;
+    let totalDamage = 0;
+
+    for (const { unit: target, group: targetG, isUndead } of enemiesInArea) {
+        if (defeatedThisFrame.has(target.id)) continue;
+        const targetData = getUnitStats(target);
+
+        if (!rollSkillHit(skill, casterData.accuracy, casterUnit)) continue;
+
+        const minDmg = skill.damageRange![0] + statBonus;
+        const maxDmg = skill.damageRange![1] + statBonus;
+        const { damage: dmg, isCrit } = calculateDamageWithCrit(
+            isUndead ? minDmg : Math.floor(minDmg / 2),
+            isUndead ? maxDmg : Math.floor(maxDmg / 2),
+            getEffectiveArmor(target, targetData.armor),
+            skill.damageType,
+            casterUnit
+        );
+
+        applyDamageToUnit(dmgCtx, target.id, targetG, dmg, targetData.name, {
+            color: COLORS.damagePlayer,
+            attackerName: casterData.name,
+            targetUnit: target,
+            attackerPosition: { x: casterG.position.x, z: casterG.position.z },
+            damageType: skill.damageType,
+            isCrit,
+            attackerId: casterId,
+            isMeleeHit: false
+        });
+
+        hitCount++;
+        totalDamage += dmg;
+
+        if (defeatedThisFrame.has(target.id)) continue;
+
+        // Undead: apply feared
+        if (isUndead && !hasStatusEffect(target, "feared")) {
+            fearedIds.add(target.id);
+        }
+    }
+
+    if (fearedIds.size > 0) {
+        setUnits(prev => prev.map(unit => {
+            if (!fearedIds.has(unit.id) || unit.hp <= 0) return unit;
+            const fearedEffect: StatusEffect = {
+                type: "feared",
+                duration: fearDuration,
+                tickInterval: BUFF_TICK_INTERVAL,
+                timeSinceTick: 0,
+                lastUpdateTime: now,
+                damagePerTick: 0,
+                sourceId: casterId,
+                fearSourceX: casterG.position.x,
+                fearSourceZ: casterG.position.z
+            };
+            return { ...unit, statusEffects: applyStatusEffect(unit.statusEffects, fearedEffect) };
+        }));
+    }
+
+    const fearedCount = fearedIds.size;
+    if (fearedCount > 0) {
+        addLog(`${fearedCount} undead ${fearedCount === 1 ? "flees" : "flee"} in terror!`, skillLogColor);
+    }
+
+    if (hitCount > 0) {
+        addLog(logAoeHit(casterData.name, skill.name, hitCount, totalDamage), skillLogColor);
+    } else if (enemiesInArea.length > 0) {
+        addLog(logAoeMiss(casterData.name, skill.name), COLORS.logNeutral);
+    } else {
+        addLog(logCast(casterData.name, skill.name), skillLogColor);
+    }
+
+    return true;
+}
+
+// =============================================================================
+// ELORA'S GRASP SKILL (ground-targeted AoE: sleep)
+// =============================================================================
+
+/**
+ * Execute Elora's Grasp — ground-targeted AoE that puts enemies to sleep.
+ */
+export function executeElorasGraspSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill,
+    targetX: number,
+    targetZ: number
+): boolean {
+    const { scene, unitsStateRef, unitsRef, setUnits, addLog, defeatedThisFrame } = ctx;
+
+    const casterG = unitsRef.current[casterId];
+    if (!casterG) return false;
+
+    consumeSkill(ctx, casterId, skill);
+
+    const casterData = UNIT_DATA[casterId];
+    const now = Date.now();
+    const aoeRadius = skill.aoeRadius ?? 2;
+    const sleepDuration = skill.duration ?? 8000;
+    const sleepChance = skill.stunChance ?? 75;
+
+    const enemies = getAliveUnits(unitsStateRef.current, "enemy");
+    const enemiesInArea: { unit: Unit; group: UnitGroup }[] = [];
+
+    for (const enemy of enemies) {
+        if (defeatedThisFrame.has(enemy.id)) continue;
+        const enemyG = unitsRef.current[enemy.id];
+        if (!enemyG) continue;
+        const dist = Math.hypot(enemyG.position.x - targetX, enemyG.position.z - targetZ);
+        if (dist <= aoeRadius + getUnitRadius(enemy)) {
+            enemiesInArea.push({ unit: enemy, group: enemyG });
+        }
+    }
+
+    // Visual: green-gold vine ring
+    createAnimatedRing(scene, targetX, targetZ, "#88aa44", {
+        innerRadius: 0.3,
+        outerRadius: aoeRadius,
+        maxScale: 1.0,
+        duration: 400
+    });
+    createAnimatedRing(scene, casterG.position.x, casterG.position.z, "#88aa44", {
+        innerRadius: 0.15,
+        outerRadius: 0.4,
+        maxScale: 1.2,
+        duration: 280
+    });
+    soundFns.playHeal();
+
+    const sleepIds = new Set<number>();
+
+    for (const { unit: target } of enemiesInArea) {
+        if (hasStatusEffect(target, "sleep")) continue;
+        if (rollChance(sleepChance)) {
+            sleepIds.add(target.id);
+        }
+    }
+
+    if (sleepIds.size > 0) {
+        setUnits(prev => prev.map(unit => {
+            if (!sleepIds.has(unit.id) || unit.hp <= 0) return unit;
+            const sleepEffect: StatusEffect = {
+                type: "sleep",
+                duration: sleepDuration,
+                tickInterval: BUFF_TICK_INTERVAL,
+                timeSinceTick: 0,
+                lastUpdateTime: now,
+                damagePerTick: 0,
+                sourceId: casterId
+            };
+            return { ...unit, statusEffects: applyStatusEffect(unit.statusEffects, sleepEffect) };
+        }));
+    }
+
+    const skillLogColor = getSkillTextColor(skill.type, skill.damageType);
+    if (sleepIds.size > 0) {
+        addLog(`${casterData.name}'s ${skill.name} puts ${sleepIds.size} ${sleepIds.size === 1 ? "enemy" : "enemies"} to sleep!`, skillLogColor);
+    } else if (enemiesInArea.length > 0) {
+        addLog(`${casterData.name}'s ${skill.name} fails to take hold!`, COLORS.logNeutral);
+    } else {
+        addLog(logCast(casterData.name, skill.name), skillLogColor);
+    }
+
+    return true;
+}
+
+// =============================================================================
+// SMOKE BOMB SKILL (ground-targeted AoE: creates persistent blind tiles)
+// =============================================================================
+
+/**
+ * Execute Smoke Bomb — throw a smoke bomb that creates persistent smoke tiles.
+ * Enemies standing in smoke are periodically blinded.
+ */
+export function executeSmokeBombSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill,
+    targetX: number,
+    targetZ: number
+): boolean {
+    const { scene, unitsRef, smokeTilesRef, addLog } = ctx;
+
+    if (!smokeTilesRef) {
+        addLog("Smoke Bomb cannot be cast right now.", COLORS.logWarning);
+        return false;
+    }
+
+    const casterG = unitsRef.current[casterId];
+    if (!casterG) return false;
+
+    consumeSkill(ctx, casterId, skill);
+
+    const casterData = UNIT_DATA[casterId];
+    const now = Date.now();
+    const radius = skill.aoeRadius ?? 2.5;
+    const blindChance = skill.blindChance ?? 70;
+    const blindDuration = skill.blindDuration ?? 3000;
+
+    const centerX = Math.floor(targetX);
+    const centerZ = Math.floor(targetZ);
+
+    forEachTileInRadius(centerX, centerZ, radius, (x, z) => {
+        createSmokeTile(
+            scene,
+            smokeTilesRef.current,
+            x, z,
+            casterId,
+            blindChance,
+            blindDuration,
+            now
+        );
+    });
+
+    // Visual: dark expanding ring
+    createAnimatedRing(scene, casterG.position.x, casterG.position.z, "#666677", {
+        innerRadius: 0.14,
+        outerRadius: 0.3,
+        maxScale: 1.0,
+        duration: 200
+    });
+    createAnimatedRing(scene, targetX, targetZ, "#555566", { maxScale: radius, duration: 350 });
+
+    addLog(`${casterData.name} hurls a ${skill.name}!`, getSkillTextColor(skill.type, skill.damageType));
+    soundFns.playAttack();
+
     return true;
 }

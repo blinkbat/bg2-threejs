@@ -6,7 +6,7 @@
 import { useRef, useEffect, useState } from "react";
 import * as THREE from "three";
 import { getCurrentArea, getCurrentAreaId } from "../game/areas";
-import type { Unit, FogTexture, Projectile, SwingAnimation, DamageText, UnitGroup, SanctuaryTile, HolyTile } from "../core/types";
+import type { Unit, FogTexture, Projectile, SwingAnimation, DamageText, UnitGroup, SanctuaryTile, HolyTile, SmokeTile } from "../core/types";
 import type { AcidTile, LootBag } from "../core/types";
 import { createScene, updateChestStates, updateCamera, type DoorMesh, type SecretDoorMesh, type ChestMeshData } from "../rendering/scene";
 import { resetFogCache, resetSpriteFacing, clearChargeAttacks, clearFireBreaths, clearCurses, clearGlares, clearLeaps, clearTentacles, clearShadePhases, clearSubmergedKrakens, resetLootBagIds } from "../gameLoop";
@@ -79,6 +79,7 @@ export interface GameRefs {
     acidTiles: Map<string, AcidTile>;
     sanctuaryTiles: Map<string, SanctuaryTile>;
     holyTiles: Map<string, HolyTile>;
+    smokeTiles: Map<string, SmokeTile>;
     lootBags: LootBag[];
     hoveredDoor: string | null;
 
@@ -243,6 +244,7 @@ export function useThreeScene({
         acidTiles: new Map(),
         sanctuaryTiles: new Map(),
         holyTiles: new Map(),
+        smokeTiles: new Map(),
         lootBags: [],
         hoveredDoor: null,
         cameraOffset: { ...initialCameraOffset },
@@ -279,6 +281,7 @@ export function useThreeScene({
         gameRefs.acidTiles.clear();
         gameRefs.sanctuaryTiles.clear();
         gameRefs.holyTiles.clear();
+        gameRefs.smokeTiles.clear();
         clearChargeAttacks();
         clearFireBreaths();
         clearCurses();

@@ -70,6 +70,7 @@ import { loadFormationOrder, saveFormationOrder } from "./hooks/formationStorage
 import { HelpModal } from "./components/HelpModal";
 import { SaveLoadModal } from "./components/SaveLoadModal";
 import { DialogModal } from "./components/DialogModal";
+import { LootPickupModal } from "./components/LootPickupModal";
 import {
     type DialogTriggerProgress,
     type SaveLoadOperationResult,
@@ -164,6 +165,16 @@ interface LightingTuningSettings {
     spriteEmissiveScale: number;
     spriteRoughness: number;
     spriteMetalness: number;
+}
+
+interface LootPickupModalEntry {
+    label: string;
+    tone: "gold" | "item";
+}
+
+interface LootPickupModalState {
+    sourceLabel: "Chest" | "Loot Bag";
+    entries: LootPickupModalEntry[];
 }
 
 const DEFAULT_LIGHTING_TUNING: LightingTuningSettings = {
@@ -331,7 +342,7 @@ function Game({
     const [combatLog, setCombatLog] = useState<CombatLogEntry[]>(() => [{ text: `The party enters ${getCurrentArea().name}.`, color: "#f59e0b" }]);
     const [paused, setPaused] = useState(true);
     const [skillCooldowns, setSkillCooldowns] = useState<Record<string, { end: number; duration: number }>>({});
-    const [targetingMode, setTargetingMode] = useState<{ casterId: number; skill: Skill } | null>(null);
+    const [targetingMode, setTargetingMode] = useState<{ casterId: number; skill: Skill; displacementTargetId?: number } | null>(null);
     const [consumableTargetingMode, setConsumableTargetingMode] = useState<{ userId: number; itemId: string } | null>(null);
     const [queuedActions, setQueuedActions] = useState<{ unitId: number; skillName: string }[]>([]);
     const [hoveredEnemy, setHoveredEnemy] = useState<{ id: number; x: number; y: number } | null>(null);
@@ -356,6 +367,7 @@ function Game({
     const [sleepFadeOpacity, setSleepFadeOpacity] = useState(0);
     const [hudMenuModalOpen, setHudMenuModalOpen] = useState(false);
     const [equipmentModalUnitId, setEquipmentModalUnitId] = useState<number | null>(null);
+    const [lootPickupModalState, setLootPickupModalState] = useState<LootPickupModalState | null>(null);
 
     // =============================================================================
     // STATE SYNC REFS
@@ -378,6 +390,8 @@ function Game({
     const handleCastSkillRef = useRef<((unitId: number, skill: Skill) => void) | null>(null);
     const unitGroupsRef = useRef<Record<number, { position: { x: number; z: number } }>>({});
     const dialogPauseForcedRef = useRef(false);
+    const lootPickupPauseForcedRef = useRef(false);
+    const lootPickupOnTakeRef = useRef<(() => void) | null>(null);
     const dialogLastBlipAtRef = useRef(0);
     const dialogPreviousTypedCharsRef = useRef(0);
     const dialogTriggerAreaLoadedAtRef = useRef(Date.now());
@@ -497,11 +511,12 @@ function Game({
         return new Map(dialogChoiceOptions.map(option => [option.choice.id, option]));
     }, [dialogChoiceOptions]);
     const isDialogOpen = dialogState !== null;
+    const isLootPickupModalOpen = lootPickupModalState !== null;
     const equipmentModalOpen = equipmentModalUnitId !== null;
     const isDialogTyping = currentDialogNode !== null && dialogTypedChars < currentDialogNode.text.length;
     const dialogVisibleText = currentDialogNode ? currentDialogNode.text.slice(0, dialogTypedChars) : "";
     const canContinueWithoutChoices = !isDialogTyping && dialogChoiceOptions.length === 0 && currentDialogNode !== null;
-    const anyMenuOpen = isDialogOpen || helpOpen || saveLoadOpen || hudMenuModalOpen || equipmentModalOpen;
+    const anyMenuOpen = isDialogOpen || isLootPickupModalOpen || helpOpen || saveLoadOpen || hudMenuModalOpen || equipmentModalOpen;
 
     useEffect(() => {
         pauseToggleLockedRef.current = anyMenuOpen;
@@ -823,7 +838,8 @@ function Game({
         defeatedThisFrame: defeatedThisFrame ?? new Set<number>(),
         sanctuaryTilesRef: { current: gameRefs.current.sanctuaryTiles },
         acidTilesRef: { current: gameRefs.current.acidTiles },
-        holyTilesRef: { current: gameRefs.current.holyTiles }
+        holyTilesRef: { current: gameRefs.current.holyTiles },
+        smokeTilesRef: { current: gameRefs.current.smokeTiles }
     }), [sceneState, gameRefs, addLog, setUnitsLive]);
 
     // Execute consumable
@@ -989,6 +1005,50 @@ function Game({
         }
         dialogPauseForcedRef.current = false;
     }, [doProcessQueue]);
+
+    const closeLootPickupModal = useCallback((options?: { resumeIfForced?: boolean }) => {
+        const resumeIfForced = options?.resumeIfForced ?? true;
+        setLootPickupModalState(null);
+        lootPickupOnTakeRef.current = null;
+
+        if (resumeIfForced && lootPickupPauseForcedRef.current && pausedRef.current) {
+            togglePause(
+                { pauseStartTimeRef, actionCooldownRef },
+                { pausedRef },
+                { setPaused, setSkillCooldowns },
+                doProcessQueue
+            );
+        }
+        lootPickupPauseForcedRef.current = false;
+    }, [doProcessQueue]);
+
+    const openLootPickupModal = useCallback((request: { sourceLabel: "Chest" | "Loot Bag"; entries: LootPickupModalEntry[]; onTake: () => void }) => {
+        if (!pausedRef.current) {
+            lootPickupPauseForcedRef.current = true;
+            togglePause(
+                { pauseStartTimeRef, actionCooldownRef },
+                { pausedRef },
+                { setPaused, setSkillCooldowns },
+                doProcessQueue
+            );
+        } else {
+            lootPickupPauseForcedRef.current = false;
+        }
+
+        lootPickupOnTakeRef.current = request.onTake;
+        setLootPickupModalState({
+            sourceLabel: request.sourceLabel,
+            entries: request.entries
+        });
+    }, [doProcessQueue]);
+
+    const takeLootPickup = useCallback(() => {
+        const onTake = lootPickupOnTakeRef.current;
+        if (onTake) {
+            onTake();
+        }
+        closeLootPickupModal();
+    }, [closeLootPickupModal]);
 
     useEffect(() => {
         if (!playtestSkipDialogs || !isDialogOpen) return;
@@ -1159,7 +1219,7 @@ function Game({
         };
 
         const evaluateDialogTriggers = () => {
-            if (isDialogOpen) return;
+            if (isDialogOpen || isLootPickupModalOpen) return;
 
             const runtimeState = dialogTriggerRuntimeStateRef.current;
             if (sortedTriggers.length === 0) {
@@ -1256,7 +1316,7 @@ function Game({
         evaluateDialogTriggers();
         const intervalId = window.setInterval(evaluateDialogTriggers, DIALOG_TRIGGER_POLL_MS);
         return () => window.clearInterval(intervalId);
-    }, [addLog, currentAreaId, dialogTriggersEnabled, isDialogOpen, killedEnemies, playtestSkipDialogs, startDialog]);
+    }, [addLog, currentAreaId, dialogTriggersEnabled, isDialogOpen, isLootPickupModalOpen, killedEnemies, playtestSkipDialogs, startDialog]);
 
     const buildPersistedPlayers = useCallback((allUnits: Unit[], includePositions: boolean): PersistedPlayer[] => {
         const players = allUnits.filter(u => u.team === "player");
@@ -1409,9 +1469,10 @@ function Game({
         handleAreaTransition,
         onNpcEngaged: handleNpcEngaged,
         onCloseHelp,
+        openLootPickupModal,
         processActionQueue: doProcessQueue,
         handleCastSkillRef
-    }), [addLog, getSkillContext, handleAreaTransition, handleNpcEngaged, onCloseHelp, doProcessQueue]);
+    }), [addLog, getSkillContext, handleAreaTransition, handleNpcEngaged, onCloseHelp, openLootPickupModal, doProcessQueue]);
 
     useInputHandlers({
         containerRef,
@@ -2097,7 +2158,7 @@ function Game({
         setSelectedIds([id]);
     }, []);
 
-    const otherModalOpen = helpOpen || saveLoadOpen || isDialogOpen || hudMenuModalOpen || equipmentModalOpen || sleepFadeOpacity > 0;
+    const otherModalOpen = helpOpen || saveLoadOpen || isDialogOpen || isLootPickupModalOpen || hudMenuModalOpen || equipmentModalOpen || sleepFadeOpacity > 0;
 
     // =============================================================================
     // RENDER
@@ -2249,6 +2310,14 @@ function Game({
                     onSkipDialog={closeDialog}
                     onContinueWithoutChoices={continueDialogWithoutChoices}
                     onChoose={chooseDialogOption}
+                />
+            )}
+
+            {lootPickupModalState && (
+                <LootPickupModal
+                    sourceLabel={lootPickupModalState.sourceLabel}
+                    entries={lootPickupModalState.entries}
+                    onTake={takeLootPickup}
                 />
             )}
 

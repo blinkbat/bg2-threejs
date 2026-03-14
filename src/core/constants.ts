@@ -107,6 +107,14 @@ export const HOLY_TICK_INTERVAL = 1000;        // Damage every 1 second
 export const HOLY_DAMAGE_PER_TICK = 3;         // 3 holy damage per tick
 export const HOLY_MAX_TILES = 45;              // Max tiles in world
 
+// Smoke Tiles - Blind zone created by Thief
+export const SMOKE_TILE_DURATION = 8000;       // 8 seconds per tile
+export const SMOKE_TICK_INTERVAL = 1500;       // Blind check every 1.5 seconds
+export const SMOKE_MAX_TILES = 20;             // Max tiles in world
+
+// Blood Mark - lifesteal debuff applied by Barbarian
+export const BLOOD_MARK_LIFESTEAL = 0.35;     // 35% of melee damage healed
+
 // Trap Projectile
 export const TRAP_FLIGHT_DURATION = 600;   // ms for arc flight
 export const TRAP_ARC_HEIGHT = 2.5;        // Peak height of thrown trap
@@ -271,12 +279,15 @@ export const COLORS = {
     invulText: "#d2b4ff",           // Light purple - divine protection
     regenText: "#6bef8a",           // Bright green - healing over time
     enragedText: "#ff6633",         // Orange-red - fury
+    fearedText: "#cc88ff",          // Pale purple - terror
+    bloodMarkedText: "#cc2233",     // Deep crimson - blood mark
     fireBreath: "#ff4400",       // Orange-red for fire breath cone
     acid: "#9acd32",            // Yellow-green for acid tiles
     acidText: "#b8e060",        // Brighter for damage text
     holyGround: "#f0e6a8",      // Pale gold for holy ground tiles
     holyGroundText: "#fff3c9",  // Bright holy text for smiting tiles
     sanctuary: "#ffd700",       // Golden for sanctuary tiles
+    smoke: "#555566",            // Dark grey for smoke tiles
     sanctuaryText: "#ffe44d",   // Brighter gold for heal text
 
     // HP bar colors
@@ -306,7 +317,7 @@ export const COLORS = {
 // =============================================================================
 
 type DamageTypeForColor = "physical" | "fire" | "cold" | "lightning" | "chaos" | "holy";
-type SkillTypeForColor = "damage" | "heal" | "buff" | "taunt" | "flurry" | "debuff" | "trap" | "sanctuary" | "mana_transfer" | "smite" | "energy_shield" | "aoe_buff" | "restoration" | "revive" | "dodge" | "summon";
+type SkillTypeForColor = "damage" | "heal" | "buff" | "taunt" | "flurry" | "debuff" | "trap" | "sanctuary" | "mana_transfer" | "smite" | "energy_shield" | "aoe_buff" | "restoration" | "revive" | "dodge" | "summon" | "displacement" | "turn_undead" | "smoke";
 
 /** Canonical color for a raw damage type */
 export function getDamageTypeColor(damageType: DamageTypeForColor | undefined): string {
@@ -345,6 +356,7 @@ export function getSkillTextColor(
             return COLORS.defianceText;
         case "dodge":
         case "energy_shield":
+        case "displacement":
             return COLORS.dmgChaos;
         case "buff":
         case "aoe_buff":
@@ -352,11 +364,14 @@ export function getSkillTextColor(
             return damageType && damageType !== "physical"
                 ? getDamageTypeColor(damageType)
                 : COLORS.shieldedText;
+        case "smoke":
+            return COLORS.blindText;
         case "damage":
         case "smite":
         case "flurry":
         case "debuff":
         case "trap":
+        case "turn_undead":
             return getDamageTypeColor(damageType);
         default:
             return COLORS.logNeutral;

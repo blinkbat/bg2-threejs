@@ -29,6 +29,7 @@ export { updateSwingAnimations } from "./swingAnimations";
 export { processAcidTiles, createAcidPool } from "./acidTiles";
 export { processSanctuaryTiles } from "./sanctuaryTiles";
 export { processHolyTiles } from "./holyTiles";
+export { processSmokeTiles } from "./smokeTiles";
 export { processChargeAttacks, clearChargeAttacks } from "./constructCharge";
 export { processFireBreaths, clearFireBreaths } from "./fireBreath";
 export { processCurses, clearCurses } from "./necromancerCurse";
@@ -105,6 +106,23 @@ export function updateUnitAI(
 
     // Skip all actions if stunned or asleep - unit cannot move or attack
     if (hasStatusEffect(unit, "stunned") || hasStatusEffect(unit, "sleep")) {
+        return;
+    }
+
+    // Feared: flee away from fear source, skip all other AI
+    const fearEffect = unit.statusEffects?.find(e => e.type === "feared");
+    if (fearEffect && fearEffect.fearSourceX !== undefined && fearEffect.fearSourceZ !== undefined) {
+        g.userData.attackTarget = null;
+        pathsRef[unit.id] = [];
+        const fleeX = g.position.x - fearEffect.fearSourceX;
+        const fleeZ = g.position.z - fearEffect.fearSourceZ;
+        const fleeDist = Math.hypot(fleeX, fleeZ);
+        if (fleeDist > 0.001) {
+            const fleeTargetX = g.position.x + (fleeX / fleeDist) * 5;
+            const fleeTargetZ = g.position.z + (fleeZ / fleeDist) * 5;
+            const movementCtx: MovementContext = { unit, g, unitsRef, unitsState, targetX: fleeTargetX, targetZ: fleeTargetZ, speedMultiplier: getEffectiveSpeedMultiplier(unit, data) };
+            runMovementPhase(movementCtx);
+        }
         return;
     }
 

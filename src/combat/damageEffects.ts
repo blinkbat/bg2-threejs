@@ -775,6 +775,19 @@ export function applyDamageToUnit(
         }
     }
 
+    // Blood Mark lifesteal: when a player melee-hits a blood_marked enemy, heal the attacker.
+    if (isMeleeHit && attackerId !== undefined && newHp > 0 && refUnit && hasStatusEffect(refUnit, "blood_marked")) {
+        const attackerUnit = unitsStateRef.current.find(u => u.id === attackerId && u.team === "player" && u.hp > 0);
+        const attackerGroup = unitsRef[attackerId];
+        if (attackerUnit && attackerGroup) {
+            const bloodEffect = refUnit.statusEffects?.find(e => e.type === "blood_marked");
+            const lifestealPct = bloodEffect?.lifestealPercent ?? 0.35;
+            const healAmount = Math.max(1, Math.floor(effectiveDamage * lifestealPct));
+            const attackerMaxHp = getEffectiveMaxHp(attackerId, attackerUnit);
+            applyLifesteal(scene, damageTexts, setUnits, attackerId, attackerGroup.position.x, attackerGroup.position.z, healAmount, attackerMaxHp);
+        }
+    }
+
     // Defeat handling
     if (newHp <= 0) {
         if (defeatedThisFrame && !skipDefeatTracking) {

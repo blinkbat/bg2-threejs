@@ -114,6 +114,18 @@ export interface HolyTile {
     damagePerTick: number;   // Holy damage dealt each tick
 }
 
+// Smoke tile - blind zone created by Thief
+export interface SmokeTile {
+    mesh: THREE.Mesh;
+    x: number;           // Grid cell X
+    z: number;           // Grid cell Z
+    elapsedTime: number;     // Accumulated elapsed time (pause-safe)
+    lastUpdateTime: number;  // Last frame timestamp for delta calculation
+    duration: number;        // Total duration in ms
+    timeSinceTick: number;   // Accumulated time since last blind tick (pause-safe)
+    sourceId: number;        // ID of the unit that created it
+}
+
 // =============================================================================
 // LOOT
 // =============================================================================

@@ -45,7 +45,7 @@ interface InputState {
     selectedRef: React.RefObject<number[]>;
     unitsStateRef: React.RefObject<Unit[]>;
     pausedRef: React.MutableRefObject<boolean>;
-    targetingModeRef: React.RefObject<{ casterId: number; skill: Skill } | null>;
+    targetingModeRef: React.RefObject<{ casterId: number; skill: Skill; displacementTargetId?: number } | null>;
 }
 
 interface InputSetters {
@@ -53,7 +53,7 @@ interface InputSetters {
     setSelBox: React.Dispatch<React.SetStateAction<SelectionBox | null>>;
     setUnits: React.Dispatch<React.SetStateAction<Unit[]>>;
     setPaused: React.Dispatch<React.SetStateAction<boolean>>;
-    setTargetingMode: React.Dispatch<React.SetStateAction<{ casterId: number; skill: Skill } | null>>;
+    setTargetingMode: React.Dispatch<React.SetStateAction<{ casterId: number; skill: Skill; displacementTargetId?: number } | null>>;
     setSkillCooldowns: React.Dispatch<React.SetStateAction<Record<string, { end: number; duration: number }>>>;
     setQueuedActions: React.Dispatch<React.SetStateAction<{ unitId: number; skillName: string }[]>>;
 }
@@ -615,7 +615,7 @@ export function queueOrExecuteSkill(
 
 export function handleTargetingClick(
     hit: THREE.Intersection,
-    targetingMode: { casterId: number; skill: Skill },
+    targetingMode: { casterId: number; skill: Skill; displacementTargetId?: number },
     refs: Pick<InputRefs, "actionCooldownRef" | "actionQueueRef" | "rangeIndicatorRef" | "aoeIndicatorRef">,
     state: Pick<InputState, "unitsStateRef" | "pausedRef">,
     setters: Pick<InputSetters, "setTargetingMode" | "setQueuedActions">,
@@ -630,6 +630,19 @@ export function handleTargetingClick(
     if (!caster || !casterG || caster.hp <= 0) {
         clearTargetingMode(setters.setTargetingMode, refs.rangeIndicatorRef, refs.aoeIndicatorRef);
         return true;
+    }
+
+    // Displacement phase 2: unit already selected, now picking ground destination
+    if (skill.type === "displacement" && targetingMode.displacementTargetId !== undefined) {
+        if (hit.object.name !== "ground") return false;
+        const targetX = hit.point.x;
+        const targetZ = hit.point.z;
+        const dist = distanceToPoint(casterG.position, targetX, targetZ);
+        if (dist > skill.range) {
+            addLog(`${UNIT_DATA[casterId].name}: Destination out of range!`, "#888");
+            return true;
+        }
+        return queueOrExecuteSkill(casterId, skill, targetX, targetZ, refs, state, setters, skillCtx, addLog, targetingMode.displacementTargetId);
     }
 
     // Check if we clicked on a unit
@@ -652,6 +665,15 @@ export function handleTargetingClick(
                 const targetRadius = getUnitRadius(targetUnit);
                 if (!isInRange(casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, targetRadius, skill.range)) {
                     addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, "#888");
+                    return true;
+                }
+
+                // Displacement phase 1: store target, stay in targeting mode for ground click
+                if (skill.type === "displacement") {
+                    setters.setTargetingMode({ casterId, skill, displacementTargetId: targetId });
+                    addLog(`${UNIT_DATA[casterId].name}: Now choose a destination.`, getSkillTextColor(skill.type, skill.damageType));
+                    // Hide range indicator since we're now picking a ground position
+                    if (refs.rangeIndicatorRef.current) refs.rangeIndicatorRef.current.visible = false;
                     return true;
                 }
 
@@ -689,7 +711,7 @@ export function handleTargetingClick(
  */
 export function handleTargetingOnUnit(
     targetUnitId: number,
-    targetingMode: { casterId: number; skill: Skill },
+    targetingMode: { casterId: number; skill: Skill; displacementTargetId?: number },
     refs: Pick<InputRefs, "actionCooldownRef" | "actionQueueRef" | "rangeIndicatorRef" | "aoeIndicatorRef">,
     state: Pick<InputState, "unitsStateRef" | "pausedRef">,
     setters: Pick<InputSetters, "setTargetingMode" | "setQueuedActions">,
@@ -750,7 +772,7 @@ export function setupTargetingMode(
     casterG: UnitGroup,
     rangeIndicatorRef: React.RefObject<THREE.Mesh | null>,
     aoeIndicatorRef: React.RefObject<THREE.Mesh | null>,
-    setTargetingMode: React.Dispatch<React.SetStateAction<{ casterId: number; skill: Skill } | null>>
+    setTargetingMode: React.Dispatch<React.SetStateAction<{ casterId: number; skill: Skill; displacementTargetId?: number } | null>>
 ): void {
     setTargetingMode({ casterId, skill });
 

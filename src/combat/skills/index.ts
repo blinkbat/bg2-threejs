@@ -13,10 +13,10 @@ export type { SkillExecutionContext } from "./types";
 
 // Import for internal use
 import type { SkillExecutionContext } from "./types";
-import { executeAoeSkill, executeMeleeSkill, executeSmiteSkill, executeRangedSkill, executeFlurrySkill, executeMagicWaveSkill, executeChainLightningSkill, executeForcePushSkill, executeHolyCrossSkill, executeHolyStrikeSkill, executeGlacialWhorlSkill } from "./damage";
-import { executeHealSkill, executeManaTransferSkill, executeBuffSkill, executeAoeBuffSkill, executeEnergyShieldSkill, executeCleanseSkill, executeRestorationSkill, executeReviveSkill, executeSunStanceSkill, executePangolinStanceSkill, executeHighlandDefenseSkill, executeDivineLatticeSkill, executeVanquishingLightSkill } from "./support";
-import { executeTauntSkill, executeDebuffSkill, executeTrapSkill, executeSanctuarySkill, executeSummonSkill } from "./utility";
-import { executeDodgeSkill, executeBodySwapSkill } from "./movement";
+import { executeAoeSkill, executeMeleeSkill, executeSmiteSkill, executeRangedSkill, executeFlurrySkill, executeMagicWaveSkill, executeChainLightningSkill, executeForcePushSkill, executeWellOfGravitySkill, executeHolyCrossSkill, executeHolyStrikeSkill, executeGlacialWhorlSkill } from "./damage";
+import { executeHealSkill, executeMassHealSkill, executeManaTransferSkill, executeBuffSkill, executeAoeBuffSkill, executeEnergyShieldSkill, executeCleanseSkill, executeRestorationSkill, executeReviveSkill, executeSunStanceSkill, executePangolinStanceSkill, executeHighlandDefenseSkill, executeDivineLatticeSkill, executeVanquishingLightSkill } from "./support";
+import { executeTauntSkill, executeDebuffSkill, executeBloodMarkSkill, executeElorasGraspSkill, executeTrapSkill, executeSanctuarySkill, executeSummonSkill, executeTurnUndeadSkill, executeSmokeBombSkill } from "./utility";
+import { executeDodgeSkill, executeBodySwapSkill, executeDisplacementSkill } from "./movement";
 
 // =============================================================================
 // MAIN SKILL ROUTER
@@ -56,6 +56,10 @@ export function executeSkill(
         if (skill.name === "Force Push") {
             return executeForcePushSkill(ctx, casterId, skill, targetX, targetZ);
         }
+        // Well of Gravity - circular AoE pull + stun
+        if (skill.name === "Well of Gravity") {
+            return executeWellOfGravitySkill(ctx, casterId, skill, targetX, targetZ);
+        }
         // Holy Cross - cross-shaped detonation that leaves holy ground
         if (skill.name === "Holy Cross") {
             return executeHolyCrossSkill(ctx, casterId, skill, targetX, targetZ);
@@ -71,6 +75,8 @@ export function executeSkill(
         // Standard AOE like Fireball
         executeAoeSkill(ctx, casterId, skill, targetX, targetZ);
         return true;
+    } else if (skill.type === "heal" && skill.targetType === "self") {
+        return executeMassHealSkill(ctx, casterId, skill);
     } else if (skill.type === "heal" && skill.targetType === "ally") {
         return executeHealSkill(ctx, casterId, skill, targetX, targetZ, targetId);
     } else if (skill.type === "damage" && skill.targetType === "enemy") {
@@ -122,7 +128,15 @@ export function executeSkill(
     } else if (skill.type === "flurry" && skill.targetType === "self") {
         return executeFlurrySkill(ctx, casterId, skill);
     } else if (skill.type === "debuff" && skill.targetType === "enemy") {
+        if (skill.name === "Blood Mark") {
+            return executeBloodMarkSkill(ctx, casterId, skill, targetX, targetZ, targetId);
+        }
         return executeDebuffSkill(ctx, casterId, skill, targetX, targetZ, targetId);
+    } else if (skill.type === "debuff" && skill.targetType === "aoe") {
+        if (skill.name === "Elora's Grasp") {
+            return executeElorasGraspSkill(ctx, casterId, skill, targetX, targetZ);
+        }
+        return false;
     } else if (skill.type === "trap" && skill.targetType === "aoe") {
         return executeTrapSkill(ctx, casterId, skill, targetX, targetZ);
     } else if (skill.type === "sanctuary" && skill.targetType === "aoe") {
@@ -147,6 +161,12 @@ export function executeSkill(
         return executeDodgeSkill(ctx, casterId, skill, targetX, targetZ);
     } else if (skill.type === "summon" && skill.targetType === "self") {
         return executeSummonSkill(ctx, casterId, skill);
+    } else if (skill.type === "turn_undead" && skill.targetType === "self") {
+        return executeTurnUndeadSkill(ctx, casterId, skill);
+    } else if (skill.type === "displacement" && skill.targetType === "unit") {
+        return executeDisplacementSkill(ctx, casterId, skill, targetX, targetZ, targetId);
+    } else if (skill.type === "smoke" && skill.targetType === "aoe") {
+        return executeSmokeBombSkill(ctx, casterId, skill, targetX, targetZ);
     }
 
     return false;
@@ -160,7 +180,7 @@ export function executeSkill(
  * Clear targeting mode and hide indicators
  */
 export function clearTargetingMode(
-    setTargetingMode: React.Dispatch<React.SetStateAction<{ casterId: number; skill: Skill } | null>>,
+    setTargetingMode: React.Dispatch<React.SetStateAction<{ casterId: number; skill: Skill; displacementTargetId?: number } | null>>,
     rangeIndicatorRef: React.RefObject<THREE.Mesh | null>,
     aoeIndicatorRef: React.RefObject<THREE.Mesh | null>
 ): void {

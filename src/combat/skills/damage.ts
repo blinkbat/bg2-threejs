@@ -1137,6 +1137,212 @@ export function executeForcePushSkill(
 }
 
 // =============================================================================
+// WELL OF GRAVITY SKILL (circular AoE pull + stun)
+// =============================================================================
+
+/**
+ * Execute Well of Gravity — circular AoE that pulls enemies toward center and may stun.
+ */
+export function executeWellOfGravitySkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill,
+    targetX: number,
+    targetZ: number
+): boolean {
+    const { scene, unitsStateRef, unitsRef, setUnits, addLog, hitFlashRef, damageTexts, defeatedThisFrame } = ctx;
+
+    const casterG = unitsRef.current[casterId];
+    if (!casterG) return false;
+
+    consumeSkill(ctx, casterId, skill);
+
+    const casterData = UNIT_DATA[casterId];
+    const now = Date.now();
+    const aoeRadius = skill.aoeRadius ?? 3;
+
+    const enemies = getAliveUnits(unitsStateRef.current, "enemy");
+    const enemiesInArea: { unit: Unit; group: UnitGroup }[] = [];
+
+    for (const enemy of enemies) {
+        if (defeatedThisFrame.has(enemy.id)) continue;
+        const enemyG = unitsRef.current[enemy.id];
+        if (!enemyG) continue;
+        const dx = enemyG.position.x - targetX;
+        const dz = enemyG.position.z - targetZ;
+        if (Math.hypot(dx, dz) <= aoeRadius + getUnitRadius(enemy)) {
+            enemiesInArea.push({ unit: enemy, group: enemyG });
+        }
+    }
+
+    // Visual: dark ring expanding at target point
+    createAnimatedRing(scene, targetX, targetZ, "#6633aa", {
+        innerRadius: 0.3,
+        outerRadius: aoeRadius,
+        maxScale: 1.0,
+        duration: 400
+    });
+    createAnimatedRing(scene, targetX, targetZ, "#9966ff", {
+        innerRadius: 0.1,
+        outerRadius: 0.4,
+        maxScale: 1.3,
+        duration: 300
+    });
+    createAnimatedRing(scene, casterG.position.x, casterG.position.z, "#9966ff", {
+        innerRadius: 0.15,
+        outerRadius: 0.35,
+        maxScale: 1.1,
+        duration: 220
+    });
+    soundFns.playWarcry();
+
+    const dmgCtx: DamageContext = {
+        scene, damageTexts: damageTexts.current, hitFlashRef: hitFlashRef.current,
+        unitsRef: unitsRef.current, unitsStateRef, setUnits, addLog, now, defeatedThisFrame
+    };
+
+    const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
+    const statBonus = calculateStatBonus(casterUnit, skill.damageType);
+    const skillLogColor = getSkillTextColor(skill.type, skill.damageType);
+    const pullDist = skill.pullDistance ?? 2.5;
+    const stunChance = skill.stunChance ?? 0;
+    const stunDuration = skill.duration ?? 2500;
+
+    const pullById = new Map<number, { x: number; z: number }>();
+    const stunnedIds = new Set<number>();
+
+    let hitCount = 0;
+    let totalDamage = 0;
+    let totalCrits = 0;
+    let pulledCount = 0;
+
+    for (const { unit: target, group: targetG } of enemiesInArea) {
+        if (defeatedThisFrame.has(target.id)) continue;
+        const targetData = getUnitStats(target);
+
+        if (target.enemyType) {
+            const enemyStats = ENEMY_STATS[target.enemyType];
+            if (checkEnemyDefenses(
+                enemyStats,
+                target.facing,
+                casterG.position.x,
+                casterG.position.z,
+                targetG.position.x,
+                targetG.position.z
+            ) === "frontShield") {
+                soundFns.playBlock();
+                continue;
+            }
+        }
+
+        if (!rollSkillHit(skill, casterData.accuracy, casterUnit)) continue;
+
+        const { damage: dmg, isCrit } = calculateDamageWithCrit(
+            skill.damageRange![0] + statBonus,
+            skill.damageRange![1] + statBonus,
+            getEffectiveArmor(target, targetData.armor),
+            skill.damageType,
+            casterUnit
+        );
+
+        applyDamageToUnit(dmgCtx, target.id, targetG, dmg, targetData.name, {
+            color: COLORS.damagePlayer,
+            attackerName: casterData.name,
+            targetUnit: target,
+            attackerPosition: { x: casterG.position.x, z: casterG.position.z },
+            damageType: skill.damageType,
+            isCrit,
+            attackerId: casterId,
+            isMeleeHit: false
+        });
+
+        hitCount++;
+        totalDamage += dmg;
+        if (isCrit) totalCrits++;
+
+        if (defeatedThisFrame.has(target.id)) continue;
+
+        // Pull toward AoE center (inverse of knockback)
+        const towardX = targetX - targetG.position.x;
+        const towardZ = targetZ - targetG.position.z;
+        const towardLen = Math.hypot(towardX, towardZ);
+        if (towardLen > 0.001) {
+            const actualPull = Math.min(pullDist, towardLen);
+            const desiredX = targetG.position.x + (towardX / towardLen) * actualPull;
+            const desiredZ = targetG.position.z + (towardZ / towardLen) * actualPull;
+            const safePos = findNearestPassable(
+                desiredX,
+                desiredZ,
+                Math.max(1, Math.ceil(pullDist))
+            );
+            if (safePos) {
+                pullById.set(target.id, safePos);
+                targetG.position.x = safePos.x;
+                targetG.position.z = safePos.z;
+                targetG.userData.targetX = safePos.x;
+                targetG.userData.targetZ = safePos.z;
+                pulledCount++;
+            }
+        }
+
+        if (stunChance > 0 && !hasStatusEffect(target, "stunned") && rollChance(stunChance)) {
+            stunnedIds.add(target.id);
+            createAnimatedRing(scene, targetG.position.x, targetG.position.z, COLORS.stunnedText, {
+                innerRadius: 0.14,
+                outerRadius: 0.34,
+                maxScale: 1.1,
+                duration: 240
+            });
+        }
+    }
+
+    if (pullById.size > 0 || stunnedIds.size > 0) {
+        setUnits(prev => prev.map(unit => {
+            let next = unit;
+            const pull = pullById.get(unit.id);
+            if (pull) {
+                next = { ...next, x: pull.x, z: pull.z };
+            }
+
+            if (stunnedIds.has(unit.id) && next.hp > 0) {
+                const stunnedEffect: StatusEffect = {
+                    type: "stunned",
+                    duration: stunDuration,
+                    tickInterval: BUFF_TICK_INTERVAL,
+                    timeSinceTick: 0,
+                    lastUpdateTime: now,
+                    damagePerTick: 0,
+                    sourceId: casterId
+                };
+                next = { ...next, statusEffects: applyStatusEffect(next.statusEffects, stunnedEffect) };
+            }
+
+            return next;
+        }));
+    }
+
+    const stunnedCount = stunnedIds.size;
+    if (stunnedCount > 0) {
+        addLog(`${stunnedCount} foe${stunnedCount === 1 ? "" : "s"} ${stunnedCount === 1 ? "is" : "are"} stunned!`, COLORS.stunnedText);
+    }
+
+    if (hitCount > 0) {
+        const critText = totalCrits > 0 ? ` (${totalCrits} critical!)` : "";
+        addLog(logAoeHit(casterData.name, skill.name, hitCount, totalDamage) + critText, skillLogColor);
+    } else if (enemiesInArea.length > 0) {
+        addLog(logAoeMiss(casterData.name, skill.name), COLORS.logNeutral);
+    } else {
+        addLog(logCast(casterData.name, skill.name), skillLogColor);
+    }
+
+    if (pulledCount > 0) {
+        addLog(`${pulledCount} foe${pulledCount === 1 ? "" : "s"} dragged inward.`, skillLogColor);
+    }
+
+    return true;
+}
+
+// =============================================================================
 // HOLY STRIKE SKILL (line-shaped AOE)
 // =============================================================================
 

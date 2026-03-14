@@ -301,6 +301,90 @@
     text-align: center;
 }
 
+.loot-pickup-overlay {
+    background: var(--ui-color-overlay);
+    z-index: 1290;
+    animation: dialogOverlayFadeIn 180ms ease-out;
+}
+
+.loot-pickup-modal {
+    width: min(420px, calc(100vw - var(--ui-modal-edge-gap)));
+    max-width: 420px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    animation: dialogModalFadeIn 220ms ease-out;
+}
+
+.loot-pickup-header {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.loot-pickup-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--ui-color-text);
+}
+
+.loot-pickup-subtitle {
+    color: var(--ui-color-text-dim);
+    font-size: 11px;
+    letter-spacing: 0.22px;
+    text-transform: uppercase;
+}
+
+.loot-pickup-body {
+    background: var(--ui-color-surface-alt);
+    border: 1px solid var(--ui-color-border);
+    border-radius: 6px;
+    padding: 12px;
+}
+
+.loot-pickup-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.loot-pickup-entry {
+    border: 1px solid var(--ui-color-border-muted);
+    border-radius: 6px;
+    background: var(--ui-color-surface);
+    color: var(--ui-color-text-secondary);
+    padding: 10px 12px;
+    line-height: 1.35;
+}
+
+.loot-pickup-entry--gold {
+    color: var(--ui-color-accent-gold);
+}
+
+.loot-pickup-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.loot-pickup-btn {
+    width: auto;
+    min-width: 140px;
+    text-align: center;
+}
+
+@media (max-width: 640px) {
+    .loot-pickup-footer {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .loot-pickup-btn {
+        width: 100%;
+    }
+}
+
 /* -----------------------------------------------------------------------------
    CLOSE BUTTON
    ----------------------------------------------------------------------------- */

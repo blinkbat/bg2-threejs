@@ -7,7 +7,7 @@ export type EnemyType = "acid_slug" | "ancient_construct" | "armored_crab" | "ba
 export type MonsterType = "beast" | "construct" | "demon" | "humanoid" | "undead";
 
 // Status effect types
-export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed" | "chilled" | "qi_drain" | "energy_shield" | "defiance" | "doom" | "invul" | "sleep" | "sun_stance" | "thorns" | "highland_defense" | "divine_lattice" | "weakened" | "hamstrung" | "blind" | "vanquishing_light" | "enraged";
+export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed" | "chilled" | "qi_drain" | "energy_shield" | "defiance" | "doom" | "invul" | "sleep" | "sun_stance" | "thorns" | "highland_defense" | "divine_lattice" | "weakened" | "hamstrung" | "blind" | "vanquishing_light" | "enraged" | "feared" | "blood_marked";
 
 export interface StatusEffect {
     type: StatusEffectType;
@@ -25,6 +25,9 @@ export interface StatusEffect {
     blindChance?: number;     // for vanquishing_light: blind proc chance per tick
     blindDuration?: number;   // for vanquishing_light: blind duration in ms
     auraDamageType?: "physical" | "fire" | "cold" | "lightning" | "chaos" | "holy"; // for aura effects
+    fearSourceX?: number;     // for feared: X position to flee from
+    fearSourceZ?: number;     // for feared: Z position to flee from
+    lifestealPercent?: number; // for blood_marked: fraction of melee damage healed by attacker
 }
 
 // =============================================================================

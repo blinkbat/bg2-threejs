@@ -186,6 +186,18 @@ export const SKILLS: Record<string, Skill> = {
         isCantrip: true,
         maxUses: 1
     },
+    bloodMark: {
+        name: "Blood Mark",
+        description: "Brand an enemy with a crimson sigil. Melee strikes against the marked foe restore health to the attacker.",
+        flavor: "\"The old blood remembers its debts.\" - Kvel of the North",
+        manaCost: 8,
+        cooldown: 6000,
+        type: "debuff",
+        targetType: "enemy",
+        range: 1.8,
+        duration: 15000,
+        damageType: "physical"
+    },
     raiseShield: {
         name: "Raise Shield",
         description: "Adopt a defensive stance, doubling armor but slowing your attacks.",
@@ -366,6 +378,19 @@ export const SKILLS: Record<string, Skill> = {
         healPerTick: 3,  // Heal per tick
         damageType: "holy"
     },
+    massHeal: {
+        name: "Mass Heal",
+        description: "Bathe all nearby allies in restorative light, mending their wounds.",
+        flavor: "\"Stand close. The light does not discriminate.\"",
+        manaCost: 18,
+        cooldown: 12000,
+        type: "heal",
+        targetType: "self",
+        range: 5,
+        healRange: [6, 10],
+        damageType: "holy",
+        aoeRadius: 5
+    },
     restoration: {
         name: "Restoration",
         description: "Purge doom, poison, and slow from an ally, then heal them for 3 HP per second over 10 seconds.",
@@ -474,6 +499,77 @@ export const SKILLS: Record<string, Skill> = {
         damageType: "cold",
         chillChance: 60,
         projectileColor: "#5dade2"
+    },
+    wellOfGravity: {
+        name: "Well of Gravity",
+        description: "Open a gravitational rift that drags enemies inward and stuns them.",
+        flavor: "The air screamed first. The soldiers followed.",
+        manaCost: 14,
+        cooldown: 10000,
+        type: "damage",
+        targetType: "aoe",
+        range: 8,
+        aoeRadius: 3,
+        damageRange: [4, 8],
+        damageType: "chaos",
+        pullDistance: 2.5,
+        stunChance: 50,
+        duration: 2500
+    },
+    turnUndead: {
+        name: "Turn Undead",
+        description: "Radiate holy power that terrifies undead, sending them fleeing. Living foes take lesser damage.",
+        flavor: "\"Return to your graves. This ground is not yours.\"",
+        manaCost: 14,
+        cooldown: 8000,
+        type: "turn_undead",
+        targetType: "self",
+        range: 5,
+        damageRange: [8, 14],
+        damageType: "holy",
+        duration: 6000
+    },
+    elorasGrasp: {
+        name: "Elora's Grasp",
+        description: "Coils of spectral vines erupt from the earth, lulling nearby enemies into deep slumber.",
+        flavor: "\"Sleep now, child. The garden keeps its own.\"",
+        manaCost: 14,
+        cooldown: 10000,
+        type: "debuff",
+        targetType: "aoe",
+        range: 4,
+        aoeRadius: 2,
+        damageType: "holy",
+        duration: 8000,
+        stunChance: 75
+    },
+    smokeBomb: {
+        name: "Smoke Bomb",
+        description: "Hurl a smoke bomb that blankets the area in thick haze, blinding enemies caught within.",
+        flavor: "\"If they can't see you, they can't hit you. Simple as that.\"",
+        manaCost: 10,
+        cooldown: 10000,
+        type: "smoke",
+        targetType: "aoe",
+        range: 8,
+        aoeRadius: 2.5,
+        duration: 8000,
+        blindChance: 70,
+        blindDuration: 3000,
+        damageType: "physical"
+    },
+    teleportOther: {
+        name: "Teleport Other",
+        description: "Wrench a creature through space, relocating it to a point of your choosing.",
+        flavor: "\"You were there. Now you are here. Argue with the universe if you disagree.\"",
+        manaCost: 16,
+        cooldown: 8000,
+        type: "displacement",
+        targetType: "unit",
+        range: 8,
+        damageType: "chaos",
+        isCantrip: true,
+        maxUses: 1
     },
     dodge: {
         name: "Dodge",

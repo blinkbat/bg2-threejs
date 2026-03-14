@@ -46,6 +46,7 @@ import {
     createAcidPool,
     processSanctuaryTiles,
     processHolyTiles,
+    processSmokeTiles,
     processChargeAttacks,
     processFireBreaths,
     processCurses,
@@ -712,6 +713,16 @@ export function useGameLoop({
                     callbacks.addLog,
                     now,
                     defeatedThisFrame
+                );
+
+                // Process smoke tiles
+                processSmokeTiles(
+                    refs.smokeTiles,
+                    currentUnits,
+                    unitGroups,
+                    scene,
+                    setUnitsLive,
+                    now
                 );
 
                 // Process charge attacks

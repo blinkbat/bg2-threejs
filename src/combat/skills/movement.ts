@@ -312,3 +312,99 @@ export function executeBodySwapSkill(
 
     return true;
 }
+
+// =============================================================================
+// DISPLACEMENT (Teleport Other)
+// =============================================================================
+
+/**
+ * Execute Teleport Other — forcibly relocate a target unit to a chosen ground position.
+ * targetId is the unit to move, targetX/targetZ is the destination.
+ */
+export function executeDisplacementSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill,
+    targetX: number,
+    targetZ: number,
+    targetUnitId?: number
+): boolean {
+    const { scene, unitsStateRef, unitsRef, hitFlashRef, setUnits } = ctx;
+
+    const caster = unitsStateRef.current.find(u => u.id === casterId);
+    const casterG = unitsRef.current[casterId];
+    if (!caster || !casterG || caster.hp <= 0) return false;
+
+    if (targetUnitId === undefined) {
+        ctx.addLog(`${UNIT_DATA[casterId].name}: No target selected!`, COLORS.logNeutral);
+        return false;
+    }
+
+    if ((caster.cantripUses?.[skill.name] ?? 0) <= 0) {
+        ctx.addLog(`${UNIT_DATA[casterId].name}: No uses remaining!`, COLORS.logNeutral);
+        return false;
+    }
+
+    const target = unitsStateRef.current.find(u => u.id === targetUnitId && u.hp > 0);
+    const targetG = target ? unitsRef.current[target.id] : undefined;
+    if (!target || !targetG) {
+        ctx.addLog(`${UNIT_DATA[casterId].name}: Invalid target!`, COLORS.logNeutral);
+        return false;
+    }
+
+    const targetRadius = getUnitRadius(target);
+    if (!isInRange(casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, targetRadius, skill.range + 0.4)) {
+        ctx.addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, COLORS.logNeutral);
+        return false;
+    }
+
+    const originPos = { x: targetG.position.x, z: targetG.position.z };
+
+    consumeSkill(ctx, casterId, skill);
+
+    // Move target to destination in React state
+    setUnits(prev => prev.map(u => {
+        if (u.id === target.id) return { ...u, x: targetX, z: targetZ };
+        return u;
+    }));
+
+    // Teleport the 3D group instantly and reset movement targets
+    targetG.position.set(targetX, targetG.userData.flyHeight ?? 0, targetZ);
+    targetG.userData.targetX = targetX;
+    targetG.userData.targetZ = targetZ;
+    targetG.userData.attackTarget = null;
+
+    // Visual effects at origin and destination
+    createAnimatedRing(scene, originPos.x, originPos.z, "#8e44ad", {
+        innerRadius: 0.2, outerRadius: 0.45, maxScale: 1.3, duration: 260
+    });
+    createAnimatedRing(scene, targetX, targetZ, "#8e44ad", {
+        innerRadius: 0.2, outerRadius: 0.45, maxScale: 1.3, duration: 260
+    });
+    createSwapBeam(scene, originPos.x, originPos.z, targetX, targetZ, COLORS.dmgChaos);
+    createAnimatedRing(scene, originPos.x, originPos.z, COLORS.dmgChaos, {
+        innerRadius: 0.12, outerRadius: 0.28, maxScale: 1.0, duration: 200
+    });
+    createAnimatedRing(scene, targetX, targetZ, COLORS.dmgChaos, {
+        innerRadius: 0.12, outerRadius: 0.28, maxScale: 1.0, duration: 200
+    });
+
+    // Caster flash
+    const casterMesh = ctx.unitMeshRef.current[casterId];
+    if (casterMesh) {
+        (casterMesh.material as THREE.MeshStandardMaterial).color.set(COLORS.dmgChaos);
+        hitFlashRef.current[casterId] = Date.now();
+    }
+    // Target flash
+    const targetMesh = ctx.unitMeshRef.current[target.id];
+    if (targetMesh) {
+        (targetMesh.material as THREE.MeshStandardMaterial).color.set(COLORS.dmgChaos);
+        hitFlashRef.current[target.id] = Date.now();
+    }
+
+    const targetData = getUnitStats(target);
+    soundFns.playMagicWave();
+    ctx.addLog(`${UNIT_DATA[casterId].name} displaces ${targetData.name}!`, getSkillTextColor(skill.type, skill.damageType));
+
+    return true;
+}

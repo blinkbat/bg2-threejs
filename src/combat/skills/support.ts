@@ -138,6 +138,97 @@ function createPulseBeam(
 }
 
 // =============================================================================
+// MASS HEAL SKILL (self-centered AoE)
+// =============================================================================
+
+/**
+ * Execute Mass Heal — self-centered AoE that heals all player allies within radius.
+ */
+export function executeMassHealSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill
+): boolean {
+    const { scene, unitsStateRef, unitsRef, unitMeshRef, hitFlashRef, setUnits, addLog } = ctx;
+
+    const casterG = unitsRef.current[casterId];
+    if (!casterG) return false;
+
+    const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
+    const faithBonus = casterUnit ? getFaithHealingBonus(casterUnit) : 0;
+
+    // Find all living player allies within range
+    const allies = unitsStateRef.current.filter(u => u.team === "player" && u.hp > 0);
+    const alliesInRange: Array<{ unit: typeof allies[0]; group: THREE.Group }> = [];
+    for (const ally of allies) {
+        const allyG = unitsRef.current[ally.id];
+        if (!allyG) continue;
+        const allyRadius = getUnitRadius(ally);
+        if (isInRange(casterG.position.x, casterG.position.z, allyG.position.x, allyG.position.z, allyRadius, skill.range)) {
+            alliesInRange.push({ unit: ally, group: allyG });
+        }
+    }
+
+    // Check if anyone actually needs healing
+    const needsHealing = alliesInRange.filter(a => {
+        const maxHp = getEffectiveMaxHp(a.unit.id, a.unit);
+        return a.unit.hp < maxHp;
+    });
+
+    if (needsHealing.length === 0) {
+        addLog(`${UNIT_DATA[casterId].name}: All nearby allies are at full health!`, COLORS.logNeutral);
+        return false;
+    }
+
+    consumeSkill(ctx, casterId, skill);
+
+    const healAmount = rollDamage(skill.healRange![0], skill.healRange![1]) + faithBonus;
+    const now = Date.now();
+
+    // Apply heal to all allies in range
+    const healTargetIds = new Set(alliesInRange.map(a => a.unit.id));
+    setUnits(prev => prev.map(u => {
+        if (!healTargetIds.has(u.id) || u.hp <= 0) return u;
+        const maxHp = getEffectiveMaxHp(u.id, u);
+        if (u.hp >= maxHp) return u;
+        const actual = Math.min(healAmount, maxHp - u.hp);
+        return { ...u, hp: u.hp + actual };
+    }));
+
+    addLog(`${UNIT_DATA[casterId].name}'s ${skill.name} heals ${needsHealing.length} allies for ${healAmount}!`, getSkillTextColor(skill.type, skill.damageType));
+    soundFns.playHeal();
+    tryHealBark(UNIT_DATA[casterId].name, addLog);
+
+    // Visual: expanding ring from caster
+    createAnimatedRing(scene, casterG.position.x, casterG.position.z, COLORS.logHeal, {
+        innerRadius: 0.5,
+        outerRadius: skill.range,
+        maxScale: 2.0,
+        duration: 400
+    });
+
+    // Visual: green flash + small ring on each healed ally
+    for (const { unit: ally, group: allyG } of alliesInRange) {
+        const maxHp = getEffectiveMaxHp(ally.id, ally);
+        if (ally.hp >= maxHp) continue;
+
+        const mesh = unitMeshRef.current[ally.id];
+        if (mesh) {
+            (mesh.material as THREE.MeshStandardMaterial).color.set("#22ff22");
+            hitFlashRef.current[ally.id] = now;
+        }
+        createAnimatedRing(scene, allyG.position.x, allyG.position.z, COLORS.logHeal, {
+            innerRadius: 0.15,
+            outerRadius: 0.35,
+            maxScale: 1.4,
+            duration: 280
+        });
+    }
+
+    return true;
+}
+
+// =============================================================================
 // HEAL SKILL (single ally)
 // =============================================================================
 

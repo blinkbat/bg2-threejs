@@ -68,7 +68,7 @@ export interface InputStateRefs {
     selectedRef: React.MutableRefObject<number[]>;
     pausedRef: React.MutableRefObject<boolean>;
     pauseToggleLockedRef: React.MutableRefObject<boolean>;
-    targetingModeRef: React.MutableRefObject<{ casterId: number; skill: Skill } | null>;
+    targetingModeRef: React.MutableRefObject<{ casterId: number; skill: Skill; displacementTargetId?: number } | null>;
     consumableTargetingModeRef: React.MutableRefObject<{ userId: number; itemId: string } | null>;
     showPanelRef: React.MutableRefObject<boolean>;
     helpOpenRef: React.MutableRefObject<boolean>;
@@ -96,7 +96,7 @@ export interface InputSetters {
     setSelBox: React.Dispatch<React.SetStateAction<SelectionBox | null>>;
     setUnits: React.Dispatch<React.SetStateAction<Unit[]>>;
     setPaused: React.Dispatch<React.SetStateAction<boolean>>;
-    setTargetingMode: React.Dispatch<React.SetStateAction<{ casterId: number; skill: Skill } | null>>;
+    setTargetingMode: React.Dispatch<React.SetStateAction<{ casterId: number; skill: Skill; displacementTargetId?: number } | null>>;
     setConsumableTargetingMode: React.Dispatch<React.SetStateAction<{ userId: number; itemId: string } | null>>;
     setSkillCooldowns: React.Dispatch<React.SetStateAction<Record<string, { end: number; duration: number }>>>;
     setQueuedActions: React.Dispatch<React.SetStateAction<{ unitId: number; skillName: string }[]>>;
@@ -119,6 +119,7 @@ export interface InputCallbacks {
     handleAreaTransition: (transition: AreaTransition) => void;
     onNpcEngaged: (unitId: number) => void;
     onCloseHelp: () => void;
+    openLootPickupModal: (request: LootPickupModalRequest) => void;
     processActionQueue: (defeatedThisFrame: Set<number>) => void;
     handleCastSkillRef: React.MutableRefObject<((unitId: number, skill: Skill) => void) | null>;
 }
@@ -148,6 +149,17 @@ interface ChestHitData {
     chestX: number;
     chestZ: number;
     chestDecorOnly?: boolean;
+}
+
+interface LootPickupModalEntry {
+    label: string;
+    tone: "gold" | "item";
+}
+
+interface LootPickupModalRequest {
+    sourceLabel: "Chest" | "Loot Bag";
+    entries: LootPickupModalEntry[];
+    onTake: () => void;
 }
 
 /**
@@ -988,6 +1000,10 @@ function isAnyAlivePlayerWithinRange(
     return false;
 }
 
+function formatLootLabel(name: string, quantity: number = 1): string {
+    return quantity > 1 ? `${quantity}x ${name}` : name;
+}
+
 function handleChestClick(
     userData: ChestHitData,
     stateRefs: InputStateRefs,
@@ -1022,49 +1038,80 @@ function handleChestClick(
     if (!chest) return;
     if (chest.decorOnly) return;
 
+    const chestGold = chest.gold ?? 0;
+    const lootEntries: LootPickupModalEntry[] = [];
+    const lootMessages: string[] = [];
+    let keyItemIdToConsume: string | null = null;
+    let keyItemName = "key";
+
     if (chest.locked && chest.requiredKeyId) {
         const inventory = getPartyInventory();
-        const hasKey = inventory.items.some(entry => {
-            const item = getItem(entry.itemId);
-            return item && isKey(item) && item.keyId === chest.requiredKeyId;
-        });
-        if (!hasKey) {
-            callbacks.addLog("This chest is locked. You need the right key.", "#ef4444");
-            return;
-        }
         const keyEntry = inventory.items.find(entry => {
             const item = getItem(entry.itemId);
             return item && isKey(item) && item.keyId === chest.requiredKeyId;
         });
-        if (keyEntry) {
-            const newInventory = removeFromInventory(inventory, keyEntry.itemId, 1);
-            setPartyInventory(newInventory);
-            const keyItem = getItem(keyEntry.itemId);
-            callbacks.addLog(`Used ${keyItem?.name ?? "key"} to unlock the chest.`, "#f59e0b");
+        if (!keyEntry) {
+            callbacks.addLog("This chest is locked. You need the right key.", "#ef4444");
+            return;
         }
+        keyItemIdToConsume = keyEntry.itemId;
+        keyItemName = getItem(keyEntry.itemId)?.name ?? "key";
     }
 
-    const lootMessages: string[] = [];
-    let currentInventory = getPartyInventory();
-
-    if (chest.gold && chest.gold > 0) {
-        setters.setGold(prev => prev + chest.gold!);
-        lootMessages.push(`${chest.gold} gold`);
+    if (chestGold > 0) {
+        const goldLabel = `${chestGold} gold`;
+        lootEntries.push({ label: goldLabel, tone: "gold" });
+        lootMessages.push(goldLabel);
     }
 
     for (const content of chest.contents) {
         const item = getItem(content.itemId);
         if (item) {
-            currentInventory = addToInventory(currentInventory, content.itemId, content.quantity);
-            lootMessages.push(`${content.quantity > 1 ? `${content.quantity}x ` : ""}${item.name}`);
+            const itemLabel = formatLootLabel(item.name, content.quantity);
+            lootEntries.push({ label: itemLabel, tone: "item" });
+            lootMessages.push(itemLabel);
         }
     }
 
-    setPartyInventory(currentInventory);
-    setters.setOpenedChests(prev => new Set([...prev, chestKey]));
+    const applyChestLoot = (): void => {
+        let currentInventory = getPartyInventory();
 
-    callbacks.addLog(lootMessages.length > 0 ? `Found: ${lootMessages.join(", ")}` : "The chest was empty.", lootMessages.length > 0 ? "#4ade80" : "#888");
-    soundFns.playAttack();
+        if (keyItemIdToConsume) {
+            currentInventory = removeFromInventory(currentInventory, keyItemIdToConsume, 1);
+            callbacks.addLog(`Used ${keyItemName} to unlock the chest.`, "#f59e0b");
+        }
+
+        if (chestGold > 0) {
+            setters.setGold(prev => prev + chestGold);
+        }
+
+        for (const content of chest.contents) {
+            const item = getItem(content.itemId);
+            if (item) {
+                currentInventory = addToInventory(currentInventory, content.itemId, content.quantity);
+            }
+        }
+
+        setPartyInventory(currentInventory);
+        setters.setOpenedChests(prev => new Set([...prev, chestKey]));
+
+        callbacks.addLog(
+            lootMessages.length > 0 ? `Found: ${lootMessages.join(", ")}` : "The chest was empty.",
+            lootMessages.length > 0 ? "#4ade80" : "#888"
+        );
+        soundFns.playAttack();
+    };
+
+    if (lootEntries.length === 0) {
+        applyChestLoot();
+        return;
+    }
+
+    callbacks.openLootPickupModal({
+        sourceLabel: "Chest",
+        entries: lootEntries,
+        onTake: applyChestLoot
+    });
 }
 
 function handleLootBagClick(
@@ -1096,37 +1143,62 @@ function handleLootBagClick(
 
     const bag = gameRefs.current.lootBags[bagIndex];
     const lootMessages: string[] = [];
+    const lootEntries: LootPickupModalEntry[] = [];
+    const bagItems = bag.items ?? [];
+    const itemCounts = new Map<string, number>();
 
     if (bag.gold > 0) {
-        setters.setGold(prev => prev + bag.gold);
-        lootMessages.push(`${bag.gold} gold`);
+        const goldLabel = `${bag.gold} gold`;
+        lootEntries.push({ label: goldLabel, tone: "gold" });
+        lootMessages.push(goldLabel);
     }
 
-    if (bag.items && bag.items.length > 0) {
-        let inventory = getPartyInventory();
-        const itemCounts = new Map<string, number>();
-
-        for (const itemId of bag.items) {
-            inventory = addToInventory(inventory, itemId, 1);
-            itemCounts.set(itemId, (itemCounts.get(itemId) ?? 0) + 1);
-        }
-        setPartyInventory(inventory);
-
-        for (const [itemId, quantity] of itemCounts) {
-            const item = getItem(itemId);
-            const itemName = item?.name ?? itemId;
-            lootMessages.push(`${quantity > 1 ? `${quantity}x ` : ""}${itemName}`);
-        }
+    for (const itemId of bagItems) {
+        itemCounts.set(itemId, (itemCounts.get(itemId) ?? 0) + 1);
     }
 
-    callbacks.addLog(
-        lootMessages.length > 0 ? `Found: ${lootMessages.join(", ")}` : "The bag was empty.",
-        lootMessages.length > 0 ? "#ffd700" : "#888"
-    );
+    for (const [itemId, quantity] of itemCounts) {
+        const item = getItem(itemId);
+        const itemName = item?.name ?? itemId;
+        const itemLabel = formatLootLabel(itemName, quantity);
+        lootEntries.push({ label: itemLabel, tone: "item" });
+        lootMessages.push(itemLabel);
+    }
 
-    removeLootBag(scene, bag);
-    gameRefs.current.lootBags.splice(bagIndex, 1);
-    soundFns.playGold();
+    const applyLootBagLoot = (): void => {
+        if (bag.gold > 0) {
+            setters.setGold(prev => prev + bag.gold);
+        }
+
+        if (bagItems.length > 0) {
+            let inventory = getPartyInventory();
+
+            for (const itemId of bagItems) {
+                inventory = addToInventory(inventory, itemId, 1);
+            }
+            setPartyInventory(inventory);
+        }
+
+        callbacks.addLog(
+            lootMessages.length > 0 ? `Found: ${lootMessages.join(", ")}` : "The bag was empty.",
+            lootMessages.length > 0 ? "#ffd700" : "#888"
+        );
+
+        removeLootBag(scene, bag);
+        gameRefs.current.lootBags.splice(bagIndex, 1);
+        soundFns.playGold();
+    };
+
+    if (lootEntries.length === 0) {
+        applyLootBagLoot();
+        return;
+    }
+
+    callbacks.openLootPickupModal({
+        sourceLabel: "Loot Bag",
+        entries: lootEntries,
+        onTake: applyLootBagLoot
+    });
 }
 
 function handleSecretDoorClick(
