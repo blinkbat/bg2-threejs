@@ -1144,6 +1144,51 @@ function Game({
             soundFns.playHeal();
             addLog("The party spends the night and wakes restored.", "#22c55e");
 
+            // Respawn all enemy-tier enemies across all areas
+            setKilledEnemies(prev => {
+                const next = new Set<string>();
+                for (const key of prev) {
+                    // key format: "areaId-spawnIndex"
+                    const dashIdx = key.lastIndexOf("-");
+                    const areaId = key.substring(0, dashIdx);
+                    const spawnIndex = parseInt(key.substring(dashIdx + 1), 10);
+                    const area = AREAS[areaId];
+                    if (!area) { next.add(key); continue; }
+                    const spawn = area.enemySpawns[spawnIndex];
+                    if (!spawn) { next.add(key); continue; }
+                    const stats = ENEMY_STATS[spawn.type];
+                    if (stats.tier !== "enemy") {
+                        next.add(key); // Keep miniboss/boss/npc kills
+                    }
+                }
+                return next;
+            });
+
+            // Recreate enemy-tier units for the current area
+            const area = getCurrentArea();
+            setUnits(prev => {
+                const existingEnemyIds = new Set(prev.filter(u => u.team === "enemy" || u.team === "neutral").map(u => u.id));
+                const newUnits: Unit[] = [];
+                area.enemySpawns.forEach((spawnDef, spawnIndex) => {
+                    const unitId = 100 + spawnIndex;
+                    if (existingEnemyIds.has(unitId)) return; // Already alive
+                    const stats = ENEMY_STATS[spawnDef.type];
+                    if (stats.tier !== "enemy") return; // Only respawn enemy tier
+                    newUnits.push({
+                        id: unitId,
+                        x: spawnDef.x,
+                        z: spawnDef.z,
+                        hp: stats.maxHp,
+                        team: "enemy" as const,
+                        enemyType: spawnDef.type,
+                        target: null,
+                        aiEnabled: true,
+                        ...(stats.frontShield && { facing: 0 }),
+                    });
+                });
+                return newUnits.length > 0 ? [...prev, ...newUnits] : prev;
+            });
+
             spendNightRestoreTimeoutRef.current = window.setTimeout(() => {
                 spendNightRestoreTimeoutRef.current = null;
                 setSleepFadeOpacity(0);
