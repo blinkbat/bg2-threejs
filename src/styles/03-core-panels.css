@@ -889,28 +889,14 @@
     border-top: 1px solid var(--ui-color-border);
     line-height: 1.3;
 }
-
-/* Tippy "game" theme — attribute selector beats vendor .tippy-box class */
-.tippy-box[data-theme~="game"] {
-    background: var(--ui-color-overlay-strong);
-    border: 1px solid var(--ui-color-border);
-    z-index: 99999;
+/* Tippy tooltip overrides */
+.tippy-box {
+    background: #1a1a2a !important;
+    border: none !important;
 }
 
-.tippy-box[data-theme~="game"] .tippy-content {
-    padding: 8px 10px;
-}
-
-.tippy-box[data-theme~="game"] .tippy-arrow {
-    color: var(--ui-color-surface-alt);
-}
-
-.tippy-box[data-theme~="game"][data-placement^='left'] > .tippy-arrow::before {
-    border-left-color: var(--ui-color-border);
-}
-
-.tippy-box[data-theme~="game"][data-placement^='right'] > .tippy-arrow::before {
-    border-right-color: var(--ui-color-border);
+.tippy-arrow {
+    color: #1a1a2a !important;
 }
 
 /* Enemy hover tooltip */

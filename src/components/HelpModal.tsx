@@ -14,6 +14,14 @@ const HELP_SECTIONS: ReadonlyArray<{ title: string; body: string }> = [
         body: "Characters gain stat points when they level up. Open a character's Status tab and spend them to raise Strength, Dexterity, Vitality, Intelligence, or Faith. The bonuses apply immediately and are permanent."
     },
     {
+        title: "Skills",
+        body: "Each character has a basic attack and a set of class skills. Skills cost mana and have a cooldown after use. Some skills target enemies, some target allies or the caster, and some hit an area. Damage skills can deal physical, fire, cold, lightning, chaos, or holy damage. Cantrip skills use limited charges instead of mana and cooldowns."
+    },
+    {
+        title: "Skill Points",
+        body: "Characters earn skill points when they level up. Open a character's Skills tab to see the available class skills and spend points to learn new ones. Once learned, a skill is permanent and appears in the character's action bar."
+    },
+    {
         title: "Status Effects",
         body: "Status effects are temporary conditions that change how a character fights or survives. Poison, stun, slow, regeneration, and similar effects take hold immediately, then wear off or get removed by other abilities. Active effects are shown on the party bar and in the character panel."
     },
