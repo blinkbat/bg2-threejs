@@ -890,18 +890,18 @@
     line-height: 1.3;
 }
 
-/* Tippy theme overrides */
-.tippy-box {
+/* Tippy theme overrides — doubled selectors for specificity over vendor tippy.css */
+.tippy-box.tippy-box {
     background: var(--ui-color-overlay-strong);
     border: 1px solid var(--ui-color-border);
     z-index: 99999 !important;
 }
 
-.tippy-content {
+.tippy-box .tippy-content {
     padding: 8px 10px;
 }
 
-.tippy-arrow {
+.tippy-box .tippy-arrow {
     color: var(--ui-color-surface-alt);
 }
 
