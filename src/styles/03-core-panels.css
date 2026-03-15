@@ -890,26 +890,26 @@
     line-height: 1.3;
 }
 
-/* Tippy theme overrides — doubled selectors for specificity over vendor tippy.css */
-.tippy-box.tippy-box {
+/* Tippy "game" theme — attribute selector beats vendor .tippy-box class */
+.tippy-box[data-theme~="game"] {
     background: var(--ui-color-overlay-strong);
     border: 1px solid var(--ui-color-border);
-    z-index: 99999 !important;
+    z-index: 99999;
 }
 
-.tippy-box .tippy-content {
+.tippy-box[data-theme~="game"] .tippy-content {
     padding: 8px 10px;
 }
 
-.tippy-box .tippy-arrow {
+.tippy-box[data-theme~="game"] .tippy-arrow {
     color: var(--ui-color-surface-alt);
 }
 
-.tippy-box[data-placement^='left'] > .tippy-arrow::before {
+.tippy-box[data-theme~="game"][data-placement^='left'] > .tippy-arrow::before {
     border-left-color: var(--ui-color-border);
 }
 
-.tippy-box[data-placement^='right'] > .tippy-arrow::before {
+.tippy-box[data-theme~="game"][data-placement^='right'] > .tippy-arrow::before {
     border-right-color: var(--ui-color-border);
 }
 
