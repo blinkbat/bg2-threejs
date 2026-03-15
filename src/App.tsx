@@ -2961,7 +2961,7 @@ export default function App() {
             {startupPhase === "title" && (
                 <div className="startup-title-screen">
                     <div className="startup-title-card">
-                        <h1 className="startup-title-text">Untitled Shipwreck RPG</h1>
+                        <h1 className="startup-title-text">Archipelago</h1>
                         <button className="startup-title-btn" onClick={handleStartGame}>
                             Start Game
                         </button>
