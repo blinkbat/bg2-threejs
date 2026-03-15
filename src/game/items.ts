@@ -459,7 +459,7 @@ const VALID_CONSUMABLE_EFFECTS = new Set(KNOWN_CONSUMABLE_EFFECTS);
 const VALID_CONSUMABLE_SOUNDS = new Set(KNOWN_CONSUMABLE_SOUNDS);
 const VALID_CONSUMABLE_TARGET_TYPES = new Set(KNOWN_CONSUMABLE_TARGET_TYPES);
 const ITEM_REGISTRY_STORAGE_VERSION = 1;
-const ITEM_REGISTRY_STORAGE_KEY = "bg2_item_registry_v1";
+export const ITEM_REGISTRY_STORAGE_KEY = "bg2_item_registry_v1";
 
 interface ItemCategoryGroup {
     category: ItemCategory;
@@ -531,7 +531,7 @@ function writeStoredRegistry(items: Item[]): void {
     storage.setItem(ITEM_REGISTRY_STORAGE_KEY, JSON.stringify(payload));
 }
 
-function clearStoredItemRegistry(): void {
+export function clearStoredItemRegistry(): void {
     const storage = getBrowserStorage();
     if (!storage) return;
     storage.removeItem(ITEM_REGISTRY_STORAGE_KEY);

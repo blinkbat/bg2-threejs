@@ -71,7 +71,7 @@ export const rollHit = (accuracy: number, attacker?: Unit): boolean => {
     return rollChance(blindAdjustedAccuracy);
 };
 
-interface SkillHitProfile {
+export interface SkillHitProfile {
     name: string;
     hitChance?: number;
 }
@@ -81,7 +81,7 @@ interface SkillHitProfile {
  * Named skills default to 100% unless they explicitly set hitChance.
  * "Attack" falls back to attacker accuracy.
  */
-function getSkillHitChance(skill: SkillHitProfile | undefined, attackerAccuracy: number): number {
+export function getSkillHitChance(skill: SkillHitProfile | undefined, attackerAccuracy: number): number {
     if (!skill) return Math.max(0, Math.min(100, attackerAccuracy));
     if (skill.hitChance !== undefined) return Math.max(0, Math.min(100, skill.hitChance));
     if (skill.name !== "Attack") return 100;

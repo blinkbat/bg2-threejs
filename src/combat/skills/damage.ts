@@ -17,6 +17,7 @@ import { soundFns } from "../../audio";
 import { createProjectile, getProjectileSpeed, applyDamageToUnit, createAnimatedRing, createLightningPillar, animateExpandingMesh, type DamageContext } from "../damageEffects";
 import { spawnSwingIndicator } from "../../gameLoop/swingAnimations";
 import { createHolyCross } from "../../gameLoop/holyTiles";
+import { createFireTile } from "../../gameLoop/fireTiles";
 import { updateUnitWith } from "../../core/stateUtils";
 import { getGameTime } from "../../core/gameClock";
 import { scheduleEffectAnimation } from "../../core/effectScheduler";
@@ -1984,6 +1985,71 @@ export function executeLeapStrikeSkill(
         soundFns.playMiss();
         addLog(logMiss(casterData.name, skill.name, targetData.name), COLORS.logNeutral);
     }
+
+    return true;
+}
+
+// =============================================================================
+// WALL OF FIRE - Drag-line ground tile skill
+// =============================================================================
+
+/**
+ * Execute Wall of Fire — create fire tiles along a line of grid cells.
+ * The tile positions are computed by the input handler from the drag gesture.
+ */
+export function executeWallOfFireSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill,
+    tilePositions: { x: number; z: number }[]
+): boolean {
+    const { scene, unitsRef, fireTilesRef, addLog } = ctx;
+
+    if (!fireTilesRef) {
+        addLog("Wall of Fire cannot be cast right now.", COLORS.logWarning);
+        return false;
+    }
+
+    const casterG = unitsRef.current[casterId];
+    if (!casterG) return false;
+
+    if (tilePositions.length === 0) {
+        addLog(`${UNIT_DATA[casterId].name}: No tiles selected!`, COLORS.logNeutral);
+        return false;
+    }
+
+    consumeSkill(ctx, casterId, skill);
+
+    const casterData = UNIT_DATA[casterId];
+    const now = Date.now();
+    const damagePerTick = skill.damagePerTick ?? 3;
+    const duration = skill.duration ?? 10000;
+
+    for (const pos of tilePositions) {
+        createFireTile(
+            scene,
+            fireTilesRef.current,
+            pos.x, pos.z,
+            casterId,
+            damagePerTick,
+            now,
+            duration
+        );
+    }
+
+    // Visual: expanding ring at center of the line
+    const midIdx = Math.floor(tilePositions.length / 2);
+    const midPos = tilePositions[midIdx];
+    createAnimatedRing(scene, midPos.x + 0.5, midPos.z + 0.5, COLORS.dmgFire, {
+        innerRadius: 0.2,
+        outerRadius: 0.4,
+        maxScale: tilePositions.length * 0.6,
+        duration: 300,
+        initialOpacity: 0.6
+    });
+
+    addLog(logCast(casterData.name, skill.name), getSkillTextColor(skill.type, skill.damageType));
+    soundFns.playAttack();
 
     return true;
 }

@@ -47,6 +47,7 @@ import {
     processSanctuaryTiles,
     processHolyTiles,
     processSmokeTiles,
+    processFireTiles,
     processChargeAttacks,
     processFireBreaths,
     processCurses,
@@ -723,6 +724,20 @@ export function useGameLoop({
                     scene,
                     setUnitsLive,
                     now
+                );
+
+                // Process fire tiles
+                processFireTiles(
+                    refs.fireTiles,
+                    currentUnits,
+                    unitGroups,
+                    scene,
+                    refs.damageTexts,
+                    refs.hitFlash,
+                    setUnitsLive,
+                    callbacks.addLog,
+                    now,
+                    defeatedThisFrame
                 );
 
                 // Process charge attacks

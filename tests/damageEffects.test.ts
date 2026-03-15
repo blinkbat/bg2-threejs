@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { Dispatch, RefObject, SetStateAction } from "react";
+import type { Scene } from "three";
 import type { Unit, UnitGroup, DamageText, StatusEffect } from "../src/core/types";
+import { createThreeTestModule } from "./threeMock";
 
 // Provide a minimal document.createElement for canvas/texture pooling
 const globalAny = globalThis as Record<string, unknown>;
@@ -26,53 +29,7 @@ if (!globalAny.document) {
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
-vi.mock("three", () => {
-    function Color() { /* noop */ }
-    Color.prototype.copy = function () { return this; };
-    Color.prototype.multiplyScalar = function () { return this; };
-
-    function Mesh() {
-        this.position = { set() {}, x: 0, y: 0, z: 0 };
-        this.rotation = { x: 0, y: 0, z: 0 };
-        this.scale = { set() {} };
-        this.renderOrder = 0;
-        this.userData = {};
-        this.material = { map: { image: { getContext() { return { clearRect() {}, fillText() {}, strokeText() {} }; } }, needsUpdate: false }, opacity: 1, dispose() {} };
-        this.geometry = { dispose() {} };
-    }
-
-    function MeshPhongMaterial() {
-        this.color = new Color();
-        this.emissive = new Color();
-        this.emissiveIntensity = 0;
-        this.shininess = 0;
-        this.transparent = false;
-        this.opacity = 1;
-        this.dispose = function () {};
-        this.clone = function () { return new MeshPhongMaterial(); };
-    }
-
-    function MeshBasicMaterial() {
-        this.dispose = function () {};
-        this.opacity = 1;
-    }
-
-    return {
-        Scene: function () {},
-        Mesh,
-        PlaneGeometry: function () {},
-        MeshBasicMaterial,
-        MeshPhongMaterial,
-        SphereGeometry: function () {},
-        RingGeometry: function () {},
-        CylinderGeometry: function () {},
-        CanvasTexture: function () { this.generateMipmaps = false; this.minFilter = 0; this.magFilter = 0; this.colorSpace = ""; },
-        LinearFilter: 0,
-        SRGBColorSpace: "",
-        DoubleSide: 0,
-        Color,
-    };
-});
+vi.mock("three", () => createThreeTestModule());
 
 vi.mock("../src/audio", () => ({
     soundFns: {
@@ -136,9 +93,13 @@ function makeUnit(overrides: Partial<Unit> = {}): Unit {
     };
 }
 
-function makeUnitGroup(overrides: Partial<UnitGroup> = {}): UnitGroup {
+type UnitGroupOverrides = Partial<Omit<UnitGroup, "position">> & {
+    position?: { x: number; y: number; z: number };
+};
+
+function makeUnitGroup(overrides: UnitGroupOverrides = {}): UnitGroup {
     return {
-        position: { x: 5, y: 0, z: 5 },
+        position: overrides.position ?? { x: 5, y: 0, z: 5 },
         visible: true,
         userData: {},
         ...overrides,
@@ -158,18 +119,22 @@ function makeStatusEffect(type: StatusEffect["type"], overrides: Partial<StatusE
     };
 }
 
+function makeScene(): Scene {
+    return { add() {}, remove() {} } as unknown as Scene;
+}
+
 function makeCtx(units: Unit[], unitsRef: Record<number, UnitGroup> = {}): DamageContext {
     // applySyncedUnitsUpdate manages unitsStateRef.current internally,
     // so setUnits should be a no-op mock — the ref is the source of truth.
-    const ref = { current: units };
-    const setUnits = vi.fn();
+    const ref: RefObject<Unit[]> = { current: units };
+    const setUnits: Dispatch<SetStateAction<Unit[]>> = vi.fn(() => {});
     return {
-        scene: { add() {}, remove() {} } as any,
+        scene: makeScene(),
         damageTexts: [] as DamageText[],
         hitFlashRef: {},
         unitsRef,
-        unitsStateRef: ref as unknown as React.RefObject<Unit[]>,
-        setUnits: setUnits as unknown as React.Dispatch<React.SetStateAction<Unit[]>>,
+        unitsStateRef: ref,
+        setUnits,
         addLog: vi.fn(),
         now: 1000,
         defeatedThisFrame: new Set<number>(),
@@ -488,18 +453,16 @@ describe("damageEffects", () => {
         it("heals the attacker up to maxHp", () => {
             const attacker = makeUnit({ id: 1, hp: 20, team: "player" });
             const units = [attacker];
-            const setUnits = vi.fn((fn: unknown) => {
-                if (typeof fn === "function") {
-                    const result = fn(units);
-                    units.length = 0;
-                    units.push(...result);
-                }
+            const setUnits: Dispatch<SetStateAction<Unit[]>> = vi.fn((nextState: SetStateAction<Unit[]>) => {
+                const result = typeof nextState === "function" ? nextState(units) : nextState;
+                units.length = 0;
+                units.push(...result);
             });
 
             applyLifesteal(
-                { add() {}, remove() {} } as any, // scene
+                makeScene(),
                 [],         // damageTexts
-                setUnits as any,
+                setUnits,
                 1, 5, 5,   // attacker id and position
                 10,         // healAmount
                 25          // maxHp
@@ -510,9 +473,9 @@ describe("damageEffects", () => {
         });
 
         it("does nothing for zero heal amount", () => {
-            const setUnits = vi.fn();
+            const setUnits: Dispatch<SetStateAction<Unit[]>> = vi.fn(() => {});
 
-            applyLifesteal({} as any, [], setUnits as any, 1, 5, 5, 0, 25);
+            applyLifesteal(makeScene(), [], setUnits, 1, 5, 5, 0, 25);
 
             expect(setUnits).not.toHaveBeenCalled();
         });
@@ -525,9 +488,9 @@ describe("damageEffects", () => {
             const player = makeUnit({ id: 1, hp: 20, team: "player" });
             const units = [enemy1, enemy2, player];
 
-            const g10 = makeUnitGroup({ position: { x: 5, y: 0, z: 5 } } as any);
-            const g11 = makeUnitGroup({ position: { x: 100, y: 0, z: 100 } } as any);
-            const g1 = makeUnitGroup({ position: { x: 5, y: 0, z: 6 } } as any);
+            const g10 = makeUnitGroup({ position: { x: 5, y: 0, z: 5 } });
+            const g11 = makeUnitGroup({ position: { x: 100, y: 0, z: 100 } });
+            const g1 = makeUnitGroup({ position: { x: 5, y: 0, z: 6 } });
             const unitsRef: Record<number, UnitGroup> = { 10: g10, 11: g11, 1: g1 };
 
             const results = getAliveUnitsInRange(units, unitsRef, "enemy", 5, 5, 3);

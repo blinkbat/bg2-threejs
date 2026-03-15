@@ -13,7 +13,7 @@ export type { SkillExecutionContext } from "./types";
 
 // Import for internal use
 import type { SkillExecutionContext } from "./types";
-import { executeAoeSkill, executeMeleeSkill, executeSmiteSkill, executeRangedSkill, executeFlurrySkill, executeMagicWaveSkill, executeChainLightningSkill, executeForcePushSkill, executeWellOfGravitySkill, executeHolyCrossSkill, executeHolyStrikeSkill, executeGlacialWhorlSkill, executeCleaveSkill, executeSmiteStrikeSkill, executeLeapStrikeSkill } from "./damage";
+import { executeAoeSkill, executeMeleeSkill, executeSmiteSkill, executeRangedSkill, executeFlurrySkill, executeMagicWaveSkill, executeChainLightningSkill, executeForcePushSkill, executeWellOfGravitySkill, executeHolyCrossSkill, executeHolyStrikeSkill, executeGlacialWhorlSkill, executeCleaveSkill, executeSmiteStrikeSkill, executeLeapStrikeSkill, executeWallOfFireSkill } from "./damage";
 import { executeHealSkill, executeMassHealSkill, executeManaTransferSkill, executeBuffSkill, executeAoeBuffSkill, executeEnergyShieldSkill, executeCleanseSkill, executeRestorationSkill, executeReviveSkill, executeSunStanceSkill, executePangolinStanceSkill, executeHighlandDefenseSkill, executeDivineLatticeSkill, executeVanquishingLightSkill } from "./support";
 import { executeTauntSkill, executeDebuffSkill, executeBloodMarkSkill, executeElorasGraspSkill, executeTrapSkill, executeSanctuarySkill, executeSummonSkill, executeTurnUndeadSkill, executeSmokeBombSkill, executeIntimidateSkill, executeFivePointPalmSkill, executeDimMakSkill } from "./utility";
 import { executeDodgeSkill, executeBodySwapSkill, executeDisplacementSkill } from "./movement";
@@ -32,7 +32,8 @@ export function executeSkill(
     skill: Skill,
     targetX: number,
     targetZ: number,
-    targetId?: number
+    targetId?: number,
+    dragLinePositions?: { x: number; z: number }[]
 ): boolean {
     const caster = ctx.unitsStateRef.current.find(u => u.id === casterId);
     const casterG = ctx.unitsRef.current[casterId];
@@ -182,6 +183,8 @@ export function executeSkill(
         return executeDisplacementSkill(ctx, casterId, skill, targetX, targetZ, targetId);
     } else if (skill.type === "smoke" && skill.targetType === "aoe") {
         return executeSmokeBombSkill(ctx, casterId, skill, targetX, targetZ);
+    } else if (skill.type === "wall_of_fire" && skill.targetType === "drag_line") {
+        return executeWallOfFireSkill(ctx, casterId, skill, dragLinePositions ?? []);
     }
 
     return false;

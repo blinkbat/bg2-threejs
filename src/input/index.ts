@@ -61,7 +61,7 @@ interface InputSetters {
 // Per-unit queued action - only ONE action per unit at a time (last one wins)
 // Note: attacks are just skills now - no separate "attack" type
 type QueuedAction =
-    | { type: "skill"; skill: Skill; targetX: number; targetZ: number; targetId?: number }
+    | { type: "skill"; skill: Skill; targetX: number; targetZ: number; targetId?: number; dragLinePositions?: { x: number; z: number }[] }
     | { type: "move"; targetX: number; targetZ: number; direct?: boolean; notBefore?: number; attackMove?: boolean }
     | { type: "consumable"; itemId: string; targetId?: number };
 
@@ -422,7 +422,7 @@ export function processActionQueue(
                 executeTargetZ = targetZ;
             }
 
-            executeSkill(skillCtx, unitId, action.skill, executeTargetX, executeTargetZ, action.targetId);
+            executeSkill(skillCtx, unitId, action.skill, executeTargetX, executeTargetZ, action.targetId, action.dragLinePositions);
             executedUnits.push(unitId);
         } else if (action.type === "move") {
             // Respect row stagger delay for formation moves
@@ -582,7 +582,8 @@ export function queueOrExecuteSkill(
     setters: Pick<InputSetters, "setTargetingMode" | "setQueuedActions">,
     skillCtx: SkillExecutionContext,
     addLog: (text: string, color?: string) => void,
-    targetId?: number
+    targetId?: number,
+    dragLinePositions?: { x: number; z: number }[]
 ): boolean {
     // Check cooldown (cantrips bypass action cooldown — they use charges instead)
     const now = Date.now();
@@ -592,7 +593,7 @@ export function queueOrExecuteSkill(
     // Queue when paused OR on cooldown - execute immediately otherwise
     if (state.pausedRef.current || onCooldown) {
         // Per-unit queue: new action replaces any previous action for this unit
-        refs.actionQueueRef.current[casterId] = { type: "skill", skill, targetX, targetZ, targetId };
+        refs.actionQueueRef.current[casterId] = { type: "skill", skill, targetX, targetZ, targetId, dragLinePositions };
         // Update UI state (replace any existing queued action for this unit)
         setters.setQueuedActions(prev => [
             ...prev.filter(q => q.unitId !== casterId),
@@ -604,9 +605,61 @@ export function queueOrExecuteSkill(
         return true;
     }
 
-    executeSkill(skillCtx, casterId, skill, targetX, targetZ, targetId);
+    executeSkill(skillCtx, casterId, skill, targetX, targetZ, targetId, dragLinePositions);
     clearTargetingMode(setters.setTargetingMode, refs.rangeIndicatorRef, refs.aoeIndicatorRef);
     return true;
+}
+
+// =============================================================================
+// DRAG LINE TILE COMPUTATION
+// =============================================================================
+
+/**
+ * Compute grid cell positions along a line from start to end, up to maxTiles.
+ * Uses Bresenham-like stepping: walks from start toward end, adding each new
+ * grid cell encountered (no duplicates).
+ */
+export function computeDragLineTiles(
+    startX: number,
+    startZ: number,
+    endX: number,
+    endZ: number,
+    maxTiles: number
+): { x: number; z: number }[] {
+    const tiles: { x: number; z: number }[] = [];
+    const seen = new Set<string>();
+
+    const sx = Math.floor(startX);
+    const sz = Math.floor(startZ);
+    tiles.push({ x: sx, z: sz });
+    seen.add(`${sx},${sz}`);
+
+    if (tiles.length >= maxTiles) return tiles;
+
+    const dx = endX - startX;
+    const dz = endZ - startZ;
+    const dist = Math.hypot(dx, dz);
+    if (dist < 0.01) return tiles;
+
+    const stepX = dx / dist;
+    const stepZ = dz / dist;
+
+    // Walk along the line in small steps, collecting unique grid cells
+    const maxDist = Math.min(dist, maxTiles * 1.5); // Limit walk distance
+    for (let t = 0.5; t <= maxDist; t += 0.3) {
+        const wx = startX + stepX * t;
+        const wz = startZ + stepZ * t;
+        const gx = Math.floor(wx);
+        const gz = Math.floor(wz);
+        const key = `${gx},${gz}`;
+        if (!seen.has(key)) {
+            tiles.push({ x: gx, z: gz });
+            seen.add(key);
+            if (tiles.length >= maxTiles) break;
+        }
+    }
+
+    return tiles;
 }
 
 // =============================================================================
@@ -790,7 +843,10 @@ export function setupTargetingMode(
     }
 
     if (aoeIndicatorRef.current) {
-        if (skill.lineWidth) {
+        if (skill.targetType === "drag_line") {
+            // Drag-line skills show preview tiles instead of an AOE indicator
+            aoeIndicatorRef.current.visible = false;
+        } else if (skill.lineWidth) {
             // Line-shaped AOE: rectangle from caster toward cursor
             disposeGeometry(aoeIndicatorRef.current);
             const rectGeo = new THREE.PlaneGeometry(skill.range, skill.lineWidth);

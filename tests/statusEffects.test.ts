@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
+import type { Dispatch, SetStateAction } from "react";
+import type { Scene } from "three";
 import type { Unit, UnitGroup, DamageText, StatusEffect } from "../src/core/types";
+import { createThreeTestModule } from "./threeMock";
 
 // Provide a minimal document.createElement for canvas/texture pooling
 const globalAny = globalThis as Record<string, unknown>;
@@ -26,53 +29,7 @@ if (!globalAny.document) {
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
-vi.mock("three", () => {
-    function Color() { /* noop */ }
-    Color.prototype.copy = function () { return this; };
-    Color.prototype.multiplyScalar = function () { return this; };
-
-    function Mesh() {
-        this.position = { set() {}, x: 0, y: 0, z: 0 };
-        this.rotation = { x: 0, y: 0, z: 0 };
-        this.scale = { set() {} };
-        this.renderOrder = 0;
-        this.userData = {};
-        this.material = { map: { image: { getContext() { return { clearRect() {}, fillText() {}, strokeText() {} }; } }, needsUpdate: false }, opacity: 1, dispose() {} };
-        this.geometry = { dispose() {} };
-    }
-
-    function MeshPhongMaterial() {
-        this.color = new Color();
-        this.emissive = new Color();
-        this.emissiveIntensity = 0;
-        this.shininess = 0;
-        this.transparent = false;
-        this.opacity = 1;
-        this.dispose = function () {};
-        this.clone = function () { return new MeshPhongMaterial(); };
-    }
-
-    function MeshBasicMaterial() {
-        this.dispose = function () {};
-        this.opacity = 1;
-    }
-
-    return {
-        Scene: function () {},
-        Mesh,
-        PlaneGeometry: function () {},
-        MeshBasicMaterial,
-        MeshPhongMaterial,
-        SphereGeometry: function () {},
-        RingGeometry: function () {},
-        CylinderGeometry: function () {},
-        CanvasTexture: function () { this.generateMipmaps = false; this.minFilter = 0; this.magFilter = 0; this.colorSpace = ""; },
-        LinearFilter: 0,
-        SRGBColorSpace: "",
-        DoubleSide: 0,
-        Color,
-    };
-});
+vi.mock("three", () => createThreeTestModule());
 
 vi.mock("../src/audio", () => ({
     soundFns: {
@@ -157,6 +114,10 @@ function makeUnitGroup(): UnitGroup {
     } as unknown as UnitGroup;
 }
 
+function makeScene(): Scene {
+    return { add() {}, remove() {} } as unknown as Scene;
+}
+
 interface ProcessResult {
     updatedUnits: Unit[];
     addLog: ReturnType<typeof vi.fn>;
@@ -169,10 +130,8 @@ function runProcessStatusEffects(units: Unit[], now: number = 2000): ProcessResu
     }
 
     let updatedUnits = units;
-    const setUnits = vi.fn((fn: unknown) => {
-        if (typeof fn === "function") {
-            updatedUnits = fn(updatedUnits);
-        }
+    const setUnits: Dispatch<SetStateAction<Unit[]>> = vi.fn((nextState: SetStateAction<Unit[]>) => {
+        updatedUnits = typeof nextState === "function" ? nextState(updatedUnits) : nextState;
     });
     const addLog = vi.fn();
     const defeatedThisFrame = new Set<number>();
@@ -180,10 +139,10 @@ function runProcessStatusEffects(units: Unit[], now: number = 2000): ProcessResu
     processStatusEffects(
         units,
         unitsRef,
-        { add() {}, remove() {} } as any,  // scene
+        makeScene(),
         [] as DamageText[],
         {},                  // hitFlashRef
-        setUnits as any,
+        setUnits,
         addLog,
         now,
         defeatedThisFrame
@@ -303,6 +262,7 @@ describe("statusEffects - processStatusEffects", () => {
         it("kills unit when doom expires", () => {
             const unit = makeUnit({
                 hp: 50,
+                enemyType: "bloated_corpse",
                 statusEffects: [
                     makeStatusEffect("doom", {
                         tickInterval: 1000,
@@ -313,7 +273,7 @@ describe("statusEffects - processStatusEffects", () => {
                 ],
             });
 
-            const { updatedUnits, addLog } = runProcessStatusEffects([unit], 2000);
+            const { updatedUnits } = runProcessStatusEffects([unit], 2000);
             expect(updatedUnits[0].hp).toBe(0);
             expect(updatedUnits[0].statusEffects).toBeUndefined();
         });

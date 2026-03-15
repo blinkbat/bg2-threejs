@@ -571,6 +571,13 @@ function SkillTooltip({ skill, isShielded, cantripUses }: { skill: Skill; isShie
         lines.push({ label: "Damage", value: `${skill.damageRange![0]}-${skill.damageRange![1]}`, color: dmgInfo.color });
         lines.push({ label: "Type", value: dmgInfo.name, color: dmgInfo.color });
         lines.push({ label: "Leap range", value: `${skill.range}`, color: "var(--ui-color-accent-warning)" });
+    } else if (skill.type === "wall_of_fire") {
+        const dmgInfo = getDamageTypeInfo(skill.damageType);
+        lines.push({ label: "Damage/tick", value: `${skill.damagePerTick ?? 0}`, color: dmgInfo.color });
+        lines.push({ label: "Type", value: dmgInfo.name, color: dmgInfo.color });
+        const durationSec = Math.round((skill.duration ?? 0) / 1000);
+        lines.push({ label: "Duration", value: `${durationSec}s`, color: COLORS.logNeutral });
+        lines.push({ label: "Max tiles", value: `${skill.maxTiles ?? 5}`, color: "var(--ui-color-accent-warning)" });
     }
 
     // Range (skip for self-targeted AOE skills that use range as radius, and dodge which shows it inline)
@@ -598,7 +605,7 @@ function SkillTooltip({ skill, isShielded, cantripUses }: { skill: Skill; isShie
     if (skill.stunChance && skill.type !== "debuff") {
         lines.push({ label: "Stun chance", value: `${skill.stunChance}%`, color: COLORS.stunnedText });
     }
-    if (skill.damagePerTick && skill.type !== "sanctuary") {
+    if (skill.damagePerTick && skill.type !== "sanctuary" && skill.type !== "wall_of_fire") {
         lines.push({ label: "Damage/tick", value: `${skill.damagePerTick}`, color: COLORS.dmgHoly });
     }
     if (skill.tickInterval && skill.tickInterval > 0) {

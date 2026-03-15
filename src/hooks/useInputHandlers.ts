@@ -28,9 +28,12 @@ import {
     queueOrExecuteSkill,
     stopSelectedUnits,
     toggleHoldPositionForSelectedUnits,
+    computeDragLineTiles,
     type ActionQueue
 } from "../input";
 import { clearTargetingMode, type SkillExecutionContext } from "../combat/skills";
+import { disposeBasicMesh } from "../rendering/disposal";
+import { distanceToPoint } from "../game/geometry";
 import { getPartyInventory, setPartyInventory } from "../game/equipmentState";
 import { removeFromInventory, addToInventory } from "../game/equipment";
 import { buildEffectiveFormationOrder } from "../game/formationOrder";
@@ -212,6 +215,14 @@ export function useInputHandlers({
     const hoveredDoorRef = useRef<{ targetArea: string; x: number; y: number } | null>(null);
     const hoveredSecretDoorRef = useRef<{ x: number; y: number } | null>(null);
     const hoveredLootBagRef = useRef<{ x: number; y: number; gold: number; hasItems: boolean } | null>(null);
+    // Drag-line targeting state (Wall of Fire etc.)
+    const dragLineStateRef = useRef<{
+        startX: number;
+        startZ: number;
+        previewMeshes: THREE.Mesh[];
+    } | null>(null);
+    // Timestamp of last drag-line execution — suppresses the click event that follows mouseup
+    const dragLineExecutedAtRef = useRef(0);
 
     useEffect(() => {
         if (!sceneRefs || !containerRef.current) return;
@@ -291,15 +302,104 @@ export function useInputHandlers({
         };
 
         // =============================================================================
+        // DRAG-LINE TARGETING HELPERS
+        // =============================================================================
+        const DRAG_PREVIEW_COLOR = 0xcc4400;
+        const DRAG_PREVIEW_OPACITY = 0.4;
+        const DRAG_PREVIEW_Y = 0.03;
+
+        const clearDragLinePreview = (): void => {
+            const state = dragLineStateRef.current;
+            if (!state) return;
+            for (const mesh of state.previewMeshes) {
+                disposeBasicMesh(scene, mesh);
+            }
+            dragLineStateRef.current = null;
+        };
+
+        const updateDragLinePreview = (endX: number, endZ: number): void => {
+            const state = dragLineStateRef.current;
+            if (!state) return;
+            const targeting = stateRefs.targetingModeRef.current;
+            if (!targeting) return;
+
+            const maxTiles = targeting.skill.maxTiles ?? 5;
+            const tiles = computeDragLineTiles(state.startX, state.startZ, endX, endZ, maxTiles);
+
+            // Remove excess preview meshes
+            while (state.previewMeshes.length > tiles.length) {
+                const mesh = state.previewMeshes.pop()!;
+                disposeBasicMesh(scene, mesh);
+            }
+            // Create/update preview meshes
+            for (let i = 0; i < tiles.length; i++) {
+                if (i < state.previewMeshes.length) {
+                    // Reposition existing mesh
+                    state.previewMeshes[i].position.set(tiles[i].x + 0.5, DRAG_PREVIEW_Y, tiles[i].z + 0.5);
+                } else {
+                    // Create new preview mesh
+                    const geo = new THREE.CircleGeometry(0.45, 16);
+                    const mat = new THREE.MeshBasicMaterial({
+                        color: DRAG_PREVIEW_COLOR,
+                        transparent: true,
+                        opacity: DRAG_PREVIEW_OPACITY,
+                        side: THREE.DoubleSide
+                    });
+                    const mesh = new THREE.Mesh(geo, mat);
+                    mesh.rotation.x = -Math.PI / 2;
+                    mesh.position.set(tiles[i].x + 0.5, DRAG_PREVIEW_Y, tiles[i].z + 0.5);
+                    mesh.name = "dragLinePreview";
+                    scene.add(mesh);
+                    state.previewMeshes.push(mesh);
+                }
+            }
+        };
+
+        // =============================================================================
         // MOUSE DOWN
         // =============================================================================
         const onMouseDown = (e: MouseEvent) => {
             if (e.button === 2) {
+                // Right-click cancels drag-line targeting
+                if (dragLineStateRef.current) {
+                    clearDragLinePreview();
+                }
                 closeAllTooltips();
                 mutableRefs.isDragging.current = true;
                 mutableRefs.didPan.current = false;
                 mutableRefs.lastMouse.current = { x: e.clientX, y: e.clientY };
             } else if (e.button === 0) {
+                // Check if we're in drag-line targeting mode
+                const targeting = stateRefs.targetingModeRef.current;
+                if (targeting && targeting.skill.targetType === "drag_line") {
+                    const rect = renderer.domElement.getBoundingClientRect();
+                    mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+                    mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+                    raycaster.setFromCamera(mouse, camera);
+                    for (const hit of raycaster.intersectObjects(rebuildInteractionRaycastRoots(), true)) {
+                        if (hit.object.name !== "ground") continue;
+                        const casterG = unitGroups[targeting.casterId];
+                        if (!casterG) break;
+                        const dist = distanceToPoint(casterG.position, hit.point.x, hit.point.z);
+                        if (dist > targeting.skill.range) {
+                            callbacks.addLog(`${stateRefs.unitsStateRef.current.find(u => u.id === targeting.casterId)?.team === "player" ? "Wizard" : "Caster"}: Target out of range!`, "#888");
+                            break;
+                        }
+                        // Start drag
+                        dragLineStateRef.current = {
+                            startX: hit.point.x,
+                            startZ: hit.point.z,
+                            previewMeshes: []
+                        };
+                        // Create initial preview at start tile
+                        updateDragLinePreview(hit.point.x, hit.point.z);
+                        // Hide AOE indicator during drag (we show preview tiles instead)
+                        if (aoeIndicator) aoeIndicator.visible = false;
+                        break;
+                    }
+                    return; // Don't start box selection
+                }
+
                 const rect = renderer.domElement.getBoundingClientRect();
                 mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
                 mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
@@ -347,6 +447,20 @@ export function useInputHandlers({
 
             if (mutableRefs.isDragging.current || mutableRefs.isBoxSel.current) {
                 return;
+            }
+
+            // Update drag-line preview during drag
+            if (dragLineStateRef.current) {
+                const rect = renderer.domElement.getBoundingClientRect();
+                mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+                mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+                raycaster.setFromCamera(mouse, camera);
+                for (const hit of raycaster.intersectObjects(rebuildInteractionRaycastRoots(), true)) {
+                    if (hit.object.name !== "ground") continue;
+                    updateDragLinePreview(hit.point.x, hit.point.z);
+                    break;
+                }
+                return; // Don't process hover tooltips during drag
             }
 
             const hoverNow = performance.now();
@@ -561,6 +675,49 @@ export function useInputHandlers({
         // MOUSE UP
         // =============================================================================
         const onMouseUp = (e: MouseEvent) => {
+            // Complete drag-line targeting
+            if (dragLineStateRef.current && e.button === 0) {
+                const dragState = dragLineStateRef.current;
+                const targeting = stateRefs.targetingModeRef.current;
+                if (targeting) {
+                    // Raycast to get final cursor position
+                    const rect = renderer.domElement.getBoundingClientRect();
+                    mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+                    mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+                    raycaster.setFromCamera(mouse, camera);
+                    let endX = dragState.startX;
+                    let endZ = dragState.startZ;
+                    for (const hit of raycaster.intersectObjects(rebuildInteractionRaycastRoots(), true)) {
+                        if (hit.object.name !== "ground") continue;
+                        endX = hit.point.x;
+                        endZ = hit.point.z;
+                        break;
+                    }
+
+                    const maxTiles = targeting.skill.maxTiles ?? 5;
+                    const tiles = computeDragLineTiles(dragState.startX, dragState.startZ, endX, endZ, maxTiles);
+                    const skillCtx = callbacks.getSkillContext();
+
+                    queueOrExecuteSkill(
+                        targeting.casterId,
+                        targeting.skill,
+                        dragState.startX,
+                        dragState.startZ,
+                        { actionCooldownRef: mutableRefs.actionCooldownRef, actionQueueRef: mutableRefs.actionQueueRef, rangeIndicatorRef: { current: rangeIndicator }, aoeIndicatorRef: { current: aoeIndicator } },
+                        { pausedRef: stateRefs.pausedRef },
+                        { setTargetingMode: setters.setTargetingMode, setQueuedActions: setters.setQueuedActions },
+                        skillCtx,
+                        callbacks.addLog,
+                        undefined,
+                        tiles
+                    );
+
+                    dragLineExecutedAtRef.current = Date.now();
+                }
+                clearDragLinePreview();
+                return;
+            }
+
             if (mutableRefs.isBoxSel.current && !stateRefs.targetingModeRef.current) {
                 const dx = Math.abs(mutableRefs.boxEnd.current.x - mutableRefs.boxStart.current.x);
                 const dy = Math.abs(mutableRefs.boxEnd.current.y - mutableRefs.boxStart.current.y);
@@ -675,6 +832,8 @@ export function useInputHandlers({
         // =============================================================================
         const onClick = (e: MouseEvent) => {
             if (e.button !== 0) return;
+            // Suppress click that follows a drag-line mouseup
+            if (Date.now() - dragLineExecutedAtRef.current < 100) return;
             const rect = renderer.domElement.getBoundingClientRect();
             mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
             mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
@@ -822,6 +981,9 @@ export function useInputHandlers({
                 );
             }
             if (e.code === "Escape") {
+                if (dragLineStateRef.current) {
+                    clearDragLinePreview();
+                }
                 if (stateRefs.commandModeRef?.current) {
                     setters.setCommandMode(null);
                 } else if (stateRefs.consumableTargetingModeRef.current) {

@@ -846,7 +846,8 @@ function Game({
         sanctuaryTilesRef: { current: gameRefs.current.sanctuaryTiles },
         acidTilesRef: { current: gameRefs.current.acidTiles },
         holyTilesRef: { current: gameRefs.current.holyTiles },
-        smokeTilesRef: { current: gameRefs.current.smokeTiles }
+        smokeTilesRef: { current: gameRefs.current.smokeTiles },
+        fireTilesRef: { current: gameRefs.current.fireTiles }
     }), [sceneState, gameRefs, addLog, setUnitsLive]);
 
     // Execute consumable
@@ -2071,7 +2072,8 @@ function Game({
 
         addLog(`Debug: Party gained ${amount} Experience!`, "#9b59b6");
         if (leveledUpIds.length > 0) {
-            addLog(`Level up! +${LEVEL_UP_STAT_POINTS} stat points available.`, "#ffd700");
+            const names = leveledUpIds.map(id => UNIT_DATA[id]?.name ?? "Unknown").join(", ");
+            addLog(`${names} leveled up! +${LEVEL_UP_STAT_POINTS} stat points available.`, "#ffd700");
             soundFns.playLevelUp();
             for (const unitId of leveledUpIds) {
                 const unitGroup = sceneState.unitGroups[unitId];

@@ -21,8 +21,8 @@ export interface Skill {
     flavor?: string;       // Flavor text for tooltip
     manaCost: number;
     cooldown: number;  // ms
-    type: "damage" | "heal" | "buff" | "taunt" | "flurry" | "debuff" | "trap" | "sanctuary" | "mana_transfer" | "smite" | "energy_shield" | "aoe_buff" | "restoration" | "revive" | "dodge" | "summon" | "displacement" | "turn_undead" | "smoke" | "cleave" | "intimidate" | "leap_strike";
-    targetType: "enemy" | "ally" | "self" | "aoe" | "unit";
+    type: "damage" | "heal" | "buff" | "taunt" | "flurry" | "debuff" | "trap" | "sanctuary" | "mana_transfer" | "smite" | "energy_shield" | "aoe_buff" | "restoration" | "revive" | "dodge" | "summon" | "displacement" | "turn_undead" | "smoke" | "cleave" | "intimidate" | "leap_strike" | "wall_of_fire";
+    targetType: "enemy" | "ally" | "self" | "aoe" | "unit" | "drag_line";
     range: number;
     aoeRadius?: number;
     damageType: DamageType;  // Type of damage - armor only reduces physical
@@ -56,6 +56,9 @@ export interface Skill {
     delivery?: SkillDeliveryMode;     // Optional explicit delivery mode for single-target damage skills
     critChanceOverride?: number;      // Optional crit chance override for this skill's hit resolution
     onHitEffect?: SkillOnHitEffect;   // Optional status effect applied when this skill hits
+
+    // Drag-line properties (wall of fire, etc.)
+    maxTiles?: number;                // Max tiles for drag-line skills
 
     // Cantrip properties
     isCantrip?: boolean;              // Uses charges instead of cooldowns, bypasses action cooldown

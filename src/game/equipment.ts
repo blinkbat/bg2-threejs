@@ -102,7 +102,7 @@ export function isOffHandDisabled(equipment: CharacterEquipment): boolean {
 }
 
 /** Get total armor from equipment (armor slot + shield) */
-function getEquipmentArmor(equipment: CharacterEquipment): number {
+export function getEquipmentArmor(equipment: CharacterEquipment): number {
     let total = 0;
 
     // Armor slot
@@ -303,6 +303,12 @@ export function removeFromInventory(inventory: PartyInventory, itemId: string, q
 export function hasInInventory(inventory: PartyInventory, itemId: string, quantity: number = 1): boolean {
     const entry = inventory.items.find(e => e.itemId === itemId);
     return entry !== undefined && entry.quantity >= quantity;
+}
+
+/** Get the current quantity of an item in inventory */
+export function getInventoryQuantity(inventory: PartyInventory, itemId: string): number {
+    const entry = inventory.items.find(e => e.itemId === itemId);
+    return entry?.quantity ?? 0;
 }
 
 // =============================================================================

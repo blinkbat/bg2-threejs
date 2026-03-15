@@ -3,7 +3,7 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitGroup, Projectile, SanctuaryTile, AcidTile, HolyTile, SmokeTile, SwingAnimation } from "../../core/types";
+import type { Unit, UnitGroup, Projectile, SanctuaryTile, AcidTile, HolyTile, SmokeTile, FireTile, SwingAnimation } from "../../core/types";
 
 export interface SkillExecutionContext {
     scene: THREE.Scene;
@@ -25,4 +25,5 @@ export interface SkillExecutionContext {
     acidTilesRef?: React.MutableRefObject<Map<string, AcidTile>>;
     holyTilesRef?: React.MutableRefObject<Map<string, HolyTile>>;
     smokeTilesRef?: React.MutableRefObject<Map<string, SmokeTile>>;
+    fireTilesRef?: React.MutableRefObject<Map<string, FireTile>>;
 }

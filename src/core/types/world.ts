@@ -114,6 +114,19 @@ export interface HolyTile {
     damagePerTick: number;   // Holy damage dealt each tick
 }
 
+// Fire tile - burning ground created by Wizard
+export interface FireTile {
+    mesh: THREE.Mesh;
+    x: number;           // Grid cell X
+    z: number;           // Grid cell Z
+    elapsedTime: number;     // Accumulated elapsed time (pause-safe)
+    lastUpdateTime: number;  // Last frame timestamp for delta calculation
+    duration: number;        // Total duration in ms
+    timeSinceTick: number;   // Accumulated time since last damage tick (pause-safe)
+    sourceId: number;        // ID of the unit that created it
+    damagePerTick: number;   // Fire damage dealt each tick
+}
+
 // Smoke tile - blind zone created by Thief
 export interface SmokeTile {
     mesh: THREE.Mesh;

@@ -37,6 +37,7 @@ function createState(): SaveSnapshotState {
         hotbarAssignments: { 1: ["Attack", null, null, null, null] },
         formationOrder: [1, 2, 3],
         dialogTriggerProgress: { coast: ["intro_1", "intro_1"] },
+        enemyPositions: {},
     };
 }
 

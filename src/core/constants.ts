@@ -112,6 +112,12 @@ export const SMOKE_TILE_DURATION = 8000;       // 8 seconds per tile
 export const SMOKE_TICK_INTERVAL = 1500;       // Blind check every 1.5 seconds
 export const SMOKE_MAX_TILES = 20;             // Max tiles in world
 
+// Fire Tiles - Burning ground created by Wizard
+export const FIRE_TILE_DURATION = 10000;        // 10 seconds per tile
+export const FIRE_TICK_INTERVAL = 1000;         // Damage every 1 second
+export const FIRE_DAMAGE_PER_TICK = 3;          // 3 fire damage per tick
+export const FIRE_MAX_TILES = 30;               // Max tiles in world
+
 // Blood Mark - lifesteal debuff applied by Barbarian
 export const BLOOD_MARK_LIFESTEAL = 0.35;     // 35% of melee damage healed
 
@@ -289,6 +295,8 @@ export const COLORS = {
     sanctuary: "#ffd700",       // Golden for sanctuary tiles
     smoke: "#555566",            // Dark grey for smoke tiles
     sanctuaryText: "#ffe44d",   // Brighter gold for heal text
+    fireGround: "#cc4400",       // Deep orange for fire ground tiles
+    fireGroundText: "#ff6b35",   // Bright orange for fire damage text
 
     // HP bar colors
     hpHigh: "#22c55e",          // > 50%
@@ -317,7 +325,7 @@ export const COLORS = {
 // =============================================================================
 
 type DamageTypeForColor = "physical" | "fire" | "cold" | "lightning" | "chaos" | "holy";
-type SkillTypeForColor = "damage" | "heal" | "buff" | "taunt" | "flurry" | "debuff" | "trap" | "sanctuary" | "mana_transfer" | "smite" | "energy_shield" | "aoe_buff" | "restoration" | "revive" | "dodge" | "summon" | "displacement" | "turn_undead" | "smoke" | "cleave" | "intimidate" | "leap_strike";
+type SkillTypeForColor = "damage" | "heal" | "buff" | "taunt" | "flurry" | "debuff" | "trap" | "sanctuary" | "mana_transfer" | "smite" | "energy_shield" | "aoe_buff" | "restoration" | "revive" | "dodge" | "summon" | "displacement" | "turn_undead" | "smoke" | "cleave" | "intimidate" | "leap_strike" | "wall_of_fire";
 
 /** Canonical color for a raw damage type */
 export function getDamageTypeColor(damageType: DamageTypeForColor | undefined): string {
@@ -374,6 +382,7 @@ export function getSkillTextColor(
         case "turn_undead":
         case "cleave":
         case "leap_strike":
+        case "wall_of_fire":
             return getDamageTypeColor(damageType);
         case "intimidate":
             return COLORS.fearedText;

@@ -4,7 +4,7 @@ import type { AreaId } from "../areas";
 import { SAVE_VERSION } from "./constants";
 import type { DialogTriggerProgress, EnemyPositionMap, SaveLoadFailure, SaveSlotData, SavedPlayer } from "./types";
 
-interface SaveSnapshotState {
+export interface SaveSnapshotState {
     players: SavedPlayer[];
     currentAreaId: AreaId;
     openedChests: Set<string>;
@@ -97,7 +97,7 @@ function normalizeStringArray(values: readonly string[]): string[] {
     return normalized;
 }
 
-function normalizeDialogTriggerProgress(progress: DialogTriggerProgress | undefined): DialogTriggerProgress {
+export function normalizeDialogTriggerProgress(progress: DialogTriggerProgress | undefined): DialogTriggerProgress {
     const normalized: DialogTriggerProgress = {};
     if (!progress) return normalized;
 

@@ -117,7 +117,7 @@ const DIRECTION_ANGLES: Record<string, number> = {
 /**
  * Compute formation positions for area spawn, oriented by door direction.
  */
-function getFormationPositionsForSpawn(
+export function getFormationPositionsForSpawn(
     spawnX: number,
     spawnZ: number,
     direction: "north" | "south" | "east" | "west",

@@ -86,7 +86,7 @@ describe("stateUtils", () => {
     it("applySyncedUnitsUpdate returns live-dispatch result and syncs snapshot ref", () => {
         const initial = [makeUnit(1, { hp: 9 })];
         const liveRef = { current: initial };
-        const snapshotRef: { current: Unit[] | null } = { current: initial };
+        const snapshotRef = { current: initial };
         const store = createStateStore(initial);
         const liveSetUnits = createLiveUnitsDispatch(store.setUnits, liveRef);
 
@@ -102,7 +102,7 @@ describe("stateUtils", () => {
     it("applySyncedUnitsUpdate falls back to snapshot and replays on divergence", () => {
         const snapshotPrev = [makeUnit(1, { hp: 10 })];
         const runtimePrev = [makeUnit(1, { hp: 4 })];
-        const snapshotRef: { current: Unit[] | null } = { current: snapshotPrev };
+        const snapshotRef = { current: snapshotPrev };
         let committed = runtimePrev;
         const setUnits: SetUnits = update => {
             committed = typeof update === "function" ? update(committed) : update;
@@ -119,7 +119,7 @@ describe("stateUtils", () => {
 
     it("applySyncedUnitUpdate updates one unit and returns the updated snapshot", () => {
         const initial = [makeUnit(1, { hp: 10 }), makeUnit(2, { hp: 6 })];
-        const snapshotRef: { current: Unit[] | null } = { current: initial };
+        const snapshotRef = { current: initial };
         const store = createStateStore(initial);
 
         const updated = applySyncedUnitUpdate(snapshotRef, store.setUnits, 2, unit => ({ ...unit, hp: 1 }));

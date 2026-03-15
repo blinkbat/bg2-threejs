@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
+import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from "react";
+import type { Color, Mesh, Scene } from "three";
 import type { Skill, Unit, UnitGroup } from "../src/core/types";
 import type { SkillExecutionContext } from "../src/combat/skills/types";
+import { createThreeTestModule } from "./threeMock";
 
 // Provide a minimal document.createElement for canvas/texture pooling
 const globalAny = globalThis as Record<string, unknown>;
@@ -27,66 +30,7 @@ if (!globalAny.document) {
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
-vi.mock("three", () => {
-    function Color() { /* noop */ }
-    Color.prototype.copy = function () { return this; };
-    Color.prototype.multiplyScalar = function () { return this; };
-
-    function Mesh() {
-        this.position = { set() {}, x: 0, y: 0, z: 0 };
-        this.rotation = { x: 0, y: 0, z: 0 };
-        this.scale = { set() {} };
-        this.renderOrder = 0;
-        this.userData = {};
-        this.material = { map: { image: { getContext() { return { clearRect() {}, fillText() {}, strokeText() {} }; } }, needsUpdate: false }, opacity: 1, dispose() {} };
-        this.geometry = { dispose() {} };
-    }
-
-    function MeshPhongMaterial() {
-        this.color = new Color();
-        this.emissive = new Color();
-        this.emissiveIntensity = 0;
-        this.shininess = 0;
-        this.transparent = false;
-        this.opacity = 1;
-        this.dispose = function () {};
-        this.clone = function () { return new MeshPhongMaterial(); };
-    }
-
-    function MeshBasicMaterial() {
-        this.dispose = function () {};
-        this.opacity = 1;
-    }
-
-    function Vector3() {
-        this.x = 0; this.y = 0; this.z = 0;
-        this.set = function () { return this; };
-        this.copy = function () { return this; };
-        this.normalize = function () { return this; };
-        this.multiplyScalar = function () { return this; };
-    }
-
-    return {
-        Scene: function () { this.add = function () {}; this.remove = function () {}; },
-        Mesh,
-        PlaneGeometry: function () {},
-        MeshBasicMaterial,
-        MeshPhongMaterial,
-        SphereGeometry: function () {},
-        RingGeometry: function () {},
-        CylinderGeometry: function () {},
-        IcosahedronGeometry: function () {},
-        BufferGeometry: function () {},
-        LineBasicMaterial: function () {},
-        Line: function () { this.position = { set() {} }; this.userData = {}; },
-        CanvasTexture: function () { this.generateMipmaps = false; this.minFilter = 0; this.magFilter = 0; this.colorSpace = ""; },
-        LinearFilter: 0,
-        SRGBColorSpace: "",
-        DoubleSide: 0,
-        Color,
-        Vector3,
-    };
-});
+vi.mock("three", () => createThreeTestModule());
 
 vi.mock("../src/audio", () => ({
     soundFns: {
@@ -186,20 +130,35 @@ function makeUnitGroup(): UnitGroup {
     } as unknown as UnitGroup;
 }
 
+function createRef<T>(current: T): RefObject<T> {
+    return { current };
+}
+
+function createMutableRef<T>(current: T): MutableRefObject<T> {
+    return { current };
+}
+
+function makeScene(): Scene {
+    return { add() {}, remove() {} } as unknown as Scene;
+}
+
 function makeCtx(units: Unit[], unitsRef: Record<number, UnitGroup> = {}): SkillExecutionContext {
+    const setUnits: Dispatch<SetStateAction<Unit[]>> = vi.fn(() => {});
+    const setSkillCooldowns: Dispatch<SetStateAction<Record<string, { end: number; duration: number }>>> = vi.fn(() => {});
+
     return {
-        scene: { add() {}, remove() {} } as any,
-        unitsStateRef: { current: units } as any,
-        unitsRef: { current: unitsRef } as any,
-        actionCooldownRef: { current: {} } as any,
-        projectilesRef: { current: [] } as any,
-        hitFlashRef: { current: {} } as any,
-        damageTexts: { current: [] } as any,
-        unitMeshRef: { current: {} } as any,
-        unitOriginalColorRef: { current: {} } as any,
-        swingAnimationsRef: { current: [] } as any,
-        setUnits: vi.fn() as any,
-        setSkillCooldowns: vi.fn() as any,
+        scene: makeScene(),
+        unitsStateRef: createRef(units),
+        unitsRef: createRef(unitsRef),
+        actionCooldownRef: createMutableRef<Record<number, number>>({}),
+        projectilesRef: createMutableRef<SkillExecutionContext["projectilesRef"]["current"]>([]),
+        hitFlashRef: createMutableRef<Record<number, number>>({}),
+        damageTexts: createMutableRef<SkillExecutionContext["damageTexts"]["current"]>([]),
+        unitMeshRef: createRef<Record<number, Mesh>>({}),
+        unitOriginalColorRef: createRef<Record<number, Color>>({}),
+        swingAnimationsRef: createMutableRef<SkillExecutionContext["swingAnimationsRef"]["current"]>([]),
+        setUnits,
+        setSkillCooldowns,
         addLog: vi.fn(),
         defeatedThisFrame: new Set<number>(),
     };

@@ -30,6 +30,7 @@ export { processAcidTiles, createAcidPool } from "./acidTiles";
 export { processSanctuaryTiles } from "./sanctuaryTiles";
 export { processHolyTiles } from "./holyTiles";
 export { processSmokeTiles } from "./smokeTiles";
+export { processFireTiles } from "./fireTiles";
 export { processChargeAttacks, clearChargeAttacks } from "./constructCharge";
 export { processFireBreaths, clearFireBreaths } from "./fireBreath";
 export { processCurses, clearCurses } from "./necromancerCurse";
