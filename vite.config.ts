@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { saveMapPlugin } from "./vite-plugin-save-map";
@@ -6,6 +7,10 @@ import { saveMapPlugin } from "./vite-plugin-save-map";
 export default defineConfig({
     plugins: [react(), saveMapPlugin()],
     base: "/bg2-threejs/",
+    test: {
+        include: ["tests/**/*.test.ts"],
+        environment: "node",
+    },
     build: {
         outDir: "dist",
         assetsDir: "assets",

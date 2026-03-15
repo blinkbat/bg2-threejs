@@ -119,6 +119,7 @@ export interface EnemyHealSkill {
 }
 
 export interface EnemySpawnSkill {
+    name: string;            // Cooldown key name (e.g. "spawn")
     spawnType: EnemyType;    // What enemy type to spawn
     cooldown: number;        // ms between spawns
     maxSpawns: number;       // Maximum active spawns at once

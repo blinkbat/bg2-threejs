@@ -6,7 +6,7 @@ import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, EnemyChargeAttack, EnemyStats, DamageType } from "../core/types";
 import { COLORS } from "../core/constants";
 import { getUnitStats } from "../game/units";
-import { accumulateDelta } from "../core/gameClock";
+import { accumulateDelta, getGameTime } from "../core/gameClock";
 import { calculateDamageWithCrit, rollHit, getEffectiveArmor, logAoeHit } from "../combat/combatMath";
 import { applyDamageToUnit, buildDamageContext, createAnimatedRing } from "../combat/damageEffects";
 import { soundFns } from "../audio";
@@ -90,7 +90,6 @@ export function startChargeAttack(
     unit: Unit,
     g: UnitGroup,
     chargeAttack: EnemyChargeAttack,
-    now: number,
     addLog: (text: string, color?: string) => void
 ): void {
     // Don't start if already charging
@@ -108,11 +107,11 @@ export function startChargeAttack(
         chargeAttack.crossLength
     );
 
-    // Store charge state
+    // Store charge state (use getGameTime for pause-safe timing)
     activeCharges.set(unit.id, {
         unitId: unit.id,
         elapsedTime: 0,
-        lastUpdateTime: now,
+        lastUpdateTime: getGameTime(),
         chargeTime: chargeAttack.chargeTime,
         damage: chargeAttack.damage,
         damageType: chargeAttack.damageType,
@@ -163,8 +162,8 @@ export function processChargeAttacks(
             return;
         }
 
-        // Accumulate elapsed time (pause-safe)
-        accumulateDelta(charge, now);
+        // Accumulate elapsed time (pause-safe via getGameTime)
+        accumulateDelta(charge, getGameTime());
 
         const progress = Math.min(charge.elapsedTime / charge.chargeTime, 1);
 

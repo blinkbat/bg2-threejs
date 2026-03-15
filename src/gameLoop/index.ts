@@ -20,13 +20,14 @@ import type { ActionQueue } from "../input";
 import { hasStatusEffect, isUnitAlive, getCooldownMultiplier, setSkillCooldown, isCooldownReady, getEffectiveSpeedMultiplier, applyStatusEffect } from "../combat/combatMath";
 import { getAliveUnitsInRange } from "../combat/damageEffects";
 import { isEnemyKiting, clearEnemyKiting } from "../game/enemyState";
+import { ACID_AURA_SKILL_NAME } from "./acidTiles";
 
 // Re-export from split modules
 export { updateDamageTexts, updateHitFlash, updatePoisonVisuals, updateEnergyShieldVisuals, updateFogOfWar, resetFogCache, updateSpriteFacing, updateAncestorGhostVisuals, resetSpriteFacing } from "./visuals";
 export { processStatusEffects } from "./statusEffects";
-export { updateProjectiles, pruneStaleVolleys } from "./projectiles";
+export { updateProjectiles, pruneStaleVolleys, resetProjectileState } from "./projectiles";
 export { updateSwingAnimations } from "./swingAnimations";
-export { processAcidTiles, createAcidPool } from "./acidTiles";
+export { processAcidTiles, createAcidPool, ACID_AURA_SKILL_NAME } from "./acidTiles";
 export { processSanctuaryTiles } from "./sanctuaryTiles";
 export { processHolyTiles } from "./holyTiles";
 export { processSmokeTiles } from "./smokeTiles";
@@ -253,8 +254,8 @@ export function updateUnitAI(
     let targetX = g.position.x, targetZ = g.position.z;
 
     if (g.userData.attackTarget && !hasDivineLattice) {
-        const targetG = unitsRef[g.userData.attackTarget];
-        const targetU = getUnitById(g.userData.attackTarget);
+        let targetG = unitsRef[g.userData.attackTarget];
+        let targetU = getUnitById(g.userData.attackTarget);
 
         if (targetG && targetU && isUnitAlive(targetU, defeatedThisFrame)) {
             targetX = targetG.position.x;
@@ -272,6 +273,20 @@ export function updateUnitAI(
                 // Don't return - druid can still attack/move after casting vines
             }
 
+            // Re-validate target after vines (which deals damage and could defeat it)
+            targetU = getUnitById(g.userData.attackTarget!);
+            if (!targetU || !isUnitAlive(targetU, defeatedThisFrame)) {
+                g.userData.attackTarget = null;
+                return;
+            }
+            targetG = unitsRef[g.userData.attackTarget!];
+            if (!targetG) {
+                g.userData.attackTarget = null;
+                return;
+            }
+            targetX = targetG.position.x;
+            targetZ = targetG.position.z;
+
             const unitRange = getAttackRange(unit);
 
             // Use hitbox-aware range: if closest edge of target is in range, we can attack
@@ -288,7 +303,7 @@ export function updateUnitAI(
                 // Acid slugs prioritize acid aura over attacking - check if aura is ready
                 let skipAttackForAcidAura = false;
                 if (!isPlayer && 'acidAura' in data && data.acidAura) {
-                    const auraCooldownKey = `${unit.id}-acidAura`;
+                    const auraCooldownKey = `${unit.id}-${ACID_AURA_SKILL_NAME}`;
                     const auraCooldownEnd = skillCooldowns[auraCooldownKey]?.end || 0;
                     if (now >= auraCooldownEnd) {
                         skipAttackForAcidAura = true;

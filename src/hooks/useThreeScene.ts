@@ -9,7 +9,8 @@ import { getCurrentArea, getCurrentAreaId } from "../game/areas";
 import type { Unit, FogTexture, Projectile, SwingAnimation, DamageText, UnitGroup, SanctuaryTile, HolyTile, SmokeTile, FireTile } from "../core/types";
 import type { AcidTile, LootBag } from "../core/types";
 import { createScene, updateChestStates, updateCamera, type DoorMesh, type SecretDoorMesh, type ChestMeshData } from "../rendering/scene";
-import { resetFogCache, resetSpriteFacing, clearChargeAttacks, clearFireBreaths, clearCurses, clearGlares, clearLeaps, clearTentacles, clearShadePhases, clearSubmergedKrakens, resetLootBagIds } from "../gameLoop";
+import { disposeLoadedTextures } from "../rendering/scene/units";
+import { resetFogCache, resetSpriteFacing, clearChargeAttacks, clearFireBreaths, clearCurses, clearGlares, clearLeaps, clearTentacles, clearShadePhases, clearSubmergedKrakens, resetLootBagIds, resetProjectileState } from "../gameLoop";
 import { resetAllBroodMotherScreeches, resetAllEnemyKiteCooldowns, resetAllEnemyKitingState } from "../game/enemyState";
 import { resetAllMovementState } from "../ai/movement";
 import { resetBarks } from "../combat/barks";
@@ -265,6 +266,7 @@ export function useThreeScene({
         // Reset module-level caches and runtime state for this scene mount
         resetFogCache();
         resetSpriteFacing();
+        disposeLoadedTextures();
         resetAllBroodMotherScreeches();
         resetAllEnemyKiteCooldowns();
         resetAllEnemyKitingState();
@@ -293,6 +295,7 @@ export function useThreeScene({
         clearTentacles();
         clearShadePhases();
         clearSubmergedKrakens();
+        resetProjectileState();
         gameRefs.lootBags = [];
         resetLootBagIds();
         gameRefs.damageTexts = [];

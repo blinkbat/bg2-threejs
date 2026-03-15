@@ -4,6 +4,7 @@ import {
     FolderOpen,
     RotateCcw,
     Keyboard,
+    BookOpen,
     Volume2,
     VolumeX,
     HelpCircle,
@@ -15,6 +16,7 @@ interface MenuModalProps {
     onClose: () => void;
     onShowControls: () => void;
     onShowHelp: () => void;
+    onShowGlossary: () => void;
     onRestart: () => void;
     onSaveClick: () => void;
     onLoadClick: () => void;
@@ -24,6 +26,7 @@ export function MenuModal({
     onClose,
     onShowControls,
     onShowHelp,
+    onShowGlossary,
     onRestart,
     onSaveClick,
     onLoadClick
@@ -52,6 +55,11 @@ export function MenuModal({
 
     const handleHelp = () => {
         onShowHelp();
+        onClose();
+    };
+
+    const handleGlossary = () => {
+        onShowGlossary();
         onClose();
     };
 
@@ -89,6 +97,21 @@ export function MenuModal({
                     </div>
                 </div>
 
+                {/* Info Section */}
+                <div className="menu-section">
+                    <div className="menu-section-title">Info</div>
+                    <div className="menu-buttons">
+                        <button className="menu-btn" onClick={handleHelp}>
+                            <HelpCircle size={18} />
+                            <span>Help</span>
+                        </button>
+                        <button className="menu-btn" onClick={handleGlossary}>
+                            <BookOpen size={18} />
+                            <span>Glossary</span>
+                        </button>
+                    </div>
+                </div>
+
                 {/* Settings Section */}
                 <div className="menu-section">
                     <div className="menu-section-title">Settings</div>
@@ -100,10 +123,6 @@ export function MenuModal({
                         <button className="menu-btn" onClick={handleControls}>
                             <Keyboard size={18} />
                             <span>Controls</span>
-                        </button>
-                        <button className="menu-btn" onClick={handleHelp}>
-                            <HelpCircle size={18} />
-                            <span>Help</span>
                         </button>
                     </div>
                 </div>

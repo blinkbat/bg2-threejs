@@ -268,6 +268,14 @@ export function hasStatusEffect(unit: Unit, effectType: StatusEffectType): boole
     return unit.statusEffects?.some(e => e.type === effectType) ?? false;
 }
 
+export type IncapacitatingStatus = "stunned" | "sleep";
+
+export function getIncapacitatingStatus(unit: Unit): IncapacitatingStatus | null {
+    if (hasStatusEffect(unit, "stunned")) return "stunned";
+    if (hasStatusEffect(unit, "sleep")) return "sleep";
+    return null;
+}
+
 /**
  * Apply the slowed debuff to a unit (1.5x cooldowns, 0.5x move speed for 10s).
  */

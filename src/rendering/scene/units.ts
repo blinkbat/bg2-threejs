@@ -422,18 +422,6 @@ function buildUnitGroup(
         billboards.push(plane);
         unitMesh = plane;
         billboard = plane;
-    } else if (unit.enemyType === "kraken_tentacle") {
-        // Tentacles use cone geometry (pointing up)
-        const coneMat = new THREE.MeshStandardMaterial({
-            color: unitColor,
-            metalness: 0.3,
-            roughness: 0.6
-        });
-        const cone = new THREE.Mesh(new THREE.ConeGeometry(boxW * 0.5, boxH * 1.5, 8), coneMat);
-        cone.position.y = boxH * 0.75;
-        cone.userData.unitId = unit.id;
-        group.add(cone);
-        unitMesh = cone;
     } else {
         // Fallback meshes for units without sprites.
         const fallbackMat = new THREE.MeshStandardMaterial({

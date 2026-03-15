@@ -173,6 +173,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         moveSpeed: 0.5,  // 50% slower than normal - lumbering
         expReward: 36,
         spawnSkill: {
+            name: "spawn",
             spawnType: "broodling",
             cooldown: 4000,  // Spawn every 4 seconds when in combat
             maxSpawns: 3,    // Max 3 broodlings at once

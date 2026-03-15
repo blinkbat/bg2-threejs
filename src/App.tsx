@@ -7,7 +7,7 @@ import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import * as THREE from "three";
 
 // Constants & Types
-import { BUFF_TICK_INTERVAL, getSkillTextColor, setDebugSpeedMultiplier } from "./core/constants";
+import { BUFF_TICK_INTERVAL, COLORS, getSkillTextColor, setDebugSpeedMultiplier } from "./core/constants";
 import type { Unit, Skill, CombatLogEntry, SelectionBox, CharacterStats, StatusEffect, EquipmentSlot, LootPickupRequest } from "./core/types";
 
 // Game Logic
@@ -37,7 +37,7 @@ import { createUnitsForArea as createAreaUnits, type PersistedPlayer } from "./a
 
 // Extracted modules
 import { executeSkill, type SkillExecutionContext } from "./combat/skills";
-import { applyPoison, applyStatusEffect } from "./combat/combatMath";
+import { applyPoison, applyStatusEffect, getIncapacitatingStatus } from "./combat/combatMath";
 import { setupTargetingMode } from "./input";
 import { createLightningPillar } from "./combat/damageEffects";
 import { spawnLootBag } from "./gameLoop";
@@ -68,6 +68,7 @@ import { FormationIndicator } from "./components/FormationIndicator";
 import { HpBarsOverlay } from "./components/HpBarsOverlay";
 import { loadFormationOrder, saveFormationOrder } from "./hooks/formationStorage";
 import { ControlsModal } from "./components/ControlsModal";
+import { GlossaryModal } from "./components/GlossaryModal";
 import { HelpModal } from "./components/HelpModal";
 import { SaveLoadModal } from "./components/SaveLoadModal";
 import { DialogModal } from "./components/DialogModal";
@@ -122,6 +123,7 @@ interface GameProps {
     onAreaTransition: (players: PersistedPlayer[], targetArea: AreaId, spawn: { x: number; z: number }, direction?: "north" | "south" | "east" | "west") => void;
     onShowControls: (options?: { chainAction?: MenuChainAction }) => void;
     onShowHelp: (options?: { chainAction?: MenuChainAction }) => void;
+    onShowGlossary: (options?: { chainAction?: MenuChainAction }) => void;
     onCloseInfoModal: () => void;
     infoModalOpen: boolean;
     saveLoadOpen: boolean;
@@ -304,7 +306,7 @@ function getPrimaryStatusLabel(statusEffects: StatusEffect[] | undefined): strin
 // =============================================================================
 
 function Game({
-    onRestart, onAreaTransition, onShowControls, onShowHelp, onCloseInfoModal, infoModalOpen, saveLoadOpen,
+    onRestart, onAreaTransition, onShowControls, onShowHelp, onShowGlossary, onCloseInfoModal, infoModalOpen, saveLoadOpen,
     menuOpen, jukeboxOpen,
     persistedPlayers, spawnPoint, spawnDirection, onSaveClick, onLoadClick,
     onOpenMenu, onCloseMenu, onOpenJukebox, onCloseJukebox, onOpenEquipment, onCloseEquipment,
@@ -857,6 +859,15 @@ function Game({
 
         const userUnit = unitsStateRef.current.find(u => u.id === unitId);
         if (!userUnit || userUnit.hp <= 0) return false;
+        const incapacitatingStatus = getIncapacitatingStatus(userUnit);
+        if (incapacitatingStatus === "stunned") {
+            addLog(`${UNIT_DATA[unitId]?.name ?? "Unknown"} cannot act while stunned.`, COLORS.stunnedText);
+            return false;
+        }
+        if (incapacitatingStatus === "sleep") {
+            addLog(`${UNIT_DATA[unitId]?.name ?? "Unknown"} cannot act while asleep.`, COLORS.sleepText);
+            return false;
+        }
         const inventory = getPartyInventory();
         if (!hasInInventory(inventory, itemId, 1)) return false;
 
@@ -866,7 +877,7 @@ function Game({
             const newHp = Math.min(maxHp, userUnit.hp + item.value);
             const healed = newHp - userUnit.hp;
             updateUnit(setUnits, unitId, { hp: newHp });
-            addLog(`${UNIT_DATA[unitId].name} uses ${item.name}, restoring ${healed} HP.`, "#22c55e");
+            addLog(`${UNIT_DATA[unitId]?.name ?? "Unknown"} uses ${item.name}, restoring ${healed} HP.`, "#22c55e");
 
             const poisonChanceOnUse = item.poisonChanceOnUse ?? 0;
             const isPoisonImmune = userUnit.statusEffects?.some(effect => effect.type === "cleansed") ?? false;
@@ -877,7 +888,7 @@ function Game({
                         ? applyPoison(u, unitId, now, item.poisonDamageOnUse)
                         : u
                 )));
-                addLog(`${UNIT_DATA[unitId].name} is poisoned by ${item.name}!`, "#7cba7c");
+                addLog(`${UNIT_DATA[unitId]?.name ?? "Unknown"} is poisoned by ${item.name}!`, "#7cba7c");
             }
         } else if (item.effect === "mana") {
             const maxMana = getEffectiveMaxMana(unitId, userUnit);
@@ -886,7 +897,7 @@ function Game({
             const newMana = Math.min(maxMana, currentMana + item.value);
             const restored = newMana - currentMana;
             updateUnit(setUnits, unitId, { mana: newMana });
-            addLog(`${UNIT_DATA[unitId].name} uses ${item.name}, restoring ${restored} Mana.`, "#3b82f6");
+            addLog(`${UNIT_DATA[unitId]?.name ?? "Unknown"} uses ${item.name}, restoring ${restored} Mana.`, "#3b82f6");
         } else if (item.effect === "cleanse") {
             const hasPoison = userUnit.statusEffects?.some(effect => effect.type === "poison") ?? false;
             const alreadyCleansed = userUnit.statusEffects?.some(effect => effect.type === "cleansed") ?? false;
@@ -909,7 +920,7 @@ function Game({
                 const withoutPoison = (u.statusEffects ?? []).filter(effect => effect.type !== "poison");
                 return { ...u, statusEffects: applyStatusEffect(withoutPoison, cleansedEffect) };
             }));
-            addLog(`${UNIT_DATA[unitId].name} uses ${item.name}, cleansing poison and gaining immunity.`, "#ecf0f1");
+            addLog(`${UNIT_DATA[unitId]?.name ?? "Unknown"} uses ${item.name}, cleansing poison and gaining immunity.`, "#ecf0f1");
         } else if (item.effect === "exp") {
             const newExp = (userUnit.exp ?? 0) + item.value;
             const currentLevel = userUnit.level ?? 1;
@@ -928,7 +939,7 @@ function Game({
                         stats: u.stats ?? { strength: 0, dexterity: 0, vitality: 0, intelligence: 0, faith: 0 }
                     };
                 }));
-                addLog(`${UNIT_DATA[unitId].name} reads ${item.name} and levels up!`, "#ffd700");
+                addLog(`${UNIT_DATA[unitId]?.name ?? "Unknown"} reads ${item.name} and levels up!`, "#ffd700");
                 soundFns.playLevelUp();
                 if (sceneState.scene) {
                     const unitGroup = sceneState.unitGroups[unitId];
@@ -938,7 +949,7 @@ function Game({
                 }
             } else {
                 updateUnit(setUnits, unitId, { exp: newExp });
-                addLog(`${UNIT_DATA[unitId].name} reads ${item.name}, gaining ${item.value} Experience.`, "#9b59b6");
+                addLog(`${UNIT_DATA[unitId]?.name ?? "Unknown"} reads ${item.name}, gaining ${item.value} Experience.`, "#9b59b6");
             }
         } else if (item.effect === "revive") {
             // Revive a dead ally - targetId is required
@@ -959,7 +970,7 @@ function Game({
             // Make the unit visible and reposition
             reviveUnitVisual(sceneState.unitGroups, targetId, reviveX, reviveZ);
 
-            addLog(`${UNIT_DATA[unitId].name} uses ${item.name}, reviving ${UNIT_DATA[targetId].name}!`, "#ffd700");
+            addLog(`${UNIT_DATA[unitId]?.name ?? "Unknown"} uses ${item.name}, reviving ${UNIT_DATA[targetId]?.name ?? "Unknown"}!`, "#ffd700");
             soundFns.playHeal();
             if (sceneState.scene) {
                 createLightningPillar(sceneState.scene, reviveX, reviveZ, { color: "#ffd700", duration: 600, radius: 0.3, height: 10 });
@@ -986,15 +997,22 @@ function Game({
         );
     }, [getSkillContext, sceneState.unitGroups, gameRefs, executeConsumable]);
 
+    const getPauseRuntimeRefs = useCallback(() => ({
+        pauseStartTimeRef,
+        actionCooldownRef,
+        actionQueueRef,
+        moveStartRef: { current: gameRefs.current.moveStart }
+    }), [gameRefs]);
+
     useEffect(() => {
         if (!anyMenuOpen || pausedRef.current) return;
         togglePause(
-            { pauseStartTimeRef, actionCooldownRef },
+            getPauseRuntimeRefs(),
             { pausedRef },
             { setPaused, setSkillCooldowns },
             doProcessQueue
         );
-    }, [anyMenuOpen, doProcessQueue]);
+    }, [anyMenuOpen, doProcessQueue, getPauseRuntimeRefs]);
 
     const closeDialog = useCallback((options?: { resumeIfForced?: boolean }) => {
         const resumeIfForced = options?.resumeIfForced ?? true;
@@ -1005,14 +1023,14 @@ function Game({
 
         if (resumeIfForced && dialogPauseForcedRef.current && pausedRef.current) {
             togglePause(
-                { pauseStartTimeRef, actionCooldownRef },
+                getPauseRuntimeRefs(),
                 { pausedRef },
                 { setPaused, setSkillCooldowns },
                 doProcessQueue
             );
         }
         dialogPauseForcedRef.current = false;
-    }, [doProcessQueue]);
+    }, [doProcessQueue, getPauseRuntimeRefs]);
 
     const closeLootPickupModal = useCallback((options?: { resumeIfForced?: boolean }) => {
         const resumeIfForced = options?.resumeIfForced ?? true;
@@ -1021,20 +1039,20 @@ function Game({
 
         if (resumeIfForced && lootPickupPauseForcedRef.current && pausedRef.current) {
             togglePause(
-                { pauseStartTimeRef, actionCooldownRef },
+                getPauseRuntimeRefs(),
                 { pausedRef },
                 { setPaused, setSkillCooldowns },
                 doProcessQueue
             );
         }
         lootPickupPauseForcedRef.current = false;
-    }, [doProcessQueue]);
+    }, [doProcessQueue, getPauseRuntimeRefs]);
 
     const openLootPickupModal = useCallback((request: LootPickupRequest) => {
         if (!pausedRef.current) {
             lootPickupPauseForcedRef.current = true;
             togglePause(
-                { pauseStartTimeRef, actionCooldownRef },
+                getPauseRuntimeRefs(),
                 { pausedRef },
                 { setPaused, setSkillCooldowns },
                 doProcessQueue
@@ -1048,7 +1066,7 @@ function Game({
             sourceLabel: request.sourceLabel,
             entries: request.entries
         });
-    }, [doProcessQueue]);
+    }, [doProcessQueue, getPauseRuntimeRefs]);
 
     const takeLootPickup = useCallback(() => {
         const onTake = lootPickupOnTakeRef.current;
@@ -1091,7 +1109,7 @@ function Game({
         if (!pausedRef.current) {
             dialogPauseForcedRef.current = true;
             togglePause(
-                { pauseStartTimeRef, actionCooldownRef },
+                getPauseRuntimeRefs(),
                 { pausedRef },
                 { setPaused, setSkillCooldowns },
                 doProcessQueue
@@ -1104,7 +1122,7 @@ function Game({
         setDialogTypedChars(0);
         dialogPreviousTypedCharsRef.current = 0;
         dialogLastBlipAtRef.current = 0;
-    }, [addLog, doProcessQueue, playtestSkipDialogs]);
+    }, [addLog, doProcessQueue, getPauseRuntimeRefs, playtestSkipDialogs]);
 
     const skipDialogTyping = useCallback(() => {
         if (!currentDialogNode) return;
@@ -1226,6 +1244,10 @@ function Game({
             onShowHelp({ chainAction });
             return;
         }
+        if (action.menuId === "glossary") {
+            onShowGlossary({ chainAction });
+            return;
+        }
         if (action.menuId === "save_game") {
             onSaveClick({ chainAction });
             return;
@@ -1245,7 +1267,7 @@ function Game({
         if (action.menuId === "jukebox") {
             onOpenJukebox({ chainAction });
         }
-    }, [onShowControls, onShowHelp, onSaveClick, onLoadClick, onOpenEquipment, onOpenMenu, onOpenJukebox, runSpendNightEvent]);
+    }, [onShowControls, onShowHelp, onShowGlossary, onSaveClick, onLoadClick, onOpenEquipment, onOpenMenu, onOpenJukebox, runSpendNightEvent]);
     runDialogUiActionRef.current = runDialogUiAction;
 
     const closeDialogWithAction = useCallback((action: DialogUiAction | undefined) => {
@@ -1846,7 +1868,7 @@ function Game({
         const caster = units.find(u => u.id === casterId);
         if (!caster || caster.hp <= 0 || (caster.mana ?? 0) < skill.manaCost) return;
         if (skill.isCantrip && (caster.cantripUses?.[skill.name] ?? 0) <= 0) {
-            addLog(`${UNIT_DATA[casterId].name}: No uses remaining!`, getSkillTextColor(skill.type, skill.damageType));
+            addLog(`${UNIT_DATA[casterId]?.name ?? "Unknown"}: No uses remaining!`, getSkillTextColor(skill.type, skill.damageType));
             return;
         }
         const casterG = sceneState.unitGroups[casterId];
@@ -1858,7 +1880,7 @@ function Game({
             if (paused || Date.now() < cooldownEnd) {
                 actionQueueRef.current[casterId] = { type: "skill", skill, targetX: casterG.position.x, targetZ: casterG.position.z };
                 setQueuedActions(prev => [...prev.filter(q => q.unitId !== casterId), { unitId: casterId, skillName: skill.name }]);
-                addLog(`${UNIT_DATA[casterId].name} queues ${skill.name} (${paused ? "queued" : "on cooldown"})`, getSkillTextColor(skill.type, skill.damageType));
+                addLog(`${UNIT_DATA[casterId]?.name ?? "Unknown"} queues ${skill.name} (${paused ? "queued" : "on cooldown"})`, getSkillTextColor(skill.type, skill.damageType));
             } else {
                 executeSkill(skillCtx, casterId, skill, casterG.position.x, casterG.position.z);
             }
@@ -1929,12 +1951,12 @@ function Game({
             return;
         }
         togglePause(
-            { pauseStartTimeRef, actionCooldownRef },
+            getPauseRuntimeRefs(),
             { pausedRef },
             { setPaused, setSkillCooldowns },
             doProcessQueue
         );
-    }, [doProcessQueue]);
+    }, [doProcessQueue, getPauseRuntimeRefs]);
 
     const clampUnitToEffectiveCaps = useCallback((unitId: number) => {
         updateUnitWith(setUnits, unitId, u => ({
@@ -1951,7 +1973,7 @@ function Game({
 
         const item = getItem(itemId);
         if (item) {
-            addLog(`${UNIT_DATA[unitId].name} equips ${item.name}.`, "#58a6ff");
+            addLog(`${UNIT_DATA[unitId]?.name ?? "Unknown"} equips ${item.name}.`, "#58a6ff");
         }
     }, [addLog, clampUnitToEffectiveCaps]);
 
@@ -1964,7 +1986,7 @@ function Game({
         const itemId = transaction.previousEquipment[slot];
         const item = itemId ? getItem(itemId) : undefined;
         if (item) {
-            addLog(`${UNIT_DATA[unitId].name} unequips ${item.name}.`, "#58a6ff");
+            addLog(`${UNIT_DATA[unitId]?.name ?? "Unknown"} unequips ${item.name}.`, "#58a6ff");
         }
     }, [addLog, clampUnitToEffectiveCaps]);
 
@@ -1978,7 +2000,7 @@ function Game({
         const movedItem = movedItemId ? getItem(movedItemId) : undefined;
         if (movedItem) {
             addLog(
-                `${UNIT_DATA[unitId].name} moves ${movedItem.name} (${fromSlot} -> ${toSlot}).`,
+                `${UNIT_DATA[unitId]?.name ?? "Unknown"} moves ${movedItem.name} (${fromSlot} -> ${toSlot}).`,
                 "#58a6ff"
             );
         }
@@ -2001,7 +2023,7 @@ function Game({
         if (paused || now < cooldownEnd) {
             actionQueueRef.current[userId] = { type: "consumable", itemId };
             setQueuedActions(prev => [...prev.filter(q => q.unitId !== userId), { unitId: userId, skillName: item.name }]);
-            addLog(`${UNIT_DATA[userId].name} prepares ${item.name}... (${paused ? "queued" : "on cooldown"})`, "#888");
+            addLog(`${UNIT_DATA[userId]?.name ?? "Unknown"} prepares ${item.name}... (${paused ? "queued" : "on cooldown"})`, "#888");
             return;
         }
         executeConsumable(userId, itemId);
@@ -2018,7 +2040,7 @@ function Game({
         // Validate target is a dead ally
         const deadAlly = units.find(u => u.id === deadAllyId && u.team === "player" && u.hp <= 0);
         if (!deadAlly) {
-            addLog(`${UNIT_DATA[userId].name}: Must target a fallen ally!`, "#888");
+            addLog(`${UNIT_DATA[userId]?.name ?? "Unknown"}: Must target a fallen ally!`, "#888");
             return;
         }
 
@@ -2027,7 +2049,7 @@ function Game({
         if (paused || now < cooldownEnd) {
             actionQueueRef.current[userId] = { type: "consumable", itemId, targetId: deadAllyId };
             setQueuedActions(prev => [...prev.filter(q => q.unitId !== userId), { unitId: userId, skillName: item.name }]);
-            addLog(`${UNIT_DATA[userId].name} prepares ${item.name}... (${paused ? "queued" : "on cooldown"})`, "#888");
+            addLog(`${UNIT_DATA[userId]?.name ?? "Unknown"} prepares ${item.name}... (${paused ? "queued" : "on cooldown"})`, "#888");
             return;
         }
         executeConsumable(userId, itemId, deadAllyId);
@@ -2454,7 +2476,7 @@ function Game({
             <div style={{ position: "absolute", top: 10, right: 10, color: "var(--ui-color-text-dim)", fontSize: 11, opacity: 0.6 }}>{fps} fps</div>
 
             {/* UI Components */}
-            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onShowControls={onShowControls} onShowHelp={onShowHelp} onRestart={onRestart} onSaveClick={onSaveClick} onLoadClick={onLoadClick} debug={debug} onToggleDebug={handleToggleDebug} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} onStatBoost={handleStatBoost} onTogglePlaytestUnlockAllSkills={handleTogglePlaytestUnlockAllSkills} playtestUnlockAllSkillsEnabled={playtestSettings.unlockAllSkills} onTogglePlaytestSkipDialogs={handleTogglePlaytestSkipDialogs} playtestSkipDialogsEnabled={playtestSettings.skipDialogs} onToggleFastMove={handleToggleFastMove} fastMoveEnabled={fastMove} lightingTuning={lightingTuning} onUpdateLightingTuning={handleUpdateLightingTuning} onResetLightingTuning={handleResetLightingTuning} lightingTuningOutput={lightingTuningOutput} menuOpen={menuOpen} jukeboxOpen={jukeboxOpen} onOpenMenu={onOpenMenu} onCloseMenu={onCloseMenu} onOpenJukebox={onOpenJukebox} onCloseJukebox={onCloseJukebox} otherModalOpen={otherModalOpen} hasSelection={selectedIds.length > 0} />
+            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onShowControls={onShowControls} onShowHelp={onShowHelp} onShowGlossary={onShowGlossary} onRestart={onRestart} onSaveClick={onSaveClick} onLoadClick={onLoadClick} debug={debug} onToggleDebug={handleToggleDebug} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} onStatBoost={handleStatBoost} onTogglePlaytestUnlockAllSkills={handleTogglePlaytestUnlockAllSkills} playtestUnlockAllSkillsEnabled={playtestSettings.unlockAllSkills} onTogglePlaytestSkipDialogs={handleTogglePlaytestSkipDialogs} playtestSkipDialogsEnabled={playtestSettings.skipDialogs} onToggleFastMove={handleToggleFastMove} fastMoveEnabled={fastMove} lightingTuning={lightingTuning} onUpdateLightingTuning={handleUpdateLightingTuning} onResetLightingTuning={handleResetLightingTuning} lightingTuningOutput={lightingTuningOutput} menuOpen={menuOpen} jukeboxOpen={jukeboxOpen} onOpenMenu={onOpenMenu} onCloseMenu={onCloseMenu} onOpenJukebox={onOpenJukebox} onCloseJukebox={onCloseJukebox} otherModalOpen={otherModalOpen} hasSelection={selectedIds.length > 0} />
             <CombatLog log={combatLog} />
             <FormationIndicator units={playerUnits} formationOrder={formationOrder} />
             <div className="bottom-bar-container">
@@ -2521,7 +2543,7 @@ const STARTUP_SCENE_FADE_IN_DURATION = 1400; // ms for initial black-to-scene fa
 const STARTUP_FANFARE_LEAD_IN_MS = 550;
 const DIALOG_TRIGGER_POLL_MS = 120;
 type StartupPhase = "title" | "booting" | "running";
-type InfoModalKind = "controls" | "help";
+type InfoModalKind = "controls" | "help" | "glossary";
 
 function shouldSkipGameIntro(): boolean {
     return loadPlaytestSettings().skipDialogs;
@@ -2590,6 +2612,7 @@ export default function App() {
             const id = action.menuId;
             if (id === "controls" || id === "startup_controls") { setOpenInfoModal("controls"); }
             else if (id === "help") { setOpenInfoModal("help"); }
+            else if (id === "glossary") { setOpenInfoModal("glossary"); }
             else if (id === "save_game") { setSaveLoadMode("save"); setShowSaveLoad(true); }
             else if (id === "load_game") { setSaveLoadMode("load"); setShowSaveLoad(true); }
             else if (id === "equipment") { /* equipment needs a unit — skip if no obvious target */ }
@@ -2619,6 +2642,11 @@ export default function App() {
         setOpenInfoModal("help");
     }, []);
 
+    const handleShowGlossary = useCallback((options?: { chainAction?: MenuChainAction }) => {
+        pendingChainActionRef.current = options?.chainAction ?? null;
+        setOpenInfoModal("glossary");
+    }, []);
+
     const handleCloseInfoModal = useCallback(() => {
         pendingChainActionRef.current = null;
         setOpenInfoModal(null);
@@ -2630,6 +2658,11 @@ export default function App() {
     }, [executePendingChain]);
 
     const handleConfirmControlsModal = useCallback(() => {
+        setOpenInfoModal(null);
+        executePendingChain();
+    }, [executePendingChain]);
+
+    const handleCloseGlossaryModal = useCallback(() => {
         setOpenInfoModal(null);
         executePendingChain();
     }, [executePendingChain]);
@@ -2904,7 +2937,7 @@ export default function App() {
             {gameMounted && (
                 <Game
                     key={gameKey} onRestart={handleFullRestart} onAreaTransition={handleAreaTransition}
-                    onShowControls={handleShowControls} onShowHelp={handleShowHelp} onCloseInfoModal={handleCloseInfoModal}
+                    onShowControls={handleShowControls} onShowHelp={handleShowHelp} onShowGlossary={handleShowGlossary} onCloseInfoModal={handleCloseInfoModal}
                     infoModalOpen={openInfoModal !== null} saveLoadOpen={showSaveLoad}
                     menuOpen={menuOpen} jukeboxOpen={jukeboxOpen}
                     persistedPlayers={persistedPlayers} spawnPoint={spawnPoint} spawnDirection={spawnDirection}
@@ -2923,6 +2956,7 @@ export default function App() {
             )}
             {gameMounted && openInfoModal === "controls" && <ControlsModal onClose={handleCloseInfoModal} onConfirm={handleConfirmControlsModal} />}
             {gameMounted && openInfoModal === "help" && <HelpModal onClose={handleCloseHelpModal} />}
+            {gameMounted && openInfoModal === "glossary" && <GlossaryModal onClose={handleCloseGlossaryModal} />}
             {gameMounted && showSaveLoad && <SaveLoadModal mode={saveLoadMode} onClose={closeSaveLoadModal} onSave={handleSave} onLoad={handleLoad} onDelete={handleDelete} currentState={savePreviewState} saveDisabledReason={saveDisabledReason} />}
             {startupPhase === "title" && (
                 <div className="startup-title-screen">

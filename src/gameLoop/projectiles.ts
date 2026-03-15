@@ -116,6 +116,7 @@ interface VolleyStats {
 }
 const magicWaveVolleys: Map<number, VolleyStats> = new Map();
 const VOLLEY_TIMEOUT_MS = 30_000;
+const ARMED_TRAP_TIMEOUT_MS = 30_000;
 
 /** Remove stale volley entries that were never fully resolved (e.g., caster died mid-volley). */
 export function pruneStaleVolleys(now: number): void {
@@ -124,6 +125,12 @@ export function pruneStaleVolleys(now: number): void {
             magicWaveVolleys.delete(id);
         }
     }
+}
+
+/** Clear all projectile module-level state (for area transitions). */
+export function resetProjectileState(): void {
+    projectileBuckets.clear();
+    magicWaveVolleys.clear();
 }
 
 function getOrCreateMagicWaveVolley(
@@ -705,6 +712,7 @@ export function updateProjectiles(
                 // Check if landed
                 if (t >= 1) {
                     trapProj.isLanded = true;
+                    trapProj.armedAt = now;
                     proj.mesh.position.y = 0.15;  // Settle on ground
                     proj.mesh.rotation.x = 0;
                     proj.mesh.rotation.z = 0;
@@ -722,6 +730,12 @@ export function updateProjectiles(
             }
 
             updateArmedTrapVisual(proj.mesh);
+
+            // Remove trap if it has been armed too long without triggering
+            if (trapProj.armedAt !== undefined && now - trapProj.armedAt > ARMED_TRAP_TIMEOUT_MS) {
+                disposeProjectile(scene, proj);
+                return false;
+            }
 
             // Trap is on the ground - check for enemy triggers
             const trapCaster = getUnitById(trapProj.attackerId);

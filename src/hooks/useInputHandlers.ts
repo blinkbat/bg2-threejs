@@ -60,6 +60,7 @@ export interface InputGameRefs {
     zoomLevel: number;
     targetRingTimers: Record<number, number>;
     moveMarkerStart: number;
+    moveStart: Record<number, { time: number; x: number; z: number }>;
     paths: Record<number, { x: number; z: number }[]>;
     actionCooldown: Record<number, number>;
     visibility: number[][];
@@ -974,7 +975,12 @@ export function useInputHandlers({
                     return;
                 }
                 togglePause(
-                    { pauseStartTimeRef: stateRefs.pauseStartTimeRef, actionCooldownRef: mutableRefs.actionCooldownRef },
+                    {
+                        pauseStartTimeRef: stateRefs.pauseStartTimeRef,
+                        actionCooldownRef: mutableRefs.actionCooldownRef,
+                        actionQueueRef: mutableRefs.actionQueueRef,
+                        moveStartRef: { current: gameRefs.current.moveStart }
+                    },
                     { pausedRef: stateRefs.pausedRef },
                     { setPaused: setters.setPaused, setSkillCooldowns: setters.setSkillCooldowns },
                     callbacks.processActionQueue

@@ -221,6 +221,62 @@ describe("executeSkill", () => {
             );
         });
 
+        it("returns false and logs when caster is stunned", () => {
+            const caster = makeUnit({
+                id: 1,
+                hp: 30,
+                mana: 50,
+                statusEffects: [{
+                    type: "stunned",
+                    duration: 5000,
+                    tickInterval: 100,
+                    timeSinceTick: 0,
+                    lastUpdateTime: 0,
+                    damagePerTick: 0,
+                    sourceId: 1,
+                }],
+            });
+            const casterG = makeUnitGroup();
+            const ctx = makeCtx([caster], { 1: casterG });
+            const skill: Skill = { name: "Fireball", manaCost: 15, cooldown: 5000, type: "damage", targetType: "aoe", range: 10, damageRange: [8, 14], damageType: "fire" };
+
+            const result = executeSkill(ctx, 1, skill, 10, 10);
+
+            expect(result).toBe(false);
+            expect(ctx.addLog).toHaveBeenCalledWith(
+                expect.stringContaining("cannot act while stunned"),
+                expect.any(String)
+            );
+        });
+
+        it("returns false and logs when caster is asleep", () => {
+            const caster = makeUnit({
+                id: 1,
+                hp: 30,
+                mana: 50,
+                statusEffects: [{
+                    type: "sleep",
+                    duration: 5000,
+                    tickInterval: 100,
+                    timeSinceTick: 0,
+                    lastUpdateTime: 0,
+                    damagePerTick: 0,
+                    sourceId: 1,
+                }],
+            });
+            const casterG = makeUnitGroup();
+            const ctx = makeCtx([caster], { 1: casterG });
+            const skill: Skill = { name: "Fireball", manaCost: 15, cooldown: 5000, type: "damage", targetType: "aoe", range: 10, damageRange: [8, 14], damageType: "fire" };
+
+            const result = executeSkill(ctx, 1, skill, 10, 10);
+
+            expect(result).toBe(false);
+            expect(ctx.addLog).toHaveBeenCalledWith(
+                expect.stringContaining("cannot act while asleep"),
+                expect.any(String)
+            );
+        });
+
         it("returns false and logs when not enough mana", () => {
             const caster = makeUnit({ id: 1, hp: 30, mana: 5 });
             const casterG = makeUnitGroup();

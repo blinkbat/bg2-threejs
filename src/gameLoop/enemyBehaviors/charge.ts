@@ -22,7 +22,7 @@ export function tryStartChargeAttack(ctx: ChargeContext): boolean {
     }
 
     // Start the charge attack
-    startChargeAttack(scene, unit, g, chargeAttack, now, addLog);
+    startChargeAttack(scene, unit, g, chargeAttack, addLog);
 
     setSkillCooldown(setSkillCooldowns, chargeKey, chargeAttack.cooldown, now, unit);
 

@@ -760,7 +760,7 @@ function parseLightLine(line: string, lights: AreaLight[]) {
 }
 
 const DIALOG_SPEAKER_IDS = new Set<string>(Object.keys(DIALOG_SPEAKERS));
-const DIALOG_MENU_IDS = new Set<AreaDialogMenuId>(["controls", "startup_controls", "help", "equipment", "save_game", "load_game", "menu", "jukebox"]);
+const DIALOG_MENU_IDS = new Set<AreaDialogMenuId>(["controls", "startup_controls", "help", "glossary", "equipment", "save_game", "load_game", "menu", "jukebox"]);
 const DIALOG_EVENT_IDS = new Set<AreaDialogEventId>(["spend_the_night"]);
 
 function isDialogSpeakerId(value: string): value is DialogSpeakerId {

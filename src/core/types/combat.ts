@@ -153,6 +153,7 @@ export interface TrapProjectile extends BaseProjectile {
     flightDuration: number;   // ms for the arc flight
     arcHeight: number;        // Peak height of the arc
     isLanded: boolean;        // Whether trap has landed and is active
+    armedAt?: number;         // Timestamp when trap landed and became armed
 }
 
 export interface FireballProjectile extends BaseProjectile {

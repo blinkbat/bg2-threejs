@@ -42,6 +42,7 @@ export type TriggerListFilter = "all" | "needs_fix" | "ready" | "wip";
 export const DIALOG_END_MENU_OPTIONS: Array<{ value: AreaDialogMenuId | AreaDialogEventId; label: string }> = [
     { value: "controls", label: "Controls" },
     { value: "help", label: "Help" },
+    { value: "glossary", label: "Glossary" },
     { value: "equipment", label: "Equipment" },
     { value: "save_game", label: "Save Menu" },
     { value: "load_game", label: "Load Menu" },
@@ -83,6 +84,7 @@ export function createUniqueId(base: string, existingIds: Set<string>): string {
 export const MENU_NODE_OPTIONS: Array<{ value: AreaDialogMenuId | AreaDialogEventId; label: string }> = [
     { value: "controls", label: "Controls" },
     { value: "help", label: "Help" },
+    { value: "glossary", label: "Glossary" },
     { value: "equipment", label: "Equipment" },
     { value: "save_game", label: "Save Menu" },
     { value: "load_game", label: "Load Menu" },
@@ -131,7 +133,7 @@ export function createDefaultDialog(dialogId: string): AreaDialogDefinition {
 }
 
 const VALID_MENU_IDS: Set<string> = new Set<AreaDialogMenuId>([
-    "controls", "startup_controls", "help", "equipment", "save_game", "load_game", "menu", "jukebox",
+    "controls", "startup_controls", "help", "glossary", "equipment", "save_game", "load_game", "menu", "jukebox",
 ]);
 
 export function toDialogEndAction(menuId: string): AreaDialogUiAction | undefined {

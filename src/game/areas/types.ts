@@ -38,7 +38,7 @@ export interface AreaDialogChoice {
     onDialogEndAction?: AreaDialogUiAction;
 }
 
-export type AreaDialogMenuId = "controls" | "startup_controls" | "help" | "equipment" | "save_game" | "load_game" | "menu" | "jukebox";
+export type AreaDialogMenuId = "controls" | "startup_controls" | "help" | "glossary" | "equipment" | "save_game" | "load_game" | "menu" | "jukebox";
 export type AreaDialogEventId = "spend_the_night";
 
 export type AreaMenuChainAction =

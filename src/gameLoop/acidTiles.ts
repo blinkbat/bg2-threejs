@@ -15,6 +15,8 @@ import { isUnitAlive, setSkillCooldown } from "../combat/combatMath";
 // CONSTANTS
 // =============================================================================
 
+export const ACID_AURA_SKILL_NAME = "acidAura";
+
 const ACID_MESH_CONFIG = {
     color: COLORS.acid,
     opacity: 0.5,
@@ -216,7 +218,7 @@ interface AcidAuraContext {
 export function tryCreateAcidAura(stats: EnemyStats, ctx: AcidAuraContext): boolean {
     if (!stats.acidAura) return false;
 
-    const auraCooldownKey = `${ctx.unitId}-acidAura`;
+    const auraCooldownKey = `${ctx.unitId}-${ACID_AURA_SKILL_NAME}`;
     const auraCooldownEnd = ctx.skillCooldowns[auraCooldownKey]?.end ?? 0;
 
     if (ctx.now < auraCooldownEnd) return false;

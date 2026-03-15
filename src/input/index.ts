@@ -9,7 +9,7 @@ import { findPath } from "../ai/pathfinding";
 import { UNIT_DATA } from "../game/playerUnits";
 import { pauseGameClock, resumeGameClock } from "../core/gameClock";
 import { executeSkill, clearTargetingMode, type SkillExecutionContext } from "../combat/skills";
-import { hasStatusEffect } from "../combat/combatMath";
+import { getIncapacitatingStatus } from "../combat/combatMath";
 import { getFormationPositions } from "../game/formation";
 import { sortUnitsByFormationOrder } from "../game/formationOrder";
 import { MOVE_SPEED, getSkillTextColor } from "../core/constants";
@@ -73,7 +73,7 @@ export type ActionQueue = Record<number, QueuedAction>;
 // =============================================================================
 
 export function togglePause(
-    refs: Pick<InputRefs, "pauseStartTimeRef" | "actionCooldownRef">,
+    refs: Pick<InputRefs, "pauseStartTimeRef" | "actionCooldownRef" | "actionQueueRef" | "moveStartRef">,
     state: Pick<InputState, "pausedRef">,
     setters: Pick<InputSetters, "setPaused" | "setSkillCooldowns">,
     processActionQueue: (defeatedThisFrame: Set<number>) => void
@@ -87,7 +87,7 @@ export function togglePause(
         resumeGameClock();
         if (refs.pauseStartTimeRef.current !== null) {
             const pausedDuration = Date.now() - refs.pauseStartTimeRef.current;
-            adjustCooldownsForPause(refs.actionCooldownRef, setters.setSkillCooldowns, pausedDuration);
+            adjustTimersForPause(refs.actionCooldownRef, refs.actionQueueRef, refs.moveStartRef, setters.setSkillCooldowns, pausedDuration);
         }
         refs.pauseStartTimeRef.current = null;
         // Create new defeatedThisFrame for unpause processing (not part of main game loop)
@@ -99,14 +99,24 @@ export function togglePause(
     }
 }
 
-function adjustCooldownsForPause(
+function adjustTimersForPause(
     actionCooldownRef: React.MutableRefObject<Record<number, number>>,
+    actionQueueRef: React.MutableRefObject<ActionQueue>,
+    moveStartRef: React.MutableRefObject<Record<number, { time: number; x: number; z: number }>>,
     setSkillCooldowns: React.Dispatch<React.SetStateAction<Record<string, { end: number; duration: number }>>>,
     pausedDuration: number
 ): void {
     // Adjust ref cooldowns
     Object.keys(actionCooldownRef.current).forEach(key => {
         actionCooldownRef.current[Number(key)] += pausedDuration;
+    });
+    Object.values(moveStartRef.current).forEach(moveStart => {
+        moveStart.time += pausedDuration;
+    });
+    Object.values(actionQueueRef.current).forEach(action => {
+        if (action.type === "move" && action.notBefore !== undefined) {
+            action.notBefore += pausedDuration;
+        }
     });
     // Adjust React state cooldowns for UI
     setSkillCooldowns(prev => {
@@ -362,9 +372,9 @@ export function processActionQueue(
     for (const [unitIdStr, action] of Object.entries(actionQueueRef.current)) {
         const unitId = Number(unitIdStr);
 
-        // Skip stunned units — don't execute or remove, wait for stun to wear off
+        // Skip incapacitated units — don't execute or remove, wait for the effect to wear off
         const unit = skillCtx.unitsStateRef.current.find(u => u.id === unitId);
-        if (unit && hasStatusEffect(unit, "stunned")) continue;
+        if (unit && getIncapacitatingStatus(unit) !== null) continue;
 
         if (action.type === "skill") {
             const caster = skillCtx.unitsStateRef.current.find(u => u.id === unitId);

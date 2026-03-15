@@ -47,6 +47,8 @@ const STATUS_EFFECT_TYPES: ReadonlySet<StatusEffectType> = new Set([
     "blind",
     "vanquishing_light",
     "enraged",
+    "feared",
+    "blood_marked",
 ]);
 
 const SUMMON_TYPES: ReadonlySet<SummonType> = new Set([
@@ -231,6 +233,15 @@ function sanitizeStatusEffect(raw: unknown): StatusEffect | null {
     if (auraDamageTypeRaw && isDamageType(auraDamageTypeRaw)) {
         effect.auraDamageType = auraDamageTypeRaw;
     }
+
+    const fearSourceX = readFiniteNumber(raw, "fearSourceX");
+    if (fearSourceX !== undefined) effect.fearSourceX = fearSourceX;
+
+    const fearSourceZ = readFiniteNumber(raw, "fearSourceZ");
+    if (fearSourceZ !== undefined) effect.fearSourceZ = fearSourceZ;
+
+    const lifestealPercent = readFiniteNumber(raw, "lifestealPercent");
+    if (lifestealPercent !== undefined) effect.lifestealPercent = lifestealPercent;
 
     return effect;
 }

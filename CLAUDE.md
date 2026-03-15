@@ -13,7 +13,7 @@
 ## Hard Guardrails
 
 - **Enemy registries:** `EnemyType` union + `ENEMY_STATS` keys strictly alphabetical.
-- **HP/MP clamping:** `getEffectiveMaxHp(unit.id, unit)` / `getEffectiveMaxMana(unit.id, unit)` from `src/game/statBonuses.ts`.
+- **HP/MP clamping:** `getEffectiveMaxHp(unit.id, unit)` / `getEffectiveMaxMana(unit.id, unit)` from `src/game/playerUnits.ts`.
 - **Equipment changes:** transactional via `equipItemForCharacter` / `unequipItemForCharacter` / `moveEquippedItemForCharacter` from `src/game/equipmentState.ts`, then clamp HP/MP.
 - **Combat stats:** read from `src/game/equipmentState.ts` centralized helpers, never raw slot reads.
 - **Basic attacks:** no pre-baked stat bonuses in payload; applied at combat/projectile runtime.
@@ -60,11 +60,12 @@ Renderer (updates.ts) reads UnitGroups for fog/transparency/animations
 
 - `units.ts` — `getUnitStats(unit)` universal stat lookup, `getAttackRange()`
 - `enemyStats.ts` — `ENEMY_STATS` registry (alphabetical keys = editor dropdown order)
-- `playerUnits.ts` — `UNIT_DATA` player unit definitions
+- `playerUnits.ts` — `UNIT_DATA` player unit definitions, `getEffectiveMaxHp()`, `getEffectiveMaxMana()`
 - `skills.ts` — `SKILLS` object with all player skill definitions
 - `equipment.ts` — Item slot logic
 - `equipmentState.ts` — **Single source of truth** for equipment-derived stats/effects; transaction APIs
-- `statBonuses.ts` — Stat-derived bonuses, `getEffectiveMaxHp()`, `getEffectiveMaxMana()`
+- `statBonuses.ts` — Stat-derived bonuses (strength, dexterity, intelligence, faith scaling)
+- `progression.ts` — Level-up constants (`LEVEL_UP_HP`, `LEVEL_UP_MANA`, `LEVEL_UP_STAT_POINTS`, `LEVEL_UP_SKILL_POINTS`)
 - `items.ts` — `ITEMS` master registry, `getItem()`, `getItemOrThrow()`
 - `unitQuery.ts` — `getUnitById()`, `findNearestUnit()`, `getAliveUnits()` (cached)
 - `geometry.ts` — `distance()`, `isWithinGrid()`, `worldToCell()`, `normalizeAngle()`
@@ -79,7 +80,7 @@ Renderer (updates.ts) reads UnitGroups for fog/transparency/animations
 ### `src/combat/` — Damage pipeline, skills, math
 
 - `damageEffects.ts` — `applyDamageToUnit()` **single damage pipeline** (shields, split, death, XP)
-- `combatMath.ts` — `rollHit()`, `rollDamage()`, `rollCrit()`, `isBlockedByFrontShield()`
+- `combatMath.ts` — `calculateDamageWithCrit()`, `applyArmor()`, `checkEnemyDefenses()`, `hasStatusEffect()`
 - `skills/index.ts` — `executeSkill()` router + all `execute*Skill()` implementations
 - `skills/damage.ts` | `support.ts` | `utility.ts` | `movement.ts` — Skill category modules
 - `skills/helpers.ts` — Shared skill execution helpers
@@ -94,17 +95,20 @@ Renderer (updates.ts) reads UnitGroups for fog/transparency/animations
 - `swingAnimations.ts` — Melee swing visual sequences
 - `enemyBehaviors/` — One file per behavior; `try*(ctx): boolean` pattern
 - `enemyBehaviors/index.ts` — Barrel export for all behaviors + guards (`isEnemyUntargetable`, etc.)
-- `acidTiles.ts` | `holyTiles.ts` | `sanctuaryTiles.ts` — Ground effect tile processing
+- `enemyAttack.ts` — `executeEnemyBasicAttack()` ranged/melee enemy attacks
+- `enemySkills.ts` — `executeEnemySwipe()`, `executeEnemyHeal()` enemy skill execution
+- `acidTiles.ts` | `holyTiles.ts` | `sanctuaryTiles.ts` | `fireTiles.ts` | `smokeTiles.ts` — Ground effect tile processing
 - `fireBreath.ts` | `necromancerCurse.ts` | `constructCharge.ts` — Boss mechanic processing
 - `lootBags.ts` — Loot bag drop/pickup logic
 - `tileUtils.ts` — Shared tile mesh creation/fade helpers
 
 ### `src/ai/` — Pathfinding, movement, targeting
 
-- `pathfinding.ts` — A* `findPath()`, `updateVisibility()`, `hasLineOfSight()`, `isBlocked()`
+- `pathfinding.ts` — A* `findPath()`, `updateVisibility()`, `isBlocked()`, `clearPathCache()`
 - `movement.ts` — `createPathToTarget()`, stuck detection, path recalculation
 - `targeting.ts` — `tryKite()` ranged kiting logic
 - `unitAI.ts` — `runTargetingPhase()`, `runMovementPhase()`, `runPathFollowingPhase()`, avoidance
+- `spatialCache.ts` — `buildUnitSpatialFrame()` for O(1) spatial lookups per frame
 
 ### `src/rendering/` — Three.js scene management
 
@@ -116,7 +120,7 @@ Renderer (updates.ts) reads UnitGroups for fog/transparency/animations
 - `scene/sceneSetupHelpers.ts` — Render order constants, shadow defaults
 - `scene/types.ts` — `SceneRefs`, `DoorMesh`, `ChestMeshData`
 - `range.ts` — `isInRange()` **required for all range checks** (hitbox-aware), `getUnitRadius()`
-- `disposal.ts` — `createBasicMesh()`, `createTexturedMesh()`, disposal scheduling
+- `disposal.ts` — `disposeBasicMesh()`, `disposeGeometry()`, disposal scheduling
 
 ### `src/hooks/` — React hooks connecting systems
 
@@ -167,7 +171,7 @@ Renderer (updates.ts) reads UnitGroups for fog/transparency/animations
 
 | Need | Use | Location |
 |------|-----|----------|
-| Range check | `isInRange(a, b, range)` | `rendering/range.ts` |
+| Range check | `isInRange(ax, az, tx, tz, targetRadius, range)` | `rendering/range.ts` |
 | Unit stats | `getUnitStats(unit)` | `game/units.ts` |
 | Apply damage | `applyDamageToUnit(...)` | `combat/damageEffects.ts` |
 | Update one unit | `updateUnit(setUnits, id, partial)` | `core/stateUtils.ts` |
@@ -175,7 +179,7 @@ Renderer (updates.ts) reads UnitGroups for fog/transparency/animations
 | Pause-aware time | `getGameTime()` | `core/gameClock.ts` |
 | Logic timestamps | `Date.now()` | built-in |
 | Next unit ID | `getNextUnitId()` | `core/unitIds.ts` |
-| HP/MP caps | `getEffectiveMaxHp(id, unit)` | `game/statBonuses.ts` |
+| HP/MP caps | `getEffectiveMaxHp(id, unit)` | `game/playerUnits.ts` |
 | Equipment transaction | `equipItemForCharacter(...)` | `game/equipmentState.ts` |
 | Current area | `getCurrentArea()` | `game/areas/index.ts` |
 | Find path | `findPath(...)` | `ai/pathfinding.ts` |
@@ -188,7 +192,7 @@ Renderer (updates.ts) reads UnitGroups for fog/transparency/animations
 
 - `isInRange()` for **all** range checks (hitbox-aware).
 - `getGameTime()` for animations; `Date.now()` for cooldowns/status timestamps.
-- `updateUnit()`/`updateUnitWith()` for targeted unit state writes.
+- `updateUnit()`/`updateUnitWith()` for skill-level state writes; `applySyncedUnitsUpdate()` for game loop logic needing ref sync.
 - Enemy behaviors: `try*(ctx): boolean`; cooldown keys: `${unitId}-${skillName}`.
 - Flat ground-plane arcs (`RingGeometry` + `rotation.x = -PI/2`): `rotation.z = -facingAngle` where `facingAngle = atan2(dz, dx)`.
 
@@ -219,10 +223,11 @@ Renderer (updates.ts) reads UnitGroups for fog/transparency/animations
 
 ### Add a New Status Effect
 
-1. Type in `src/core/types/units.ts`.
+1. Type in `src/core/types/units.ts` (`StatusEffectType` union + optional fields on `StatusEffect`).
 2. Constants/colors in `src/core/constants.ts`.
 3. Process in `src/gameLoop/statusEffects.ts`.
-4. Visuals in `src/gameLoop/visuals.ts`.
+4. Visuals in `src/gameLoop/visuals.ts` (if effect has a visual indicator).
+5. Add to `STATUS_EFFECT_TYPES` set in `src/game/saveLoad/sanitize.ts` (+ sanitize any new fields).
 
 ### Add a New Projectile Type
 

@@ -24,7 +24,7 @@ import type { SpawnContext } from "./types";
 export function trySpawnMinion(ctx: SpawnContext): boolean {
     const { unit, g, enemyStats, spawnSkill, unitsState, unitsRef, scene, skillCooldowns, setSkillCooldowns, setUnits, addLog, now } = ctx;
 
-    const spawnCooldownKey = `${unit.id}-spawn`;
+    const spawnCooldownKey = `${unit.id}-${spawnSkill.name}`;
     const spawnCooldownEnd = skillCooldowns[spawnCooldownKey]?.end ?? 0;
 
     const playerInSight = isPlayerVisible(g, enemyStats, unitsState, unitsRef);

@@ -19,7 +19,7 @@ import {
     hasReachedWaypoint, checkIfStuck, handleGiveUp, clearJitterTracking,
     canRecalculatePath, recordPathRecalculation
 } from "./movement";
-import { getUnitRadius } from "../rendering/range";
+import { getUnitRadius, isInRange } from "../rendering/range";
 import { clampToGrid, distanceBetween } from "../game/geometry";
 import { getAttackRange } from "../game/units";
 import { ENEMY_STATS } from "../game/enemyStats";
@@ -450,12 +450,18 @@ function acquireTarget(ctx: TargetingContext, targetId: number): boolean {
         return false;
     }
 
-    const dist = distanceBetween(g.position, targetG.position);
+    const { unitsState } = ctx;
     const attackRange = getAttackRange(unit);
+    const targetUnit = unitsState.find(u => u.id === targetId);
+    if (!targetUnit) {
+        pathsRef[unit.id] = [];
+        return false;
+    }
+    const targetRadius = getUnitRadius(targetUnit);
 
     // Hold position: only engage targets already in range
     if (isPlayer && unit.holdPosition) {
-        if (dist < attackRange) {
+        if (isInRange(g.position.x, g.position.z, targetG.position.x, targetG.position.z, targetRadius, attackRange)) {
             g.userData.attackTarget = targetId;
             pathsRef[unit.id] = [];
             return true;
@@ -465,7 +471,7 @@ function acquireTarget(ctx: TargetingContext, targetId: number): boolean {
 
     g.userData.attackTarget = targetId;
 
-    if (dist < attackRange) {
+    if (isInRange(g.position.x, g.position.z, targetG.position.x, targetG.position.z, targetRadius, attackRange)) {
         // Already in attack range, no path needed
         pathsRef[unit.id] = [];
         return true;
@@ -785,11 +791,14 @@ export function runPathFollowingPhase(ctx: PathContext): { targetX: number; targ
         if (hasReachedWaypoint(g.position.x, g.position.z, targetX, targetZ)) {
             path.shift();
             moveStartRef[unit.id] = { time: now, x: g.position.x, z: g.position.z };
-            if (path.length === 0 && isPlayerMoveCommand) {
-                delete moveStartRef[unit.id];
-                delete g.userData.moveTarget;
-                delete g.userData.formationRegroupAttempted;
-                delete g.userData.formationRamp;
+            if (path.length === 0) {
+                clearJitterTracking(unit.id);
+                if (isPlayerMoveCommand) {
+                    delete moveStartRef[unit.id];
+                    delete g.userData.moveTarget;
+                    delete g.userData.formationRegroupAttempted;
+                    delete g.userData.formationRamp;
+                }
             }
         }
 

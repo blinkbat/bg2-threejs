@@ -447,7 +447,7 @@ function getUnitDisplayName(unit: Unit): string {
         return UNIT_DATA[unit.id]?.name ?? "Unknown";
     }
     if (unit.enemyType) {
-        return ENEMY_STATS[unit.enemyType].name;
+        return ENEMY_STATS[unit.enemyType]?.name ?? "Unknown";
     }
     return "Unknown";
 }
@@ -552,11 +552,11 @@ export function applyDamageToUnit(
             const defenderGroup = unitsRef[candidate.id];
             if (!defenderGroup) continue;
 
+            if (!isInRange(defenderGroup.position.x, defenderGroup.position.z, targetGroup.position.x, targetGroup.position.z, getUnitRadius(candidate), HIGHLAND_DEFENSE_RANGE)) continue;
             const distance = Math.hypot(
                 defenderGroup.position.x - targetGroup.position.x,
                 defenderGroup.position.z - targetGroup.position.z
             );
-            if (distance > HIGHLAND_DEFENSE_RANGE) continue;
 
             if (!chosenDefender || distance < chosenDefender.distance) {
                 chosenDefender = { unit: candidate, group: defenderGroup, distance, remaining };
@@ -800,7 +800,7 @@ export function applyDamageToUnit(
         }
         // Award XP to all living player units when an enemy dies
         if (targetState && targetState.team === "enemy" && targetState.enemyType) {
-            const expReward = ENEMY_STATS[targetState.enemyType].expReward;
+            const expReward = ENEMY_STATS[targetState.enemyType]?.expReward ?? 0;
             if (expReward > 0) {
                 // Compute level ups BEFORE state update using ref
                 const currentUnits = unitsStateRef.current ?? [];

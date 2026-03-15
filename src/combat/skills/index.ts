@@ -6,7 +6,7 @@ import * as THREE from "three";
 import type { Skill } from "../../core/types";
 import { COLORS } from "../../core/constants";
 import { UNIT_DATA, getEffectiveUnitData } from "../../game/playerUnits";
-import { hasStatusEffect } from "../combatMath";
+import { getIncapacitatingStatus, hasStatusEffect } from "../combatMath";
 
 // Re-export types
 export type { SkillExecutionContext } from "./types";
@@ -39,6 +39,15 @@ export function executeSkill(
     const casterG = ctx.unitsRef.current[casterId];
 
     if (!caster || !casterG || caster.hp <= 0) return false;
+    const incapacitatingStatus = getIncapacitatingStatus(caster);
+    if (incapacitatingStatus === "stunned") {
+        ctx.addLog(`${UNIT_DATA[casterId].name} cannot act while stunned.`, COLORS.stunnedText);
+        return false;
+    }
+    if (incapacitatingStatus === "sleep") {
+        ctx.addLog(`${UNIT_DATA[casterId].name} cannot act while asleep.`, COLORS.sleepText);
+        return false;
+    }
     if (hasStatusEffect(caster, "divine_lattice")) {
         ctx.addLog(`${UNIT_DATA[casterId].name} cannot act while in Divine Lattice.`, COLORS.divineLatticeText);
         return false;
