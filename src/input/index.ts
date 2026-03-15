@@ -751,17 +751,18 @@ export function handleTargetingClick(
     // Clicked on ground (for AOE skills)
     if (hit.object.name !== "ground") return false;
 
+    // Unit-targeted skills can't target ground
+    if (skill.targetType === "ally" || skill.targetType === "enemy" || skill.targetType === "unit") {
+        addLog(`${UNIT_DATA[casterId].name}: Must target a unit!`, "#888");
+        return true;
+    }
+
     const targetX = hit.point.x;
     const targetZ = hit.point.z;
     const dist = distanceToPoint(casterG.position, targetX, targetZ);
 
     if (dist > skill.range) {
         addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, "#888");
-        return true;
-    }
-
-    if (skill.targetType === "unit") {
-        addLog(`${UNIT_DATA[casterId].name}: Must target a unit!`, "#888");
         return true;
     }
 

@@ -1,10 +1,13 @@
 // =============================================================================
-// MELEE SWING ANIMATIONS
+// MELEE SWING ANIMATIONS + ATTACK BUMP
 // =============================================================================
 
 import * as THREE from "three";
 import type { UnitGroup, SwingAnimation } from "../core/types";
 import { SWING_DURATION, SWING_ARC_ANGLE, SWING_START_OFFSET, SWING_DOT_ORBIT_RADIUS } from "../core/constants";
+
+const BUMP_DURATION = 200;  // ms total (forward + back)
+const BUMP_DISTANCE = 0.25; // world units forward
 // Shared geometry for all swing dots
 const swingDotGeo = new THREE.SphereGeometry(0.08, 8, 8);
 
@@ -64,4 +67,58 @@ export function updateSwingAnimations(
         }
         return true;
     });
+}
+
+// =============================================================================
+// ATTACK BUMP — nudge unit toward target then back
+// =============================================================================
+
+export function startAttackBump(attackerG: UnitGroup, targetX: number, targetZ: number, now: number): void {
+    const dx = targetX - attackerG.position.x;
+    const dz = targetZ - attackerG.position.z;
+    const len = Math.sqrt(dx * dx + dz * dz);
+    if (len < 0.01) return;
+    attackerG.userData.attackBump = {
+        startTime: now,
+        dx: (dx / len) * BUMP_DISTANCE,
+        dz: (dz / len) * BUMP_DISTANCE,
+        appliedX: 0,
+        appliedZ: 0
+    };
+}
+
+/** Remove any currently applied bump offset so AI/pathfinding sees true position. */
+export function removeBumpOffsets(unitsRef: Record<number, UnitGroup>): void {
+    for (const key in unitsRef) {
+        const g = unitsRef[key];
+        const bump = g.userData.attackBump;
+        if (!bump || (bump.appliedX === 0 && bump.appliedZ === 0)) continue;
+        g.position.x -= bump.appliedX;
+        g.position.z -= bump.appliedZ;
+        bump.appliedX = 0;
+        bump.appliedZ = 0;
+    }
+}
+
+/** Apply bump offsets after AI has run. */
+export function applyBumpOffsets(unitsRef: Record<number, UnitGroup>, now: number): void {
+    for (const key in unitsRef) {
+        const g = unitsRef[key];
+        const bump = g.userData.attackBump;
+        if (!bump) continue;
+
+        const elapsed = now - bump.startTime;
+        if (elapsed >= BUMP_DURATION) {
+            g.userData.attackBump = undefined;
+            continue;
+        }
+
+        // Triangle wave: forward first half, back second half
+        const t = elapsed / BUMP_DURATION;
+        const scale = t < 0.5 ? t * 2 : (1 - t) * 2;
+        bump.appliedX = bump.dx * scale;
+        bump.appliedZ = bump.dz * scale;
+        g.position.x += bump.appliedX;
+        g.position.z += bump.appliedZ;
+    }
 }

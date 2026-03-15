@@ -415,7 +415,7 @@ export const SKILLS: Record<string, Skill> = {
         cooldown: 5000,
         type: "revive",
         targetType: "ally",
-        range: 8,
+        range: 999,
         damageType: "holy"
     },
     qiFocus: {

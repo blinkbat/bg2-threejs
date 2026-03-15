@@ -26,7 +26,7 @@ import { ACID_AURA_SKILL_NAME } from "./acidTiles";
 export { updateDamageTexts, updateHitFlash, updatePoisonVisuals, updateEnergyShieldVisuals, updateFogOfWar, resetFogCache, updateSpriteFacing, updateAncestorGhostVisuals, resetSpriteFacing } from "./visuals";
 export { processStatusEffects } from "./statusEffects";
 export { updateProjectiles, pruneStaleVolleys, resetProjectileState } from "./projectiles";
-export { updateSwingAnimations } from "./swingAnimations";
+export { updateSwingAnimations, startAttackBump, removeBumpOffsets, applyBumpOffsets } from "./swingAnimations";
 export { processAcidTiles, createAcidPool, ACID_AURA_SKILL_NAME } from "./acidTiles";
 export { processSanctuaryTiles } from "./sanctuaryTiles";
 export { processHolyTiles } from "./holyTiles";

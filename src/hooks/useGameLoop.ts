@@ -57,7 +57,9 @@ import {
     updateSubmergedKrakens,
     processShadePhases,
     updateSpriteFacing,
-    updateAncestorGhostVisuals
+    updateAncestorGhostVisuals,
+    removeBumpOffsets,
+    applyBumpOffsets
 } from "../gameLoop";
 import { createAnimatedRing, handleUnitDefeat, spawnDamageNumber } from "../combat/damageEffects";
 import type { ActionQueue } from "../input";
@@ -889,6 +891,9 @@ export function useGameLoop({
                     }
                 }
 
+                // Remove visual bump offsets before AI reads positions
+                removeBumpOffsets(unitGroups);
+
                 // Update pathfinding obstacles
                 const spatialFrame = buildUnitSpatialFrame(
                     currentUnits,
@@ -924,6 +929,12 @@ export function useGameLoop({
 
                 // Update swing animations
                 refs.swingAnimations = updateSwingAnimations(refs.swingAnimations, scene, now);
+
+                // Sprite facing reads true positions (before bump offsets)
+                updateSpriteFacing(currentUnits, unitGroups);
+
+                // Re-apply bump offsets for rendering
+                applyBumpOffsets(unitGroups, now);
                 aiMs = performance.now() - aiStart;
             }
 
@@ -957,8 +968,6 @@ export function useGameLoop({
             const lightLodMs = performance.now() - sectionStart;
 
             sectionStart = performance.now();
-            // Sprite facing direction (before billboard rotation so scale is current)
-            updateSpriteFacing(currentUnits, unitGroups);
             updateAncestorGhostVisuals(currentUnits, unitGroups, unitMeshes, now);
 
             // Billboard rotation

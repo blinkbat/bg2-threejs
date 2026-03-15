@@ -38,6 +38,9 @@ import koboldWarriorSpriteUrl from "../../assets/kobold_warrior.png";
 import koboldWitchDoctorSpriteUrl from "../../assets/kobold_witch_doctor.png";
 import krakenTentacleSpriteUrl from "../../assets/kraken-tentacle.png";
 import krakenBodySpriteUrl from "../../assets/kraken-body.png";
+import necromancerSpriteUrl from "../../assets/necromancer.png";
+import skeletonWarriorSpriteUrl from "../../assets/skeleton_warrior.png";
+import spineSpitterSpriteUrl from "../../assets/spine_spitter.png";
 import undeadKnightSpriteUrl from "../../assets/undead_knight.png";
 
 // =============================================================================
@@ -88,6 +91,9 @@ type SpriteTextureKey =
     | "kobold_witch_doctor"
     | "kraken_tentacle"
     | "kraken_body"
+    | "necromancer"
+    | "skeleton_warrior"
+    | "spine_spitter"
     | "undead_knight";
 
 const SPRITE_TEXTURE_URLS: Record<SpriteTextureKey, string> = {
@@ -118,6 +124,9 @@ const SPRITE_TEXTURE_URLS: Record<SpriteTextureKey, string> = {
     kobold_witch_doctor: koboldWitchDoctorSpriteUrl,
     kraken_tentacle: krakenTentacleSpriteUrl,
     kraken_body: krakenBodySpriteUrl,
+    necromancer: necromancerSpriteUrl,
+    skeleton_warrior: skeletonWarriorSpriteUrl,
+    spine_spitter: spineSpitterSpriteUrl,
     undead_knight: undeadKnightSpriteUrl,
 };
 
@@ -193,7 +202,10 @@ function resolveSpriteTextureKey(unit: Unit): SpriteTextureKey | null {
         kobold_witch_doctor: "kobold_witch_doctor",
         kraken_tentacle: "kraken_tentacle",
         magma_imp: "fire_imp",
+        necromancer: "necromancer",
+        skeleton_warrior: "skeleton_warrior",
         occultist_pygmy: "occultist_pygmy",
+        spine_spitter: "spine_spitter",
         undead_knight: "undead_knight",
         wandering_shade: "wandering_shade",
     };
@@ -302,6 +314,9 @@ const ENEMY_SPRITE_TEMPLATES: Record<string, SpriteTemplate> = {
     magma_imp: { textureKey: "fire_imp", width: 128, height: 128, color: 0xf68b5a, spriteHeight: 1.85, shadowSize: 0.42 }, // lighter orange-red; larger sprite
     occultist_pygmy: { textureKey: "occultist_pygmy", width: 128, height: 128, color: 0x8d4a07, spriteHeight: 1.0, shadowSize: 0.32 },
     kraken_tentacle: { textureKey: "kraken_tentacle", width: 80, height: 128, color: 0x924adb, spriteHeight: 2.0 },
+    necromancer: { textureKey: "necromancer", width: 385, height: 620, color: 0xb08bb7, spriteHeight: 3.1, shadowSize: 0.56 },
+    skeleton_warrior: { textureKey: "skeleton_warrior", width: 439, height: 556, color: 0xc8c078, spriteHeight: 2.15, shadowSize: 0.48 },
+    spine_spitter: { textureKey: "spine_spitter", width: 363, height: 264, color: 0xc5a15c, spriteHeight: 1.35, offsetY: -0.12, shadowSize: 0.46 },
     undead_knight: { textureKey: "undead_knight", width: 105, height: 128, color: 0x6f8bb5, spriteHeight: 3.5, shadowSize: 0.7 }, // less saturated blue
     wandering_shade: { textureKey: "wandering_shade", width: 128, height: 128, color: 0x748ec9, spriteHeight: 2.05, shadowSize: 0.44, opacity: 0.68 },
 };
@@ -601,4 +616,3 @@ export function addUnitToScene(
         shieldIndicators[unit.id] = result.shieldIndicator;
     }
 }
-

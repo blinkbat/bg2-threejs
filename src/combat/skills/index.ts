@@ -17,6 +17,7 @@ import { executeAoeSkill, executeMeleeSkill, executeSmiteSkill, executeRangedSki
 import { executeHealSkill, executeMassHealSkill, executeManaTransferSkill, executeBuffSkill, executeAoeBuffSkill, executeEnergyShieldSkill, executeCleanseSkill, executeRestorationSkill, executeReviveSkill, executeSunStanceSkill, executePangolinStanceSkill, executeHighlandDefenseSkill, executeDivineLatticeSkill, executeVanquishingLightSkill } from "./support";
 import { executeTauntSkill, executeDebuffSkill, executeBloodMarkSkill, executeElorasGraspSkill, executeTrapSkill, executeSanctuarySkill, executeSummonSkill, executeTurnUndeadSkill, executeSmokeBombSkill, executeIntimidateSkill, executeFivePointPalmSkill, executeDimMakSkill } from "./utility";
 import { executeDodgeSkill, executeBodySwapSkill, executeDisplacementSkill } from "./movement";
+import { startAttackBump } from "../../gameLoop/swingAnimations";
 
 // =============================================================================
 // MAIN SKILL ROUTER
@@ -55,6 +56,11 @@ export function executeSkill(
     if ((caster.mana ?? 0) < skill.manaCost) {
         ctx.addLog(`${UNIT_DATA[casterId].name}: Not enough mana!`, COLORS.logNeutral);
         return false;
+    }
+
+    // Attack bump toward target (skip self-targeted skills)
+    if (skill.targetType !== "self") {
+        startAttackBump(casterG, targetX, targetZ, Date.now());
     }
 
     if (skill.type === "cleave" && skill.targetType === "self") {

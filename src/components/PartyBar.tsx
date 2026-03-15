@@ -267,9 +267,15 @@ function PartyBarComponent({
         ].filter(Boolean).join(" ");
 
         const hasUnspentPoints = (unit.statPoints ?? 0) > 0 || (unit.skillPoints ?? 0) > 0;
+        const unspentHint = hasUnspentPoints
+            ? [
+                (unit.statPoints ?? 0) > 0 ? `${unit.statPoints} stat point${unit.statPoints! > 1 ? "s" : ""}` : "",
+                (unit.skillPoints ?? 0) > 0 ? `${unit.skillPoints} skill point${unit.skillPoints! > 1 ? "s" : ""}` : ""
+            ].filter(Boolean).join(", ") + " to spend"
+            : "";
         const showHotbar = isSelected && selectedIds.length === 1 && onAssignSkill && !hideHotbar;
 
-        elements.push(
+        const portraitDiv = (
             <div
                 key={unit.id}
                 className={portraitClass}
@@ -361,6 +367,12 @@ function PartyBarComponent({
                     </div>
                 )}
             </div>
+        );
+
+        elements.push(
+            hasUnspentPoints
+                ? <Tippy key={unit.id} content={unspentHint} placement="top" delay={[300, 0]}>{portraitDiv}</Tippy>
+                : portraitDiv
         );
     });
 

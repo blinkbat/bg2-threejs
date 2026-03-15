@@ -79,6 +79,7 @@ import {
     type SaveSlotData,
     buildSaveSlotData,
     deleteSave,
+    getSaveSlots,
     loadGame,
     resolveLoadedSaveState,
     saveGame
@@ -181,6 +182,7 @@ interface LightingTuningSettings {
 }
 
 type LootPickupModalState = Pick<LootPickupRequest, "sourceLabel" | "entries">;
+
 
 const DEFAULT_LIGHTING_TUNING: LightingTuningSettings = {
     shadowsEnabled: false,
@@ -2561,6 +2563,7 @@ export default function App() {
     const [spawnDirection, setSpawnDirection] = useState<"north" | "south" | "east" | "west" | undefined>(undefined);
     const [showSaveLoad, setShowSaveLoad] = useState(false);
     const [saveLoadMode, setSaveLoadMode] = useState<"save" | "load">("save");
+    const [hasSaves] = useState(() => getSaveSlots().some(s => s !== null));
     const [initialOpenedChests, setInitialOpenedChests] = useState<Set<string> | null>(null);
     const [initialOpenedSecretDoors, setInitialOpenedSecretDoors] = useState<Set<string> | null>(null);
     const [initialGold, setInitialGold] = useState<number | null>(null);
@@ -2884,6 +2887,19 @@ export default function App() {
         // Restore UI state to localStorage so Game reads it on remount
         if (saveData.hotbarAssignments) saveHotbarAssignments(saveData.hotbarAssignments);
         if (saveData.formationOrder) saveFormationOrder(saveData.formationOrder);
+        // If loading from title screen, boot the game
+        if (startupPhase === "title") {
+            setStartupPhase("booting");
+            setTransitionOpacity(1);
+            soundFns.playGameStartFanfare();
+            if (startupBootTimeoutRef.current !== null) {
+                window.clearTimeout(startupBootTimeoutRef.current);
+            }
+            startupBootTimeoutRef.current = window.setTimeout(() => {
+                startupBootTimeoutRef.current = null;
+                setGameMounted(true);
+            }, STARTUP_FANFARE_LEAD_IN_MS);
+        }
         setGameKey(k => k + 1);
         return { ok: true };
     };
@@ -2957,14 +2973,19 @@ export default function App() {
             {gameMounted && openInfoModal === "controls" && <ControlsModal onClose={handleCloseInfoModal} onConfirm={handleConfirmControlsModal} />}
             {gameMounted && openInfoModal === "help" && <HelpModal onClose={handleCloseHelpModal} />}
             {gameMounted && openInfoModal === "glossary" && <GlossaryModal onClose={handleCloseGlossaryModal} />}
-            {gameMounted && showSaveLoad && <SaveLoadModal mode={saveLoadMode} onClose={closeSaveLoadModal} onSave={handleSave} onLoad={handleLoad} onDelete={handleDelete} currentState={savePreviewState} saveDisabledReason={saveDisabledReason} />}
+            {showSaveLoad && <SaveLoadModal mode={saveLoadMode} onClose={closeSaveLoadModal} onSave={handleSave} onLoad={handleLoad} onDelete={handleDelete} currentState={savePreviewState} saveDisabledReason={saveDisabledReason} />}
             {startupPhase === "title" && (
                 <div className="startup-title-screen">
                     <div className="startup-title-card">
                         <h1 className="startup-title-text">Archipelago</h1>
                         <button className="startup-title-btn" onClick={handleStartGame}>
-                            Start Game
+                            New Game
                         </button>
+                        {hasSaves && (
+                            <button className="startup-title-btn" onClick={() => { setSaveLoadMode("load"); setShowSaveLoad(true); }}>
+                                Load Game
+                            </button>
+                        )}
                     </div>
                 </div>
             )}

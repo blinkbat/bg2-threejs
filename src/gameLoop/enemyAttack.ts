@@ -8,6 +8,7 @@ import { BUFF_TICK_INTERVAL, COLORS } from "../core/constants";
 import { getUnitStats } from "../game/units";
 import { calculateDamageWithCrit, rollHit, rollChance, rollDamage, getEffectiveArmor, getEffectiveDamage, shouldApplyPoison, shouldApplySlow, logHit, logLifestealHit, logMiss, logPoisoned, logSlowed, applyStatusEffect, logStunned, hasStatusEffect, applyArmor } from "../combat/combatMath";
 import { createProjectile, getProjectileSpeed, applyDamageToUnit, applyLifesteal, type DamageContext } from "../combat/damageEffects";
+import { startAttackBump } from "./swingAnimations";
 import { CRIT_MULTIPLIER } from "../game/statBonuses";
 import { soundFns } from "../audio";
 import { spawnSwingIndicator } from "./swingAnimations";
@@ -247,7 +248,9 @@ function executeEnemyMeleeAttack(ctx: EnemyAttackContext): void {
  * Execute an enemy basic attack (ranged or melee based on stats).
  */
 export function executeEnemyBasicAttack(ctx: EnemyAttackContext): void {
-    const { attackerStats } = ctx;
+    const { attackerStats, attackerG, targetG, now } = ctx;
+
+    startAttackBump(attackerG, targetG.position.x, targetG.position.z, now);
 
     if (attackerStats.fireballAttack) {
         executeEnemyFireballAttack(ctx);

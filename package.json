@@ -2,16 +2,17 @@
   "name": "bg2-threejs-new",
   "private": true,
   "version": "0.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "lint": "eslint .",
-    "test": "npm run lint && npm run build && npm run test:unit",
-    "test:unit": "vitest run",
-    "test:coverage": "vitest run --coverage",
-    "preview": "vite preview"
-  },
+    "type": "module",
+    "scripts": {
+        "dev": "vite",
+        "build": "npm run optimize:images && tsc -b && vite build",
+        "lint": "eslint .",
+        "optimize:images": "node scripts/optimize-images.mjs",
+        "test": "npm run lint && npm run build && npm run test:unit",
+        "test:unit": "vitest run",
+        "test:coverage": "vitest run --coverage",
+        "preview": "vite preview"
+    },
   "dependencies": {
     "@tippyjs/react": "^4.2.6",
     "@types/three": "^0.182.0",
@@ -33,6 +34,7 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
+    "oxipng": "^1.0.1",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
     "vite": "^7.2.4",

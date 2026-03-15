@@ -202,16 +202,16 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         name: "Chittering Crabling",
         monsterType: "beast",
         tier: "enemy",
-        hp: 18,
-        maxHp: 18,
-        damage: [2, 4],
-        accuracy: 60,
+        hp: 24,
+        maxHp: 24,
+        damage: [3, 5],
+        accuracy: 65,
         armor: 2,              // Hard shell
         aggroRange: 6,
         attackCooldown: 1400,  // Fast snipping
         size: 0.7,             // Small
         moveSpeed: 1.2,        // Quick scuttler
-        expReward: 10
+        expReward: 12
     },
     corrupt_druid: {
         name: "Corrupt Druid",
