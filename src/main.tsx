@@ -2,8 +2,8 @@ import { lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import App from "./App.tsx";
-import "./styles.css";
 import "tippy.js/dist/tippy.css";
+import "./styles.css";
 import { applyThemeColorSettings, createDefaultThemeColorSettings } from "./ui/themeColors";
 
 const MapEditor = lazy(async () => {
