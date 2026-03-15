@@ -238,7 +238,8 @@ function isValidEnemySpawnCell(
     propsLayer: string[][],
     width: number,
     height: number,
-    occupied: Set<string>
+    occupied: Set<string>,
+    allowWater: boolean = false
 ): boolean {
     if (x < 0 || z < 0 || x >= width || z >= height) {
         return false;
@@ -248,9 +249,11 @@ function isValidEnemySpawnCell(
         return false;
     }
 
-    const terrain = terrainLayer[z]?.[x] ?? ".";
-    if (terrain === "~" || terrain === "w") {
-        return false;
+    if (!allowWater) {
+        const terrain = terrainLayer[z]?.[x] ?? ".";
+        if (terrain === "~" || terrain === "w") {
+            return false;
+        }
     }
 
     if (isBlockingPropCell(propsLayer, x, z)) {
@@ -268,9 +271,10 @@ function findNearestValidEnemySpawnCell(
     propsLayer: string[][],
     width: number,
     height: number,
-    occupied: Set<string>
+    occupied: Set<string>,
+    allowWater: boolean = false
 ): { x: number; z: number } | null {
-    if (isValidEnemySpawnCell(startX, startZ, geometryLayer, terrainLayer, propsLayer, width, height, occupied)) {
+    if (isValidEnemySpawnCell(startX, startZ, geometryLayer, terrainLayer, propsLayer, width, height, occupied, allowWater)) {
         return { x: startX, z: startZ };
     }
 
@@ -286,7 +290,7 @@ function findNearestValidEnemySpawnCell(
 
                 const x = startX + dx;
                 const z = startZ + dz;
-                if (!isValidEnemySpawnCell(x, z, geometryLayer, terrainLayer, propsLayer, width, height, occupied)) {
+                if (!isValidEnemySpawnCell(x, z, geometryLayer, terrainLayer, propsLayer, width, height, occupied, allowWater)) {
                     continue;
                 }
 
@@ -320,9 +324,12 @@ export function sanitizeEnemySpawns(
     const sanitized: EnemySpawn[] = [];
     const occupied = new Set<string>();
 
+    const AQUATIC_ENEMIES = new Set(["baby_kraken", "kraken_tentacle"]);
+
     for (const spawn of spawns) {
         const startX = Math.floor(spawn.x);
         const startZ = Math.floor(spawn.z);
+        const allowWater = AQUATIC_ENEMIES.has(spawn.type);
         const nearest = findNearestValidEnemySpawnCell(
             startX,
             startZ,
@@ -331,7 +338,8 @@ export function sanitizeEnemySpawns(
             propsLayer,
             width,
             height,
-            occupied
+            occupied,
+            allowWater
         );
 
         if (!nearest) {
