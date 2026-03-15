@@ -28,6 +28,51 @@ const GLACIAL_WHORL_GEOMETRY = new THREE.IcosahedronGeometry(0.26, 1);
 const MAGIC_MISSILE_GEOMETRY = new THREE.IcosahedronGeometry(0.11, 0);
 const CHAIN_LIGHTNING_CHAIN_COUNT = 3;
 const CHAIN_LIGHTNING_BOUNCE_RANGE = 5.5;
+const LIGHTNING_BEAM_UP = new THREE.Vector3(0, 1, 0);
+
+function createLightningBeam(
+    scene: THREE.Scene,
+    fromX: number,
+    fromZ: number,
+    toX: number,
+    toZ: number,
+    duration: number = 280
+): void {
+    const from = new THREE.Vector3(fromX, 0.85, fromZ);
+    const to = new THREE.Vector3(toX, 0.85, toZ);
+    const direction = new THREE.Vector3().subVectors(to, from);
+    const beamLength = direction.length();
+    if (beamLength < 0.05) return;
+
+    direction.normalize();
+
+    const beam = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.055, 0.055, beamLength, 10, 1, true),
+        new THREE.MeshBasicMaterial({ color: "#d9f2ff", transparent: true, opacity: 0.9 })
+    );
+    beam.position.copy(from).add(to).multiplyScalar(0.5);
+    beam.quaternion.setFromUnitVectors(LIGHTNING_BEAM_UP, direction);
+    scene.add(beam);
+
+    const startTime = getGameTime();
+    const material = beam.material as THREE.MeshBasicMaterial;
+
+    scheduleEffectAnimation((gameNow) => {
+        const elapsed = gameNow - startTime;
+        const t = Math.min(1, elapsed / duration);
+
+        material.opacity = 0.9 * (1 - t);
+        const pulseScale = 1 + Math.sin(t * Math.PI) * 0.4;
+        beam.scale.set(pulseScale, 1, pulseScale);
+
+        if (t < 1) return false;
+
+        scene.remove(beam);
+        beam.geometry.dispose();
+        material.dispose();
+        return true;
+    });
+}
 
 function isPointInCross(
     px: number,
@@ -395,26 +440,13 @@ export function executeChainLightningSkill(
         if (defeatedThisFrame.has(currentTarget.id)) break;
 
         const targetData = getUnitStats(currentTarget);
-        createLightningPillar(scene, currentGroup.position.x, currentGroup.position.z, {
-            color: "#d9f2ff",
-            duration: chainIndex === 0 ? 300 : 240,
-            radius: chainIndex === 0 ? 0.2 : 0.14,
-            height: chainIndex === 0 ? 7 : 5.5
-        });
+        createLightningBeam(scene, sourceX, sourceZ, currentGroup.position.x, currentGroup.position.z, chainIndex === 0 ? 300 : 240);
         createAnimatedRing(scene, currentGroup.position.x, currentGroup.position.z, COLORS.dmgLightning, {
             innerRadius: 0.16,
             outerRadius: 0.38,
             maxScale: 1.5,
             duration: 260
         });
-        if (chainIndex > 0) {
-            createAnimatedRing(scene, sourceX, sourceZ, COLORS.dmgLightning, {
-                innerRadius: 0.1,
-                outerRadius: 0.25,
-                maxScale: 1.2,
-                duration: 180
-            });
-        }
 
         if (chainIndex === 0) {
             if (!rollSkillHit(skill, casterData.accuracy, casterUnit)) {
