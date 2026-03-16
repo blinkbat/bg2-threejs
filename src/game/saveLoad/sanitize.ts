@@ -11,6 +11,7 @@
 import type { HotbarAssignments } from "../../hooks/localStorage";
 import { MAX_SLOTS, SAVE_VERSION } from "./constants";
 import type { DialogTriggerProgress, EnemyPositionMap, SaveSlotData, SavedPlayer } from "./types";
+import type { FogVisibilityByArea } from "../fogMemory";
 
 const HOTBAR_SLOT_COUNT = 5;
 
@@ -452,6 +453,58 @@ function sanitizeEnemyPositions(raw: unknown): EnemyPositionMap {
     return sanitized;
 }
 
+function sanitizeFogVisibilityArea(raw: unknown): number[][] | null {
+    if (!Array.isArray(raw) || raw.length === 0) return null;
+
+    const sanitizedColumns: number[][] = [];
+    let expectedHeight: number | null = null;
+
+    for (const columnRaw of raw) {
+        if (!Array.isArray(columnRaw)) return null;
+
+        const sanitizedColumn: number[] = [];
+        for (const cellRaw of columnRaw) {
+            if (typeof cellRaw !== "number" || !Number.isFinite(cellRaw)) {
+                return null;
+            }
+
+            const cell = Math.floor(cellRaw);
+            if (cell < 0 || cell > 2) {
+                return null;
+            }
+
+            sanitizedColumn.push(cell);
+        }
+
+        if (expectedHeight === null) {
+            expectedHeight = sanitizedColumn.length;
+        } else if (sanitizedColumn.length !== expectedHeight) {
+            return null;
+        }
+
+        sanitizedColumns.push(sanitizedColumn);
+    }
+
+    return sanitizedColumns;
+}
+
+function sanitizeFogVisibilityByArea(raw: unknown): FogVisibilityByArea {
+    if (!isRecord(raw)) return {};
+
+    const sanitized: FogVisibilityByArea = {};
+    for (const [areaIdRaw, visibilityRaw] of Object.entries(raw)) {
+        const areaId = areaIdRaw.trim();
+        if (areaId.length === 0) continue;
+
+        const visibility = sanitizeFogVisibilityArea(visibilityRaw);
+        if (!visibility) continue;
+
+        sanitized[areaId] = visibility;
+    }
+
+    return sanitized;
+}
+
 function parseVersion(raw: Record<string, unknown>): number | null {
     const version = readFiniteNumber(raw, "version");
     if (version === undefined) return SAVE_VERSION;
@@ -495,6 +548,10 @@ function sanitizeSaveSlotV1(raw: Record<string, unknown>): SaveSlotData | null {
 
     if (hasField(raw, "enemyPositions")) {
         saveData.enemyPositions = sanitizeEnemyPositions(getField(raw, "enemyPositions"));
+    }
+
+    if (hasField(raw, "fogVisibilityByArea")) {
+        saveData.fogVisibilityByArea = sanitizeFogVisibilityByArea(getField(raw, "fogVisibilityByArea"));
     }
 
     return saveData;

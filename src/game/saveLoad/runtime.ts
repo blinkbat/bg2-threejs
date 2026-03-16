@@ -1,6 +1,7 @@
 ﻿import type { CharacterEquipment, PartyInventory } from "../../core/types";
 import type { HotbarAssignments } from "../../hooks/localStorage";
 import type { AreaId } from "../areas";
+import type { FogVisibilityByArea } from "../fogMemory";
 import { SAVE_VERSION } from "./constants";
 import type { DialogTriggerProgress, EnemyPositionMap, SaveLoadFailure, SaveSlotData, SavedPlayer } from "./types";
 
@@ -15,6 +16,7 @@ export interface SaveSnapshotState {
     formationOrder: number[];
     dialogTriggerProgress: DialogTriggerProgress;
     enemyPositions: EnemyPositionMap;
+    fogVisibilityByArea: FogVisibilityByArea;
 }
 
 interface BuildSaveSlotDataInput {
@@ -43,6 +45,7 @@ interface ResolvedLoadedSaveState {
     formationOrder?: number[];
     dialogTriggerProgress: DialogTriggerProgress;
     enemyPositions: EnemyPositionMap;
+    fogVisibilityByArea: FogVisibilityByArea;
 }
 
 type ResolveLoadedSaveResult =
@@ -82,6 +85,17 @@ function cloneHotbarAssignments(assignments: HotbarAssignments): HotbarAssignmen
     for (const [unitId, slots] of Object.entries(assignments)) {
         clone[Number(unitId)] = slots.map(slot => slot);
     }
+    return clone;
+}
+
+function cloneFogVisibilityByArea(fogVisibilityByArea: FogVisibilityByArea | undefined): FogVisibilityByArea {
+    const clone: FogVisibilityByArea = {};
+    if (!fogVisibilityByArea) return clone;
+
+    for (const [areaId, visibility] of Object.entries(fogVisibilityByArea)) {
+        clone[areaId] = visibility.map(column => [...column]);
+    }
+
     return clone;
 }
 
@@ -146,6 +160,7 @@ export function buildSaveSlotData(input: BuildSaveSlotDataInput): SaveSlotData {
         formationOrder: [...state.formationOrder],
         dialogTriggerProgress: normalizeDialogTriggerProgress(state.dialogTriggerProgress),
         enemyPositions: normalizeEnemyPositions(state.enemyPositions),
+        fogVisibilityByArea: cloneFogVisibilityByArea(state.fogVisibilityByArea),
     };
 }
 
@@ -187,6 +202,7 @@ export function resolveLoadedSaveState(
             formationOrder: saveData.formationOrder ? [...saveData.formationOrder] : undefined,
             dialogTriggerProgress: normalizeDialogTriggerProgress(saveData.dialogTriggerProgress),
             enemyPositions: normalizeEnemyPositions(saveData.enemyPositions),
+            fogVisibilityByArea: cloneFogVisibilityByArea(saveData.fogVisibilityByArea),
         },
     };
 }

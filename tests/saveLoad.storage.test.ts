@@ -61,6 +61,9 @@ function createValidSaveData(overrides: Partial<SaveSlotData> = {}): SaveSlotDat
         dialogTriggerProgress: {
             coast: ["intro_1"],
         },
+        fogVisibilityByArea: {
+            coast: [[0, 1], [2, 2]],
+        },
         ...overrides,
     };
 }
@@ -89,6 +92,9 @@ describe("saveLoad storage", () => {
         expect(slots[0]).not.toBeNull();
         expect(slots[1]).toBeNull();
         expect(slots[2]).toBeNull();
+        expect(slots[0]?.fogVisibilityByArea).toEqual({
+            coast: [[0, 1], [2, 2]],
+        });
     });
 
     it("rejects newer save versions", () => {

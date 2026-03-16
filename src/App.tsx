@@ -84,7 +84,12 @@ import {
     resolveLoadedSaveState,
     saveGame
 } from "./game/saveLoad";
-import { clearFogVisibilityMemory } from "./game/fogMemory";
+import {
+    captureFogVisibilityMemory,
+    clearFogVisibilityMemory,
+    restoreFogVisibilityMemory,
+    type FogVisibilityByArea,
+} from "./game/fogMemory";
 import { buildAreaDialogDefinitionMap } from "./dialog/areaDialogs";
 import { getDialogDefinitionById } from "./dialog/registry";
 import { getUnitRadius, isInRange } from "./rendering/range";
@@ -150,6 +155,7 @@ interface GameProps {
     initialEnemyPositions: Partial<Record<string, { x: number; z: number }>> | null;
     initialDialogTriggerProgress: DialogTriggerProgress | null;
     dialogTriggersEnabled: boolean;
+    skipNextFogSaveOnUnmountRef: React.MutableRefObject<boolean>;
     onReady?: () => void;
 }
 
@@ -164,6 +170,7 @@ interface SaveableGameState {
     hotbarAssignments: HotbarAssignments;
     formationOrder: number[];
     dialogTriggerProgress: DialogTriggerProgress;
+    fogVisibilityByArea: FogVisibilityByArea;
     saveLockReason: string | null;
 }
 
@@ -313,7 +320,8 @@ function Game({
     persistedPlayers, spawnPoint, spawnDirection, onSaveClick, onLoadClick,
     onOpenMenu, onCloseMenu, onOpenJukebox, onCloseJukebox, onOpenEquipment, onCloseEquipment,
     gameStateRef, startDialogRef,
-    initialOpenedChests, initialOpenedSecretDoors, initialGold, initialKilledEnemies, initialEnemyPositions, initialDialogTriggerProgress, dialogTriggersEnabled, onReady
+    initialOpenedChests, initialOpenedSecretDoors, initialGold, initialKilledEnemies, initialEnemyPositions, initialDialogTriggerProgress, dialogTriggersEnabled,
+    skipNextFogSaveOnUnmountRef, onReady
 }: GameProps) {
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -642,7 +650,8 @@ function Game({
         containerRef,
         units,
         openedChests,
-        initialCameraOffset: initialCamOffset
+        initialCameraOffset: initialCamOffset,
+        skipNextFogSaveOnUnmountRef,
     });
     const sceneRef = useRef<THREE.Scene | null>(null);
     const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -1800,11 +1809,12 @@ function Game({
                 hotbarAssignments: hotbarAssignmentsRef.current,
                 formationOrder: formationOrderRef.current,
                 dialogTriggerProgress: serializeDialogTriggerProgressForSave(dialogTriggerProgressByAreaRef.current),
+                fogVisibilityByArea: captureFogVisibilityMemory(getCurrentAreaId(), gameRefs.current.visibility),
                 saveLockReason: getSaveLockReason(),
             };
         };
         return () => { gameStateRef.current = null; };
-    }, [buildPersistedPlayers, buildPersistedEnemyPositions, gameStateRef, openedSecretDoors, gold, killedEnemies, getSaveLockReason]);
+    }, [buildPersistedPlayers, buildPersistedEnemyPositions, gameRefs, gameStateRef, openedSecretDoors, gold, killedEnemies, getSaveLockReason]);
 
     // Expose startDialog for chain actions
     useEffect(() => {
@@ -2584,6 +2594,7 @@ export default function App() {
     const transitionTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
     const startupBootTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
     const startupReadyTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+    const skipNextFogSaveOnUnmountRef = useRef(false);
 
     const setCurrentAreaWithPathReset = useCallback((areaId: AreaId) => {
         setCurrentArea(areaId);
@@ -2591,20 +2602,37 @@ export default function App() {
         invalidateDynamicObstacles();
     }, []);
 
-    const handleStartGame = useCallback(() => {
-        if (startupPhase !== "title") return;
+    const startStartupBoot = useCallback((options?: { playFanfare?: boolean; mountDelayMs?: number }) => {
+        const playFanfare = options?.playFanfare ?? false;
+        const mountDelayMs = options?.mountDelayMs ?? 0;
+
         setStartupPhase("booting");
         setDialogTriggersEnabled(false);
         setTransitionOpacity(1);
-        soundFns.playGameStartFanfare();
+        if (playFanfare) {
+            soundFns.playGameStartFanfare();
+        }
+
         if (startupBootTimeoutRef.current !== null) {
             window.clearTimeout(startupBootTimeoutRef.current);
+            startupBootTimeoutRef.current = null;
         }
+
+        if (mountDelayMs <= 0) {
+            setGameMounted(true);
+            return;
+        }
+
         startupBootTimeoutRef.current = window.setTimeout(() => {
             startupBootTimeoutRef.current = null;
             setGameMounted(true);
-        }, STARTUP_FANFARE_LEAD_IN_MS);
-    }, [startupPhase]);
+        }, mountDelayMs);
+    }, []);
+
+    const handleStartGame = useCallback(() => {
+        if (startupPhase !== "title") return;
+        startStartupBoot({ playFanfare: true, mountDelayMs: STARTUP_FANFARE_LEAD_IN_MS });
+    }, [startupPhase, startStartupBoot]);
 
     const executePendingChain = useCallback(() => {
         const action = pendingChainActionRef.current;
@@ -2692,6 +2720,9 @@ export default function App() {
 
     const handleFullRestart = () => {
         const skipIntro = shouldSkipGameIntro();
+        if (gameMounted) {
+            skipNextFogSaveOnUnmountRef.current = true;
+        }
 
         if (transitionTimeoutRef.current !== null) {
             window.clearTimeout(transitionTimeoutRef.current);
@@ -2873,6 +2904,12 @@ export default function App() {
         if (!resolved.ok) return resolved;
 
         const saveData = resolved.data;
+        const loadingFromTitleScreen = startupPhase === "title";
+        if (gameMounted) {
+            skipNextFogSaveOnUnmountRef.current = true;
+        }
+
+        restoreFogVisibilityMemory(saveData.fogVisibilityByArea);
         setAllEquipment(saveData.equipment);
         setPartyInventory(saveData.inventory);
         setCurrentAreaWithPathReset(saveData.areaId);
@@ -2887,18 +2924,9 @@ export default function App() {
         // Restore UI state to localStorage so Game reads it on remount
         if (saveData.hotbarAssignments) saveHotbarAssignments(saveData.hotbarAssignments);
         if (saveData.formationOrder) saveFormationOrder(saveData.formationOrder);
-        // If loading from title screen, boot the game
-        if (startupPhase === "title") {
-            setStartupPhase("booting");
-            setTransitionOpacity(1);
-            soundFns.playGameStartFanfare();
-            if (startupBootTimeoutRef.current !== null) {
-                window.clearTimeout(startupBootTimeoutRef.current);
-            }
-            startupBootTimeoutRef.current = window.setTimeout(() => {
-                startupBootTimeoutRef.current = null;
-                setGameMounted(true);
-            }, STARTUP_FANFARE_LEAD_IN_MS);
+        if (loadingFromTitleScreen) {
+            // Restore loads should boot straight into the saved scene without the new-game fanfare delay.
+            startStartupBoot();
         }
         setGameKey(k => k + 1);
         return { ok: true };
@@ -2967,6 +2995,7 @@ export default function App() {
                     initialGold={initialGold} initialKilledEnemies={initialKilledEnemies} initialEnemyPositions={initialEnemyPositions}
                     initialDialogTriggerProgress={initialDialogTriggerProgress}
                     dialogTriggersEnabled={dialogTriggersEnabled}
+                    skipNextFogSaveOnUnmountRef={skipNextFogSaveOnUnmountRef}
                     onReady={handleSceneReady}
                 />
             )}

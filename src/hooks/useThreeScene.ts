@@ -13,6 +13,7 @@ import { disposeLoadedTextures } from "../rendering/scene/units";
 import { resetFogCache, resetSpriteFacing, clearChargeAttacks, clearFireBreaths, clearCurses, clearGlares, clearLeaps, clearTentacles, clearShadePhases, clearSubmergedKrakens, resetLootBagIds, resetProjectileState } from "../gameLoop";
 import { resetAllBroodMotherScreeches, resetAllEnemyKiteCooldowns, resetAllEnemyKitingState } from "../game/enemyState";
 import { resetAllMovementState } from "../ai/movement";
+import { resetVisibilityTracking } from "../ai/pathfinding";
 import { resetBarks } from "../combat/barks";
 import { loadFogVisibility, saveFogVisibility } from "../game/fogMemory";
 import { clearEffectAnimations } from "../core/effectScheduler";
@@ -98,6 +99,7 @@ export interface UseThreeSceneOptions {
     units: Unit[];
     openedChests: Set<string>;
     initialCameraOffset: { x: number; z: number };
+    skipNextFogSaveOnUnmountRef: React.MutableRefObject<boolean>;
 }
 
 export interface UseThreeSceneResult {
@@ -221,7 +223,8 @@ export function useThreeScene({
     containerRef,
     units,
     openedChests,
-    initialCameraOffset
+    initialCameraOffset,
+    skipNextFogSaveOnUnmountRef,
 }: UseThreeSceneOptions): UseThreeSceneResult {
     const initialArea = getCurrentArea();
     const initialAreaId = getCurrentAreaId();
@@ -271,6 +274,7 @@ export function useThreeScene({
         resetAllEnemyKiteCooldowns();
         resetAllEnemyKitingState();
         resetAllMovementState();
+        resetVisibilityTracking();
         resetBarks();
         clearEffectAnimations();
 
@@ -362,7 +366,11 @@ export function useThreeScene({
 
         // Cleanup
         return () => {
-            saveFogVisibility(areaIdAtMount, gameRefs.visibility);
+            if (skipNextFogSaveOnUnmountRef.current) {
+                skipNextFogSaveOnUnmountRef.current = false;
+            } else {
+                saveFogVisibility(areaIdAtMount, gameRefs.visibility);
+            }
             clearEffectAnimations();
             disposeSceneResources(sceneRefs.scene);
             if (sceneRefs.renderer) {
@@ -374,7 +382,7 @@ export function useThreeScene({
             setSceneState(createEmptySceneState());
             setIsInitialized(false);
         };
-    }, [containerRef]); // Runs once; container ref identity is stable
+    }, [containerRef, skipNextFogSaveOnUnmountRef]); // Refs are stable; this still initializes once per mount
 
     return { sceneState, gameRefs: gameRefsRef, isInitialized };
 }

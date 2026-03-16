@@ -474,8 +474,10 @@ export function updateUnitAI(
             if (!aheadG) {
                 delete g.userData.formationRamp;
             } else {
+                // Formation throttle should track progress to the assigned slot, not just the next waypoint.
+                const myRampTarget = g.userData.moveTarget ?? { x: targetX, z: targetZ };
                 const aheadRemain = Math.hypot(ramp.leaderTargetX - aheadG.position.x, ramp.leaderTargetZ - aheadG.position.z);
-                const myRemain = Math.hypot(targetX - g.position.x, targetZ - g.position.z);
+                const myRemain = Math.hypot(myRampTarget.x - g.position.x, myRampTarget.z - g.position.z);
                 const leaderStartDist = Math.max(ramp.leaderStartDist ?? aheadRemain, 0.001);
                 const myStartDist = Math.max(ramp.myStartDist ?? myRemain, 0.001);
                 const aheadProgress = 1 - Math.min(1, aheadRemain / leaderStartDist);

@@ -92,6 +92,11 @@ describe("saveLoad sanitize", () => {
                 " coast ": ["intro_1", "intro_1", ""],
                 "": ["bad"],
             },
+            fogVisibilityByArea: {
+                coast: [[0, 1], [2, 2]],
+                forest: [[0, 1], [2]],
+                bad_values: [[0, 3]],
+            },
         });
 
         const parsed = parseSaveSlotData(raw);
@@ -135,6 +140,9 @@ describe("saveLoad sanitize", () => {
         expect(data.hotbarAssignments?.[1]).toEqual(["Attack", null, null, "Skill", null]);
         expect(data.formationOrder).toEqual([1, 2]);
         expect(data.dialogTriggerProgress).toEqual({ coast: ["intro_1"] });
+        expect(data.fogVisibilityByArea).toEqual({
+            coast: [[0, 1], [2, 2]],
+        });
     });
 
     it("rejects saves created by newer versions", () => {

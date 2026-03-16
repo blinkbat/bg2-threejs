@@ -1,6 +1,7 @@
 ﻿import type { CharacterEquipment, PartyInventory, CharacterStats, StatusEffect, SummonType } from "../../core/types";
 import type { AreaId } from "../areas";
 import type { HotbarAssignments } from "../../hooks/localStorage";
+import type { FogVisibilityByArea } from "../fogMemory";
 
 /** Persisted player data - matches PersistedPlayer in App.tsx */
 export interface SavedPlayer {
@@ -52,6 +53,8 @@ export interface SaveSlotData {
     dialogTriggerProgress?: DialogTriggerProgress;
     // Current-area static enemy spawn positions keyed by `${areaId}-${spawnIndex}`
     enemyPositions?: EnemyPositionMap;
+    // Per-area fog memory, including explored and currently visible cells.
+    fogVisibilityByArea?: FogVisibilityByArea;
 }
 
 /** Storage structure in localStorage */

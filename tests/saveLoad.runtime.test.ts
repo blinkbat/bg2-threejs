@@ -38,6 +38,10 @@ function createState(): SaveSnapshotState {
         formationOrder: [1, 2, 3],
         dialogTriggerProgress: { coast: ["intro_1", "intro_1"] },
         enemyPositions: {},
+        fogVisibilityByArea: {
+            coast: [[0, 1], [2, 2]],
+            forest: [[1, 0], [0, 1]],
+        },
     };
 }
 
@@ -70,12 +74,17 @@ describe("saveLoad runtime", () => {
         state.players[0].hp = 1;
         state.openedChests.add("coast-99");
         state.hotbarAssignments[1][0] = "Changed";
+        state.fogVisibilityByArea.coast[0][1] = 2;
         equipment[1].leftHand = "battleaxe";
         inventory.items[0].quantity = 99;
 
         expect(slot.players[0].hp).toBe(12);
         expect(slot.openedChests).toEqual(["coast-1"]);
         expect(slot.hotbarAssignments?.[1][0]).toBe("Attack");
+        expect(slot.fogVisibilityByArea).toEqual({
+            coast: [[0, 1], [2, 2]],
+            forest: [[1, 0], [0, 1]],
+        });
         expect(slot.equipment[1].leftHand).toBe("largeBranch");
         expect(slot.inventory.items[0].quantity).toBe(2);
         expect(slot.dialogTriggerProgress).toEqual({ coast: ["intro_1"] });
@@ -119,6 +128,9 @@ describe("saveLoad runtime", () => {
             hotbarAssignments: { 1: ["Attack", null, null, null, null] },
             formationOrder: [1, 2],
             dialogTriggerProgress: { coast: ["intro_1", "intro_1"] },
+            fogVisibilityByArea: {
+                coast: [[0, 1], [2, 2]],
+            },
         };
 
         const result = resolveLoadedSaveState(input, {
@@ -138,6 +150,7 @@ describe("saveLoad runtime", () => {
         input.hotbarAssignments?.[1].splice(0, 1, "Changed");
         input.formationOrder?.push(99);
         input.dialogTriggerProgress?.coast?.push("new");
+        input.fogVisibilityByArea?.coast?.[0].splice(0, 1, 2);
 
         expect(result.data.players[0].hp).toBe(10);
         expect(result.data.equipment[1].leftHand).toBe("largeBranch");
@@ -145,5 +158,8 @@ describe("saveLoad runtime", () => {
         expect(result.data.hotbarAssignments?.[1][0]).toBe("Attack");
         expect(result.data.formationOrder).toEqual([1, 2]);
         expect(result.data.dialogTriggerProgress).toEqual({ coast: ["intro_1"] });
+        expect(result.data.fogVisibilityByArea).toEqual({
+            coast: [[0, 1], [2, 2]],
+        });
     });
 });
