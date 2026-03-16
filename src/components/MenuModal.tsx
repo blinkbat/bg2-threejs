@@ -11,6 +11,7 @@ import {
     X
 } from "lucide-react";
 import { toggleMute, isMuted } from "../audio";
+import { ModalShell } from "./ModalShell";
 
 interface MenuModalProps {
     onClose: () => void;
@@ -71,8 +72,7 @@ export function MenuModal({
     };
 
     return (
-        <div className="modal-overlay" onClick={onClose}>
-            <div className="modal-content menu-modal" onClick={e => e.stopPropagation()}>
+        <ModalShell onClose={onClose} contentClassName="menu-modal">
                 <div className="help-header">
                     <h2 className="help-title">Menu</h2>
                     <div className="close-btn" onClick={onClose}><X size={18} /></div>
@@ -126,7 +126,6 @@ export function MenuModal({
                         </button>
                     </div>
                 </div>
-            </div>
-        </div>
+        </ModalShell>
     );
 }

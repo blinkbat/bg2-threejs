@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { ModalShell } from "./ModalShell";
 
 interface ControlsModalProps {
     onClose: () => void;
@@ -7,19 +8,6 @@ interface ControlsModalProps {
 
 export function ControlsModal({ onClose, onConfirm }: ControlsModalProps) {
     const [showAdvanced, setShowAdvanced] = useState(false);
-
-    useEffect(() => {
-        const handleKeyDown = (event: KeyboardEvent) => {
-            if (event.key === "Escape") {
-                event.preventDefault();
-                event.stopPropagation();
-                onClose();
-            }
-        };
-
-        window.addEventListener("keydown", handleKeyDown);
-        return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [onClose]);
 
     const handleConfirm = () => {
         if (onConfirm) {
@@ -30,8 +18,7 @@ export function ControlsModal({ onClose, onConfirm }: ControlsModalProps) {
     };
 
     return (
-        <div className="modal-overlay" onClick={onClose}>
-            <div className="modal-content help-modal" onClick={event => event.stopPropagation()}>
+        <ModalShell onClose={onClose} contentClassName="help-modal" closeOnEscape>
                 <div className="help-header">
                     <h2 className="help-title">Controls</h2>
                     <div className="close-btn" onClick={onClose}>&times;</div>
@@ -97,8 +84,7 @@ export function ControlsModal({ onClose, onConfirm }: ControlsModalProps) {
                         Got It
                     </button>
                 </div>
-            </div>
-        </div>
+        </ModalShell>
     );
 }
 

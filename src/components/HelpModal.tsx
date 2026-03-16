@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { ModalShell } from "./ModalShell";
 
 interface HelpModalProps {
     onClose: () => void;
@@ -36,22 +36,8 @@ const HELP_SECTIONS: ReadonlyArray<{ title: string; body: string }> = [
 ];
 
 export function HelpModal({ onClose }: HelpModalProps) {
-    useEffect(() => {
-        const handleKeyDown = (event: KeyboardEvent) => {
-            if (event.key === "Escape") {
-                event.preventDefault();
-                event.stopPropagation();
-                onClose();
-            }
-        };
-
-        window.addEventListener("keydown", handleKeyDown);
-        return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [onClose]);
-
     return (
-        <div className="modal-overlay" onClick={onClose}>
-            <div className="modal-content help-modal" onClick={event => event.stopPropagation()}>
+        <ModalShell onClose={onClose} contentClassName="help-modal" closeOnEscape>
                 <div className="help-header">
                     <h2 className="help-title">Help</h2>
                     <div className="close-btn" onClick={onClose}>&times;</div>
@@ -71,7 +57,6 @@ export function HelpModal({ onClose }: HelpModalProps) {
                         Got It
                     </button>
                 </div>
-            </div>
-        </div>
+        </ModalShell>
     );
 }

@@ -295,30 +295,30 @@ function applySpriteToneMix(
 const ENEMY_SPRITE_TEMPLATES: Record<string, SpriteTemplate> = {
     acid_slug: { textureKey: "acid_slug", width: 160, height: 128, color: 0xa9e735, spriteHeight: 1.4, offsetY: -0.3, shadowSize: 0.6 },
     armored_crab: { textureKey: "armored_crab", width: 160, height: 128, color: 0xdf8fb3, spriteHeight: 1.8, offsetY: -0.22, shadowSize: 0.7 }, // slightly lighter and less saturated; lowered on shadow
-    baby_kraken: { textureKey: "kraken_body", width: 128, height: 128, color: 0xa85ae3, spriteHeight: 2.5, offsetY: -0.16 },
+    baby_kraken: { textureKey: "kraken_body", width: 128, height: 128, color: 0xb090c8, spriteHeight: 2.5, offsetY: -0.16 },
     basilisk: { textureKey: "basilisk_youngling", width: 238, height: 191, color: 0xd8e381, spriteHeight: 2.95, offsetY: -0.14, emissiveIntensity: 0.0, shadowSize: 1.05, toneMix: 1.0 }, // brighter, paler yellow-green; slightly smaller and lower
     bat: { textureKey: "vampire_bat", width: 128, height: 128, color: 0xba8678, spriteHeight: 1.4 }, // light red-brown
-    bloated_corpse: { textureKey: "bloated_corpse", width: 128, height: 128, color: 0x7ab13b, spriteHeight: 2.05, shadowSize: 0.62 },
+    bloated_corpse: { textureKey: "bloated_corpse", width: 128, height: 128, color: 0x7ab13b, spriteHeight: 2.45, shadowSize: 0.68 },
     brood_mother: { textureKey: "brood_mother", width: 164, height: 128, color: 0xae7ac2, spriteHeight: 2.25, offsetY: -0.12, shadowSize: 0.74 }, // lowered on shadow
     broodling: { textureKey: "broodling", width: 128, height: 128, color: 0xa079b4, spriteHeight: 1.0, shadowSize: 0.32 },
     chittering_crabling: { textureKey: "crabling", width: 128, height: 128, color: 0xec816c, spriteHeight: 1.15, offsetY: -0.14, shadowSize: 0.45 }, // lighter red
-    corrupt_druid: { textureKey: "corrupted_druid", width: 96, height: 128, color: 0x598950, spriteHeight: 2.35 }, // brighter, less saturated
+    corrupt_druid: { textureKey: "corrupted_druid", width: 96, height: 128, color: 0x598950, spriteHeight: 2.75, shadowSize: 0.52 }, // brighter, less saturated
     feral_hound: { textureKey: "feral_hound", width: 188, height: 128, color: 0xc2a17a, spriteHeight: 1.45, shadowSize: 0.55 },
     giant_amoeba_lg: { textureKey: "amoeba_lg", width: 128, height: 128, color: 0x14e063, spriteHeight: 2.4, opacity: 0.42 },
     giant_amoeba_md: { textureKey: "amoeba_md", width: 128, height: 128, color: 0x14e063, spriteHeight: 1.7, offsetY: -0.10, opacity: 0.42 },
     giant_amoeba_sm: { textureKey: "amoeba_sm", width: 128, height: 128, color: 0x14e063, spriteHeight: 1.2, offsetY: -0.14, opacity: 0.42 },
     innkeeper: { textureKey: "monk", width: 128, height: 196, color: 0xc18a52, spriteHeight: 1.95, shadowSize: 0.45 },
-    kobold: { textureKey: "kobold_warrior", width: 128, height: 128, color: 0xc39976, spriteHeight: 1.61, offsetX: 0.06, shadowSize: 0.4 }, // light brown; slightly right
-    kobold_archer: { textureKey: "kobold_archer", width: 128, height: 128, color: 0xad611c, spriteHeight: 1.61, shadowSize: 0.4 }, // touch brighter
-    kobold_witch_doctor: { textureKey: "kobold_witch_doctor", width: 128, height: 128, color: 0x9576bf, spriteHeight: 1.61, shadowSize: 0.4 }, // brighter, less saturated
+    kobold: { textureKey: "kobold_warrior", width: 128, height: 128, color: 0xc39976, spriteHeight: 1.85, offsetX: 0.06, shadowSize: 0.44 }, // light brown; slightly right
+    kobold_archer: { textureKey: "kobold_archer", width: 128, height: 128, color: 0xad611c, spriteHeight: 1.85, shadowSize: 0.44 }, // touch brighter
+    kobold_witch_doctor: { textureKey: "kobold_witch_doctor", width: 128, height: 128, color: 0x9576bf, spriteHeight: 1.85, shadowSize: 0.44 }, // brighter, less saturated
     magma_imp: { textureKey: "fire_imp", width: 128, height: 128, color: 0xf68b5a, spriteHeight: 1.85, shadowSize: 0.42 }, // lighter orange-red; larger sprite
-    occultist_pygmy: { textureKey: "occultist_pygmy", width: 128, height: 128, color: 0x8d4a07, spriteHeight: 1.0, shadowSize: 0.32 },
-    kraken_tentacle: { textureKey: "kraken_tentacle", width: 80, height: 128, color: 0x924adb, spriteHeight: 2.0 },
-    necromancer: { textureKey: "necromancer", width: 385, height: 620, color: 0xb08bb7, spriteHeight: 3.1, shadowSize: 0.56 },
-    skeleton_warrior: { textureKey: "skeleton_warrior", width: 439, height: 556, color: 0xc8c078, spriteHeight: 2.15, shadowSize: 0.48 },
+    occultist_pygmy: { textureKey: "occultist_pygmy", width: 128, height: 128, color: 0x8d4a07, spriteHeight: 1.45, shadowSize: 0.38 },
+    kraken_tentacle: { textureKey: "kraken_tentacle", width: 80, height: 128, color: 0x9880b8, spriteHeight: 2.0 },
+    necromancer: { textureKey: "necromancer", width: 385, height: 620, color: 0xb08bb7, spriteHeight: 3.6, shadowSize: 0.62 },
+    skeleton_warrior: { textureKey: "skeleton_warrior", width: 439, height: 556, color: 0x9a9060, spriteHeight: 2.45, shadowSize: 0.52 },
     spine_spitter: { textureKey: "spine_spitter", width: 363, height: 264, color: 0xc5a15c, spriteHeight: 1.35, offsetY: -0.12, shadowSize: 0.46 },
     undead_knight: { textureKey: "undead_knight", width: 105, height: 128, color: 0x6f8bb5, spriteHeight: 3.5, shadowSize: 0.7 }, // less saturated blue
-    wandering_shade: { textureKey: "wandering_shade", width: 128, height: 128, color: 0x748ec9, spriteHeight: 2.05, shadowSize: 0.44, opacity: 0.68 },
+    wandering_shade: { textureKey: "wandering_shade", width: 128, height: 128, color: 0xa0b0d8, spriteHeight: 2.5, shadowSize: 0.48, opacity: 0.55 },
 };
 
 function resolveEnemySpriteTemplate(unit: Unit): SpriteTemplate | undefined {

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { X, Volume2 } from "lucide-react";
 import { soundFns } from "../audio";
+import { ModalShell } from "./ModalShell";
 
 interface JukeboxModalProps {
     onClose: () => void;
@@ -108,8 +109,7 @@ export function JukeboxModal({ onClose }: JukeboxModalProps) {
     };
 
     return (
-        <div className="modal-overlay" onClick={onClose}>
-            <div className="modal-content jukebox-modal" onClick={e => e.stopPropagation()}>
+        <ModalShell onClose={onClose} contentClassName="jukebox-modal">
                 <div className="help-header">
                     <h2 className="help-title">Jukebox</h2>
                     <div className="close-btn" onClick={onClose}><X size={18} /></div>
@@ -134,7 +134,6 @@ export function JukeboxModal({ onClose }: JukeboxModalProps) {
                         </div>
                     ))}
                 </div>
-            </div>
-        </div>
+        </ModalShell>
     );
 }

@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
     type SaveLoadOperationResult,
     type SaveSlotData,
@@ -7,6 +7,7 @@ import {
     getPartyLevel,
     getSaveSlots,
 } from "../game/saveLoad";
+import { ModalShell } from "./ModalShell";
 
 interface SaveLoadModalProps {
     mode: "save" | "load";
@@ -16,25 +17,21 @@ interface SaveLoadModalProps {
     onDelete: (slot: number) => SaveLoadOperationResult;
     currentState: SaveSlotData | null;
     saveDisabledReason: string | null;
+    overlayClassName?: string;
 }
 
-export function SaveLoadModal({ mode, onClose, onSave, onLoad, onDelete, currentState, saveDisabledReason }: SaveLoadModalProps) {
+export function SaveLoadModal({
+    mode,
+    onClose,
+    onSave,
+    onLoad,
+    onDelete,
+    currentState,
+    saveDisabledReason,
+    overlayClassName,
+}: SaveLoadModalProps) {
     const slots = getSaveSlots();
     const [error, setError] = useState<string | null>(null);
-
-    // ESC key to close
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === "Escape") {
-                e.preventDefault();
-                e.stopPropagation();
-                onClose();
-            }
-        };
-
-        window.addEventListener("keydown", handleKeyDown);
-        return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [onClose]);
 
     const finishWithResult = (result: SaveLoadOperationResult): void => {
         if (!result.ok) {
@@ -67,47 +64,50 @@ export function SaveLoadModal({ mode, onClose, onSave, onLoad, onDelete, current
     };
 
     return (
-        <div className="modal-overlay" onClick={onClose}>
-            <div className="modal-content save-load-modal" onClick={e => e.stopPropagation()}>
-                <div className="help-header">
-                    <h2 className="help-title">{mode === "save" ? "Save Game" : "Load Game"}</h2>
-                    <div className="close-btn" onClick={onClose}>x</div>
-                </div>
-
-                {error && (
-                    <div className="help-section" style={{ color: "var(--ui-color-accent-danger)", paddingTop: 0 }}>
-                        {error}
-                    </div>
-                )}
-                {!error && mode === "save" && saveDisabledReason && (
-                    <div className="help-section" style={{ color: "var(--ui-color-text-dim)", paddingTop: 0 }}>
-                        {saveDisabledReason}
-                    </div>
-                )}
-
-                <div className="save-slots">
-                    {slots.map((slot, index) => (
-                        <SaveSlot
-                            key={index}
-                            slot={slot}
-                            index={index}
-                            mode={mode}
-                            onSave={() => handleSave(index)}
-                            onLoad={() => handleLoad(index)}
-                            onDelete={() => handleDelete(index)}
-                            canSave={currentState !== null}
-                            saveDisabledReason={saveDisabledReason}
-                        />
-                    ))}
-                </div>
-
-                <div className="help-footer">
-                    <button className="btn mono" onClick={onClose}>
-                        Cancel
-                    </button>
-                </div>
+        <ModalShell
+            onClose={onClose}
+            overlayClassName={overlayClassName}
+            contentClassName="save-load-modal"
+            closeOnEscape
+        >
+            <div className="help-header">
+                <h2 className="help-title">{mode === "save" ? "Save Game" : "Load Game"}</h2>
+                <div className="close-btn" onClick={onClose}>x</div>
             </div>
-        </div>
+
+            {error && (
+                <div className="help-section" style={{ color: "var(--ui-color-accent-danger)", paddingTop: 0 }}>
+                    {error}
+                </div>
+            )}
+            {!error && mode === "save" && saveDisabledReason && (
+                <div className="help-section" style={{ color: "var(--ui-color-text-dim)", paddingTop: 0 }}>
+                    {saveDisabledReason}
+                </div>
+            )}
+
+            <div className="save-slots">
+                {slots.map((slot, index) => (
+                    <SaveSlot
+                        key={index}
+                        slot={slot}
+                        index={index}
+                        mode={mode}
+                        onSave={() => handleSave(index)}
+                        onLoad={() => handleLoad(index)}
+                        onDelete={() => handleDelete(index)}
+                        canSave={currentState !== null}
+                        saveDisabledReason={saveDisabledReason}
+                    />
+                ))}
+            </div>
+
+            <div className="help-footer">
+                <button className="btn mono" onClick={onClose}>
+                    Cancel
+                </button>
+            </div>
+        </ModalShell>
     );
 }
 

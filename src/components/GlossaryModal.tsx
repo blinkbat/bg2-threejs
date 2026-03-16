@@ -1,5 +1,5 @@
-import { useEffect } from "react";
 import type { CharacterStats, StatusEffectType } from "../core/types";
+import { ModalShell } from "./ModalShell";
 
 interface GlossaryModalProps {
     onClose: () => void;
@@ -362,22 +362,8 @@ export const GLOSSARY_ENTRIES: ReadonlyArray<GlossaryEntry> = [
 ].sort(compareGlossaryEntries);
 
 export function GlossaryModal({ onClose }: GlossaryModalProps) {
-    useEffect(() => {
-        const handleKeyDown = (event: KeyboardEvent) => {
-            if (event.key === "Escape") {
-                event.preventDefault();
-                event.stopPropagation();
-                onClose();
-            }
-        };
-
-        window.addEventListener("keydown", handleKeyDown);
-        return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [onClose]);
-
     return (
-        <div className="modal-overlay" onClick={onClose}>
-            <div className="modal-content help-modal glossary-modal" onClick={event => event.stopPropagation()}>
+        <ModalShell onClose={onClose} contentClassName="help-modal glossary-modal" closeOnEscape>
                 <div className="help-header">
                     <h2 className="help-title">Glossary</h2>
                     <div className="close-btn" onClick={onClose}>&times;</div>
@@ -404,7 +390,6 @@ export function GlossaryModal({ onClose }: GlossaryModalProps) {
                         Got It
                     </button>
                 </div>
-            </div>
-        </div>
+        </ModalShell>
     );
 }

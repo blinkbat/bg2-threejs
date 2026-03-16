@@ -2,7 +2,7 @@
 name: Coastal Cliffs
 flavor: Sea spray stings your eyes where cliffs meet the horizon.
 size: 30x50
-background: #5b5e6b
+background: #6d738d
 ground: #bb9f63
 ambient: 0.55
 directional: 0.7

@@ -572,12 +572,11 @@ export function updateAncestorGhostVisuals(
     now: number
 ): void {
     for (const unit of unitsState) {
-        if (unit.hp <= 0 || unit.team !== "player") {
-            continue;
-        }
+        if (unit.hp <= 0) continue;
 
-        const isAncestorSummon = unit.summonType === "ancestor_warrior" || unit.id === 7;
-        if (!isAncestorSummon) continue;
+        const isGhostly = (unit.team === "player" && (unit.summonType === "ancestor_warrior" || unit.id === 7))
+            || unit.enemyType === "wandering_shade";
+        if (!isGhostly) continue;
 
         const mesh = unitMeshRef[unit.id] ?? findBillboardMesh(unitsRef[unit.id]);
         if (!mesh) continue;

@@ -2,7 +2,7 @@
 name: Seaswept Coastline
 flavor: Salt air fills your lungs as waves crash against the shore.
 size: 50x50
-background: #306b82
+background: #3181a0
 ground: #ab9e78
 ambient: 0.55
 directional: 0.75

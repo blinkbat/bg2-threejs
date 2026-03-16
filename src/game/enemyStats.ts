@@ -401,7 +401,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         accuracy: 75,
         armor: 0,
         aggroRange: 10,
-        attackCooldown: 3000,  // Slow attack rate
+        attackCooldown: 4000,  // Slow attack rate
         range: 8,              // Long range caster
         size: 1.0,             // Medium size
         moveSpeed: 0.5,        // Very slow flyer
@@ -604,11 +604,11 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         name: "Undead Knight",
         monsterType: "undead",
         tier: "miniboss",
-        hp: 120,
-        maxHp: 120,
-        damage: [8, 18],
-        accuracy: 65,
-        armor: 2,          // Heavy armor
+        hp: 160,
+        maxHp: 160,
+        damage: [12, 22],
+        accuracy: 70,
+        armor: 3,          // Heavy armor
         aggroRange: 8,
         attackCooldown: 3500,  // Slow heavy swings
         size: 1.6,         // Large

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import Tippy from "@tippyjs/react";
 import { ChevronLeft, ChevronRight, Circle, Shield, Square, Swords, X } from "lucide-react";
 import type { EquipmentSlot, Item, ItemCategory } from "../core/types";
@@ -11,6 +11,7 @@ import { canEquipInSlot, isOffHandDisabled } from "../game/equipment";
 import { getItem } from "../game/items";
 import { getPlayerUnitColor } from "../game/unitColors";
 import { getPortrait } from "./portraitRegistry";
+import { ModalShell } from "./ModalShell";
 
 interface EquipmentModalProps {
     unitId: number;
@@ -139,17 +140,6 @@ export function EquipmentModal({
         ? unitOrder[(orderIdx + 1) % unitOrder.length]
         : undefined;
 
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key !== "Escape") return;
-            e.preventDefault();
-            e.stopPropagation();
-            onClose();
-        };
-        window.addEventListener("keydown", handleKeyDown);
-        return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [onClose]);
-
     const refreshEquipmentState = useCallback(() => {
         setEquipment(getCharacterEquipment(unitId));
         setInventory(getPartyInventory());
@@ -263,8 +253,12 @@ export function EquipmentModal({
             .sort((a, b) => a.item.name.localeCompare(b.item.name));
 
     return (
-        <div className="modal-overlay equipment-modal-overlay" onClick={onClose}>
-            <div className="modal-content equipment-modal" onClick={e => e.stopPropagation()}>
+        <ModalShell
+            onClose={onClose}
+            overlayClassName="equipment-modal-overlay"
+            contentClassName="equipment-modal"
+            closeOnEscape
+        >
                 <div className="equipment-modal-header">
                     <div className="equipment-modal-header-left">
                         {onChangeUnit && prevUnitId !== undefined && (
@@ -447,7 +441,6 @@ export function EquipmentModal({
                         )}
                     </aside>
                 </div>
-            </div>
-        </div>
+        </ModalShell>
     );
 }

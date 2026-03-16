@@ -2964,7 +2964,7 @@ export default function App() {
     }, [executePendingChain]);
 
     useEffect(() => {
-        if (startupPhase !== "title") return;
+        if (startupPhase !== "title" || showSaveLoad) return;
 
         const onAnyKeyDown = (event: KeyboardEvent) => {
             event.preventDefault();
@@ -2974,7 +2974,7 @@ export default function App() {
 
         window.addEventListener("keydown", onAnyKeyDown, true);
         return () => window.removeEventListener("keydown", onAnyKeyDown, true);
-    }, [startupPhase, handleStartGame]);
+    }, [startupPhase, handleStartGame, showSaveLoad]);
 
     return (
         <>
@@ -3002,7 +3002,18 @@ export default function App() {
             {gameMounted && openInfoModal === "controls" && <ControlsModal onClose={handleCloseInfoModal} onConfirm={handleConfirmControlsModal} />}
             {gameMounted && openInfoModal === "help" && <HelpModal onClose={handleCloseHelpModal} />}
             {gameMounted && openInfoModal === "glossary" && <GlossaryModal onClose={handleCloseGlossaryModal} />}
-            {showSaveLoad && <SaveLoadModal mode={saveLoadMode} onClose={closeSaveLoadModal} onSave={handleSave} onLoad={handleLoad} onDelete={handleDelete} currentState={savePreviewState} saveDisabledReason={saveDisabledReason} />}
+            {showSaveLoad && (
+                <SaveLoadModal
+                    mode={saveLoadMode}
+                    onClose={closeSaveLoadModal}
+                    onSave={handleSave}
+                    onLoad={handleLoad}
+                    onDelete={handleDelete}
+                    currentState={savePreviewState}
+                    saveDisabledReason={saveDisabledReason}
+                    overlayClassName={startupPhase === "title" ? "modal-overlay--startup" : undefined}
+                />
+            )}
             {startupPhase === "title" && (
                 <div className="startup-title-screen">
                     <div className="startup-title-card">
