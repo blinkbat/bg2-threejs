@@ -1236,7 +1236,7 @@ export function updateProjectiles(
 
                 // Apply lifesteal heal using fresh state to avoid race condition
                 if (healAmount > 0 && attackerG) {
-                    applyLifesteal(scene, damageTexts, setUnits, attackerUnit.id, attackerG.position.x, attackerG.position.z, healAmount, attackerData.maxHp);
+                    applyLifesteal(scene, damageTexts, setUnits, attackerUnit.id, attackerG.position.x, attackerG.position.z, healAmount);
                 }
             } else {
                 soundFns.playMiss();

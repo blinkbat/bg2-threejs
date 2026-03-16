@@ -2,7 +2,7 @@
 // EFFECT SCHEDULER - Shared per-frame animation updates
 // =============================================================================
 
-export type EffectAnimationStep = (gameNow: number) => boolean;
+type EffectAnimationStep = (gameNow: number) => boolean;
 
 interface ScheduledEffectAnimation {
     id: number;

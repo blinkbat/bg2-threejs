@@ -1,4 +1,4 @@
-export interface HslaColor {
+interface HslaColor {
     h: number;
     s: number;
     l: number;
@@ -27,7 +27,7 @@ export type ThemeColorTokenId =
     | "accentArcane"
     | "accentCyan";
 
-export interface ThemeColorToken {
+interface ThemeColorToken {
     id: ThemeColorTokenId;
     cssVar: string;
     label: string;

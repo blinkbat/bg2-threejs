@@ -94,7 +94,7 @@ export interface GameRefs {
     debugGrid: THREE.Group | null;
 }
 
-export interface UseThreeSceneOptions {
+interface UseThreeSceneOptions {
     containerRef: React.RefObject<HTMLDivElement | null>;
     units: Unit[];
     openedChests: Set<string>;
@@ -102,7 +102,7 @@ export interface UseThreeSceneOptions {
     skipNextFogSaveOnUnmountRef: React.MutableRefObject<boolean>;
 }
 
-export interface UseThreeSceneResult {
+interface UseThreeSceneResult {
     sceneState: ThreeSceneState;
     gameRefs: React.MutableRefObject<GameRefs>;
     isInitialized: boolean;

@@ -4,13 +4,10 @@
 
 import { useState } from "react";
 import type { AreaLocation } from "../../game/areas/types";
-import { useClampedPosition } from "../hooks/useClampedPosition";
 import { popupStyle, inputStyle, buttonStyle } from "../constants";
 
 interface LocationEditPopupProps {
     location: AreaLocation;
-    screenX: number;
-    screenY: number;
     mapWidth: number;
     mapHeight: number;
     onSave: (location: AreaLocation) => void;
@@ -25,8 +22,6 @@ function parseIntOrFallback(value: string, fallback: number): number {
 
 export function LocationEditPopup({
     location,
-    screenX,
-    screenY,
     mapWidth,
     mapHeight,
     onSave,
@@ -34,10 +29,10 @@ export function LocationEditPopup({
     onClose,
 }: LocationEditPopupProps) {
     const [draft, setDraft] = useState<AreaLocation>({ ...location });
-    const { popupRef, position } = useClampedPosition(screenX, screenY);
 
     return (
-        <div ref={popupRef} style={{ ...popupStyle, left: position.x, top: position.y }} onClick={event => event.stopPropagation()}>
+        <div style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center" }} onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+        <div style={{ ...popupStyle, position: "relative", maxHeight: "80vh", overflowY: "auto" }}>
             <h4 style={{ margin: "0 0 12px", fontSize: 15 }}>Location Properties</h4>
             <label style={{ display: "block", marginBottom: 10 }}>
                 <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>ID</span>
@@ -116,6 +111,7 @@ export function LocationEditPopup({
                     Cancel
                 </button>
             </div>
+        </div>
         </div>
     );
 }

@@ -71,7 +71,7 @@ export const rollHit = (accuracy: number, attacker?: Unit): boolean => {
     return rollChance(blindAdjustedAccuracy);
 };
 
-export interface SkillHitProfile {
+interface SkillHitProfile {
     name: string;
     hitChance?: number;
 }
@@ -268,7 +268,7 @@ export function hasStatusEffect(unit: Unit, effectType: StatusEffectType): boole
     return unit.statusEffects?.some(e => e.type === effectType) ?? false;
 }
 
-export type IncapacitatingStatus = "stunned" | "sleep";
+type IncapacitatingStatus = "stunned" | "sleep";
 
 export function getIncapacitatingStatus(unit: Unit): IncapacitatingStatus | null {
     if (hasStatusEffect(unit, "stunned")) return "stunned";

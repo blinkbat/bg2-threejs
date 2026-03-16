@@ -91,6 +91,140 @@ import "../styles/07-map-editor.css";
 // COMPONENT
 // =============================================================================
 
+const DEFAULT_AREA_ID = "area";
+
+function normalizeAreaId(value: string, fallback: string = DEFAULT_AREA_ID): string {
+    const normalized = value
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+    return normalized.length > 0 ? normalized : fallback;
+}
+
+interface EditorSnapshotSource {
+    metadata: MapMetadata;
+    geometryLayer: string[][];
+    terrainLayers: string[][][];
+    floorLayers: string[][][];
+    terrainTintLayers: number[][][];
+    floorTintLayers: number[][][];
+    propsLayer: string[][];
+    entitiesLayer: string[][];
+    entities: EntityDef[];
+    trees: TreeDef[];
+    decorations: DecorationDef[];
+    dialogs: AreaDialogDefinition[];
+    locations: AreaLocation[];
+    dialogTriggers: AreaDialogTrigger[];
+}
+
+function createEditorSnapshot(source: EditorSnapshotSource): EditorSnapshot {
+    return {
+        metadata: { ...source.metadata },
+        geometryLayer: source.geometryLayer.map(row => [...row]),
+        terrainLayers: cloneTileLayerStack(source.terrainLayers),
+        floorLayers: cloneTileLayerStack(source.floorLayers),
+        terrainTintLayers: cloneTintLayerStack(source.terrainTintLayers),
+        floorTintLayers: cloneTintLayerStack(source.floorTintLayers),
+        propsLayer: source.propsLayer.map(row => [...row]),
+        entitiesLayer: source.entitiesLayer.map(row => [...row]),
+        entities: source.entities.map(entity => ({ ...entity })),
+        trees: source.trees.map(tree => ({ ...tree })),
+        decorations: source.decorations.map(decoration => ({ ...decoration })),
+        dialogs: source.dialogs.map(cloneDialogDefinition),
+        locations: source.locations.map(cloneDialogLocation),
+        dialogTriggers: source.dialogTriggers.map(cloneDialogTrigger),
+    };
+}
+
+function getBrushCells(x: number, z: number, size: number, width: number, height: number): Array<{ x: number; z: number }> {
+    const cells: Array<{ x: number; z: number }> = [];
+    const halfSize = Math.floor(size / 2);
+    for (let dz = -halfSize; dz < size - halfSize; dz++) {
+        for (let dx = -halfSize; dx < size - halfSize; dx++) {
+            const cellX = x + dx;
+            const cellZ = z + dz;
+            if (cellX < 0 || cellX >= width || cellZ < 0 || cellZ >= height) {
+                continue;
+            }
+            cells.push({ x: cellX, z: cellZ });
+        }
+    }
+    return cells;
+}
+
+function remapEnemyLinkedTriggerConditions(
+    triggers: AreaDialogTrigger[],
+    previousEntities: EntityDef[],
+    nextEntities: EntityDef[]
+): AreaDialogTrigger[] {
+    const previousEnemies = getOrderedEnemyEntities(previousEntities);
+    const nextEnemies = getOrderedEnemyEntities(nextEntities);
+    const previousEnemyIds = previousEnemies.map(enemy => enemy.id);
+    const nextEnemyIds = nextEnemies.map(enemy => enemy.id);
+    const enemyOrderChanged = previousEnemyIds.length !== nextEnemyIds.length
+        || previousEnemyIds.some((enemyId, index) => nextEnemyIds[index] !== enemyId);
+    if (!enemyOrderChanged) {
+        return triggers;
+    }
+
+    const nextIndexByEnemyId = new Map<string, number>();
+    nextEnemies.forEach((enemy, index) => {
+        nextIndexByEnemyId.set(enemy.id, index);
+    });
+    const invalidSpawnIndex = nextEnemies.length;
+
+    return triggers.map(trigger => {
+        let didChange = false;
+        let removedTarget = false;
+        const nextConditions = trigger.conditions.map(condition => {
+            if (
+                condition.type !== "enemy_killed"
+                && condition.type !== "unit_seen"
+                && condition.type !== "npc_engaged"
+            ) {
+                return condition;
+            }
+
+            const previousEnemy = previousEnemies[condition.spawnIndex];
+            if (!previousEnemy) {
+                return condition;
+            }
+
+            const nextIndex = nextIndexByEnemyId.get(previousEnemy.id);
+            if (nextIndex === undefined) {
+                didChange = true;
+                removedTarget = true;
+                return {
+                    ...condition,
+                    spawnIndex: invalidSpawnIndex,
+                };
+            }
+
+            if (nextIndex === condition.spawnIndex) {
+                return condition;
+            }
+
+            didChange = true;
+            return {
+                ...condition,
+                spawnIndex: nextIndex,
+            };
+        });
+
+        if (!didChange) {
+            return trigger;
+        }
+
+        return {
+            ...trigger,
+            ...(removedTarget ? { wip: true } : {}),
+            conditions: nextConditions,
+        };
+    });
+}
+
 export function MapEditor() {
     // Map metadata
     const [metadata, setMetadata] = useState<MapMetadata>({
@@ -235,21 +369,22 @@ export function MapEditor() {
     const historyRef = useRef<EditorSnapshot[]>([]);
     const historyIndexRef = useRef(-1);
 
-    const createSnapshot = useCallback((): EditorSnapshot => ({
-        geometryLayer: geometryLayer.map(row => [...row]),
-        terrainLayers: cloneTileLayerStack(terrainLayers),
-        floorLayers: cloneTileLayerStack(floorLayers),
-        terrainTintLayers: cloneTintLayerStack(terrainTintLayers),
-        floorTintLayers: cloneTintLayerStack(floorTintLayers),
-        propsLayer: propsLayer.map(row => [...row]),
-        entitiesLayer: entitiesLayer.map(row => [...row]),
-        entities: entities.map(e => ({ ...e })),
-        trees: trees.map(t => ({ ...t })),
-        decorations: decorations.map(d => ({ ...d })),
-        dialogs: dialogs.map(cloneDialogDefinition),
-        locations: dialogLocations.map(cloneDialogLocation),
-        dialogTriggers: dialogTriggers.map(cloneDialogTrigger),
-    }), [geometryLayer, terrainLayers, floorLayers, terrainTintLayers, floorTintLayers, propsLayer, entitiesLayer, entities, trees, decorations, dialogs, dialogLocations, dialogTriggers]);
+    const createSnapshot = useCallback((): EditorSnapshot => createEditorSnapshot({
+        metadata,
+        geometryLayer,
+        terrainLayers,
+        floorLayers,
+        terrainTintLayers,
+        floorTintLayers,
+        propsLayer,
+        entitiesLayer,
+        entities,
+        trees,
+        decorations,
+        dialogs,
+        locations: dialogLocations,
+        dialogTriggers,
+    }), [metadata, geometryLayer, terrainLayers, floorLayers, terrainTintLayers, floorTintLayers, propsLayer, entitiesLayer, entities, trees, decorations, dialogs, dialogLocations, dialogTriggers]);
 
     const pushHistory = useCallback(() => {
         const snapshot = createSnapshot();
@@ -264,7 +399,13 @@ export function MapEditor() {
         }
     }, [createSnapshot]);
 
+    const resetHistory = useCallback((snapshot: EditorSnapshot): void => {
+        historyRef.current = [snapshot];
+        historyIndexRef.current = 0;
+    }, []);
+
     const applySnapshot = useCallback((snapshot: EditorSnapshot) => {
+        setMetadata({ ...snapshot.metadata });
         setGeometryLayer(snapshot.geometryLayer.map(row => [...row]));
         setTerrainLayers(cloneTileLayerStack(snapshot.terrainLayers));
         setFloorLayers(cloneTileLayerStack(snapshot.floorLayers));
@@ -285,6 +426,11 @@ export function MapEditor() {
         setEditingLocation(null);
         setContextMenu(null);
     }, []);
+
+    const setMetadataWithHistory = useCallback((updater: (prev: MapMetadata) => MapMetadata): void => {
+        pushHistory();
+        setMetadata(prev => updater(prev));
+    }, [pushHistory]);
 
     const undo = useCallback(() => {
         if (historyIndexRef.current > 0) {
@@ -753,6 +899,17 @@ export function MapEditor() {
         return grid;
     }, [metadata.width, metadata.height, metadata.spawnX, metadata.spawnZ, getEntityFootprint]);
 
+    const applyEntitiesUpdate = useCallback((nextEntities: EntityDef[]): void => {
+        const remappedPersistedTriggers = remapEnemyLinkedTriggerConditions(dialogTriggers, entities, nextEntities);
+        setEntities(nextEntities);
+        setEntitiesLayer(buildEntitiesLayerFromDefs(nextEntities));
+        setDialogTriggers(remappedPersistedTriggers);
+        setDialogTriggersDraft(prev => {
+            if (!prev) return prev;
+            return remapEnemyLinkedTriggerConditions(prev, entities, nextEntities);
+        });
+    }, [buildEntitiesLayerFromDefs, dialogTriggers, entities]);
+
     const setSpawnPoint = useCallback((x: number, z: number) => {
         const clampedX = Math.max(0, Math.min(metadata.width - 1, Math.floor(x)));
         const clampedZ = Math.max(0, Math.min(metadata.height - 1, Math.floor(z)));
@@ -778,13 +935,95 @@ export function MapEditor() {
             return;
         }
 
-        if (
-            activeLayer === "entities"
-            && activeTool === "paint"
-            && activeBrush === "E"
-            && isBlockingPropCell(propsLayer, x, z)
-        ) {
-            console.warn(`Blocked enemy placement at (${x}, ${z}) due to blocking prop/tree.`);
+        if (activeLayer === "entities") {
+            const targetCells = getBrushCells(x, z, brushSize, metadata.width, metadata.height);
+            if (activeTool === "erase") {
+                const nextEntities = entities.filter(entity =>
+                    !targetCells.some(cell => entityOccupiesCell(entity, cell.x, cell.z))
+                );
+                applyEntitiesUpdate(nextEntities);
+                return;
+            }
+
+            const overlappingEntityIds = new Set(
+                entities
+                    .filter(entity => targetCells.some(cell => entityOccupiesCell(entity, cell.x, cell.z)))
+                    .map(entity => entity.id)
+            );
+            const nextEntities = entities.filter(entity => !overlappingEntityIds.has(entity.id));
+            const entitySeed = Date.now();
+            targetCells.forEach((cell, index) => {
+                const entityId = `e${entitySeed}-${cell.x}-${cell.z}-${index}`;
+                if (activeBrush === "E") {
+                    if (isBlockingPropCell(propsLayer, cell.x, cell.z)) {
+                        console.warn(`Blocked enemy placement at (${cell.x}, ${cell.z}) due to blocking prop/tree.`);
+                        return;
+                    }
+                    nextEntities.push({
+                        id: entityId,
+                        x: cell.x,
+                        z: cell.z,
+                        type: "enemy",
+                        enemyType: "skeleton_warrior",
+                        enemySpawnIndex: getNextEnemySpawnIndex(nextEntities),
+                    });
+                    return;
+                }
+                if (activeBrush === "X") {
+                    nextEntities.push({
+                        id: entityId,
+                        x: cell.x,
+                        z: cell.z,
+                        type: "chest",
+                        chestGold: 0,
+                        chestItems: "",
+                        chestDecorOnly: false,
+                    });
+                    return;
+                }
+                if (activeBrush === "L") {
+                    nextEntities.push({
+                        id: entityId,
+                        x: cell.x,
+                        z: cell.z,
+                        type: "candle",
+                        candleDx: 0,
+                        candleDz: 1,
+                        lightColor: DEFAULT_CANDLE_LIGHT_COLOR,
+                    });
+                    return;
+                }
+                if (activeBrush === "Y") {
+                    nextEntities.push({
+                        id: entityId,
+                        x: cell.x,
+                        z: cell.z,
+                        type: "torch",
+                        candleDx: 0,
+                        candleDz: 1,
+                        lightColor: DEFAULT_TORCH_LIGHT_COLOR,
+                    });
+                    return;
+                }
+                if (activeBrush === "H") {
+                    nextEntities.push({
+                        id: entityId,
+                        x: cell.x + 0.5,
+                        z: cell.z + 0.5,
+                        type: "light",
+                        lightRadius: DEFAULT_AREA_LIGHT_RADIUS,
+                        lightAngle: DEFAULT_AREA_LIGHT_ANGLE,
+                        lightColor: DEFAULT_AREA_LIGHT_TINT,
+                        lightBrightness: DEFAULT_AREA_LIGHT_BRIGHTNESS,
+                        lightHeight: DEFAULT_AREA_LIGHT_HEIGHT,
+                        lightDiffusion: DEFAULT_AREA_LIGHT_DIFFUSION,
+                        lightDecay: DEFAULT_AREA_LIGHT_DECAY,
+                    });
+                    return;
+                }
+            });
+
+            applyEntitiesUpdate(nextEntities);
             return;
         }
 
@@ -816,73 +1055,6 @@ export function MapEditor() {
         if (isTintableLayer && newTintLayer) {
             setActiveTintLayerData(newTintLayer);
         }
-
-        // For entities layer, sync the entities array for special types that need detailed config
-        if (activeLayer === "entities") {
-            const existingEntity = entities.find(e => Math.floor(e.x) === x && Math.floor(e.z) === z);
-
-            if (activeTool === "erase" && existingEntity) {
-                // Remove entity when erasing
-                setEntities(prev => prev.filter(e => e.id !== existingEntity.id));
-            } else if (activeTool === "paint") {
-                // Remove any existing entity at this position first
-                if (existingEntity) {
-                    setEntities(prev => prev.filter(e => e.id !== existingEntity.id));
-                }
-
-                // Create new entity for special types
-                const entityId = `e${Date.now()}-${x}-${z}`;
-                if (activeBrush === "D") {
-                    setEntities(prev => [...prev, {
-                        id: entityId, x, z, type: "transition",
-                        transitionTarget: getAvailableAreaIds()[0], transitionSpawnX: 5, transitionSpawnZ: 5,
-                        transitionDirection: "north", transitionW: 1, transitionH: 1
-                    }]);
-                } else if (activeBrush === "L") {
-                    setEntities(prev => [...prev, {
-                        id: entityId, x, z, type: "candle",
-                        candleDx: 0, candleDz: 1,
-                        lightColor: DEFAULT_CANDLE_LIGHT_COLOR
-                    }]);
-                } else if (activeBrush === "Y") {
-                    setEntities(prev => [...prev, {
-                        id: entityId, x, z, type: "torch",
-                        candleDx: 0, candleDz: 1,
-                        lightColor: DEFAULT_TORCH_LIGHT_COLOR
-                    }]);
-                } else if (activeBrush === "H") {
-                    setEntities(prev => [...prev, {
-                        id: entityId, x: x + 0.5, z: z + 0.5, type: "light",
-                        lightRadius: DEFAULT_AREA_LIGHT_RADIUS,
-                        lightAngle: DEFAULT_AREA_LIGHT_ANGLE,
-                        lightColor: DEFAULT_AREA_LIGHT_TINT,
-                        lightBrightness: DEFAULT_AREA_LIGHT_BRIGHTNESS,
-                        lightHeight: DEFAULT_AREA_LIGHT_HEIGHT,
-                        lightDiffusion: DEFAULT_AREA_LIGHT_DIFFUSION,
-                        lightDecay: DEFAULT_AREA_LIGHT_DECAY,
-                    }]);
-                } else if (activeBrush === "S") {
-                    const secretDoor = normalizeSecretDoorEntity({
-                        id: entityId, x, z, type: "secret_door",
-                        secretBlockX: x, secretBlockZ: z, secretBlockW: 1, secretBlockH: 1
-                    });
-                    setEntities(prev => [...prev, secretDoor]);
-                } else if (activeBrush === "E") {
-                    setEntities(prev => [...prev, {
-                        id: entityId,
-                        x,
-                        z,
-                        type: "enemy",
-                        enemyType: "skeleton_warrior",
-                        enemySpawnIndex: getNextEnemySpawnIndex(prev),
-                    }]);
-                } else if (activeBrush === "X") {
-                    setEntities(prev => [...prev, {
-                        id: entityId, x, z, type: "chest", chestGold: 0, chestItems: "", chestDecorOnly: false
-                    }]);
-                }
-            }
-        }
     }, [
         getActiveLayer,
         getActiveTintLayer,
@@ -897,7 +1069,9 @@ export function MapEditor() {
         activeLayer,
         entities,
         propsLayer,
-        setSpawnPoint
+        setSpawnPoint,
+        entityOccupiesCell,
+        applyEntitiesUpdate
     ]);
 
     const updateDialogRegionDragEndpoint = useCallback((clientX: number, clientY: number): void => {
@@ -1090,8 +1264,7 @@ export function MapEditor() {
                         transitionDirection: "north", transitionW: w, transitionH: h
                     };
                     const nextEntities: EntityDef[] = [...filteredEntities, transitionDoor];
-                    setEntities(nextEntities);
-                    setEntitiesLayer(buildEntitiesLayerFromDefs(nextEntities));
+                    applyEntitiesUpdate(nextEntities);
                 } else {
                     const secretDoor = normalizeSecretDoorEntity({
                         id: entityId,
@@ -1104,8 +1277,7 @@ export function MapEditor() {
                         secretBlockH: h
                     });
                     const nextEntities: EntityDef[] = [...filteredEntities, secretDoor];
-                    setEntities(nextEntities);
-                    setEntitiesLayer(buildEntitiesLayerFromDefs(nextEntities));
+                    applyEntitiesUpdate(nextEntities);
                 }
             }
             setDoorDrag(null);
@@ -1222,8 +1394,7 @@ export function MapEditor() {
             }
             const nextEntities = baseEntities.concat(pasted);
 
-            setEntities(nextEntities);
-            setEntitiesLayer(buildEntitiesLayerFromDefs(nextEntities));
+            applyEntitiesUpdate(nextEntities);
             setTrees(prev => prev.filter(tree => !cellInPasteFootprint(Math.floor(tree.x), Math.floor(tree.z))));
             setDecorations(prev => prev.filter(decoration => !cellInPasteFootprint(Math.floor(decoration.x), Math.floor(decoration.z))));
             setPropsLayer(prev => {
@@ -1242,10 +1413,7 @@ export function MapEditor() {
         }
 
         const nextEntities = entities.filter(entity => !entityOccupiesCell(entity, x, z));
-        if (nextEntities.length !== entities.length) {
-            setEntities(nextEntities);
-            setEntitiesLayer(buildEntitiesLayerFromDefs(nextEntities));
-        }
+        applyEntitiesUpdate(nextEntities);
 
         if (clipboard.kind === "tree") {
             const treeType = clipboard.tree.type ?? "pine";
@@ -1283,8 +1451,8 @@ export function MapEditor() {
         getEntityFootprint,
         entities,
         footprintsOverlap,
-        buildEntitiesLayerFromDefs,
-        entityOccupiesCell
+        entityOccupiesCell,
+        applyEntitiesUpdate
     ]);
 
     const handleCanvasContextMenu = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -1354,8 +1522,7 @@ export function MapEditor() {
         pushHistory();
         const normalized = normalizeSecretDoorEntity(updated);
         const nextEntities = entities.map(entity => entity.id === normalized.id ? normalized : entity);
-        setEntities(nextEntities);
-        setEntitiesLayer(buildEntitiesLayerFromDefs(nextEntities));
+        applyEntitiesUpdate(nextEntities);
         setEditingEntity(null);
     };
 
@@ -1546,12 +1713,11 @@ export function MapEditor() {
         setDialogTriggersDraft(persistedTriggers.map(cloneDialogTrigger));
     }, [pushHistory]);
 
-    const loadArea = (areaId: AreaId) => {
+    const loadArea = useCallback((areaId: AreaId) => {
         const area = AREAS[areaId];
         if (!area) return;
 
-        // Update metadata
-        setMetadata({
+        const loadedMetadata: MapMetadata = {
             id: area.id,
             name: area.name,
             flavor: area.flavor,
@@ -1564,10 +1730,10 @@ export function MapEditor() {
             fog: area.hasFogOfWar,
             spawnX: area.defaultSpawn.x,
             spawnZ: area.defaultSpawn.z,
-        });
+        };
 
         // Use geometry, terrain, and floor directly from area data
-        setGeometryLayer(area.geometry.map(row => [...row]));
+        const loadedGeometryLayer = area.geometry.map(row => [...row]);
         const loadedTerrainLayers = normalizeTileLayerStack(area.terrainLayers ?? [area.terrain], area.gridWidth, area.gridHeight, TILE_EMPTY);
         const loadedFloorLayers = normalizeTileLayerStack(
             area.floor && area.floor.length > 0 ? (area.floorLayers ?? [area.floor]) : [createEmptyLayer(area.gridWidth, area.gridHeight, TILE_EMPTY)],
@@ -1575,23 +1741,17 @@ export function MapEditor() {
             area.gridHeight,
             TILE_EMPTY
         );
-        setTerrainLayers(loadedTerrainLayers);
-        setFloorLayers(loadedFloorLayers);
-        setTerrainTintLayers(normalizeTintLayerStack(area.terrainTintLayers, loadedTerrainLayers.length, area.gridWidth, area.gridHeight));
-        setFloorTintLayers(normalizeTintLayerStack(area.floorTintLayers, loadedFloorLayers.length, area.gridWidth, area.gridHeight));
-        setActiveTerrainPaintLayer(Math.max(0, loadedTerrainLayers.length - 1));
-        setActiveFloorPaintLayer(Math.max(0, loadedFloorLayers.length - 1));
+        const loadedTerrainTintLayers = normalizeTintLayerStack(area.terrainTintLayers, loadedTerrainLayers.length, area.gridWidth, area.gridHeight);
+        const loadedFloorTintLayers = normalizeTintLayerStack(area.floorTintLayers, loadedFloorLayers.length, area.gridWidth, area.gridHeight);
 
         // Compute props layer from trees and decorations
         const newProps = computePropsFromArea(area, area.gridWidth, area.gridHeight);
-        setPropsLayer(newProps);
 
         // Compute entities layer from enemies, chests, transitions
         const newEntities = computeEntitiesFromArea(area, area.gridWidth, area.gridHeight);
-        setEntitiesLayer(newEntities);
 
         // Store detailed data that can't be shown in grid
-        setTrees(area.trees.map(t => {
+        const loadedTrees = area.trees.map(t => {
             const normalizedType = t.type ?? "pine";
             return {
                 x: t.x,
@@ -1599,8 +1759,8 @@ export function MapEditor() {
                 size: clampTreeSizeByType(t.size, normalizedType),
                 type: normalizedType,
             };
-        }));
-        setDecorations((area.decorations ?? []).map(d => ({ x: d.x, z: d.z, type: d.type, rotation: d.rotation, size: d.size })));
+        });
+        const loadedDecorations = (area.decorations ?? []).map(d => ({ x: d.x, z: d.z, type: d.type, rotation: d.rotation, size: d.size }));
 
         // Build entity definitions
         const entityDefs: EntityDef[] = [];
@@ -1666,31 +1826,57 @@ export function MapEditor() {
             });
             entityDefs.push(secretDoor);
         });
-        setEntities(entityDefs);
-        setDialogs((area.dialogs ?? []).map(cloneDialogDefinition));
+        const loadedDialogs = (area.dialogs ?? []).map(cloneDialogDefinition);
         const loadedLocations = (area.locations ?? []).map(cloneDialogLocation);
+
+        const loadedTriggers = (area.dialogTriggers ?? []).map(cloneDialogTrigger);
+        setMetadata(loadedMetadata);
+        setGeometryLayer(loadedGeometryLayer);
+        setTerrainLayers(loadedTerrainLayers);
+        setFloorLayers(loadedFloorLayers);
+        setTerrainTintLayers(loadedTerrainTintLayers);
+        setFloorTintLayers(loadedFloorTintLayers);
+        setActiveTerrainPaintLayer(Math.max(0, loadedTerrainLayers.length - 1));
+        setActiveFloorPaintLayer(Math.max(0, loadedFloorLayers.length - 1));
+        setPropsLayer(newProps);
+        setEntitiesLayer(newEntities);
+        setEntities(entityDefs);
+        setTrees(loadedTrees);
+        setDecorations(loadedDecorations);
+        setDialogs(loadedDialogs);
         setDialogLocations(loadedLocations);
         setSelectedDialogLocationId(loadedLocations[0]?.id ?? null);
-        setDialogTriggers((area.dialogTriggers ?? []).map(cloneDialogTrigger));
+        setDialogTriggers(loadedTriggers);
         setDialogTriggersDraft(null);
         setDialogRegionDrag(null);
         setDialogEditorOpen(false);
         setEditingLocation(null);
         setContextMenu(null);
-    };
+        resetHistory(createEditorSnapshot({
+            metadata: loadedMetadata,
+            geometryLayer: loadedGeometryLayer,
+            terrainLayers: loadedTerrainLayers,
+            floorLayers: loadedFloorLayers,
+            terrainTintLayers: loadedTerrainTintLayers,
+            floorTintLayers: loadedFloorTintLayers,
+            propsLayer: newProps,
+            entitiesLayer: newEntities,
+            entities: entityDefs,
+            trees: loadedTrees,
+            decorations: loadedDecorations,
+            dialogs: loadedDialogs,
+            locations: loadedLocations,
+            dialogTriggers: loadedTriggers,
+        }));
+    }, [resetHistory]);
 
     const createNewArea = () => {
-        const newId = `area_${Date.now()}`;
+        const newId = normalizeAreaId(`area_${Date.now()}`);
         const width = 30;
         const height = 20;
         const spawnX = 3;
         const spawnZ = 10;
-        const newEntities = createEmptyLayer(width, height, ".");
-        if (spawnZ >= 0 && spawnZ < height && spawnX >= 0 && spawnX < width) {
-            newEntities[spawnZ][spawnX] = "@";
-        }
-
-        setMetadata({
+        const newMetadata: MapMetadata = {
             id: newId,
             name: "New Area",
             flavor: "A mysterious place.",
@@ -1703,18 +1889,29 @@ export function MapEditor() {
             fog: true,
             spawnX,
             spawnZ,
-        });
+        };
+        const newGeometryLayer = createEmptyLayer(width, height, ".");
+        const newTerrainLayers = [createEmptyLayer(width, height, TILE_EMPTY)];
+        const newFloorLayers = [createEmptyLayer(width, height, TILE_EMPTY)];
+        const newTerrainTintLayers = [createEmptyTintGrid(width, height)];
+        const newFloorTintLayers = [createEmptyTintGrid(width, height)];
+        const newPropsLayer = createEmptyLayer(width, height, ".");
+        const newEntitiesLayer = createEmptyLayer(width, height, ".");
+        if (spawnZ >= 0 && spawnZ < height && spawnX >= 0 && spawnX < width) {
+            newEntitiesLayer[spawnZ][spawnX] = "@";
+        }
 
-        setGeometryLayer(createEmptyLayer(width, height, "."));
-        setTerrainLayers([createEmptyLayer(width, height, TILE_EMPTY)]);
-        setFloorLayers([createEmptyLayer(width, height, TILE_EMPTY)]);
-        setTerrainTintLayers([createEmptyTintGrid(width, height)]);
-        setFloorTintLayers([createEmptyTintGrid(width, height)]);
+        setMetadata(newMetadata);
+        setGeometryLayer(newGeometryLayer);
+        setTerrainLayers(newTerrainLayers);
+        setFloorLayers(newFloorLayers);
+        setTerrainTintLayers(newTerrainTintLayers);
+        setFloorTintLayers(newFloorTintLayers);
         setActiveTerrainPaintLayer(0);
         setActiveFloorPaintLayer(0);
         setActiveTileTint(0);
-        setPropsLayer(createEmptyLayer(width, height, "."));
-        setEntitiesLayer(newEntities);
+        setPropsLayer(newPropsLayer);
+        setEntitiesLayer(newEntitiesLayer);
         setEntities([]);
         setTrees([]);
         setDecorations([]);
@@ -1727,11 +1924,22 @@ export function MapEditor() {
         setDialogEditorOpen(false);
         setEditingLocation(null);
         setContextMenu(null);
-
-        // Reset history for new area
-        historyRef.current = [];
-        historyIndexRef.current = -1;
-        pushHistory();
+        resetHistory(createEditorSnapshot({
+            metadata: newMetadata,
+            geometryLayer: newGeometryLayer,
+            terrainLayers: newTerrainLayers,
+            floorLayers: newFloorLayers,
+            terrainTintLayers: newTerrainTintLayers,
+            floorTintLayers: newFloorTintLayers,
+            propsLayer: newPropsLayer,
+            entitiesLayer: newEntitiesLayer,
+            entities: [],
+            trees: [],
+            decorations: [],
+            dialogs: [],
+            locations: [],
+            dialogTriggers: [],
+        }));
     };
 
     // Load last saved map on mount when available, otherwise fall back to coast.
@@ -1742,26 +1950,29 @@ export function MapEditor() {
             return;
         }
         loadArea("coast");
-    }, []);
+    }, [loadArea]);
 
     const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
     const saveMap = async () => {
         const area = buildAreaDataFromEditor();
         const content = areaDataToText(area);
+        if (area.id !== metadata.id) {
+            setMetadata(prev => ({ ...prev, id: area.id }));
+        }
 
         setSaveStatus("saving");
         try {
             const res = await fetch("/__save-map", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ areaId: metadata.id, content }),
+                body: JSON.stringify({ areaId: area.id, content }),
             });
             const data = await res.json();
             if (data.success) {
                 // Register the area so it's immediately available for loading/transitions
-                registerAreaFromText(metadata.id, content);
-                persistLastSavedAreaId(metadata.id);
+                registerAreaFromText(area.id, content);
+                persistLastSavedAreaId(area.id);
                 setSaveStatus("saved");
                 setTimeout(() => setSaveStatus("idle"), 2000);
             } else {
@@ -1807,6 +2018,7 @@ export function MapEditor() {
     }, [entities]);
 
     const buildAreaDataFromEditor = (): AreaData => {
+        const areaId = normalizeAreaId(metadata.id);
         const normalizedTerrainLayers = normalizeTileLayerStack(terrainLayers, metadata.width, metadata.height, TILE_EMPTY);
         const normalizedFloorLayers = normalizeTileLayerStack(floorLayers, metadata.width, metadata.height, TILE_EMPTY);
         const normalizedTerrainTintLayers = normalizeTintLayerStack(terrainTintLayers, normalizedTerrainLayers.length, metadata.width, metadata.height);
@@ -1932,7 +2144,7 @@ export function MapEditor() {
             }));
 
         return {
-            id: metadata.id as AreaId,
+            id: areaId as AreaId,
             name: metadata.name,
             flavor: metadata.flavor,
             gridSize: Math.max(metadata.width, metadata.height),
@@ -2406,8 +2618,6 @@ export function MapEditor() {
                     <EntityEditPopup
                         entity={editingEntity.entity}
                         itemRegistryRevision={itemRegistryRevision}
-                        screenX={editingEntity.screenX}
-                        screenY={editingEntity.screenY}
                         onSave={updateEntity}
                         onClose={() => setEditingEntity(null)}
                         onNavigate={(areaId) => {
@@ -2421,8 +2631,6 @@ export function MapEditor() {
                 {editingTree && (
                     <TreeEditPopup
                         tree={editingTree.tree}
-                        screenX={editingTree.screenX}
-                        screenY={editingTree.screenY}
                         onSave={(t) => updateTree(editingTree.index, t)}
                         onClose={() => setEditingTree(null)}
                     />
@@ -2432,8 +2640,6 @@ export function MapEditor() {
                 {editingDecoration && (
                     <DecorationEditPopup
                         decoration={editingDecoration.decoration}
-                        screenX={editingDecoration.screenX}
-                        screenY={editingDecoration.screenY}
                         onSave={(d) => updateDecoration(editingDecoration.index, d)}
                         onClose={() => setEditingDecoration(null)}
                     />
@@ -2443,8 +2649,6 @@ export function MapEditor() {
                 {editingLocation && (
                     <LocationEditPopup
                         location={editingLocation.location}
-                        screenX={editingLocation.screenX}
-                        screenY={editingLocation.screenY}
                         mapWidth={metadata.width}
                         mapHeight={metadata.height}
                         onSave={(nextLocation) => {
@@ -2470,7 +2674,16 @@ export function MapEditor() {
                     <span style={{ fontSize: 13 }}>ID</span>
                     <input
                         value={metadata.id}
-                        onChange={e => setMetadata(prev => ({ ...prev, id: e.target.value }))}
+                        onChange={e => {
+                            const nextId = normalizeAreaId(e.target.value, "");
+                            if (nextId === metadata.id) return;
+                            setMetadataWithHistory(prev => ({ ...prev, id: nextId }));
+                        }}
+                        onBlur={() => {
+                            const nextId = normalizeAreaId(metadata.id);
+                            if (nextId === metadata.id) return;
+                            setMetadataWithHistory(prev => ({ ...prev, id: nextId }));
+                        }}
                         style={{ padding: 8, fontSize: 14, background: "#333", border: "1px solid #555", borderRadius: 4, color: "#fff" }}
                     />
                 </label>
@@ -2479,7 +2692,7 @@ export function MapEditor() {
                     <span style={{ fontSize: 13 }}>Name</span>
                     <input
                         value={metadata.name}
-                        onChange={e => setMetadata(prev => ({ ...prev, name: e.target.value }))}
+                        onChange={e => setMetadataWithHistory(prev => ({ ...prev, name: e.target.value }))}
                         style={{ padding: 8, fontSize: 14, background: "#333", border: "1px solid #555", borderRadius: 4, color: "#fff" }}
                     />
                 </label>
@@ -2488,7 +2701,7 @@ export function MapEditor() {
                     <span style={{ fontSize: 13 }}>Flavor Text</span>
                     <textarea
                         value={metadata.flavor}
-                        onChange={e => setMetadata(prev => ({ ...prev, flavor: e.target.value }))}
+                        onChange={e => setMetadataWithHistory(prev => ({ ...prev, flavor: e.target.value }))}
                         rows={2}
                         style={{ padding: 8, fontSize: 14, background: "#333", border: "1px solid #555", borderRadius: 4, color: "#fff", resize: "vertical" }}
                     />
@@ -2500,7 +2713,7 @@ export function MapEditor() {
                         <input
                             type="number"
                             value={metadata.width}
-                            onChange={e => setMetadata(prev => ({ ...prev, width: Math.max(5, Math.min(100, parseInt(e.target.value) || 5)) }))}
+                            onChange={e => setMetadataWithHistory(prev => ({ ...prev, width: Math.max(5, Math.min(100, parseInt(e.target.value) || 5)) }))}
                             style={{ padding: 8, fontSize: 14, background: "#333", border: "1px solid #555", borderRadius: 4, color: "#fff" }}
                         />
                     </label>
@@ -2509,7 +2722,7 @@ export function MapEditor() {
                         <input
                             type="number"
                             value={metadata.height}
-                            onChange={e => setMetadata(prev => ({ ...prev, height: Math.max(5, Math.min(100, parseInt(e.target.value) || 5)) }))}
+                            onChange={e => setMetadataWithHistory(prev => ({ ...prev, height: Math.max(5, Math.min(100, parseInt(e.target.value) || 5)) }))}
                             style={{ padding: 8, fontSize: 14, background: "#333", border: "1px solid #555", borderRadius: 4, color: "#fff" }}
                         />
                     </label>
@@ -2521,7 +2734,7 @@ export function MapEditor() {
                         <input
                             type="color"
                             value={metadata.background}
-                            onChange={e => setMetadata(prev => ({ ...prev, background: e.target.value }))}
+                            onChange={e => setMetadataWithHistory(prev => ({ ...prev, background: e.target.value }))}
                             style={{ padding: 2, height: 40, background: "#333", border: "1px solid #555", borderRadius: 4 }}
                         />
                     </label>
@@ -2530,7 +2743,7 @@ export function MapEditor() {
                         <input
                             type="color"
                             value={metadata.ground}
-                            onChange={e => setMetadata(prev => ({ ...prev, ground: e.target.value }))}
+                            onChange={e => setMetadataWithHistory(prev => ({ ...prev, ground: e.target.value }))}
                             style={{ padding: 2, height: 40, background: "#333", border: "1px solid #555", borderRadius: 4 }}
                         />
                     </label>
@@ -2545,7 +2758,7 @@ export function MapEditor() {
                             max="1"
                             step="0.05"
                             value={metadata.ambient}
-                            onChange={e => setMetadata(prev => ({ ...prev, ambient: parseFloat(e.target.value) }))}
+                            onChange={e => setMetadataWithHistory(prev => ({ ...prev, ambient: parseFloat(e.target.value) }))}
                         />
                         <span style={{ fontSize: 12, textAlign: "center" }}>{metadata.ambient}</span>
                     </label>
@@ -2557,7 +2770,7 @@ export function MapEditor() {
                             max="1"
                             step="0.05"
                             value={metadata.directional}
-                            onChange={e => setMetadata(prev => ({ ...prev, directional: parseFloat(e.target.value) }))}
+                            onChange={e => setMetadataWithHistory(prev => ({ ...prev, directional: parseFloat(e.target.value) }))}
                         />
                         <span style={{ fontSize: 12, textAlign: "center" }}>{metadata.directional}</span>
                     </label>
@@ -2567,7 +2780,7 @@ export function MapEditor() {
                     <input
                         type="checkbox"
                         checked={metadata.fog}
-                        onChange={e => setMetadata(prev => ({ ...prev, fog: e.target.checked }))}
+                        onChange={e => setMetadataWithHistory(prev => ({ ...prev, fog: e.target.checked }))}
                         style={{ width: 18, height: 18 }}
                     />
                     Fog of War

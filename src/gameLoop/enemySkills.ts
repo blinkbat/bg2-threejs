@@ -158,15 +158,15 @@ export function executeEnemyHeal(
     const healAmount = rollDamage(skill.heal[0], skill.heal[1]);
     const targetStats = getUnitStats(bestTarget.unit) as EnemyStats;
     const targetId = bestTarget.unit.id;
-    const maxHp = targetStats.maxHp;
 
     // Estimate heal for visual (actual heal uses fresh state inside callback)
-    const estimatedHeal = Math.min(healAmount, maxHp - bestTarget.unit.hp);
+    const estimatedHeal = Math.min(healAmount, targetStats.maxHp - bestTarget.unit.hp);
 
     // Apply heal using fresh state to avoid stale HP race condition
     setUnits(prev => prev.map(u => {
         if (u.id !== targetId) return u;
         if (u.hp <= 0) return u; // Don't heal dead units
+        const maxHp = (getUnitStats(u) as EnemyStats).maxHp;
         return { ...u, hp: Math.min(u.hp + healAmount, maxHp) };
     }));
 

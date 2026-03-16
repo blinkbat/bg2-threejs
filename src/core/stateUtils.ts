@@ -7,7 +7,7 @@ import type { Unit } from "./types";
 type SetUnits = React.Dispatch<React.SetStateAction<Unit[]>>;
 const LIVE_DISPATCH_PATCH_MAX_UNITS = 64;
 
-export interface LiveUnitsDispatch extends SetUnits {
+interface LiveUnitsDispatch extends SetUnits {
     __liveUnitsRef: React.MutableRefObject<Unit[]>;
 }
 

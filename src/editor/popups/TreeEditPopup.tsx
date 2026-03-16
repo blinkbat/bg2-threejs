@@ -5,7 +5,6 @@
 import { useState } from "react";
 import type { TreeDef } from "../types";
 import { MAX_PINE_TREE_SIZE, MAX_TREE_SIZE, MIN_TREE_SIZE, type TreeType } from "../../game/areas/types";
-import { useClampedPosition } from "../hooks/useClampedPosition";
 import { popupStyle, inputStyle, selectStyle, buttonStyle } from "../constants";
 
 const TREE_TYPES: TreeType[] = ["pine", "palm", "oak"];
@@ -21,20 +20,18 @@ function clampTreeSize(size: number, treeType: TreeType): number {
 
 interface TreeEditPopupProps {
     tree: TreeDef;
-    screenX: number;
-    screenY: number;
     onSave: (t: TreeDef) => void;
     onClose: () => void;
 }
 
-export function TreeEditPopup({ tree, screenX, screenY, onSave, onClose }: TreeEditPopupProps) {
+export function TreeEditPopup({ tree, onSave, onClose }: TreeEditPopupProps) {
     const [size, setSize] = useState(tree.size);
     const [treeType, setTreeType] = useState<TreeType>(tree.type ?? "pine");
-    const { popupRef, position } = useClampedPosition(screenX, screenY);
     const maxSize = getTreeMaxSize(treeType);
 
     return (
-        <div ref={popupRef} style={{ ...popupStyle, left: position.x, top: position.y }} onClick={e => e.stopPropagation()}>
+        <div style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center" }} onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+        <div style={{ ...popupStyle, position: "relative", maxHeight: "80vh", overflowY: "auto" }}>
             <h4 style={{ margin: "0 0 12px", fontSize: 15 }}>Edit Tree</h4>
             <label style={{ display: "block", marginBottom: 10 }}>
                 <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Type</span>
@@ -73,6 +70,7 @@ export function TreeEditPopup({ tree, screenX, screenY, onSave, onClose }: TreeE
                 </button>
                 <button style={{ ...buttonStyle, background: "#555", color: "#fff" }} onClick={onClose}>Cancel</button>
             </div>
+        </div>
         </div>
     );
 }

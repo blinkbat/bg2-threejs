@@ -464,8 +464,7 @@ describe("damageEffects", () => {
                 [],         // damageTexts
                 setUnits,
                 1, 5, 5,   // attacker id and position
-                10,         // healAmount
-                25          // maxHp
+                10          // healAmount
             );
 
             expect(setUnits).toHaveBeenCalled();
@@ -475,7 +474,7 @@ describe("damageEffects", () => {
         it("does nothing for zero heal amount", () => {
             const setUnits: Dispatch<SetStateAction<Unit[]>> = vi.fn(() => {});
 
-            applyLifesteal(makeScene(), [], setUnits, 1, 5, 5, 0, 25);
+            applyLifesteal(makeScene(), [], setUnits, 1, 5, 5, 0);
 
             expect(setUnits).not.toHaveBeenCalled();
         });

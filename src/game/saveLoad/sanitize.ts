@@ -79,7 +79,7 @@ interface ParsedSaveSlotFailure {
     code: "version_unsupported" | "invalid";
 }
 
-export type ParsedSaveSlotResult = ParsedSaveSlotSuccess | ParsedSaveSlotFailure;
+type ParsedSaveSlotResult = ParsedSaveSlotSuccess | ParsedSaveSlotFailure;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value);

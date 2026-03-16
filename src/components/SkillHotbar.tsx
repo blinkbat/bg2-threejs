@@ -1,11 +1,15 @@
-import { useState } from "react";
-import { createPortal } from "react-dom";
+import { useState, useRef, useCallback } from "react";
 import Tippy from "@tippyjs/react";
 import type { Unit, Skill } from "../core/types";
 import { getAllSkills, getAvailableSkills } from "../game/playerUnits";
-import { getSkillBorderColor, getSkillTextColor } from "../core/constants";
+import { getSkillTextColor } from "../core/constants";
 import type { HotbarAssignments } from "../hooks/hotbarStorage";
 import { useDisplayTime } from "../hooks/useDisplayTime";
+
+/** Drag data type used for skill-to-hotbar and hotbar-to-hotbar transfers */
+export const SKILL_DRAG_TYPE = "application/x-skill";
+/** Secondary type carrying hotbar source slot index (for rearranging) */
+export const HOTBAR_SLOT_DRAG_TYPE = "application/x-hotbar-slot";
 
 interface SkillHotbarProps {
     unit: Unit;
@@ -16,67 +20,11 @@ interface SkillHotbarProps {
     paused?: boolean;
 }
 
-// =============================================================================
-// SKILL SELECTOR POPUP
-// =============================================================================
-
-interface SkillSelectorProps {
-    unit: Unit;
-    slotIndex: number;
-    currentSkill: string | null;
-    onSelect: (skillName: string | null) => void;
-    onClose: () => void;
-}
-
-function SkillSelector({ unit, slotIndex, currentSkill, onSelect, onClose }: SkillSelectorProps) {
-    const skills = getAllSkills(unit.id, unit);
-
-    return createPortal(
-        <div className="skill-selector-backdrop" onClick={onClose}>
-            <div className="skill-selector-popup" onClick={e => e.stopPropagation()}>
-                <div className="skill-selector-header">
-                    Assign Skill to Slot {slotIndex + 1}
-                </div>
-                <div className="skill-selector-list">
-                    {/* Clear option */}
-                    <div
-                        className={`skill-selector-item ${!currentSkill ? "selected" : ""}`}
-                        onClick={() => { onSelect(null); onClose(); }}
-                    >
-                        <span className="skill-selector-name text-muted">(Empty)</span>
-                    </div>
-                    {skills.map(skill => {
-                        const isSelected = currentSkill === skill.name;
-                        const skillColor = getSkillTextColor(skill.type, skill.damageType);
-                        const borderColor = getSkillBorderColor(skill.type, skill.damageType);
-                        const cantripUses = skill.isCantrip ? (unit.cantripUses?.[skill.name] ?? 0) : undefined;
-                        return (
-                            <div
-                                key={skill.name}
-                                className={`skill-selector-item ${isSelected ? "selected" : ""}`}
-                                style={{ borderColor: isSelected ? borderColor : undefined }}
-                                onClick={() => { onSelect(skill.name); onClose(); }}
-                            >
-                                <div className="skill-selector-info">
-                                    <span className="skill-selector-name" style={{ color: skillColor }}>{skill.name}</span>
-                                    {skill.isCantrip && (
-                                        <span className="skill-selector-tag">CANTRIP</span>
-                                    )}
-                                </div>
-                                <div className="skill-selector-meta">
-                                    {cantripUses !== undefined && (
-                                        <span className="skill-selector-uses">{cantripUses} uses</span>
-                                    )}
-                                    {skill.manaCost > 0 && <span className="skill-selector-cost">{skill.manaCost} MP</span>}
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            </div>
-        </div>,
-        document.body
-    );
+// Shared refs so HotbarSlot can communicate with the parent container.
+// These are set by the SkillHotbar and read/written by HotbarSlot.
+interface HotbarDragContext {
+    dropHandled: boolean;
+    sourceSlot: number | null;
 }
 
 // =============================================================================
@@ -87,8 +35,9 @@ interface HotbarSlotProps {
     unit: Unit;
     slotIndex: number;
     skill: Skill | null;
-    onRightClick: () => void;
     onCastSkill?: (unitId: number, skill: Skill) => void;
+    onDrop: (slotIndex: number, skillName: string, sourceSlot: number | null) => void;
+    dragCtx: React.RefObject<HotbarDragContext>;
     cooldownPct: number;
     cooldownRemaining: number;
     hasManaForSkill: boolean;
@@ -100,8 +49,9 @@ function HotbarSlot({
     unit,
     slotIndex,
     skill,
-    onRightClick,
     onCastSkill,
+    onDrop,
+    dragCtx,
     cooldownPct,
     cooldownRemaining,
     hasManaForSkill,
@@ -114,16 +64,45 @@ function HotbarSlot({
     const canClick = skill && !locked && hasManaForSkill && !noUsesLeft && unit.hp > 0;
     const onCooldown = !locked && cooldownPct > 0;
 
-    const handleContextMenu = (e: React.MouseEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        onRightClick();
-    };
+    const [dropHover, setDropHover] = useState(false);
 
     const handleClick = (e: React.MouseEvent) => {
         e.stopPropagation();
         if (canClick && onCastSkill && skill) {
             onCastSkill(unit.id, skill);
+        }
+    };
+
+    const handleDragStart = (e: React.DragEvent) => {
+        if (!skill) { e.preventDefault(); return; }
+        dragCtx.current.sourceSlot = slotIndex;
+        dragCtx.current.dropHandled = false;
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData(SKILL_DRAG_TYPE, skill.name);
+        e.dataTransfer.setData(HOTBAR_SLOT_DRAG_TYPE, String(slotIndex));
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        if (e.dataTransfer.types.includes(SKILL_DRAG_TYPE)) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+            setDropHover(true);
+        }
+    };
+
+    const handleDragLeave = () => {
+        setDropHover(false);
+    };
+
+    const handleDropEvent = (e: React.DragEvent) => {
+        e.preventDefault();
+        setDropHover(false);
+        dragCtx.current.dropHandled = true;
+        const skillName = e.dataTransfer.getData(SKILL_DRAG_TYPE);
+        const sourceSlotStr = e.dataTransfer.getData(HOTBAR_SLOT_DRAG_TYPE);
+        const sourceSlot = sourceSlotStr ? parseInt(sourceSlotStr, 10) : null;
+        if (skillName) {
+            onDrop(slotIndex, skillName, Number.isNaN(sourceSlot) ? null : sourceSlot);
         }
     };
 
@@ -133,20 +112,20 @@ function HotbarSlot({
         "hotbar-slot",
         isEmpty ? "empty" : "",
         !canClick && !isEmpty ? "disabled" : "",
-        onCooldown ? "on-cooldown" : ""
+        onCooldown ? "on-cooldown" : "",
+        dropHover ? "drop-hover" : ""
     ].filter(Boolean).join(" ");
 
-    // Skill abbreviation (first 3 chars or icon)
     const abbrev = skill ? skill.name.slice(0, 3).toUpperCase() : "";
 
     return (
         <Tippy
             content={locked && skill ? (
-                    <div className="hotbar-tooltip">
-                        <div className="hotbar-tooltip-name" style={{ color: getSkillTextColor(skill.type, skill.damageType) }}>{skill.name}</div>
+                <div className="hotbar-tooltip">
+                    <div className="hotbar-tooltip-name" style={{ color: getSkillTextColor(skill.type, skill.damageType) }}>{skill.name}</div>
                     <div className="hotbar-tooltip-hint" style={{ color: "var(--ui-color-accent-warning)" }}>Not yet learned</div>
-                        <div className="hotbar-tooltip-hint">Right-click to change</div>
-                    </div>
+                    <div className="hotbar-tooltip-hint">Drag skills here to assign</div>
+                </div>
             ) : skill ? (
                 <div className="hotbar-tooltip">
                     <div className="hotbar-tooltip-name" style={{ color: getSkillTextColor(skill.type, skill.damageType) }}>{skill.name}</div>
@@ -154,12 +133,12 @@ function HotbarSlot({
                     {isCantrip && usesLeft !== undefined && (
                         <div className="hotbar-tooltip-cost">{usesLeft} uses remaining</div>
                     )}
-                    <div className="hotbar-tooltip-hint">Right-click to change</div>
                     <div className="hotbar-tooltip-hint">Press {slotIndex + 1} to use</div>
+                    <div className="hotbar-tooltip-hint">Drag to rearrange · drag off to clear</div>
                 </div>
             ) : (
                 <div className="hotbar-tooltip">
-                    <div className="hotbar-tooltip-hint">Right-click to assign skill</div>
+                    <div className="hotbar-tooltip-hint">Drag skills here to assign</div>
                     <div className="hotbar-tooltip-hint">Press {slotIndex + 1} to use</div>
                 </div>
             )}
@@ -169,7 +148,11 @@ function HotbarSlot({
             <div
                 className={slotClass}
                 onClick={handleClick}
-                onContextMenu={handleContextMenu}
+                draggable={!!skill}
+                onDragStart={handleDragStart}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDropEvent}
             >
                 {onCooldown && (
                     <div
@@ -204,24 +187,52 @@ export function SkillHotbar({
     skillCooldowns = {},
     paused = false
 }: SkillHotbarProps) {
-    const [selectorOpen, setSelectorOpen] = useState<number | null>(null);
     const displayTime = useDisplayTime(paused, 50);
     const allSkills = getAllSkills(unit.id, unit);
     const availableSkills = getAvailableSkills(unit.id);
 
-    // Get slot assignments for this unit (default to 5 empty slots)
     const slots = hotbarAssignments[unit.id] || [null, null, null, null, null];
+    const slotsRef = useRef(slots);
+    slotsRef.current = slots;
+
+    const dragCtx = useRef<HotbarDragContext>({ dropHandled: false, sourceSlot: null });
+
+    const handleSlotDrop = useCallback((targetSlot: number, skillName: string, sourceSlot: number | null) => {
+        if (sourceSlot !== null && sourceSlot !== targetSlot) {
+            const targetSkill = slotsRef.current[targetSlot];
+            onAssignSkill(unit.id, targetSlot, skillName);
+            onAssignSkill(unit.id, sourceSlot, targetSkill);
+        } else if (sourceSlot === null) {
+            onAssignSkill(unit.id, targetSlot, skillName);
+        }
+    }, [unit.id, onAssignSkill]);
+
+    const handleDragEnd = useCallback(() => {
+        // If a hotbar slot was dragged and not dropped on another slot, clear it
+        if (!dragCtx.current.dropHandled && dragCtx.current.sourceSlot !== null) {
+            onAssignSkill(unit.id, dragCtx.current.sourceSlot, null);
+        }
+        dragCtx.current.sourceSlot = null;
+        dragCtx.current.dropHandled = false;
+    }, [unit.id, onAssignSkill]);
 
     return (
-        <div className="skill-hotbar" onClick={e => e.stopPropagation()}>
+        <div
+            className="skill-hotbar"
+            onClick={e => e.stopPropagation()}
+            onDragEnd={handleDragEnd}
+            onDragOver={(e) => {
+                if (e.dataTransfer.types.includes(SKILL_DRAG_TYPE)) {
+                    e.preventDefault();
+                }
+            }}
+        >
             {slots.map((skillName, index) => {
                 const learnedSkill = skillName ? allSkills.find(s => s.name === skillName) || null : null;
-                // If not learned, check if it exists as an available (unlearned) skill
                 const lockedSkill = !learnedSkill && skillName ? availableSkills.find(s => s.name === skillName) || null : null;
                 const skill = learnedSkill || lockedSkill;
                 const isLocked = !!lockedSkill;
 
-                // Cooldown calculation
                 const cooldownKey = skill ? `${unit.id}-${skill.name}` : "";
                 const cooldownData = skillCooldowns[cooldownKey];
                 const skillCooldownEnd = cooldownData?.end || 0;
@@ -238,8 +249,9 @@ export function SkillHotbar({
                         unit={unit}
                         slotIndex={index}
                         skill={skill}
-                        onRightClick={() => setSelectorOpen(index)}
                         onCastSkill={onCastSkill}
+                        onDrop={handleSlotDrop}
+                        dragCtx={dragCtx}
                         cooldownPct={cooldownPct}
                         cooldownRemaining={cooldownRemaining}
                         hasManaForSkill={hasManaForSkill}
@@ -248,17 +260,6 @@ export function SkillHotbar({
                     />
                 );
             })}
-
-            {selectorOpen !== null && (
-                <SkillSelector
-                    unit={unit}
-                    slotIndex={selectorOpen}
-                    currentSkill={slots[selectorOpen]}
-                    onSelect={(skillName) => onAssignSkill(unit.id, selectorOpen, skillName)}
-                    onClose={() => setSelectorOpen(null)}
-                />
-            )}
         </div>
     );
 }
-

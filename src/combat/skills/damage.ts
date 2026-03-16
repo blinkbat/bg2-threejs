@@ -138,7 +138,7 @@ export function executeAoeSkill(
 // DELIVERY TYPES FOR TARGETED DAMAGE SKILLS
 // =============================================================================
 
-export type DamageDelivery =
+type DamageDelivery =
     | { mode: "melee" }
     | { mode: "ranged" }
     | { mode: "smite" };
@@ -1204,9 +1204,7 @@ export function executeWellOfGravitySkill(
         if (defeatedThisFrame.has(enemy.id)) continue;
         const enemyG = unitsRef.current[enemy.id];
         if (!enemyG) continue;
-        const dx = enemyG.position.x - targetX;
-        const dz = enemyG.position.z - targetZ;
-        if (Math.hypot(dx, dz) <= aoeRadius + getUnitRadius(enemy)) {
+        if (isInRange(targetX, targetZ, enemyG.position.x, enemyG.position.z, getUnitRadius(enemy), aoeRadius)) {
             enemiesInArea.push({ unit: enemy, group: enemyG });
         }
     }

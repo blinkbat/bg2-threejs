@@ -503,8 +503,8 @@ spawn: 25,7
 46.5,2.5:baby_kraken
 
 === CHESTS ===
-2.5,5.5:gold=14
-5.5,40.5:gold=4
+2.5,5.5:gold=14,items=[blightberry:1]
+5.5,40.5:gold=7
 
 === TRANSITIONS ===
 0,18,1,5:west->cliffs@47,25
@@ -665,10 +665,31 @@ spawn: 25,7
 31,34:small_rock
 32,34:fern
 32,35:small_fern
+2,36:small_fern
 43,36:small_fern
+17,37:fern
+2,38:small_fern
+3,38:weeds
+4,38:small_weeds
+6,38:small_weeds
+3,39:fern
+3,40:small_fern
+6,40:weeds
+7,40:small_weeds
+4,41:fern
+7,41:small_weeds
 11,41:small_rock
+4,42:small_fern
+6,42:weeds
+4,43:fern
+5,43:small_fern
+4,44:fern
+7,44:fern
+6,46:fern
+7,46:fern
 20,46:small_mushroom
 29,46:small_mushroom
+7,47:fern
 21,47:small_mushroom
 22,47:mushroom
 29,47:small_mushroom

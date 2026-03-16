@@ -14,7 +14,7 @@ export type ItemCategory = "weapon" | "shield" | "armor" | "accessory" | "consum
 export type WeaponGrip = "oneHand" | "twoHand";
 
 // Base item interface
-export interface ItemBase {
+interface ItemBase {
     id: string;
     name: string;
     description: string;

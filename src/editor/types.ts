@@ -71,6 +71,7 @@ export interface DecorationDef {
 }
 
 export interface EditorSnapshot {
+    metadata: MapMetadata;
     geometryLayer: string[][];
     terrainLayers: string[][][];
     floorLayers: string[][][];

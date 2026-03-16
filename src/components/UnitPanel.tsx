@@ -11,6 +11,7 @@ import { getPartyInventory } from "../game/equipmentState";
 import { getItem } from "../game/items";
 import { useDisplayTime } from "../hooks/useDisplayTime";
 import { getPortrait } from "./portraitRegistry";
+import { SKILL_DRAG_TYPE } from "./SkillHotbar";
 
 const PORTRAIT_POS: Record<string, string> = {
     Cleric: "35% bottom",
@@ -21,16 +22,22 @@ const PORTRAIT_POS: Record<string, string> = {
     Ancestor: "center 78%",
 };
 
+type PanelQueuedAction =
+    | { type: "skill"; skillName: string }
+    | { type: "consumable"; itemId: string };
+
 interface UnitPanelProps {
     unitId: number;
     units: Unit[];
     onClose: () => void;
     onToggleAI: (unitId: number) => void;
     onCastSkill?: (unitId: number, skill: Skill) => void;
+    onCancelQueuedSkill?: (unitId: number, skill: Skill) => void;
     skillCooldowns?: Record<string, { end: number; duration: number }>;
     paused?: boolean;
-    queuedSkills?: string[];
+    queuedAction?: PanelQueuedAction | null;
     onUseConsumable?: (itemId: string, targetUnitId: number) => void;
+    onCancelQueuedConsumable?: (itemId: string, targetUnitId: number) => void;
     consumableCooldownEnd?: number;
     onOpenEquipment?: (unitId: number) => void;
     onIncrementStat?: (unitId: number, stat: keyof CharacterStats) => void;
@@ -44,10 +51,12 @@ export function UnitPanel({
     onClose,
     onToggleAI,
     onCastSkill,
+    onCancelQueuedSkill,
     skillCooldowns = {},
     paused = false,
-    queuedSkills = [],
+    queuedAction = null,
     onUseConsumable,
+    onCancelQueuedConsumable,
     consumableCooldownEnd = 0,
     onOpenEquipment,
     onIncrementStat,
@@ -124,8 +133,9 @@ export function UnitPanel({
                         skillCooldowns={skillCooldowns}
                         displayTime={displayTime}
                         paused={paused}
-                        queuedSkills={queuedSkills}
+                        queuedAction={queuedAction}
                         onCastSkill={onCastSkill}
+                        onCancelQueuedSkill={onCancelQueuedSkill}
                         onLearnSkill={onLearnSkill}
                     />
                 )}
@@ -136,7 +146,8 @@ export function UnitPanel({
                         displayTime={displayTime}
                         consumableCooldownEnd={consumableCooldownEnd}
                         onUseConsumable={onUseConsumable}
-                        queuedSkills={queuedSkills}
+                        onCancelQueuedConsumable={onCancelQueuedConsumable}
+                        queuedAction={queuedAction}
                         gold={gold}
                     />
                 )}
@@ -678,7 +689,7 @@ function SkillTooltip({ skill, isShielded, cantripUses }: { skill: Skill; isShie
 }
 
 function SkillCard({
-    unitId, unit, skill, skillCooldowns, displayTime, paused, isShielded, isQueued, onCastSkill, unlearned, canLearn, onLearn
+    unitId, unit, skill, skillCooldowns, displayTime, paused, isShielded, isQueued, onCastSkill, onCancelQueuedSkill, unlearned, canLearn, onLearn
 }: {
     unitId: number;
     unit: Unit;
@@ -689,6 +700,7 @@ function SkillCard({
     isShielded: boolean;
     isQueued: boolean;
     onCastSkill?: (unitId: number, skill: Skill) => void;
+    onCancelQueuedSkill?: (unitId: number, skill: Skill) => void;
     unlearned?: boolean;
     canLearn?: boolean;
     onLearn?: () => void;
@@ -731,10 +743,17 @@ function SkillCard({
                 className={cardClass}
                 onClick={() => {
                     if (unlearned && canLearn && onLearn) onLearn();
+                    else if (isQueued) onCancelQueuedSkill?.(unitId, skill);
                     else if (canCast) onCastSkill?.(unitId, skill);
                 }}
                 style={{
-                    borderColor: unlearned ? undefined : (isQueued ? undefined : (canCast ? skillBorderColor : "var(--ui-color-border)"))
+                    borderColor: unlearned ? undefined : (isQueued ? undefined : (canCast ? skillBorderColor : "var(--ui-color-border)")),
+                    cursor: !unlearned ? (isQueued ? "pointer" : "grab") : undefined
+                }}
+                draggable={!unlearned}
+                onDragStart={(e) => {
+                    e.dataTransfer.effectAllowed = "move";
+                    e.dataTransfer.setData(SKILL_DRAG_TYPE, skill.name);
                 }}
             >
                 {!unlearned && skillOnCooldown && (
@@ -779,15 +798,16 @@ function SkillCard({
 }
 
 function SkillsTab({
-    unitId, unit, skillCooldowns, displayTime, paused, queuedSkills, onCastSkill, onLearnSkill
+    unitId, unit, skillCooldowns, displayTime, paused, queuedAction, onCastSkill, onCancelQueuedSkill, onLearnSkill
 }: {
     unitId: number;
     unit: Unit;
     skillCooldowns: Record<string, { end: number; duration: number }>;
     displayTime: number;
     paused: boolean;
-    queuedSkills: string[];
+    queuedAction: PanelQueuedAction | null;
     onCastSkill?: (unitId: number, skill: Skill) => void;
+    onCancelQueuedSkill?: (unitId: number, skill: Skill) => void;
     onLearnSkill?: (unitId: number, skillName: string) => void;
 }) {
     const isShielded = hasStatusEffect(unit, "shielded");
@@ -817,8 +837,9 @@ function SkillsTab({
                             displayTime={displayTime}
                             paused={paused}
                             isShielded={isShielded}
-                            isQueued={queuedSkills.includes(skill.name)}
+                            isQueued={queuedAction?.type === "skill" && queuedAction.skillName === skill.name}
                             onCastSkill={onCastSkill}
+                            onCancelQueuedSkill={onCancelQueuedSkill}
                         />
                     ))}
                 </>
@@ -837,8 +858,9 @@ function SkillsTab({
                             displayTime={displayTime}
                             paused={paused}
                             isShielded={isShielded}
-                            isQueued={queuedSkills.includes(skill.name)}
+                            isQueued={queuedAction?.type === "skill" && queuedAction.skillName === skill.name}
                             onCastSkill={onCastSkill}
+                            onCancelQueuedSkill={onCancelQueuedSkill}
                         />
                     ))}
                 </>
@@ -878,7 +900,8 @@ function InventoryTab({
     displayTime,
     consumableCooldownEnd,
     onUseConsumable,
-    queuedSkills = [],
+    onCancelQueuedConsumable,
+    queuedAction = null,
     gold = 0,
 }: {
     unit: Unit;
@@ -886,7 +909,8 @@ function InventoryTab({
     displayTime: number;
     consumableCooldownEnd: number;
     onUseConsumable?: (itemId: string, targetUnitId: number) => void;
-    queuedSkills?: string[];
+    onCancelQueuedConsumable?: (itemId: string, targetUnitId: number) => void;
+    queuedAction?: PanelQueuedAction | null;
     gold?: number;
 }) {
     const inventory = getPartyInventory();
@@ -920,7 +944,7 @@ function InventoryTab({
                 if (!item || !isConsumable(item)) return null;
 
                 const unitAlive = unit.hp > 0;
-                const isQueued = queuedSkills.includes(item.name);
+                const isQueued = queuedAction?.type === "consumable" && queuedAction.itemId === entry.itemId;
                 const isRevive = item.effect === "revive";
                 const isCleanse = item.effect === "cleanse";
 
@@ -1016,7 +1040,9 @@ function InventoryTab({
                         <div
                             className={itemClass}
                             onClick={() => {
-                                if (canClick) {
+                                if (isQueued) {
+                                    onCancelQueuedConsumable?.(entry.itemId, unit.id);
+                                } else if (canClick) {
                                     onUseConsumable?.(entry.itemId, unit.id);
                                 }
                             }}

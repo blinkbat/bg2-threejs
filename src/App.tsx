@@ -1906,6 +1906,20 @@ function Game({
         handleCastSkillRef.current = handleCastSkill;
     }, [handleCastSkill]);
 
+    const handleCancelQueuedSkill = useCallback((unitId: number, skill: Skill) => {
+        const queuedAction = actionQueueRef.current[unitId];
+        if (!queuedAction || queuedAction.type !== "skill" || queuedAction.skill.name !== skill.name) {
+            return;
+        }
+
+        delete actionQueueRef.current[unitId];
+        setQueuedActions(prev => prev.filter(q => q.unitId !== unitId));
+        addLog(
+            `${UNIT_DATA[unitId]?.name ?? "Unknown"} cancels ${skill.name}.`,
+            getSkillTextColor(skill.type, skill.damageType)
+        );
+    }, [addLog]);
+
     const handleStop = useCallback(() => {
         stopSelectedUnits({
             selectedIds: selectedRef.current,
@@ -2040,6 +2054,21 @@ function Game({
         }
         executeConsumable(userId, itemId);
     }, [units, paused, addLog, executeConsumable]);
+
+    const handleCancelQueuedConsumable = useCallback((itemId: string, userId: number) => {
+        const queuedAction = actionQueueRef.current[userId];
+        if (!queuedAction || queuedAction.type !== "consumable" || queuedAction.itemId !== itemId) {
+            return;
+        }
+
+        const item = getItem(itemId);
+        delete actionQueueRef.current[userId];
+        setQueuedActions(prev => prev.filter(q => q.unitId !== userId));
+        addLog(
+            `${UNIT_DATA[userId]?.name ?? "Unknown"} cancels ${item?.name ?? "that item"}.`,
+            "#888"
+        );
+    }, [addLog]);
 
     const handleConsumableTarget = useCallback((deadAllyId: number) => {
         if (!consumableTargetingMode) return;
@@ -2355,6 +2384,17 @@ function Game({
         return "var(--ui-color-accent-danger)";
     }, []);
     const areaData = getCurrentArea();
+    const selectedQueuedActionEntry = selectedIds.length === 1
+        ? queuedActions.find(q => q.unitId === selectedIds[0])
+        : undefined;
+    const selectedPanelQueuedAction = selectedQueuedActionEntry
+        ? actionQueueRef.current[selectedIds[0]]
+        : undefined;
+    const queuedPanelAction = selectedPanelQueuedAction?.type === "skill"
+        ? { type: "skill" as const, skillName: selectedPanelQueuedAction.skill.name }
+        : selectedPanelQueuedAction?.type === "consumable"
+            ? { type: "consumable" as const, itemId: selectedPanelQueuedAction.itemId }
+            : null;
 
     return (
         <div className={equipmentModalOpen ? "equip-modal-active" : undefined} style={{ width: "100%", height: "100vh", position: "relative", cursor: (targetingMode || consumableTargetingMode || commandMode === "attackMove") ? "crosshair" : "default" }}>
@@ -2490,7 +2530,7 @@ function Game({
             {/* UI Components */}
             <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onShowControls={onShowControls} onShowHelp={onShowHelp} onShowGlossary={onShowGlossary} onRestart={onRestart} onSaveClick={onSaveClick} onLoadClick={onLoadClick} debug={debug} onToggleDebug={handleToggleDebug} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} onStatBoost={handleStatBoost} onTogglePlaytestUnlockAllSkills={handleTogglePlaytestUnlockAllSkills} playtestUnlockAllSkillsEnabled={playtestSettings.unlockAllSkills} onTogglePlaytestSkipDialogs={handleTogglePlaytestSkipDialogs} playtestSkipDialogsEnabled={playtestSettings.skipDialogs} onToggleFastMove={handleToggleFastMove} fastMoveEnabled={fastMove} lightingTuning={lightingTuning} onUpdateLightingTuning={handleUpdateLightingTuning} onResetLightingTuning={handleResetLightingTuning} lightingTuningOutput={lightingTuningOutput} menuOpen={menuOpen} jukeboxOpen={jukeboxOpen} onOpenMenu={onOpenMenu} onCloseMenu={onCloseMenu} onOpenJukebox={onOpenJukebox} onCloseJukebox={onCloseJukebox} otherModalOpen={otherModalOpen} hasSelection={selectedIds.length > 0} />
             <CombatLog log={combatLog} />
-            <FormationIndicator units={playerUnits} formationOrder={formationOrder} />
+            <FormationIndicator units={playerUnits} formationOrder={formationOrder} onReorderFormation={handleReorderFormation} />
             <div className="bottom-bar-container">
             <CommandBar
                 commandMode={commandMode}
@@ -2520,9 +2560,14 @@ function Game({
                 <UnitPanel
                     unitId={selectedIds[0]} units={playerUnits} onClose={handleClosePanel}
                     onToggleAI={handleToggleAI}
-                    onCastSkill={handleCastSkill} skillCooldowns={skillCooldowns} paused={paused}
-                    queuedSkills={queuedActions.filter(q => q.unitId === selectedIds[0]).map(q => q.skillName)}
-                    onUseConsumable={handleUseConsumable} consumableCooldownEnd={selectedConsumableCooldownEnd}
+                    onCastSkill={handleCastSkill}
+                    onCancelQueuedSkill={handleCancelQueuedSkill}
+                    skillCooldowns={skillCooldowns}
+                    paused={paused}
+                    queuedAction={queuedPanelAction}
+                    onUseConsumable={handleUseConsumable}
+                    onCancelQueuedConsumable={handleCancelQueuedConsumable}
+                    consumableCooldownEnd={selectedConsumableCooldownEnd}
                     onOpenEquipment={setEquipmentModalUnitId}
                     onIncrementStat={handleIncrementStat}
                     onLearnSkill={handleLearnSkill}
@@ -3018,14 +3063,16 @@ export default function App() {
                 <div className="startup-title-screen">
                     <div className="startup-title-card">
                         <h1 className="startup-title-text">Archipelago</h1>
-                        <button className="startup-title-btn" onClick={handleStartGame}>
-                            New Game
-                        </button>
-                        {hasSaves && (
-                            <button className="startup-title-btn" onClick={() => { setSaveLoadMode("load"); setShowSaveLoad(true); }}>
-                                Load Game
+                        <div className="startup-title-buttons">
+                            <button className="startup-title-btn startup-title-btn-new" onClick={handleStartGame}>
+                                New Game
                             </button>
-                        )}
+                            {hasSaves && (
+                                <button className="startup-title-btn startup-title-btn-load" onClick={() => { setSaveLoadMode("load"); setShowSaveLoad(true); }}>
+                                    Load Game
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}

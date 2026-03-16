@@ -236,7 +236,7 @@ DDDDDDDDDDD.......................................
 
 === CHESTS ===
 30.5,5.5:gold=17
-5.5,30.5:gold=9
+5.5,30.5:gold=9,items=[dustyElixir:1]
 
 === TRANSITIONS ===
 49,23,1,5:west->coast@2,20

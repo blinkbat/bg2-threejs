@@ -365,6 +365,12 @@
     background: var(--ui-color-surface-active);
 }
 
+.hotbar-slot.drop-hover {
+    border-color: var(--ui-color-text);
+    border-style: solid;
+    background: var(--ui-color-surface-hover);
+}
+
 .hotbar-slot-key {
     position: absolute;
     top: 3px;
@@ -446,109 +452,6 @@
     font-style: italic;
 }
 
-/* Skill selector popup */
-.skill-selector-backdrop {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: var(--ui-color-overlay);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 999999;
-}
-
-.skill-selector-popup {
-    background: var(--ui-modal-bg);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border: var(--ui-modal-border);
-    border-radius: 8px;
-    padding: 12px;
-    min-width: 220px;
-    max-width: 280px;
-    box-shadow: 0 8px 32px var(--ui-color-shadow);
-    color: var(--ui-color-text-secondary);
-}
-
-.skill-selector-header {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--ui-color-text-muted);
-    margin-bottom: 10px;
-    text-align: center;
-    padding-bottom: 8px;
-    border-bottom: 1px solid var(--ui-color-border-soft);
-}
-
-.skill-selector-list {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    max-height: 300px;
-    overflow-y: auto;
-}
-
-.skill-selector-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 10px;
-    background: var(--ui-color-surface);
-    border-radius: 4px;
-    cursor: pointer;
-    border: 1px solid transparent;
-    transition: background 0.15s, border-color 0.15s;
-}
-
-.skill-selector-item:hover {
-    background: var(--ui-color-surface-hover);
-    border-color: var(--ui-color-border);
-}
-
-.skill-selector-item.selected {
-    background: var(--ui-color-surface-hover);
-}
-
-.skill-selector-info {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}
-
-.skill-selector-name {
-    font-size: 12px;
-    font-weight: 600;
-}
-
-.skill-selector-tag {
-    font-size: 9px;
-    font-weight: 600;
-    color: var(--ui-color-accent-arcane);
-    background: var(--ui-color-accent-arcane-soft);
-    border: 1px solid var(--ui-color-accent-arcane-border);
-    border-radius: 3px;
-    padding: 1px 4px;
-    letter-spacing: 0.5px;
-}
-
-.skill-selector-meta {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.skill-selector-uses {
-    font-size: 11px;
-    color: var(--ui-color-accent-arcane);
-}
-
-.skill-selector-cost {
-    font-size: 11px;
-    color: var(--ui-color-accent-cyan);
-}
 
 @media (max-width: 640px) {
     .dialog-modal {

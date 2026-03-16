@@ -4,13 +4,10 @@
 
 import { useState } from "react";
 import type { DecorationDef } from "../types";
-import { useClampedPosition } from "../hooks/useClampedPosition";
 import { popupStyle, inputStyle, selectStyle, buttonStyle } from "../constants";
 
 interface DecorationEditPopupProps {
     decoration: DecorationDef;
-    screenX: number;
-    screenY: number;
     onSave: (d: DecorationDef) => void;
     onClose: () => void;
 }
@@ -43,14 +40,14 @@ function getClosestCardinalOrientationValue(rotation: number): string {
     return closest.value;
 }
 
-export function DecorationEditPopup({ decoration, screenX, screenY, onSave, onClose }: DecorationEditPopupProps) {
+export function DecorationEditPopup({ decoration, onSave, onClose }: DecorationEditPopupProps) {
     const [draft, setDraft] = useState({ ...decoration });
-    const { popupRef, position } = useClampedPosition(screenX, screenY);
     const showCardinalOrientation = draft.type === "bed" || draft.type === "bookshelf";
     const orientationLabel = draft.type === "bookshelf" ? "Bookshelf Orientation" : "Bed Orientation";
 
     return (
-        <div ref={popupRef} style={{ ...popupStyle, left: position.x, top: position.y }} onClick={e => e.stopPropagation()}>
+        <div style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center" }} onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+        <div style={{ ...popupStyle, position: "relative", maxHeight: "80vh", overflowY: "auto" }}>
             <h4 style={{ margin: "0 0 12px", fontSize: 15 }}>Edit Decoration</h4>
             <label style={{ display: "block", marginBottom: 10 }}>
                 <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Type</span>
@@ -118,6 +115,7 @@ export function DecorationEditPopup({ decoration, screenX, screenY, onSave, onCl
                 <button style={{ ...buttonStyle, background: "#4a9", color: "#fff" }} onClick={() => onSave(draft)}>Save</button>
                 <button style={{ ...buttonStyle, background: "#555", color: "#fff" }} onClick={onClose}>Cancel</button>
             </div>
+        </div>
         </div>
     );
 }

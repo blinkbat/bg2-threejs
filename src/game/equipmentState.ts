@@ -19,7 +19,6 @@ import {
     getMainHandWeapon,
     unequipItem
 } from "./equipment";
-export type { EffectivePlayerEquipmentStats } from "./equipment";
 import type { EffectivePlayerEquipmentStats } from "./equipment";
 
 // =============================================================================
@@ -39,7 +38,7 @@ let isInitialized = false;
 // TYPES
 // =============================================================================
 
-export interface EquipmentTransactionResult {
+interface EquipmentTransactionResult {
     unitId: number;
     previousEquipment: CharacterEquipment;
 }

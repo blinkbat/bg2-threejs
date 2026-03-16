@@ -17,6 +17,7 @@ interface AreaMinimapProps {
 export function AreaMinimap({ areaId, spawnX, spawnZ, onSpawnChange, width = 200, height = 200 }: AreaMinimapProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const area = AREAS[areaId];
+    const suppressNextClickRef = useRef(false);
 
     // Zoom and pan state
     const [zoom, setZoom] = useState(1);
@@ -26,8 +27,9 @@ export function AreaMinimap({ areaId, spawnX, spawnZ, onSpawnChange, width = 200
     const [dragStart, setDragStart] = useState({ x: 0, z: 0 });
 
     // Calculate scale to fit area in preview
-    const gridSize = area?.gridSize || 30;
-    const baseCellSize = Math.min(width, height) / gridSize;
+    const gridWidth = area?.gridWidth || 30;
+    const gridHeight = area?.gridHeight || 30;
+    const baseCellSize = Math.min(width / gridWidth, height / gridHeight);
     const cellSize = baseCellSize * zoom;
 
     const draw = useCallback(() => {
@@ -69,14 +71,16 @@ export function AreaMinimap({ areaId, spawnX, spawnZ, onSpawnChange, width = 200
         if (zoom >= 1.5) {
             ctx.strokeStyle = "rgba(255,255,255,0.1)";
             ctx.lineWidth = 0.5;
-            for (let i = 0; i <= gridSize; i++) {
+            for (let x = 0; x <= gridWidth; x++) {
                 ctx.beginPath();
-                ctx.moveTo(i * cellSize, 0);
-                ctx.lineTo(i * cellSize, gridSize * cellSize);
+                ctx.moveTo(x * cellSize, 0);
+                ctx.lineTo(x * cellSize, gridHeight * cellSize);
                 ctx.stroke();
+            }
+            for (let z = 0; z <= gridHeight; z++) {
                 ctx.beginPath();
-                ctx.moveTo(0, i * cellSize);
-                ctx.lineTo(gridSize * cellSize, i * cellSize);
+                ctx.moveTo(0, z * cellSize);
+                ctx.lineTo(gridWidth * cellSize, z * cellSize);
                 ctx.stroke();
             }
         }
@@ -116,7 +120,7 @@ export function AreaMinimap({ areaId, spawnX, spawnZ, onSpawnChange, width = 200
 
         ctx.restore();
 
-    }, [area, width, height, cellSize, spawnX, spawnZ, gridSize, zoom, offsetX, offsetZ]);
+    }, [area, width, height, cellSize, spawnX, spawnZ, gridWidth, gridHeight, zoom, offsetX, offsetZ]);
 
     useEffect(() => {
         draw();
@@ -126,8 +130,8 @@ export function AreaMinimap({ areaId, spawnX, spawnZ, onSpawnChange, width = 200
         const gridX = Math.floor((screenX - offsetX) / cellSize);
         const gridZ = Math.floor((screenZ - offsetZ) / cellSize);
         return {
-            x: Math.max(0, Math.min(gridSize - 1, gridX)),
-            z: Math.max(0, Math.min(gridSize - 1, gridZ))
+            x: Math.max(0, Math.min(gridWidth - 1, gridX)),
+            z: Math.max(0, Math.min(gridHeight - 1, gridZ))
         };
     };
 
@@ -135,6 +139,7 @@ export function AreaMinimap({ areaId, spawnX, spawnZ, onSpawnChange, width = 200
         if (e.button === 1 || e.button === 2 || e.shiftKey) {
             // Middle click, right click, or shift+click to pan
             e.preventDefault();
+            suppressNextClickRef.current = true;
             setIsDragging(true);
             setDragStart({ x: e.clientX - offsetX, z: e.clientY - offsetZ });
         }
@@ -142,6 +147,7 @@ export function AreaMinimap({ areaId, spawnX, spawnZ, onSpawnChange, width = 200
 
     const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
         if (isDragging) {
+            suppressNextClickRef.current = true;
             setOffsetX(e.clientX - dragStart.x);
             setOffsetZ(e.clientY - dragStart.z);
         }
@@ -153,6 +159,10 @@ export function AreaMinimap({ areaId, spawnX, spawnZ, onSpawnChange, width = 200
 
     const handleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
         if (isDragging) return;
+        if (suppressNextClickRef.current) {
+            suppressNextClickRef.current = false;
+            return;
+        }
 
         const canvas = canvasRef.current;
         if (!canvas) return;

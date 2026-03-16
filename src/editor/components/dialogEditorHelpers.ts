@@ -39,18 +39,6 @@ export interface TriggerValidationState {
 
 export type TriggerListFilter = "all" | "needs_fix" | "ready" | "wip";
 
-export const DIALOG_END_MENU_OPTIONS: Array<{ value: AreaDialogMenuId | AreaDialogEventId; label: string }> = [
-    { value: "controls", label: "Controls" },
-    { value: "help", label: "Help" },
-    { value: "glossary", label: "Glossary" },
-    { value: "equipment", label: "Equipment" },
-    { value: "save_game", label: "Save Menu" },
-    { value: "load_game", label: "Load Menu" },
-    { value: "menu", label: "Main Menu" },
-    { value: "jukebox", label: "Jukebox" },
-    { value: "spend_the_night", label: "Spend The Night" },
-];
-
 export const SAVE_FEEDBACK_MS = 2500;
 
 export const TRIGGER_CONDITION_OPTIONS: Array<{ value: AreaDialogTriggerCondition["type"]; label: string }> = [

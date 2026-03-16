@@ -1,7 +1,7 @@
 import { VISION_RADIUS, PATH_RECURSION_LIMIT, ASTAR_BLOCKED_TARGET_SEARCH, ASTAR_DIAGONAL_COST } from "../core/constants";
 import { blocked } from "../game/dungeon";
 import { isTreeBlocked, isTerrainBlocked, isWaterTerrain } from "../game/areas";
-import { isWithinGrid } from "../game/geometry";
+import { isWithinGrid, distance } from "../game/geometry";
 import type { PathNode, Unit, UnitGroup } from "../core/types";
 import type { UnitSpatialFrame } from "./spatialCache";
 
@@ -700,8 +700,7 @@ export function findPath(
                 }
             } else {
                 // Calculate h using actual distance (needed for accurate pathfinding)
-                const hdx = ex - n.x, hdz = ez - n.z;
-                const newNode: PathNode = { x: n.x, z: n.z, g, h: Math.sqrt(hdx * hdx + hdz * hdz), parent: current };
+                const newNode: PathNode = { x: n.x, z: n.z, g, h: distance(n.x, n.z, ex, ez), parent: current };
                 open.insert(newNode);
             }
         }

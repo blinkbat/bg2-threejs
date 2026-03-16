@@ -26,8 +26,8 @@ import { ACID_AURA_SKILL_NAME } from "./acidTiles";
 export { updateDamageTexts, updateHitFlash, updatePoisonVisuals, updateEnergyShieldVisuals, updateFogOfWar, resetFogCache, updateSpriteFacing, updateAncestorGhostVisuals, resetSpriteFacing } from "./visuals";
 export { processStatusEffects } from "./statusEffects";
 export { updateProjectiles, pruneStaleVolleys, resetProjectileState } from "./projectiles";
-export { updateSwingAnimations, startAttackBump, removeBumpOffsets, applyBumpOffsets } from "./swingAnimations";
-export { processAcidTiles, createAcidPool, ACID_AURA_SKILL_NAME } from "./acidTiles";
+export { updateSwingAnimations, removeBumpOffsets, applyBumpOffsets } from "./swingAnimations";
+export { processAcidTiles, createAcidPool } from "./acidTiles";
 export { processSanctuaryTiles } from "./sanctuaryTiles";
 export { processHolyTiles } from "./holyTiles";
 export { processSmokeTiles } from "./smokeTiles";
@@ -514,7 +514,7 @@ export function updateUnitAI(
 // Reusable vector for HP bar position calculations
 const _hpWorldPos = new THREE.Vector3();
 
-export interface HpBarPosition {
+interface HpBarPosition {
     id: number;
     x: number;
     y: number;
@@ -523,7 +523,7 @@ export interface HpBarPosition {
     maxHp: number;
 }
 
-export interface HpBarPositionsFrame {
+interface HpBarPositionsFrame {
     bars: HpBarPosition[];
     scale: number;
 }

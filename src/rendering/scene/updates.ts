@@ -5,6 +5,7 @@
 import * as THREE from "three";
 import type { Unit, UnitGroup } from "../../core/types";
 import type { ChestMeshData } from "./types";
+import { getGameTime } from "../../core/gameClock";
 
 interface LiquidTileAnimationData {
     liquidType: "lava";
@@ -1212,7 +1213,7 @@ export function updateFogOccluderVisibility(
     fogOccluderMeshes: THREE.Mesh[],
     visibility: number[][]
 ): boolean {
-    const now = Date.now();
+    const now = getGameTime();
     const FOG_Y = 2.6;
     const MAX_HEIGHT_UNEXPLORED = FOG_Y - 0.1;
     let hasActiveTransitions = false;

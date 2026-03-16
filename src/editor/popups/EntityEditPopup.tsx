@@ -16,7 +16,6 @@ import {
 import type { EnemyType, Item } from "../../core/types";
 import { DEFAULT_CANDLE_LIGHT_COLOR, DEFAULT_TORCH_LIGHT_COLOR } from "../../core/constants";
 import type { EntityDef } from "../types";
-import { useClampedPosition } from "../hooks/useClampedPosition";
 import { getAvailableAreaIds, ENEMY_TYPES, popupStyle, inputStyle, selectStyle, buttonStyle } from "../constants";
 import { ITEMS, getItemCategoryGroups } from "../../game/items";
 import { AreaMinimap } from "../components";
@@ -32,19 +31,17 @@ function getDefaultLightTintForEntity(type: "candle" | "torch"): string {
 interface EntityEditPopupProps {
     entity: EntityDef;
     itemRegistryRevision?: number;
-    screenX: number;
-    screenY: number;
     onSave: (e: EntityDef) => void;
     onClose: () => void;
     onNavigate?: (areaId: string) => void;
 }
 
-export function EntityEditPopup({ entity, itemRegistryRevision = 0, screenX, screenY, onSave, onClose, onNavigate }: EntityEditPopupProps) {
+export function EntityEditPopup({ entity, itemRegistryRevision = 0, onSave, onClose, onNavigate }: EntityEditPopupProps) {
     const [draft, setDraft] = useState({ ...entity });
-    const { popupRef, position } = useClampedPosition(screenX, screenY);
 
     return (
-        <div ref={popupRef} style={{ ...popupStyle, left: position.x, top: position.y }} onClick={e => e.stopPropagation()}>
+        <div style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center" }} onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+        <div style={{ ...popupStyle, position: "relative", maxHeight: "80vh", overflowY: "auto" }}>
             <h4 style={{ margin: "0 0 12px", fontSize: 15 }}>Edit {draft.type}</h4>
 
             {draft.type === "enemy" && (
@@ -53,7 +50,7 @@ export function EntityEditPopup({ entity, itemRegistryRevision = 0, screenX, scr
                     <select
                         style={selectStyle}
                         value={draft.enemyType || ""}
-                        onChange={e => setDraft({ ...draft, enemyType: e.target.value as EnemyType })}
+                        onChange={e => { const v = e.target.value as EnemyType; setDraft(prev => ({ ...prev, enemyType: v })); }}
                     >
                         {ENEMY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
@@ -67,10 +64,10 @@ export function EntityEditPopup({ entity, itemRegistryRevision = 0, screenX, scr
                     itemsString={draft.chestItems || ""}
                     locked={draft.chestLocked || ""}
                     decorOnly={draft.chestDecorOnly ?? false}
-                    onGoldChange={gold => setDraft({ ...draft, chestGold: gold })}
-                    onItemsChange={items => setDraft({ ...draft, chestItems: items })}
-                    onLockedChange={locked => setDraft({ ...draft, chestLocked: locked || undefined })}
-                    onDecorOnlyChange={decorOnly => setDraft({ ...draft, chestDecorOnly: decorOnly })}
+                    onGoldChange={gold => setDraft(prev => ({ ...prev, chestGold: gold }))}
+                    onItemsChange={items => setDraft(prev => ({ ...prev, chestItems: items }))}
+                    onLockedChange={locked => setDraft(prev => ({ ...prev, chestLocked: locked || undefined }))}
+                    onDecorOnlyChange={decorOnly => setDraft(prev => ({ ...prev, chestDecorOnly: decorOnly }))}
                 />
             )}
 
@@ -336,6 +333,7 @@ export function EntityEditPopup({ entity, itemRegistryRevision = 0, screenX, scr
                 <button style={{ ...buttonStyle, background: "#4a9", color: "#fff" }} onClick={() => onSave(draft)}>Save</button>
                 <button style={{ ...buttonStyle, background: "#555", color: "#fff" }} onClick={onClose}>Cancel</button>
             </div>
+        </div>
         </div>
     );
 }

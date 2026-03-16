@@ -20,7 +20,7 @@ export interface UnitSpatialFrame {
     targetingCount: number;
 }
 
-export interface UnitSpatialFrameScratch {
+interface UnitSpatialFrameScratch {
     aliveEntries: UnitSpatialEntry[];
     targetingEntries: UnitSpatialEntry[];
 }

@@ -232,7 +232,7 @@ function executeEnemyMeleeAttack(ctx: EnemyAttackContext): void {
 
         // Apply lifesteal heal using fresh state to avoid race condition
         if (healAmount > 0) {
-            applyLifesteal(scene, damageTexts, setUnits, attacker.id, attackerG.position.x, attackerG.position.z, healAmount, attackerStats.maxHp);
+            applyLifesteal(scene, damageTexts, setUnits, attacker.id, attackerG.position.x, attackerG.position.z, healAmount);
         }
     } else {
         soundFns.playMiss();

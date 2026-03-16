@@ -161,7 +161,6 @@ for (const brush of PROP_BRUSHES) {
 
 // Popup dimensions
 const POPUP_WIDTH = 280;
-export const POPUP_MARGIN = 16;
 
 // Base cell size for editor grid
 export const BASE_CELL_SIZE = 28;

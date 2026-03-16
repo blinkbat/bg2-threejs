@@ -372,7 +372,7 @@
     bottom: 12px;
     right: 12px;
     padding: 6px 8px;
-    pointer-events: none;
+    pointer-events: auto;
 }
 
 .formation-label {
@@ -410,6 +410,15 @@
 .formation-slot-dead {
     opacity: 0.3;
     color: var(--ui-color-text-faint);
+}
+
+.formation-slot-dragging {
+    opacity: 0.4;
+}
+
+.formation-slot-drop-target {
+    outline: 2px solid var(--ui-color-text);
+    outline-offset: -1px;
 }
 
 /* -----------------------------------------------------------------------------

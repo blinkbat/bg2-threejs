@@ -17,7 +17,7 @@ import { tryShadePhase } from "./shadePhase";
 // CONTEXT — superset of fields needed by all pre-attack behaviors
 // =============================================================================
 
-export interface PreAttackContext {
+interface PreAttackContext {
     unit: Unit;
     g: UnitGroup;
     enemyStats: EnemyStats;

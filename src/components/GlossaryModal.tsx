@@ -7,7 +7,7 @@ interface GlossaryModalProps {
 
 type GlossaryCategory = "Core System" | "Damage Type" | "Stat" | "Status";
 
-export interface GlossaryEntry {
+interface GlossaryEntry {
     term: string;
     body: string;
     category: GlossaryCategory;

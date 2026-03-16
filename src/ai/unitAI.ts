@@ -878,6 +878,7 @@ export interface MovementContext {
     targetX: number;
     targetZ: number;
     speedMultiplier?: number;  // Optional movement speed multiplier (default 1.0)
+    avoidanceScale?: number;  // Optional avoidance multiplier (default 1.0)
 }
 
 interface AvoidanceBucketEntry {
@@ -994,11 +995,11 @@ export function updateAvoidanceCache(
  * Player formation moves keep steering at reduced strength for cohesion.
  */
 function calculateAvoidance(ctx: MovementContext, desiredX: number, desiredZ: number): { avoidX: number; avoidZ: number } {
-    const { unit, g } = ctx;
+    const { unit, g, avoidanceScale = 1.0 } = ctx;
 
     // Player formation movement keeps steering mild instead of fully disabled.
     const formationMove = unit.team === "player" && g.userData.attackTarget === null;
-    const steeringScale = formationMove ? 0.35 : 1.0;
+    const steeringScale = formationMove ? 0.35 * avoidanceScale : avoidanceScale;
 
     const myRadius = getUnitRadius(unit);
     let avoidX = 0, avoidZ = 0;
@@ -1027,8 +1028,8 @@ function calculateAvoidance(ctx: MovementContext, desiredX: number, desiredZ: nu
                     // Hard separation when overlapping - push directly away
                     if (oDist < combinedRadius) {
                         const sepStrength = (combinedRadius - oDist) / combinedRadius;
-                        avoidX -= (ox / oDist) * sepStrength * AVOIDANCE_OVERLAP_STRENGTH;
-                        avoidZ -= (oz / oDist) * sepStrength * AVOIDANCE_OVERLAP_STRENGTH;
+                        avoidX -= (ox / oDist) * sepStrength * AVOIDANCE_OVERLAP_STRENGTH * avoidanceScale;
+                        avoidZ -= (oz / oDist) * sepStrength * AVOIDANCE_OVERLAP_STRENGTH * avoidanceScale;
                     }
                     // Steering when unit is ahead and close
                     else {

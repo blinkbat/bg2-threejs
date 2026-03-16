@@ -18,6 +18,7 @@ import { soundFns } from "../audio";
 import { cleanupUnitState } from "../ai/movement";
 import { cleanupEnemyKiteCooldown } from "../game/enemyState";
 import { getGameTime } from "../core/gameClock";
+import { getUnitStats } from "../game/units";
 import { scheduleEffectAnimation } from "../core/effectScheduler";
 import { applySyncedUnitUpdate, applySyncedUnitsUpdate } from "../core/stateUtils";
 import { logDefeated, applyPoison, applySlowed, hasStatusEffect, isUnitAlive } from "./combatMath";
@@ -415,18 +416,20 @@ export function applyLifesteal(
     attackerId: number,
     attackerX: number,
     attackerZ: number,
-    healAmount: number,
-    maxHp: number
+    healAmount: number
 ): void {
     if (healAmount <= 0) return;
     setUnits(prev => prev.map(u => {
         if (u.id !== attackerId) return u;
+        const maxHp = u.team === "player"
+            ? getEffectiveMaxHp(u.id, u)
+            : getUnitStats(u).maxHp;
         return { ...u, hp: Math.min(u.hp + healAmount, maxHp) };
     }));
     spawnDamageNumber(scene, attackerX, attackerZ, healAmount, COLORS.logHeal, damageTexts, true);
 }
 
-export interface DamageOptions {
+interface DamageOptions {
     poison?: { sourceId: number; damagePerTick?: number };  // Optional custom poison damage
     slow?: { sourceId: number };  // Apply slow debuff (1.5x cooldowns, 0.5x move speed)
     color?: string;
@@ -783,8 +786,7 @@ export function applyDamageToUnit(
             const bloodEffect = refUnit.statusEffects?.find(e => e.type === "blood_marked");
             const lifestealPct = bloodEffect?.lifestealPercent ?? 0.35;
             const healAmount = Math.max(1, Math.floor(effectiveDamage * lifestealPct));
-            const attackerMaxHp = getEffectiveMaxHp(attackerId, attackerUnit);
-            applyLifesteal(scene, damageTexts, setUnits, attackerId, attackerGroup.position.x, attackerGroup.position.z, healAmount, attackerMaxHp);
+            applyLifesteal(scene, damageTexts, setUnits, attackerId, attackerGroup.position.x, attackerGroup.position.z, healAmount);
         }
     }
 

@@ -1,4 +1,4 @@
-export interface HpBarOverlayEntry {
+interface HpBarOverlayEntry {
     id: number;
     x: number;
     y: number;
@@ -7,7 +7,7 @@ export interface HpBarOverlayEntry {
     maxHp: number;
 }
 
-export interface HpBarOverlayFrame {
+interface HpBarOverlayFrame {
     bars: HpBarOverlayEntry[];
     scale: number;
 }

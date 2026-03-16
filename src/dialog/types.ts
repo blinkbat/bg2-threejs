@@ -14,7 +14,7 @@ export interface DialogSpeaker {
     portraitTint: string;
 }
 
-export type DialogMenuId = "controls" | "startup_controls" | "help" | "glossary" | "equipment" | "save_game" | "load_game" | "menu" | "jukebox";
+type DialogMenuId = "controls" | "startup_controls" | "help" | "glossary" | "equipment" | "save_game" | "load_game" | "menu" | "jukebox";
 type DialogEventId = "spend_the_night";
 
 export type MenuChainAction =

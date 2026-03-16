@@ -20,7 +20,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         aggroRange: 7,
         attackCooldown: 2000,
         size: 1.0,
-        moveSpeed: 0.5,    // Slow - it's a slug
+        moveSpeed: 0.4,    // Very slow - keep patrol movement less twitchy
         acidTrail: true,   // Leaves acid on cells it moves through
         acidAura: true,    // Periodically creates acid around itself
         acidAuraCooldown: 3500,  // 3.5 seconds between aura creation
@@ -550,7 +550,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         }
     },
     skeleton_minion: {
-        name: "Zombie",
+        name: "Skeletal Offspring",
         monsterType: "undead",
         tier: "enemy",
         hp: 12,
@@ -649,14 +649,6 @@ const MONSTER_TYPE_LABELS: Record<MonsterType, string> = {
     humanoid: "Humanoid",
     undead: "Undead",
 };
-
-export function getEnemyMonsterType(enemyType: EnemyType): MonsterType {
-    return ENEMY_STATS[enemyType].monsterType;
-}
-
-export function isEnemyMonsterType(enemyType: EnemyType, monsterType: MonsterType): boolean {
-    return getEnemyMonsterType(enemyType) === monsterType;
-}
 
 export function getMonsterTypeLabel(monsterType: MonsterType): string {
     return MONSTER_TYPE_LABELS[monsterType];

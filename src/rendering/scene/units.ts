@@ -318,7 +318,7 @@ const ENEMY_SPRITE_TEMPLATES: Record<string, SpriteTemplate> = {
     skeleton_warrior: { textureKey: "skeleton_warrior", width: 439, height: 556, color: 0x9a9060, spriteHeight: 2.45, shadowSize: 0.52 },
     spine_spitter: { textureKey: "spine_spitter", width: 363, height: 264, color: 0xc5a15c, spriteHeight: 1.35, offsetY: -0.12, shadowSize: 0.46 },
     undead_knight: { textureKey: "undead_knight", width: 105, height: 128, color: 0x6f8bb5, spriteHeight: 3.5, shadowSize: 0.7 }, // less saturated blue
-    wandering_shade: { textureKey: "wandering_shade", width: 128, height: 128, color: 0xa0b0d8, spriteHeight: 2.5, shadowSize: 0.48, opacity: 0.55 },
+    wandering_shade: { textureKey: "wandering_shade", width: 128, height: 128, color: 0xa0b0d8, spriteHeight: 2.0, shadowSize: 0.48, opacity: 0.55 },
 };
 
 function resolveEnemySpriteTemplate(unit: Unit): SpriteTemplate | undefined {

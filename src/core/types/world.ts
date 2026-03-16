@@ -65,6 +65,10 @@ export interface UnitGroup extends THREE.Group {
             myStartDist?: number;       // This unit's initial distance to destination
         };
         formationRegroupAttempted?: boolean;  // True after one forced regroup repath
+        acidSlugPatrolAngle?: number;  // Persistent orbit heading for acid slug patrol movement
+        acidSlugPatrolDirection?: 1 | -1;  // Orbit direction for acid slug patrol movement
+        acidSlugPatrolRadius?: number;  // Preferred orbit radius around the current player target
+        acidSlugPatrolRetargetAt?: number;  // Earliest time acid slug should pick a fresh patrol point
         facingRight?: boolean;  // Sprite facing direction (true = right, default)
         attackMoveTarget?: { x: number; z: number };  // Attack-move destination (resume after combat)
         visualFacing?: number;  // Smooth per-frame shield facing (decoupled from React state)

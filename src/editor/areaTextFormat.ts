@@ -427,8 +427,8 @@ function parseTextFormat(text: string): ParsedArea {
 
         // Section headers
         if (line.startsWith("=== AREA:")) {
-            const match = line.match(/=== AREA: (\w+) ===/);
-            if (match) result.metadata.id = match[1] as AreaId;
+            const match = line.match(/^=== AREA: (.+) ===$/);
+            if (match) result.metadata.id = match[1].trim() as AreaId;
             currentSection = "metadata";
             continue;
         }
@@ -596,9 +596,10 @@ function parseEnemyLine(line: string, enemies: EnemySpawn[]) {
 }
 
 function parseChestLine(line: string, chests: ChestLocation[]) {
-    const [coords, props] = line.split(":");
+    const colonIdx = line.indexOf(":");
+    const coords = line.substring(0, colonIdx);
+    const propsText = colonIdx >= 0 ? line.substring(colonIdx + 1) : "";
     const [x, z] = coords.split(",").map(Number);
-    const propsText = props ?? "";
 
     const chest: ChestLocation = { x, z, contents: [] };
 

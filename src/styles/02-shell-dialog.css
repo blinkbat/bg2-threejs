@@ -76,10 +76,13 @@
     text-align: center;
 }
 
+.startup-title-buttons {
+    display: flex;
+    gap: 16px;
+}
+
 .startup-title-btn {
-    border: 1px solid var(--ui-color-accent-primary-border);
     border-radius: 8px;
-    background: var(--ui-color-accent-primary);
     color: var(--ui-color-text);
     font-size: 16px;
     line-height: 1;
@@ -88,9 +91,18 @@
     transition: border-color 0.14s, filter 0.14s, transform 0.14s;
 }
 
+.startup-title-btn-new {
+    background: #2a5a30;
+    border: 1px solid #3d7a44;
+}
+
+.startup-title-btn-load {
+    background: #3a3a3a;
+    border: 1px solid #555555;
+}
+
 .startup-title-btn:hover {
-    border-color: var(--ui-color-accent-primary-bright);
-    filter: brightness(1.08);
+    filter: brightness(1.15);
     transform: translateY(-1px);
 }
 

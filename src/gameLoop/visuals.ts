@@ -10,6 +10,7 @@ import { updateVisibility, resetVisibilityTracking } from "../ai/pathfinding";
 import { getCurrentArea } from "../game/areas";
 import { isEnemyHiddenFromView } from "./enemyBehaviors";
 import { recycleDamageNumber } from "../combat/damageEffects";
+import { getGameTime } from "../core/gameClock";
 
 // =============================================================================
 // DAMAGE TEXT UPDATE
@@ -495,7 +496,7 @@ export function updateSpriteFacing(
     unitsState: Unit[],
     unitsRef: Record<number, UnitGroup>
 ): void {
-    const now = Date.now();
+    const now = getGameTime();
 
     for (const unit of unitsState) {
         if (unit.hp <= 0) continue;

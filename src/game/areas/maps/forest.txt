@@ -332,7 +332,7 @@ spawn: 25,25
 10.5,41.5:spine_spitter
 
 === CHESTS ===
-6.5,6.5:gold=3
+6.5,6.5:gold=3,items=[thornwallBuckler:1]
 38.5,38.5:gold=5
 
 === TRANSITIONS ===

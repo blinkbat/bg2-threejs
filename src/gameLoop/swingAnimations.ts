@@ -5,6 +5,7 @@
 import * as THREE from "three";
 import type { UnitGroup, SwingAnimation } from "../core/types";
 import { SWING_DURATION, SWING_ARC_ANGLE, SWING_START_OFFSET, SWING_DOT_ORBIT_RADIUS } from "../core/constants";
+import { distance } from "../game/geometry";
 
 const BUMP_DURATION = 200;  // ms total (forward + back)
 const BUMP_DISTANCE = 0.25; // world units forward
@@ -76,7 +77,7 @@ export function updateSwingAnimations(
 export function startAttackBump(attackerG: UnitGroup, targetX: number, targetZ: number, now: number): void {
     const dx = targetX - attackerG.position.x;
     const dz = targetZ - attackerG.position.z;
-    const len = Math.sqrt(dx * dx + dz * dz);
+    const len = distance(attackerG.position.x, attackerG.position.z, targetX, targetZ);
     if (len < 0.01) return;
     attackerG.userData.attackBump = {
         startTime: now,

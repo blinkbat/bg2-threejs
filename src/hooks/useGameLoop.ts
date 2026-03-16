@@ -76,7 +76,7 @@ export type InitializedSceneState = ThreeSceneState & {
     renderer: THREE.WebGLRenderer;
 };
 
-export interface GameLoopStateRefs {
+interface GameLoopStateRefs {
     unitsStateRef: React.MutableRefObject<Unit[]>;
     pausedRef: React.MutableRefObject<boolean>;
     targetingModeRef: React.MutableRefObject<{ casterId: number; skill: import("../core/types").Skill } | null>;
@@ -84,7 +84,7 @@ export interface GameLoopStateRefs {
     actionQueueRef: React.MutableRefObject<ActionQueue>;
 }
 
-export interface GameLoopCallbacks {
+interface GameLoopCallbacks {
     setUnits: React.Dispatch<React.SetStateAction<Unit[]>>;
     setFps: React.Dispatch<React.SetStateAction<number>>;
     setSkillCooldowns: React.Dispatch<React.SetStateAction<Record<string, { end: number; duration: number }>>>;
@@ -94,7 +94,7 @@ export interface GameLoopCallbacks {
     onPerfSample?: (sample: PerfFrameSample) => void;
 }
 
-export interface UseGameLoopOptions {
+interface UseGameLoopOptions {
     sceneState: InitializedSceneState | null;
     gameRefs: React.MutableRefObject<GameRefs>;
     stateRefs: GameLoopStateRefs;
@@ -817,7 +817,7 @@ export function useGameLoop({
                 processShadePhases(now, currentUnits, callbacks.addLog);
 
                 // Update energy shield visuals
-                updateEnergyShieldVisuals(currentUnits, unitGroups, now);
+                updateEnergyShieldVisuals(currentUnits, unitGroups, gameNow);
 
                 // Update shield facing
                 updateShieldFacing(currentUnits, unitGroups, shieldIndicators, setUnitsLive);
@@ -968,7 +968,7 @@ export function useGameLoop({
             const lightLodMs = performance.now() - sectionStart;
 
             sectionStart = performance.now();
-            updateAncestorGhostVisuals(currentUnits, unitGroups, unitMeshes, now);
+            updateAncestorGhostVisuals(currentUnits, unitGroups, unitMeshes, gameNow);
 
             // Billboard rotation
             updateBillboards(billboards, camera);

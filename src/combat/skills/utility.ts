@@ -724,8 +724,7 @@ export function executeTurnUndeadSkill(
         if (defeatedThisFrame.has(enemy.id)) continue;
         const enemyG = unitsRef.current[enemy.id];
         if (!enemyG) continue;
-        const dist = Math.hypot(enemyG.position.x - casterG.position.x, enemyG.position.z - casterG.position.z);
-        if (dist <= aoeRadius + getUnitRadius(enemy)) {
+        if (isInRange(casterG.position.x, casterG.position.z, enemyG.position.x, enemyG.position.z, getUnitRadius(enemy), aoeRadius)) {
             const enemyStats = enemy.enemyType ? ENEMY_STATS[enemy.enemyType] : undefined;
             const isUndead = enemyStats?.monsterType === "undead";
             enemiesInArea.push({ unit: enemy, group: enemyG, isUndead });
@@ -866,8 +865,7 @@ export function executeElorasGraspSkill(
         if (defeatedThisFrame.has(enemy.id)) continue;
         const enemyG = unitsRef.current[enemy.id];
         if (!enemyG) continue;
-        const dist = Math.hypot(enemyG.position.x - targetX, enemyG.position.z - targetZ);
-        if (dist <= aoeRadius + getUnitRadius(enemy)) {
+        if (isInRange(targetX, targetZ, enemyG.position.x, enemyG.position.z, getUnitRadius(enemy), aoeRadius)) {
             enemiesInArea.push({ unit: enemy, group: enemyG });
         }
     }

@@ -18,6 +18,7 @@ import { getItem } from "../game/items";
 import { isKey } from "../core/types";
 import { soundFns } from "../audio";
 import { clearPathCache } from "../ai/pathfinding";
+import { isInRange, getUnitRadius } from "../rendering/range";
 import { removeLootBag } from "../gameLoop";
 import { isEnemyUntargetable } from "../gameLoop/enemyBehaviors";
 import {
@@ -38,12 +39,13 @@ import { getPartyInventory, setPartyInventory } from "../game/equipmentState";
 import { removeFromInventory, addToInventory } from "../game/equipment";
 import { buildEffectiveFormationOrder } from "../game/formationOrder";
 import type { HotbarAssignments } from "./hotbarStorage";
+import { scheduleEffectAnimation } from "../core/effectScheduler";
 
 // =============================================================================
 // TYPES
 // =============================================================================
 
-export interface InputSceneRefs {
+interface InputSceneRefs {
     scene: THREE.Scene;
     camera: THREE.OrthographicCamera;
     renderer: THREE.WebGLRenderer;
@@ -67,7 +69,7 @@ export interface InputGameRefs {
     lootBags: LootBag[];
 }
 
-export interface InputStateRefs {
+interface InputStateRefs {
     unitsStateRef: React.MutableRefObject<Unit[]>;
     selectedRef: React.MutableRefObject<number[]>;
     pausedRef: React.MutableRefObject<boolean>;
@@ -83,7 +85,7 @@ export interface InputStateRefs {
     commandModeRef: React.MutableRefObject<"attackMove" | null>;
 }
 
-export interface InputMutableRefs {
+interface InputMutableRefs {
     actionQueueRef: React.MutableRefObject<ActionQueue>;
     actionCooldownRef: React.MutableRefObject<Record<number, number>>;
     keysPressed: React.MutableRefObject<Set<string>>;
@@ -95,7 +97,7 @@ export interface InputMutableRefs {
     lastMouse: React.MutableRefObject<{ x: number; y: number }>;
 }
 
-export interface InputSetters {
+interface InputSetters {
     setSelectedIds: React.Dispatch<React.SetStateAction<number[]>>;
     setSelBox: React.Dispatch<React.SetStateAction<SelectionBox | null>>;
     setUnits: React.Dispatch<React.SetStateAction<Unit[]>>;
@@ -117,7 +119,7 @@ export interface InputSetters {
     setCommandMode: React.Dispatch<React.SetStateAction<"attackMove" | null>>;
 }
 
-export interface InputCallbacks {
+interface InputCallbacks {
     addLog: (text: string, color?: string) => void;
     getSkillContext: (defeatedThisFrame?: Set<number>) => SkillExecutionContext;
     handleAreaTransition: (transition: AreaTransition) => void;
@@ -128,7 +130,7 @@ export interface InputCallbacks {
     handleCastSkillRef: React.MutableRefObject<((unitId: number, skill: Skill) => void) | null>;
 }
 
-export interface UseInputHandlersOptions {
+interface UseInputHandlersOptions {
     containerRef: React.RefObject<HTMLDivElement | null>;
     sceneRefs: InputSceneRefs | null;
     gameRefs: React.MutableRefObject<InputGameRefs>;
@@ -147,6 +149,13 @@ const TOOLTIP_CHEST_HEIGHT = 0.9;
 const TOOLTIP_DOOR_HEIGHT = 1.0;
 const TOOLTIP_SECRET_DOOR_HEIGHT = 1.2;
 const TOOLTIP_LOOT_BAG_HEIGHT = 0.7;
+const INVALID_MOVE_MARKER_DURATION_MS = 420;
+const INVALID_MOVE_MARKER_COLOR = "#ef4444";
+const INVALID_MOVE_MARKER_START_SCALE = 0.75;
+const INVALID_MOVE_MARKER_END_SCALE = 1.05;
+const INVALID_MOVE_MARKER_WIDTH = 0.14;
+const INVALID_MOVE_MARKER_LENGTH = 0.82;
+const INVALID_MOVE_MARKER_Y = 0.055;
 
 interface ChestHitData {
     chestIndex: number;
@@ -187,6 +196,64 @@ function canUseDirectMove(g: UnitGroup, targetX: number, targetZ: number): boole
     }
 
     return true;
+}
+
+function showInvalidMoveIndicator(scene: THREE.Scene, worldX: number, worldZ: number): void {
+    const geometry = new THREE.PlaneGeometry(INVALID_MOVE_MARKER_WIDTH, INVALID_MOVE_MARKER_LENGTH);
+    const material = new THREE.MeshBasicMaterial({
+        color: INVALID_MOVE_MARKER_COLOR,
+        transparent: true,
+        opacity: 0.9,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1,
+        toneMapped: false,
+    });
+    const indicator = new THREE.Group();
+    indicator.position.set(worldX, INVALID_MOVE_MARKER_Y, worldZ);
+    indicator.scale.setScalar(INVALID_MOVE_MARKER_START_SCALE);
+
+    const armA = new THREE.Mesh(geometry, material);
+    armA.rotation.x = -Math.PI / 2;
+    armA.rotation.z = Math.PI / 4;
+    armA.renderOrder = 150;
+    indicator.add(armA);
+
+    const armB = new THREE.Mesh(geometry, material);
+    armB.rotation.x = -Math.PI / 2;
+    armB.rotation.z = -Math.PI / 4;
+    armB.renderOrder = 150;
+    indicator.add(armB);
+
+    scene.add(indicator);
+
+    let startTime: number | null = null;
+    scheduleEffectAnimation((gameNow) => {
+        if (startTime === null) {
+            startTime = gameNow;
+        }
+
+        const elapsed = gameNow - startTime;
+        const progress = Math.min(1, elapsed / INVALID_MOVE_MARKER_DURATION_MS);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        const scale = INVALID_MOVE_MARKER_START_SCALE
+            + (INVALID_MOVE_MARKER_END_SCALE - INVALID_MOVE_MARKER_START_SCALE) * eased;
+
+        indicator.scale.setScalar(scale);
+        indicator.position.y = INVALID_MOVE_MARKER_Y + 0.03 * Math.sin(progress * Math.PI);
+        material.opacity = 0.9 * (1 - progress);
+
+        if (progress >= 1) {
+            scene.remove(indicator);
+            geometry.dispose();
+            material.dispose();
+            return true;
+        }
+
+        return false;
+    });
 }
 
 // =============================================================================
@@ -737,10 +804,16 @@ export function useInputHandlers({
                     raycaster.setFromCamera(mouse, camera);
                     for (const h of raycaster.intersectObjects(rebuildInteractionRaycastRoots(), true)) {
                         if (h.object.name === "obstacle") continue;
-                        if (h.object.name === "ground" && stateRefs.selectedRef.current.length > 0) {
+                        if (h.object.name !== "ground") {
+                            break;
+                        }
+                        if (stateRefs.selectedRef.current.length > 0) {
                             const gx = Math.floor(h.point.x) + 0.5;
                             const gz = Math.floor(h.point.z) + 0.5;
-                            if (blocked[Math.floor(gx)]?.[Math.floor(gz)] || isTerrainBlocked(Math.floor(gx), Math.floor(gz))) break;
+                            if (blocked[Math.floor(gx)]?.[Math.floor(gz)] || isTerrainBlocked(Math.floor(gx), Math.floor(gz))) {
+                                showInvalidMoveIndicator(scene, gx, gz);
+                                break;
+                            }
                             if (moveMarker) {
                                 moveMarker.position.set(gx, 0.05, gz);
                                 moveMarker.visible = true;
@@ -814,8 +887,8 @@ export function useInputHandlers({
                             if (stateRefs.pausedRef.current) {
                                 callbacks.addLog(`Move queued for ${moveTargets.length} unit${moveTargets.length !== 1 ? "s" : ""}.`, "#888");
                             }
-                            break;
                         }
+                        break;
                     }
                 }
                 mutableRefs.isBoxSel.current = false;
@@ -880,9 +953,7 @@ export function useInputHandlers({
                         const allPlayersInRange = alivePlayers.every(player => {
                             const playerG = unitGroups[player.id];
                             if (!playerG) return false;
-                            const dx = playerG.position.x - doorCenterX;
-                            const dz = playerG.position.z - doorCenterZ;
-                            return Math.hypot(dx, dz) <= doorRange;
+                            return isInRange(doorCenterX, doorCenterZ, playerG.position.x, playerG.position.z, getUnitRadius(player), doorRange);
                         });
                         if (allPlayersInRange) {
                             callbacks.handleAreaTransition(transition);
@@ -1143,14 +1214,11 @@ function isAnyAlivePlayerWithinRange(
     centerZ: number,
     range: number
 ): boolean {
-    const rangeSq = range * range;
     for (const unit of unitsStateRef.current) {
         if (unit.team !== "player" || unit.hp <= 0) continue;
         const playerG = unitGroups[unit.id];
         if (!playerG) continue;
-        const dx = playerG.position.x - centerX;
-        const dz = playerG.position.z - centerZ;
-        if (dx * dx + dz * dz <= rangeSq) {
+        if (isInRange(centerX, centerZ, playerG.position.x, playerG.position.z, getUnitRadius(unit), range)) {
             return true;
         }
     }

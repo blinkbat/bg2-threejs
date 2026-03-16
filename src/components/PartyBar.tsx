@@ -15,6 +15,9 @@ import type { HotbarAssignments } from "../hooks/hotbarStorage";
 import { buildEffectiveFormationOrder } from "../game/formationOrder";
 import { getPortrait } from "./portraitRegistry";
 
+/** Drag type for portrait reordering — distinct from skill drags */
+const PORTRAIT_DRAG_TYPE = "application/x-portrait";
+
 const EFFECT_ICONS: Record<StatusEffectType, { icon: string; color: string }> = {
     poison: { icon: "☠", color: COLORS.poisonText },
     shielded: { icon: "🛡", color: COLORS.shieldedText },
@@ -215,8 +218,8 @@ function PartyBarComponent({
             key="drop-spacer"
             className="drop-spacer"
             style={{ "--drop-color": dragColor } as React.CSSProperties}
-            onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
-            onDrop={(e) => { e.preventDefault(); executeDrop(); }}
+            onDragOver={(e) => { if (!e.dataTransfer.types.includes(PORTRAIT_DRAG_TYPE)) return; e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
+            onDrop={(e) => { if (!e.dataTransfer.types.includes(PORTRAIT_DRAG_TYPE)) return; e.preventDefault(); executeDrop(); }}
         />
     );
 
@@ -283,9 +286,11 @@ function PartyBarComponent({
                 onContextMenu={handleContextMenu}
                 draggable={unit.hp > 0}
                 onDragStart={(e) => {
+                    if (e.target !== e.currentTarget) return;
                     dragIdRef.current = unit.id;
                     setDraggingId(unit.id);
                     e.dataTransfer.effectAllowed = "move";
+                    e.dataTransfer.setData(PORTRAIT_DRAG_TYPE, String(unit.id));
                 }}
                 onDragEnd={() => {
                     dragIdRef.current = null;
@@ -293,6 +298,7 @@ function PartyBarComponent({
                     setInsertIdx(null);
                 }}
                 onDragOver={(e) => {
+                    if (!e.dataTransfer.types.includes(PORTRAIT_DRAG_TYPE)) return;
                     e.preventDefault();
                     e.dataTransfer.dropEffect = "move";
                     if (dragIdRef.current !== null && dragIdRef.current !== unit.id) {
@@ -300,6 +306,7 @@ function PartyBarComponent({
                     }
                 }}
                 onDrop={(e) => {
+                    if (!e.dataTransfer.types.includes(PORTRAIT_DRAG_TYPE)) return;
                     e.preventDefault();
                     executeDrop();
                 }}
@@ -385,13 +392,14 @@ function PartyBarComponent({
                 ref={barRef}
                 className="party-bar glass-panel"
                 onDragOver={(e) => {
+                    if (!e.dataTransfer.types.includes(PORTRAIT_DRAG_TYPE)) return;
                     e.preventDefault();
                     e.dataTransfer.dropEffect = "move";
                     if (dragIdRef.current !== null) {
                         setInsertIdx(computeInsertIdxFromX(dragIdRef.current, e.clientX));
                     }
                 }}
-                onDrop={(e) => { e.preventDefault(); executeDrop(); }}
+                onDrop={(e) => { if (!e.dataTransfer.types.includes(PORTRAIT_DRAG_TYPE)) return; e.preventDefault(); executeDrop(); }}
                 onDragLeave={(e) => {
                     if (!e.currentTarget.contains(e.relatedTarget as Node)) setInsertIdx(null);
                 }}

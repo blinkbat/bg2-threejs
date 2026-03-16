@@ -104,7 +104,7 @@ export function processStatusEffects(
         const currentEffects: StatusEffect[] = unit.statusEffects.map(e => ({ ...e }));
         const maxHp = unit.team === "player"
             ? getEffectiveMaxHp(unit.id, unit)
-            : data.hp;
+            : data.maxHp;
         const hasDivineLattice = hasStatusEffect(unit, "divine_lattice");
 
         for (const effect of currentEffects) {

@@ -1,6 +1,6 @@
 import type { EnemyType } from "../core/types";
 
-export interface RolledEnemyLoot {
+interface RolledEnemyLoot {
     gold: number;
     items: string[];
 }

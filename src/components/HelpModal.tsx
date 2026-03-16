@@ -7,7 +7,7 @@ interface HelpModalProps {
 const HELP_SECTIONS: ReadonlyArray<{ title: string; body: string }> = [
     {
         title: "On Pausing",
-        body: "The game proceeds in real-time but can be paused at any moment to issue commands. A character's actions, from attacking to using items to complex spells, can be selected while paused or unpaused. Most actions have a cooldown, but the next action can be queued during this time."
+        body: "The game proceeds in real-time but can be paused at any moment to issue commands. A character's actions, from attacking to using items to complex spells, can be selected while paused or unpaused. Most actions have a cooldown, but the next action can be queued during this time. Each unit can hold one queued command at a time, and you can cancel a queued skill or item by clicking its QUEUED entry again in that unit's panel."
     },
     {
         title: "Stat Points",

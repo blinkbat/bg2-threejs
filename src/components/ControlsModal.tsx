@@ -45,6 +45,7 @@ export function ControlsModal({ onClose, onConfirm }: ControlsModalProps) {
                                 <Item keys="Space" desc="Pause / Unpause" />
                                 <Item keys="F1-F6" desc="Select party member" />
                                 <Item keys="1-5" desc="Cast hotbar skill" />
+                                <Item keys="Click QUEUED skill/item" desc="Cancel that unit's queued command from its panel" />
                             </Section>
                         </div>
                     </div>
