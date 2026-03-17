@@ -22,7 +22,7 @@ import {
 } from "../../core/constants";
 import { UNIT_DATA, ANCESTOR_SUMMON_ID, VISHAS_EYE_SUMMON_IDS, getEffectiveMaxHp } from "../../game/playerUnits";
 import { getUnitStats } from "../../game/units";
-import { rollChance, rollSkillHit, hasStatusEffect, logTaunt, logTauntMiss, logStunned, logTrapThrown, applyStatusEffect, checkEnemyDefenses, calculateStatBonus, getEffectiveArmor, calculateDamageWithCrit, logAoeHit, logAoeMiss, logCast } from "../combatMath";
+import { rollChance, rollSkillHit, hasStatusEffect, logTaunt, logTauntMiss, logStunned, logTrapThrown, applyStatusEffect, checkEnemyDefenses, calculateSkillStatBonusBudget, getEffectiveArmor, calculateDamageWithCrit, logAoeHit, logAoeMiss, logCast } from "../combatMath";
 import { ENEMY_STATS } from "../../game/enemyStats";
 import { getUnitRadius, isInRange } from "../../rendering/range";
 import { getAliveUnits } from "../../game/unitQuery";
@@ -752,7 +752,7 @@ export function executeTurnUndeadSkill(
     };
 
     const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
-    const statBonus = calculateStatBonus(casterUnit, skill.damageType);
+    const statBonus = calculateSkillStatBonusBudget(casterUnit, skill.damageType, skill);
     const skillLogColor = getSkillTextColor(skill.type, skill.damageType);
 
     const fearedIds = new Set<number>();
@@ -1126,7 +1126,7 @@ export function executeFivePointPalmSkill(
     const skillLogColor = getSkillTextColor(skill.type, skill.damageType);
     if (rollSkillHit(skill, casterData.accuracy, casterUnit)) {
         // Deal damage
-        const statBonus = calculateStatBonus(casterUnit, skill.damageType);
+        const statBonus = calculateSkillStatBonusBudget(casterUnit, skill.damageType, skill);
         const { damage: dmg, isCrit } = calculateDamageWithCrit(
             skill.damageRange![0] + statBonus, skill.damageRange![1] + statBonus,
             getEffectiveArmor(targetEnemy, targetData.armor), skill.damageType, casterUnit
@@ -1267,7 +1267,7 @@ export function executeDimMakSkill(
 
     if (rollSkillHit(skill, casterData.accuracy, casterUnit)) {
         // Deal minor damage
-        const statBonus = calculateStatBonus(casterUnit, skill.damageType);
+        const statBonus = calculateSkillStatBonusBudget(casterUnit, skill.damageType, skill);
         const { damage: dmg, isCrit } = calculateDamageWithCrit(
             skill.damageRange![0] + statBonus, skill.damageRange![1] + statBonus,
             getEffectiveArmor(targetEnemy, targetData.armor), skill.damageType, casterUnit

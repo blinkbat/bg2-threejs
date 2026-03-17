@@ -27,6 +27,8 @@ interface HotbarDragContext {
     sourceSlot: number | null;
 }
 
+const EMPTY_HOTBAR_SLOTS: (string | null)[] = [null, null, null, null, null];
+
 // =============================================================================
 // HOTBAR SLOT
 // =============================================================================
@@ -37,7 +39,7 @@ interface HotbarSlotProps {
     skill: Skill | null;
     onCastSkill?: (unitId: number, skill: Skill) => void;
     onDrop: (slotIndex: number, skillName: string, sourceSlot: number | null) => void;
-    dragCtx: React.RefObject<HotbarDragContext>;
+    onHotbarDragStart: (slotIndex: number) => void;
     cooldownPct: number;
     cooldownRemaining: number;
     hasManaForSkill: boolean;
@@ -51,7 +53,7 @@ function HotbarSlot({
     skill,
     onCastSkill,
     onDrop,
-    dragCtx,
+    onHotbarDragStart,
     cooldownPct,
     cooldownRemaining,
     hasManaForSkill,
@@ -75,8 +77,7 @@ function HotbarSlot({
 
     const handleDragStart = (e: React.DragEvent) => {
         if (!skill) { e.preventDefault(); return; }
-        dragCtx.current.sourceSlot = slotIndex;
-        dragCtx.current.dropHandled = false;
+        onHotbarDragStart(slotIndex);
         e.dataTransfer.effectAllowed = "move";
         e.dataTransfer.setData(SKILL_DRAG_TYPE, skill.name);
         e.dataTransfer.setData(HOTBAR_SLOT_DRAG_TYPE, String(slotIndex));
@@ -97,12 +98,12 @@ function HotbarSlot({
     const handleDropEvent = (e: React.DragEvent) => {
         e.preventDefault();
         setDropHover(false);
-        dragCtx.current.dropHandled = true;
         const skillName = e.dataTransfer.getData(SKILL_DRAG_TYPE);
         const sourceSlotStr = e.dataTransfer.getData(HOTBAR_SLOT_DRAG_TYPE);
-        const sourceSlot = sourceSlotStr ? parseInt(sourceSlotStr, 10) : null;
+        const parsedSourceSlot = sourceSlotStr ? parseInt(sourceSlotStr, 10) : null;
+        const sourceSlot = parsedSourceSlot !== null && !Number.isNaN(parsedSourceSlot) ? parsedSourceSlot : null;
         if (skillName) {
-            onDrop(slotIndex, skillName, Number.isNaN(sourceSlot) ? null : sourceSlot);
+            onDrop(slotIndex, skillName, sourceSlot);
         }
     };
 
@@ -191,29 +192,32 @@ export function SkillHotbar({
     const allSkills = getAllSkills(unit.id, unit);
     const availableSkills = getAvailableSkills(unit.id);
 
-    const slots = hotbarAssignments[unit.id] || [null, null, null, null, null];
-    const slotsRef = useRef(slots);
-    slotsRef.current = slots;
+    const slots = hotbarAssignments[unit.id] ?? EMPTY_HOTBAR_SLOTS;
+    const dragStateRef = useRef<HotbarDragContext>({ dropHandled: false, sourceSlot: null });
 
-    const dragCtx = useRef<HotbarDragContext>({ dropHandled: false, sourceSlot: null });
+    const handleHotbarDragStart = useCallback((sourceSlot: number) => {
+        dragStateRef.current.sourceSlot = sourceSlot;
+        dragStateRef.current.dropHandled = false;
+    }, []);
 
     const handleSlotDrop = useCallback((targetSlot: number, skillName: string, sourceSlot: number | null) => {
+        dragStateRef.current.dropHandled = true;
         if (sourceSlot !== null && sourceSlot !== targetSlot) {
-            const targetSkill = slotsRef.current[targetSlot];
+            const targetSkill = slots[targetSlot];
             onAssignSkill(unit.id, targetSlot, skillName);
             onAssignSkill(unit.id, sourceSlot, targetSkill);
         } else if (sourceSlot === null) {
             onAssignSkill(unit.id, targetSlot, skillName);
         }
-    }, [unit.id, onAssignSkill]);
+    }, [slots, unit.id, onAssignSkill]);
 
     const handleDragEnd = useCallback(() => {
         // If a hotbar slot was dragged and not dropped on another slot, clear it
-        if (!dragCtx.current.dropHandled && dragCtx.current.sourceSlot !== null) {
-            onAssignSkill(unit.id, dragCtx.current.sourceSlot, null);
+        if (!dragStateRef.current.dropHandled && dragStateRef.current.sourceSlot !== null) {
+            onAssignSkill(unit.id, dragStateRef.current.sourceSlot, null);
         }
-        dragCtx.current.sourceSlot = null;
-        dragCtx.current.dropHandled = false;
+        dragStateRef.current.sourceSlot = null;
+        dragStateRef.current.dropHandled = false;
     }, [unit.id, onAssignSkill]);
 
     return (
@@ -251,7 +255,7 @@ export function SkillHotbar({
                         skill={skill}
                         onCastSkill={onCastSkill}
                         onDrop={handleSlotDrop}
-                        dragCtx={dragCtx}
+                        onHotbarDragStart={handleHotbarDragStart}
                         cooldownPct={cooldownPct}
                         cooldownRemaining={cooldownRemaining}
                         hasManaForSkill={hasManaForSkill}

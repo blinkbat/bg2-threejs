@@ -56,6 +56,7 @@ export interface Skill {
     delivery?: SkillDeliveryMode;     // Optional explicit delivery mode for single-target damage skills
     critChanceOverride?: number;      // Optional crit chance override for this skill's hit resolution
     onHitEffect?: SkillOnHitEffect;   // Optional status effect applied when this skill hits
+    statScaling?: number;             // Optional multiplier applied to the skill's total stat bonus budget
 
     // Drag-line properties (wall of fire, etc.)
     maxTiles?: number;                // Max tiles for drag-line skills
@@ -92,6 +93,7 @@ interface BaseProjectile {
     mesh: THREE.Mesh;
     attackerId: number;
     speed: number;
+    statBonus?: number;
 }
 
 export interface BasicProjectile extends BaseProjectile {

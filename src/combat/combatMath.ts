@@ -76,6 +76,10 @@ interface SkillHitProfile {
     hitChance?: number;
 }
 
+interface SkillStatScalingProfile {
+    statScaling?: number;
+}
+
 /**
  * Get base hit chance for a skill.
  * Named skills default to 100% unless they explicitly set hitChance.
@@ -138,6 +142,31 @@ export function calculateStatBonus(unit: Unit | undefined, damageType: DamageTyp
     }
     // Remaining non-physical types (for example poison) still benefit from flat non-physical gear bonuses.
     return equipmentMagicBonus + auraBonus;
+}
+
+export function calculateSkillStatBonusBudget(
+    unit: Unit | undefined,
+    damageType: DamageType,
+    skill?: SkillStatScalingProfile
+): number {
+    const scaling = Math.max(0, skill?.statScaling ?? 1);
+    return Math.floor(calculateStatBonus(unit, damageType) * scaling);
+}
+
+export function getDistributedStatBonus(
+    totalBonus: number,
+    hitIndex: number,
+    totalHits: number
+): number {
+    if (totalBonus === 0 || totalHits <= 0 || hitIndex < 0 || hitIndex >= totalHits) {
+        return 0;
+    }
+
+    const sign = totalBonus < 0 ? -1 : 1;
+    const absBonus = Math.abs(totalBonus);
+    const distributedBefore = Math.floor((absBonus * hitIndex) / totalHits);
+    const distributedAfter = Math.floor((absBonus * (hitIndex + 1)) / totalHits);
+    return (distributedAfter - distributedBefore) * sign;
 }
 
 /**

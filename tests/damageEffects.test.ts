@@ -451,7 +451,18 @@ describe("damageEffects", () => {
 
     describe("applyLifesteal", () => {
         it("heals the attacker up to maxHp", () => {
-            const attacker = makeUnit({ id: 1, hp: 20, team: "player" });
+            const attacker = makeUnit({
+                id: 3,
+                hp: 15,
+                team: "player",
+                stats: {
+                    strength: 0,
+                    dexterity: 0,
+                    vitality: 0,
+                    intelligence: 0,
+                    faith: 0,
+                },
+            });
             const units = [attacker];
             const setUnits: Dispatch<SetStateAction<Unit[]>> = vi.fn((nextState: SetStateAction<Unit[]>) => {
                 const result = typeof nextState === "function" ? nextState(units) : nextState;
@@ -463,12 +474,12 @@ describe("damageEffects", () => {
                 makeScene(),
                 [],         // damageTexts
                 setUnits,
-                1, 5, 5,   // attacker id and position
+                3, 5, 5,   // attacker id and position
                 10          // healAmount
             );
 
             expect(setUnits).toHaveBeenCalled();
-            expect(units[0].hp).toBe(25); // 20 + 10 clamped to 25
+            expect(units[0].hp).toBe(20); // 15 + 10 clamped to effective max HP
         });
 
         it("does nothing for zero heal amount", () => {

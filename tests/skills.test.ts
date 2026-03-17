@@ -102,6 +102,8 @@ vi.mock("../src/game/equipmentState", () => ({
         attackCooldown: undefined,
         damageType: undefined,
     }),
+    getEffectivePlayerBonusMagicDamage: () => 0,
+    getEffectivePlayerMoveSpeedMultiplier: () => 1,
 }));
 
 import { executeSkill } from "../src/combat/skills/index";
@@ -303,6 +305,44 @@ describe("executeSkill", () => {
             // Fireball always returns true (fires projectile)
             const result = executeSkill(ctx, 1, skill, 10, 10);
             expect(result).toBe(true);
+        });
+
+        it("splits Magic Wave stat bonus across the volley instead of cloning it per missile", () => {
+            const caster = makeUnit({
+                id: 4,
+                hp: 17,
+                mana: 50,
+                stats: {
+                    strength: 0,
+                    dexterity: 0,
+                    vitality: 0,
+                    intelligence: 10,
+                    faith: 0,
+                },
+            });
+            const casterG = makeUnitGroup();
+            const ctx = makeCtx([caster], { 4: casterG });
+            const skill: Skill = {
+                name: "Magic Wave",
+                manaCost: 20,
+                cooldown: 6000,
+                type: "damage",
+                targetType: "aoe",
+                range: 10,
+                aoeRadius: 3,
+                damageRange: [2, 4],
+                damageType: "chaos",
+                hitCount: 4,
+                projectileColor: "#9966ff",
+            };
+
+            const result = executeSkill(ctx, 4, skill, 10, 10);
+
+            expect(result).toBe(true);
+            expect(ctx.projectilesRef.current).toHaveLength(4);
+            const missileBonuses = ctx.projectilesRef.current.map(projectile => projectile.statBonus ?? 0);
+            expect(missileBonuses).toEqual([1, 1, 1, 2]);
+            expect(missileBonuses.reduce((sum, bonus) => sum + bonus, 0)).toBe(5);
         });
 
         it("routes taunt skills", () => {

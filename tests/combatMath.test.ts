@@ -3,9 +3,11 @@ import type { EnemyStats, StatusEffect, Unit } from "../src/core/types";
 import {
     applyPoison,
     applyStatusEffect,
+    calculateSkillStatBonusBudget,
     calculateDamageWithOptionalCritChance,
     checkEnemyDefenses,
     getCooldownMultiplier,
+    getDistributedStatBonus,
     getEffectiveSpeedMultiplier,
     getSkillHitChance,
 } from "../src/combat/combatMath";
@@ -33,6 +35,20 @@ function makeEnemyUnit(overrides: Partial<Unit> = {}): Unit {
         z: 0,
         hp: 10,
         team: "enemy",
+        target: null,
+        aiEnabled: true,
+        ...overrides,
+    };
+}
+
+function makePlayerUnit(overrides: Partial<Unit> = {}): Unit {
+    return {
+        id: 1,
+        x: 0,
+        z: 0,
+        hp: 20,
+        mana: 10,
+        team: "player",
         target: null,
         aiEnabled: true,
         ...overrides,
@@ -68,6 +84,30 @@ describe("combatMath", () => {
         const result = calculateDamageWithOptionalCritChance(10, 10, 0, "physical", undefined, 100);
         expect(result.isCrit).toBe(true);
         expect(result.damage).toBe(15);
+    });
+
+    it("builds and distributes a skill stat bonus budget without cloning it per hit", () => {
+        const unit = makePlayerUnit({
+            stats: {
+                strength: 10,
+                dexterity: 0,
+                vitality: 0,
+                intelligence: 0,
+                faith: 0,
+            },
+        });
+
+        const totalBudget = calculateSkillStatBonusBudget(unit, "physical", { statScaling: 1 });
+        const split = [
+            getDistributedStatBonus(totalBudget, 0, 4),
+            getDistributedStatBonus(totalBudget, 1, 4),
+            getDistributedStatBonus(totalBudget, 2, 4),
+            getDistributedStatBonus(totalBudget, 3, 4),
+        ];
+
+        expect(totalBudget).toBe(5);
+        expect(split).toEqual([1, 1, 1, 2]);
+        expect(split.reduce((sum, value) => sum + value, 0)).toBe(totalBudget);
     });
 
     it("does not apply poison when cleansed is active", () => {

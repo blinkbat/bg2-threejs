@@ -7,7 +7,7 @@ import type { Unit, Skill, UnitGroup, BasicProjectile, MagicMissileProjectile, P
 import { COLORS, BUFF_TICK_INTERVAL, SUN_STANCE_BONUS_DAMAGE, MAGIC_MISSILE_START_OFFSET, MAGIC_MISSILE_SPEED, MAGIC_MISSILE_ZIGZAG_PHASE_STEP, GLACIAL_WHORL_SPEED, GLACIAL_WHORL_MAX_DISTANCE, HOLY_DAMAGE_PER_TICK, getDamageTypeColor, getSkillTextColor } from "../../core/constants";
 import { UNIT_DATA, getEffectiveUnitData } from "../../game/playerUnits";
 import { getUnitStats } from "../../game/units";
-import { rollChance, rollDamage, calculateDamageWithCrit, rollSkillHit, getEffectiveArmor, logHit, logMiss, logPoisoned, logCast, logAoeHit, logAoeMiss, calculateStatBonus, checkEnemyDefenses, hasStatusEffect, applyStatusEffect } from "../combatMath";
+import { rollChance, rollDamage, calculateDamageWithCrit, rollSkillHit, getEffectiveArmor, logHit, logMiss, logPoisoned, logCast, logAoeHit, logAoeMiss, calculateSkillStatBonusBudget, checkEnemyDefenses, hasStatusEffect, applyStatusEffect, getDistributedStatBonus } from "../combatMath";
 import { ENEMY_STATS } from "../../game/enemyStats";
 import { getUnitRadius, isInRange } from "../../rendering/range";
 import { isPointInRectangle } from "../../game/geometry";
@@ -298,7 +298,7 @@ function executeTargetedDamageSkill(
 
     // --- Phase 6: Hit resolution ---
     if (rollSkillHit(skill, casterData.accuracy, casterUnit)) {
-        const statBonus = calculateStatBonus(casterUnit, skill.damageType);
+        const statBonus = calculateSkillStatBonusBudget(casterUnit, skill.damageType, skill);
         const { damage: dmg, isCrit } = calculateDamageWithCrit(
             skill.damageRange![0] + statBonus, skill.damageRange![1] + statBonus,
             getEffectiveArmor(targetEnemy, targetData.armor), skill.damageType, casterUnit
@@ -421,7 +421,7 @@ export function executeChainLightningSkill(
     };
 
     const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
-    const statBonus = calculateStatBonus(casterUnit, skill.damageType);
+    const totalStatBonus = calculateSkillStatBonusBudget(casterUnit, skill.damageType, skill);
     const skillLogColor = getSkillTextColor(skill.type, skill.damageType);
     const struckIds = new Set<number>();
 
@@ -453,9 +453,10 @@ export function executeChainLightningSkill(
                 addLog(logMiss(casterData.name, skill.name, targetData.name), COLORS.logNeutral);
                 return true;
             }
+            const initialStatBonus = getDistributedStatBonus(totalStatBonus, chainIndex, CHAIN_LIGHTNING_CHAIN_COUNT + 1);
             const result = calculateDamageWithCrit(
-                skill.damageRange![0] + statBonus,
-                skill.damageRange![1] + statBonus,
+                skill.damageRange![0] + initialStatBonus,
+                skill.damageRange![1] + initialStatBonus,
                 getEffectiveArmor(currentTarget, targetData.armor),
                 skill.damageType,
                 casterUnit
@@ -463,7 +464,8 @@ export function executeChainLightningSkill(
             currentDamage = result.damage;
             if (result.isCrit) crits++;
         } else {
-            currentDamage = Math.max(1, Math.floor(currentDamage * 0.5));
+            const bounceStatBonus = getDistributedStatBonus(totalStatBonus, chainIndex, CHAIN_LIGHTNING_CHAIN_COUNT + 1);
+            currentDamage = Math.max(1, Math.floor((currentDamage + bounceStatBonus) * 0.5));
         }
 
         applyDamageToUnit(dmgCtx, currentTarget.id, currentGroup, currentDamage, targetData.name, {
@@ -597,7 +599,7 @@ export function executeFlurrySkill(
     const skillLogColor = getSkillTextColor(skill.type, skill.damageType);
 
     const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
-    const statBonus = calculateStatBonus(casterUnit, skill.damageType);
+    const totalStatBonus = calculateSkillStatBonusBudget(casterUnit, skill.damageType, skill);
 
     for (let i = 0; i < hitCount; i++) {
         const targetIdx = i % enemiesInRange.length;
@@ -618,7 +620,8 @@ export function executeFlurrySkill(
         }
 
         if (rollSkillHit(skill, casterData.accuracy, casterUnit)) {
-            const { damage: dmg, isCrit } = calculateDamageWithCrit(skill.damageRange![0] + statBonus, skill.damageRange![1] + statBonus, getEffectiveArmor(target, targetData.armor), skill.damageType, casterUnit);
+            const hitStatBonus = getDistributedStatBonus(totalStatBonus, i, hitCount);
+            const { damage: dmg, isCrit } = calculateDamageWithCrit(skill.damageRange![0] + hitStatBonus, skill.damageRange![1] + hitStatBonus, getEffectiveArmor(target, targetData.armor), skill.damageType, casterUnit);
 
             applyDamageToUnit(dmgCtx, target.id, targetG, dmg, targetData.name, {
                 color: COLORS.damagePlayer,
@@ -675,6 +678,8 @@ export function executeMagicWaveSkill(
 
     consumeSkill(ctx, casterId, skill);
     const casterData = UNIT_DATA[casterId];
+    const casterUnit = ctx.unitsStateRef.current.find(u => u.id === casterId);
+    const totalStatBonus = calculateSkillStatBonusBudget(casterUnit, skill.damageType, skill);
     const missileCount = skill.hitCount ?? 8;
     const aoeRadius = skill.aoeRadius ?? 3;
     const waveDistance = Math.max(1.5, skill.range);
@@ -751,6 +756,7 @@ export function executeMagicWaveSkill(
             speed: MAGIC_MISSILE_SPEED,
             damage: skill.damageRange!,
             damageType: skill.damageType ?? "chaos",
+            statBonus: getDistributedStatBonus(totalStatBonus, i, missileCount),
             zigzagOffset: 0,
             zigzagDirection: i % 2 === 0 ? 1 : -1,
             zigzagPhase: i * MAGIC_MISSILE_ZIGZAG_PHASE_STEP + Math.random() * 0.2,
@@ -890,7 +896,7 @@ export function executeHolyCrossSkill(
     const skillLogColor = getSkillTextColor(skill.type, skill.damageType);
 
     const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
-    const statBonus = calculateStatBonus(casterUnit, skill.damageType);
+    const statBonus = calculateSkillStatBonusBudget(casterUnit, skill.damageType, skill);
 
     for (const { unit: target, group: targetG } of enemiesInCross) {
         if (defeatedThisFrame.has(target.id)) continue;
@@ -1034,7 +1040,7 @@ export function executeForcePushSkill(
     };
 
     const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
-    const statBonus = calculateStatBonus(casterUnit, skill.damageType);
+    const statBonus = calculateSkillStatBonusBudget(casterUnit, skill.damageType, skill);
     const skillLogColor = getSkillTextColor(skill.type, skill.damageType);
     const knockbackDistance = skill.knockbackDistance ?? 1.8;
     const stunChance = skill.stunChance ?? 0;
@@ -1236,7 +1242,7 @@ export function executeWellOfGravitySkill(
     };
 
     const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
-    const statBonus = calculateStatBonus(casterUnit, skill.damageType);
+    const statBonus = calculateSkillStatBonusBudget(casterUnit, skill.damageType, skill);
     const skillLogColor = getSkillTextColor(skill.type, skill.damageType);
     const pullDist = skill.pullDistance ?? 2.5;
     const stunChance = skill.stunChance ?? 0;
@@ -1478,7 +1484,7 @@ export function executeHolyStrikeSkill(
     const skillLogColor = getSkillTextColor(skill.type, skill.damageType);
 
     const casterUnit = unitsStateRef.current.find(u => u.id === casterId);
-    const statBonus = calculateStatBonus(casterUnit, skill.damageType);
+    const statBonus = calculateSkillStatBonusBudget(casterUnit, skill.damageType, skill);
 
     for (const { unit: target, group: tg } of enemiesInLine) {
         if (defeatedThisFrame.has(target.id)) continue;
@@ -1686,7 +1692,7 @@ export function executeCleaveSkill(
 
     const casterData = UNIT_DATA[casterId];
     const now = Date.now();
-    const statBonus = calculateStatBonus(casterUnit, skill.damageType);
+    const statBonus = calculateSkillStatBonusBudget(casterUnit, skill.damageType, skill);
 
     const dmgCtx: DamageContext = {
         scene, damageTexts: damageTexts.current, hitFlashRef: hitFlashRef.current,
@@ -1822,7 +1828,7 @@ export function executeSmiteStrikeSkill(
 
     // Hit resolution
     if (rollSkillHit(skill, casterData.accuracy, casterUnit)) {
-        const statBonus = calculateStatBonus(casterUnit, skill.damageType);
+        const statBonus = calculateSkillStatBonusBudget(casterUnit, skill.damageType, skill);
 
         // Check if target is undead or demon for bonus damage
         const enemyStats = targetEnemy.enemyType ? ENEMY_STATS[targetEnemy.enemyType] : undefined;
@@ -1987,7 +1993,7 @@ export function executeLeapStrikeSkill(
 
     // Hit resolution
     if (rollSkillHit(skill, casterData.accuracy, casterUnit)) {
-        const statBonus = calculateStatBonus(casterUnit, skill.damageType);
+        const statBonus = calculateSkillStatBonusBudget(casterUnit, skill.damageType, skill);
         const { damage: dmg, isCrit } = calculateDamageWithCrit(
             skill.damageRange![0] + statBonus, skill.damageRange![1] + statBonus,
             getEffectiveArmor(targetEnemy, targetData.armor), skill.damageType, casterUnit

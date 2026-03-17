@@ -1,4 +1,4 @@
-import { memo, useState, useRef, useCallback } from "react";
+import { memo, useState, useRef } from "react";
 import { UNIT_DATA } from "../game/playerUnits";
 import { getPlayerUnitColor } from "../game/unitColors";
 import type { Unit } from "../core/types";
@@ -34,8 +34,6 @@ function FormationIndicatorComponent({ units, formationOrder, onReorderFormation
         formationOrder
     );
 
-    if (players.length <= 1) return null;
-
     const effectiveOrder = buildEffectiveFormationOrder(
         players.map(u => u.id),
         formationOrder
@@ -45,7 +43,7 @@ function FormationIndicatorComponent({ units, formationOrder, onReorderFormation
     const [dropTargetId, setDropTargetId] = useState<number | null>(null);
     const dragIdRef = useRef<number | null>(null);
 
-    const handleDrop = useCallback((targetUnitId: number) => {
+    const handleDrop = (targetUnitId: number): void => {
         const sourceId = dragIdRef.current;
         dragIdRef.current = null;
         setDragId(null);
@@ -58,9 +56,11 @@ function FormationIndicatorComponent({ units, formationOrder, onReorderFormation
         if (srcIdx === -1 || tgtIdx === -1) return;
         [newOrder[srcIdx], newOrder[tgtIdx]] = [newOrder[tgtIdx], newOrder[srcIdx]];
         onReorderFormation(newOrder);
-    }, [effectiveOrder, onReorderFormation]);
+    };
 
     const canDrag = !!onReorderFormation;
+
+    if (players.length <= 1) return null;
 
     return (
         <div className="formation-indicator glass-panel">

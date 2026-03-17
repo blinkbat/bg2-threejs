@@ -1701,6 +1701,11 @@ function Game({
 
         if (sceneState.scene) {
             for (const u of newlyDeadUnits) {
+                // Skip loot for amoebas that split (not truly dead)
+                if (u.enemyType === "giant_amoeba") {
+                    const maxSplits = ENEMY_STATS.giant_amoeba.maxSplitCount ?? 3;
+                    if ((u.splitCount ?? 0) < maxSplits) continue;
+                }
                 const rolledLoot = rollEnemyLoot(u.enemyType);
                 if (!rolledLoot) continue;
 

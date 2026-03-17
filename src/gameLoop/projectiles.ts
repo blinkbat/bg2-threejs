@@ -486,7 +486,7 @@ export function updateProjectiles(
         const attackerUnit = getUnitById(proj.attackerId);
         const attackerData = attackerUnit ? getUnitStats(attackerUnit) : null;
         const { aoeRadius, damage } = proj;
-        const statBonus = calculateStatBonus(attackerUnit, proj.damageType);
+        const statBonus = proj.statBonus ?? calculateStatBonus(attackerUnit, proj.damageType);
 
         const explosion = new THREE.Mesh(
             new THREE.RingGeometry(0.1, aoeRadius, 32),
@@ -571,7 +571,7 @@ export function updateProjectiles(
             updateMagicMissileVisual(proj.mesh, mmProj.missileIndex);
             const attackerName = attackerUnit ? getUnitStats(attackerUnit).name : "Unknown";
             const attackerG = unitsRef[mmProj.attackerId];
-            const statBonus = calculateStatBonus(attackerUnit, mmProj.damageType);
+            const statBonus = mmProj.statBonus ?? calculateStatBonus(attackerUnit, mmProj.damageType);
 
             if (!attackerUnit || !attackerG) {
                 resolveMagicWaveMissile(mmProj, attackerName, 0, addLog);
@@ -905,7 +905,7 @@ export function updateProjectiles(
             const targetTeam = pProj.attackerTeam === "player" ? "enemy" : "player";
             const chilledTargets = new Set<number>();
             const attackerName = attackerUnit ? getUnitStats(attackerUnit).name : undefined;
-            const statBonus = calculateStatBonus(attackerUnit, pProj.damageType);
+            const statBonus = pProj.statBonus ?? calculateStatBonus(attackerUnit, pProj.damageType);
             forEachProjectileCandidatesNear(
                 proj.mesh.position.x,
                 proj.mesh.position.z,
@@ -1155,7 +1155,7 @@ export function updateProjectiles(
 
                 const { damage: dmg, isCrit } = isSkillShot && skillDamage
                     ? (() => {
-                        const statBonus = calculateStatBonus(attackerUnit, dmgType);
+                        const statBonus = proj.statBonus ?? calculateStatBonus(attackerUnit, dmgType);
                         return calculateDamageWithOptionalCritChance(
                             skillDamage[0] + statBonus,
                             skillDamage[1] + statBonus,
