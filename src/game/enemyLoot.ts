@@ -1,6 +1,6 @@
 import type { EnemyType } from "../core/types";
 
-interface RolledEnemyLoot {
+export interface RolledEnemyLoot {
     gold: number;
     items: string[];
 }
@@ -118,4 +118,25 @@ export function rollEnemyLoot(enemyType: EnemyType | undefined): RolledEnemyLoot
     const rolledLoot = resolveSlotLoot(selectedSlot);
     if (rolledLoot.gold <= 0 && rolledLoot.items.length === 0) return null;
     return rolledLoot;
+}
+
+export function formatRolledEnemyLootSummary(
+    rolledLoot: RolledEnemyLoot,
+    resolveItemName: (itemId: string) => string | undefined
+): string | null {
+    const lootParts: string[] = [];
+
+    if (rolledLoot.gold > 0) {
+        lootParts.push(`${rolledLoot.gold} gold`);
+    }
+
+    for (const itemId of rolledLoot.items) {
+        lootParts.push(resolveItemName(itemId) ?? itemId);
+    }
+
+    if (lootParts.length === 0) {
+        return null;
+    }
+
+    return `Loot dropped: ${lootParts.join(", ")}`;
 }

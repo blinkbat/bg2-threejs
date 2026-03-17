@@ -3,6 +3,7 @@
 // =============================================================================
 
 import type { Unit, UnitData, EnemyStats, StatusEffect, StatusEffectType, DamageType } from "../core/types";
+import { isEnemyData } from "../game/units";
 import { POISON_DURATION, POISON_TICK_INTERVAL, POISON_DAMAGE_PER_TICK, SLOW_DURATION, BUFF_TICK_INTERVAL, COLORS, SLOW_COOLDOWN_MULT, SLOW_MOVE_MULT, DEFIANCE_COOLDOWN_MULT, SLEEP_MIN_DURATION, SLEEP_MAX_DURATION, CHILLED_DURATION, CHILLED_COOLDOWN_MULT, CHILLED_MOVE_MULT, WEAKENED_COOLDOWN_MULT, HAMSTRUNG_MOVE_MULT, BLIND_ACCURACY_MULT } from "../core/constants";
 import { getStrengthDamageBonus, getIntelligenceMagicDamageBonus, getFaithHolyDamageBonus, getDexterityCritChance, CRIT_MULTIPLIER } from "../game/statBonuses";
 import { getEffectivePlayerBonusMagicDamage, getEffectivePlayerMoveSpeedMultiplier } from "../game/equipmentState";
@@ -514,8 +515,8 @@ export function getEffectiveSpeedMultiplier(unit: Unit, data: EnemyStats | UnitD
     const slow = hasStatusEffect(unit, "slowed") ? SLOW_MOVE_MULT : 1;
     const chill = hasStatusEffect(unit, "chilled") ? CHILLED_MOVE_MULT : 1;
     const hamstrung = hasStatusEffect(unit, "hamstrung") ? HAMSTRUNG_MOVE_MULT : 1;
-    const enraged = hasStatusEffect(unit, "enraged") && "enrage" in data && (data as EnemyStats).enrage
-        ? (data as EnemyStats).enrage!.speedMultiplier : 1;
+    const enraged = hasStatusEffect(unit, "enraged") && "enrage" in data && isEnemyData(data) && data.enrage
+        ? data.enrage.speedMultiplier : 1;
     return baseMoveSpeed * equipmentMoveSpeed * slow * chill * hamstrung * enraged;
 }
 

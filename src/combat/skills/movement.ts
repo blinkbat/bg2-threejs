@@ -161,13 +161,16 @@ export function executeDodgeSkill(
     // Consume skill (deducts mana, decrements uses, sets brief lockout)
     consumeSkill(ctx, casterId, skill);
 
+    const { duration } = skill;
+    if (!duration) return false;
+
     const now = Date.now();
     const casterData = UNIT_DATA[casterId];
 
     // Apply invul status + update logical position immediately
     const invulEffect: StatusEffect = {
         type: "invul",
-        duration: skill.duration!,
+        duration,
         tickInterval: BUFF_TICK_INTERVAL,
         timeSinceTick: 0,
         lastUpdateTime: now,

@@ -3,7 +3,7 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitGroup, DamageText, Projectile, SwingAnimation, EnemyStats } from "../core/types";
+import type { Unit, UnitGroup, DamageText, Projectile, SwingAnimation } from "../core/types";
 import { SKILL_SINGLE_TARGET_CHANCE, FORMATION_SLOW_SPEED, BUFF_TICK_INTERVAL } from "../core/constants";
 import { getUnitRadius, isInRange } from "../rendering/range";
 import { tryKite, type KiteContext } from "../ai/targeting";
@@ -11,7 +11,7 @@ import {
     runTargetingPhase, runPathFollowingPhase, runMovementPhase, recalculatePathIfNeeded,
     type TargetingContext, type PathContext, type MovementContext
 } from "../ai/unitAI";
-import { getUnitStats, getAttackRange } from "../game/units";
+import { getUnitStats, getAttackRange, getEnemyUnitStats, isEnemyData } from "../game/units";
 import { getCurrentArea } from "../game/areas";
 import { getUnitById } from "../game/unitQuery";
 import { createPathToTarget, clearJitterTracking } from "../ai/movement";
@@ -176,10 +176,11 @@ export function updateUnitAI(
     }
 
     // Phase 1: Targeting - find and validate targets
-    const aggroRange = isPlayer ? 12 : (data as { aggroRange: number }).aggroRange;
-    const hasFrontShield = !isPlayer && (data as EnemyStats).frontShield === true;
-    const hasAggressiveTargeting = !isPlayer && (data as EnemyStats).aggressiveTargeting === true;
-    const hasFastRetargeting = !isPlayer && ((((data as EnemyStats).size ?? 1) >= 1) || (data as EnemyStats).moveSpeed < 1);
+    const enemyData = isEnemyData(data) ? data : null;
+    const aggroRange = isPlayer ? 12 : enemyData!.aggroRange;
+    const hasFrontShield = enemyData?.frontShield === true;
+    const hasAggressiveTargeting = enemyData?.aggressiveTargeting === true;
+    const hasFastRetargeting = !!enemyData && (((enemyData.size ?? 1) >= 1) || enemyData.moveSpeed < 1);
     const targetingCtx: TargetingContext = {
         unit, g, unitsRef, unitsState, visibility, pathsRef, moveStartRef,
         now, defeatedThisFrame, aggroRange, hasFrontShield, hasAggressiveTargeting, hasFastRetargeting
@@ -187,7 +188,6 @@ export function updateUnitAI(
     runTargetingPhase(targetingCtx);
 
     // Phase 1.5: Kiting - ranged enemies retreat when players get too close
-    const enemyData = !isPlayer ? data as EnemyStats : null;
     if (enemyData) {
         const kiteCtx: KiteContext = { unit, g, unitsRef, unitsState, pathsRef, moveStartRef, now };
         const kiteResult = tryKite(kiteCtx, enemyData);
@@ -204,7 +204,7 @@ export function updateUnitAI(
     // Phase 1.55: Acid slug patrol - circle around players spreading acid instead of attacking
     if (!isPlayer && !hasDivineLattice && unit.enemyType === "acid_slug" && acidTilesRef) {
         if (tryAcidSlugPatrol({
-            unit, g, slugData: data as EnemyStats, unitsState, unitsRef, pathsRef, moveStartRef,
+            unit, g, slugData: enemyData!, unitsState, unitsRef, pathsRef, moveStartRef,
             scene, skillCooldowns, setSkillCooldowns, acidTilesRef, now
         })) {
             return;
@@ -216,7 +216,7 @@ export function updateUnitAI(
         const healSkill = data.healSkill;
         if (isCooldownReady(skillCooldowns, unit.id, healSkill.name, now)) {
             const executed = executeEnemyHeal(
-                unit, g, healSkill, data as EnemyStats,
+                unit, g, healSkill, enemyData!,
                 unitsRef, unitsState, scene, damageTexts,
                 setUnits, addLog
             );
@@ -231,7 +231,7 @@ export function updateUnitAI(
     // Phase 1.7-1.86: Fire-and-forget pre-attack behaviors (spawn, raise, tentacle, curse, glare)
     if (!isPlayer && !hasDivineLattice) {
         runPreAttackBehaviors({
-            unit, g, enemyStats: data as EnemyStats, unitsState, unitsRef,
+            unit, g, enemyStats: enemyData!, unitsState, unitsRef,
             scene, setUnits, skillCooldowns, setSkillCooldowns, addLog, now,
             damageTexts, hitFlashRef, unitsStateRef: { current: unitsState } as React.RefObject<Unit[]>, defeatedThisFrame
         });
@@ -265,7 +265,7 @@ export function updateUnitAI(
             if (!isPlayer && 'vinesSkill' in data && data.vinesSkill) {
                 const unitsStateRef = { current: unitsState } as React.RefObject<Unit[]>;
                 tryVinesSkill({
-                    unit, g, enemyStats: data as EnemyStats, vinesSkill: data.vinesSkill,
+                    unit, g, enemyStats: enemyData!, vinesSkill: data.vinesSkill,
                     targetUnit: targetU, targetG, scene,
                     skillCooldowns, setSkillCooldowns, setUnits, addLog, now,
                     damageTexts, hitFlashRef, unitsRef, unitsStateRef, defeatedThisFrame
@@ -323,7 +323,7 @@ export function updateUnitAI(
                     // Check if enemy has a charge attack and it's ready
                     if (!isPlayer && 'chargeAttack' in data && data.chargeAttack) {
                         if (tryStartChargeAttack({
-                            unit, g, enemyStats: data as EnemyStats, chargeAttack: data.chargeAttack, scene,
+                            unit, g, enemyStats: enemyData!, chargeAttack: data.chargeAttack, scene,
                             skillCooldowns, setSkillCooldowns, addLog, now
                         })) {
                             return;
@@ -345,7 +345,7 @@ export function updateUnitAI(
                             // Use skill if there are 2+ targets, or randomly with 1 target
                             if (potentialTargets.length >= 2 || (potentialTargets.length === 1 && Math.random() < SKILL_SINGLE_TARGET_CHANCE)) {
                                 const executed = executeEnemySwipe(
-                                    unit, g, skill, data as EnemyStats,
+                                    unit, g, skill, enemyData!,
                                     unitsRef, unitsState, scene, damageTexts,
                                     hitFlashRef, setUnits, addLog, now, defeatedThisFrame
                                 );
@@ -391,7 +391,7 @@ export function updateUnitAI(
                     const unitsStateRef = { current: unitsState } as React.RefObject<Unit[]>;
                     executeEnemyBasicAttack({
                         scene, attacker: unit, attackerG: g, target: targetU, targetG,
-                        attackerStats: data as EnemyStats, damageTexts, hitFlashRef, unitsRef,
+                        attackerStats: enemyData!, damageTexts, hitFlashRef, unitsRef,
                         unitsStateRef, setUnits, addLog, now, defeatedThisFrame, swingAnimations, projectilesRef
                     });
                 }
@@ -411,7 +411,7 @@ export function updateUnitAI(
                 if (!isPlayer && 'leapSkill' in data && data.leapSkill && !isUnitLeaping(unit.id)) {
                     const leapSkill = data.leapSkill;
                     if (tryLeapToTarget({
-                        unit, g, enemyStats: data as EnemyStats, leapSkill,
+                        unit, g, enemyStats: enemyData!, leapSkill,
                         targetUnit: targetU, targetG, scene,
                         skillCooldowns, setSkillCooldowns, setUnits, addLog, now
                     })) {
@@ -503,7 +503,7 @@ export function updateUnitAI(
     if (!isPlayer && acidTilesRef && !hasDivineLattice) {
         const newGridX = Math.floor(g.position.x);
         const newGridZ = Math.floor(g.position.z);
-        processAcidTrailAndAura(data as EnemyStats, scene, acidTilesRef, skillCooldowns, setSkillCooldowns, unit.id, oldGridX, oldGridZ, newGridX, newGridZ, now);
+        processAcidTrailAndAura(enemyData!, scene, acidTilesRef, skillCooldowns, setSkillCooldowns, unit.id, oldGridX, oldGridZ, newGridX, newGridZ, now);
     }
 }
 
@@ -593,7 +593,7 @@ export function updateShieldFacing(
     for (const unit of unitsState) {
         if (unit.team !== "enemy" || unit.hp <= 0) continue;
 
-        const data = getUnitStats(unit) as EnemyStats;
+        const data = getEnemyUnitStats(unit);
         if (!data.frontShield) continue;
 
         const g = unitsRef[unit.id];

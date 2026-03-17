@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Unit } from "../src/core/types";
-import { ENEMY_STATS, getAmoebaMaxHpForSplitCount } from "../src/game/enemyStats";
+import { ENEMY_STATS, getAmoebaMaxHpForSplitCount, isEnemyPermanentDeath } from "../src/game/enemyStats";
 import { clearUnitStatsCache, getUnitStats } from "../src/game/units";
 
 function makeAmoebaUnit(id: number, splitCount: number): Unit {
@@ -50,5 +50,13 @@ describe("amoeba split scaling", () => {
         expect(stage0Stats.maxHp).toBe(getAmoebaMaxHpForSplitCount(0));
         expect(stage1Stats.maxHp).toBe(getAmoebaMaxHpForSplitCount(1));
         expect(stage1Stats.maxHp).toBeLessThan(stage0Stats.maxHp);
+    });
+
+    it("only treats the final amoeba stage as a permanent death", () => {
+        const otherEnemy: Pick<Unit, "enemyType" | "splitCount"> = { enemyType: "kobold" };
+        expect(isEnemyPermanentDeath(makeAmoebaUnit(903, 0))).toBe(false);
+        expect(isEnemyPermanentDeath(makeAmoebaUnit(904, 1))).toBe(false);
+        expect(isEnemyPermanentDeath(makeAmoebaUnit(905, 2))).toBe(true);
+        expect(isEnemyPermanentDeath(otherEnemy)).toBe(true);
     });
 });

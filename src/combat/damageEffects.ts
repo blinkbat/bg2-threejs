@@ -484,6 +484,9 @@ export function applyDamageToUnit(
         skipHighlandDefense = false
     } = options;
 
+    // Floor negative damage to zero so it can never heal the target.
+    damage = Math.max(0, damage);
+
     // Area-wide invulnerability (testing rooms, etc.)
     if (getCurrentArea().invulnerable) return;
 

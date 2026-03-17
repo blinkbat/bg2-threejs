@@ -124,11 +124,16 @@ function makeUnit(overrides: Partial<Unit> = {}): Unit {
     };
 }
 
-function makeUnitGroup(): UnitGroup {
+type UnitGroupOverrides = Partial<Omit<UnitGroup, "position">> & {
+    position?: { x: number; y: number; z: number };
+};
+
+function makeUnitGroup(overrides: UnitGroupOverrides = {}): UnitGroup {
     return {
-        position: { x: 5, y: 0, z: 5 },
+        position: overrides.position ?? { x: 5, y: 0, z: 5 },
         visible: true,
         userData: {},
+        ...overrides,
     } as unknown as UnitGroup;
 }
 
@@ -343,6 +348,53 @@ describe("executeSkill", () => {
             const missileBonuses = ctx.projectilesRef.current.map(projectile => projectile.statBonus ?? 0);
             expect(missileBonuses).toEqual([1, 1, 1, 2]);
             expect(missileBonuses.reduce((sum, bonus) => sum + bonus, 0)).toBe(5);
+        });
+
+        it("keeps Chain Lightning stat bonus from bleeding into later bounce decay", () => {
+            const caster = makeUnit({
+                id: 4,
+                hp: 17,
+                mana: 50,
+                stats: {
+                    strength: 0,
+                    dexterity: 0,
+                    vitality: 0,
+                    intelligence: 10,
+                    faith: 0,
+                },
+            });
+            const enemyA = makeUnit({ id: 100, hp: 100, team: "enemy", enemyType: "kobold" });
+            const enemyB = makeUnit({ id: 101, hp: 100, team: "enemy", enemyType: "kobold" });
+            const enemyC = makeUnit({ id: 102, hp: 100, team: "enemy", enemyType: "kobold" });
+            const enemyD = makeUnit({ id: 103, hp: 100, team: "enemy", enemyType: "kobold" });
+            const casterG = makeUnitGroup();
+            const enemyAG = makeUnitGroup({ position: { x: 7, y: 0, z: 5 } });
+            const enemyBG = makeUnitGroup({ position: { x: 9, y: 0, z: 5 } });
+            const enemyCG = makeUnitGroup({ position: { x: 11, y: 0, z: 5 } });
+            const enemyDG = makeUnitGroup({ position: { x: 13, y: 0, z: 5 } });
+            const ctx = makeCtx(
+                [caster, enemyA, enemyB, enemyC, enemyD],
+                { 4: casterG, 100: enemyAG, 101: enemyBG, 102: enemyCG, 103: enemyDG }
+            );
+            const skill: Skill = {
+                name: "Chain Lightning",
+                manaCost: 20,
+                cooldown: 8500,
+                type: "smite",
+                targetType: "enemy",
+                range: 10,
+                damageRange: [14, 14],
+                damageType: "lightning",
+            };
+
+            const result = executeSkill(ctx, 4, skill, 7, 5, 100);
+
+            expect(result).toBe(true);
+            const updatedUnits = new Map(ctx.unitsStateRef.current.map(unit => [unit.id, unit]));
+            expect(updatedUnits.get(100)?.hp).toBe(85);
+            expect(updatedUnits.get(101)?.hp).toBe(92);
+            expect(updatedUnits.get(102)?.hp).toBe(96);
+            expect(updatedUnits.get(103)?.hp).toBe(97);
         });
 
         it("routes taunt skills", () => {

@@ -180,9 +180,12 @@ export function executeMassHealSkill(
         return false;
     }
 
+    const { healRange } = skill;
+    if (!healRange) return false;
+
     consumeSkill(ctx, casterId, skill);
 
-    const healAmount = rollDamage(skill.healRange![0], skill.healRange![1]) + faithBonus;
+    const healAmount = rollDamage(healRange[0], healRange[1]) + faithBonus;
     const now = Date.now();
 
     // Apply heal to all allies in range
@@ -265,11 +268,14 @@ export function executeHealSkill(
         return false;
     }
 
+    const { healRange } = skill;
+    if (!healRange) return false;
+
     consumeSkill(ctx, casterId, skill);
 
     // Apply heal with faith bonus
     const faithBonus = casterUnit ? getFaithHealingBonus(casterUnit) : 0;
-    const healAmount = rollDamage(skill.healRange![0], skill.healRange![1]) + faithBonus;
+    const healAmount = rollDamage(healRange[0], healRange[1]) + faithBonus;
     const targetData = UNIT_DATA[targetAlly.id];
     const healTargetId = targetAlly.id;
     updateUnitWith(setUnits, healTargetId, u => ({ hp: Math.min(targetMaxHp, u.hp + healAmount) }));
@@ -357,13 +363,16 @@ export function executeManaTransferSkill(
         return false;
     }
 
+    const { manaRange } = skill;
+    if (!manaRange) return false;
+
     consumeSkill(ctx, casterId, skill);
 
     const now = Date.now();
     const casterData = UNIT_DATA[casterId];
 
     // Give mana to ally
-    const manaAmount = rollDamage(skill.manaRange![0], skill.manaRange![1]);
+    const manaAmount = rollDamage(manaRange[0], manaRange[1]);
     const actualMana = Math.min(manaAmount, targetMaxMana - (targetAlly.mana ?? 0));
     const healTargetId = targetAlly.id;
 
@@ -464,6 +473,9 @@ function applyBuffFromTemplate(
     const casterG = unitsRef.current[casterId];
     if (!casterG) return false;
 
+    const { duration } = skill;
+    if (!duration) return false;
+
     consumeSkill(ctx, casterId, skill);
 
     const casterData = UNIT_DATA[casterId];
@@ -472,7 +484,7 @@ function applyBuffFromTemplate(
 
     const effect: StatusEffect = {
         type: template.effectType,
-        duration: skill.duration!,
+        duration,
         tickInterval: BUFF_TICK_INTERVAL,
         timeSinceTick: 0,
         lastUpdateTime: now,
@@ -581,6 +593,9 @@ export function executeEnergyShieldSkill(
     casterId: number,
     skill: Skill
 ): boolean {
+    const { shieldAmount } = skill;
+    if (!shieldAmount) return false;
+
     return applyBuffFromTemplate(ctx, casterId, skill, {
         effectType: "energy_shield",
         ringColor: "#66ccff",
@@ -588,7 +603,7 @@ export function executeEnergyShieldSkill(
         sound: soundFns.playEnergyShield,
         logMessage: (name) => `${name} conjures an Energy Shield!`,
         logColor: getSkillTextColor(skill.type, skill.damageType),
-        extraEffectFields: { shieldAmount: skill.shieldAmount! },
+        extraEffectFields: { shieldAmount },
     });
 }
 
@@ -649,12 +664,15 @@ export function executeDivineLatticeSkill(
         return false;
     }
 
+    const { duration } = skill;
+    if (!duration) return false;
+
     consumeSkill(ctx, casterId, skill);
 
     const now = Date.now();
     const latticeEffect: StatusEffect = {
         type: "divine_lattice",
-        duration: skill.duration!,
+        duration,
         tickInterval: BUFF_TICK_INTERVAL,
         timeSinceTick: 0,
         lastUpdateTime: now,
@@ -737,7 +755,8 @@ export function executeCleanseSkill(
     consumeSkill(ctx, casterId, skill);
 
     const casterData = UNIT_DATA[casterId];
-    const duration = skill.duration!;  // Duration in ms (30 seconds)
+    const { duration } = skill;
+    if (!duration) return false;
 
     // Apply cleanse: remove poison and add cleansed (immunity) effect
     const cleansedEffect: StatusEffect = {
@@ -827,8 +846,8 @@ export function executeRestorationSkill(
 
     const casterData = UNIT_DATA[casterId];
     const now = Date.now();
-    const duration = skill.duration!;
-    const healPerTick = skill.healPerTick!;
+    const { duration, healPerTick } = skill;
+    if (!duration || !healPerTick) return false;
 
     // Remove harmful effects and apply regen
     const regenEffect: StatusEffect = {

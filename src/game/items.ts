@@ -669,6 +669,9 @@ export function validateItemDefinition(item: Item): string[] {
         if (item.poisonDamageOnUse !== undefined && !isNonNegativeNumber(item.poisonDamageOnUse)) {
             errors.push("Consumable poison damage on use must be a non-negative number.");
         }
+        if ((item.poisonChanceOnUse !== undefined) !== (item.poisonDamageOnUse !== undefined)) {
+            errors.push("Consumable poisonChanceOnUse and poisonDamageOnUse must both be set together.");
+        }
     } else {
         errors.push("Item category is invalid.");
     }

@@ -3,11 +3,10 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { EnemyStats } from "../../core/types";
 import { COLORS } from "../../core/constants";
 import { isCooldownReady, setSkillCooldown, rollHit, calculateDamageWithCrit, getEffectiveArmor, hasStatusEffect } from "../../combat/combatMath";
 import { getAliveUnitsInRange, createAnimatedRing, applyDamageToUnit, buildDamageContext } from "../../combat/damageEffects";
-import { getUnitStats } from "../../game/units";
+import { getUnitStats, getEnemyUnitStats } from "../../game/units";
 import { soundFns } from "../../audio";
 import { getGameTime } from "../../core/gameClock";
 import { scheduleEffectAnimation } from "../../core/effectScheduler";
@@ -89,7 +88,7 @@ export function tryDreamEater(ctx: DreamEaterContext): boolean {
     sleepingTargets.sort((a, b) => a.dist - b.dist);
     const target = sleepingTargets[0];
     const targetData = getUnitStats(target.unit);
-    const casterStats = getUnitStats(unit) as EnemyStats;
+    const casterStats = getEnemyUnitStats(unit);
 
     const cooldownKey = `${unit.id}-${dreamEaterSkill.name}`;
     setSkillCooldown(setSkillCooldowns, cooldownKey, dreamEaterSkill.cooldown, now, unit);

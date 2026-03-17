@@ -1,4 +1,4 @@
-import type { EnemyStats, EnemyType, MonsterType } from "../core/types";
+import type { EnemyStats, EnemyType, MonsterType, Unit } from "../core/types";
 import { DEFAULT_MOVE_SPEED } from "../core/constants";
 
 const AMOEBA_SPLIT_HP_SCALE = 0.7;
@@ -652,6 +652,15 @@ const MONSTER_TYPE_LABELS: Record<MonsterType, string> = {
 
 export function getMonsterTypeLabel(monsterType: MonsterType): string {
     return MONSTER_TYPE_LABELS[monsterType];
+}
+
+export function isEnemyPermanentDeath(unit: Pick<Unit, "enemyType" | "splitCount">): boolean {
+    if (unit.enemyType !== "giant_amoeba") {
+        return true;
+    }
+
+    const maxSplits = ENEMY_STATS.giant_amoeba.maxSplitCount ?? 3;
+    return (unit.splitCount ?? 0) >= maxSplits;
 }
 
 export function getAmoebaMaxHpForSplitCount(splitCount: number): number {

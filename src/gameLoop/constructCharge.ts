@@ -3,9 +3,9 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitGroup, DamageText, EnemyChargeAttack, EnemyStats, DamageType } from "../core/types";
+import type { Unit, UnitGroup, DamageText, EnemyChargeAttack, DamageType } from "../core/types";
 import { COLORS } from "../core/constants";
-import { getUnitStats } from "../game/units";
+import { getUnitStats, getEnemyUnitStats } from "../game/units";
 import { accumulateDelta, getGameTime } from "../core/gameClock";
 import { calculateDamageWithCrit, rollHit, getEffectiveArmor, logAoeHit } from "../combat/combatMath";
 import { applyDamageToUnit, buildDamageContext, createAnimatedRing } from "../combat/damageEffects";
@@ -123,7 +123,7 @@ export function startChargeAttack(
         skillName: chargeAttack.name
     });
 
-    const enemyData = getUnitStats(unit) as EnemyStats;
+    const enemyData = getEnemyUnitStats(unit);
     addLog(`${enemyData.name} begins charging ${chargeAttack.name}!`, "#ff6600");
     soundFns.playHit(); // Charge start sound
 }
@@ -230,7 +230,7 @@ function executeChargeAttack(
     now: number,
     defeatedThisFrame: Set<number>
 ): void {
-    const enemyData = getUnitStats(unit) as EnemyStats;
+    const enemyData = getEnemyUnitStats(unit);
     const dmgCtx = buildDamageContext(scene, damageTexts, hitFlashRef, unitsRef, unitsState, setUnits, addLog, now, defeatedThisFrame);
 
     // Find all player units in the cross area

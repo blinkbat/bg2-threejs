@@ -63,6 +63,20 @@ export function getUnitStats(unit: Unit): UnitData | EnemyStats {
     return result;
 }
 
+/** Type guard: returns true when the stats object is EnemyStats (not player UnitData). */
+export function isEnemyData(data: UnitData | EnemyStats): data is EnemyStats {
+    return "monsterType" in data;
+}
+
+/**
+ * Get stats for a unit that is known to be an enemy.
+ * Returns EnemyStats directly, avoiding the need for `as EnemyStats` casts.
+ * Falls back to kobold stats for enemies with missing enemyType.
+ */
+export function getEnemyUnitStats(unit: Unit): EnemyStats {
+    return getUnitStats(unit) as EnemyStats;
+}
+
 /** Get the attack range for any unit (player or enemy) */
 export function getAttackRange(unit: Unit): number {
     const stats = getUnitStats(unit);

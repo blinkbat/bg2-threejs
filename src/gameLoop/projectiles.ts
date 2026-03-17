@@ -5,7 +5,7 @@
 import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, Projectile, EnemyStats, MagicMissileProjectile, TrapProjectile, FireballProjectile, PiercingProjectile, StatusEffect, DamageType, UnitData, SkillOnHitEffect } from "../core/types";
 import { HIT_DETECTION_RADIUS, COLORS, BUFF_TICK_INTERVAL, SUN_STANCE_BONUS_DAMAGE, GLACIAL_WHORL_HIT_RADIUS } from "../core/constants";
-import { getUnitStats } from "../game/units";
+import { getUnitStats, isEnemyData } from "../game/units";
 import { calculateDamageWithCrit, calculateDamageWithOptionalCritChance, getDirectionAndDistance, rollSkillHit, rollDamage, shouldApplyPoison, getEffectiveArmor, logHit, logLifestealHit, logMiss, logPoisoned, logAoeHit, logAoeMiss, getDamageColor, logTrapTriggered, calculateStatBonus, applyStatusEffect, checkEnemyDefenses, hasStatusEffect, rollChance, applyChilled, logStunned, logWeakened, logHamstrung } from "../combat/combatMath";
 import { accumulateDelta } from "../core/gameClock";
 import { isBlocked } from "../ai/pathfinding";
@@ -569,7 +569,7 @@ export function updateProjectiles(
             const mmProj = proj as MagicMissileProjectile;
             const attackerUnit = getUnitById(mmProj.attackerId);
             updateMagicMissileVisual(proj.mesh, mmProj.missileIndex);
-            const attackerName = attackerUnit ? getUnitStats(attackerUnit).name : "Unknown";
+            const attackerName = attackerUnit ? getUnitStats(attackerUnit).name : (mmProj.attackerName ?? "Unknown");
             const attackerG = unitsRef[mmProj.attackerId];
             const statBonus = mmProj.statBonus ?? calculateStatBonus(attackerUnit, mmProj.damageType);
 
@@ -1176,11 +1176,12 @@ export function updateProjectiles(
                         );
                     })();
 
-                const willPoison = !isSkillShot && attackerUnit.team === "enemy" && shouldApplyPoison(attackerData as EnemyStats);
-                const poisonDmg = willPoison && 'poisonDamage' in attackerData ? (attackerData as EnemyStats).poisonDamage : undefined;
+                const enemyAttackerData = !isSkillShot && attackerUnit.team === "enemy" && isEnemyData(attackerData) ? attackerData : null;
+                const willPoison = !!enemyAttackerData && shouldApplyPoison(enemyAttackerData);
+                const poisonDmg = willPoison ? enemyAttackerData.poisonDamage : undefined;
 
                 // Calculate lifesteal heal amount for log message
-                const lifesteal = !isSkillShot && attackerUnit.team === "enemy" ? (attackerData as EnemyStats).lifesteal : undefined;
+                const lifesteal = enemyAttackerData?.lifesteal;
                 const healAmount = lifesteal && lifesteal > 0 ? Math.floor(dmg * lifesteal) : 0;
 
                 // Custom log for lifesteal attacks

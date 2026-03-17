@@ -94,6 +94,7 @@ interface BaseProjectile {
     attackerId: number;
     speed: number;
     statBonus?: number;
+    attackerName?: string;
 }
 
 export interface BasicProjectile extends BaseProjectile {

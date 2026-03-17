@@ -24,10 +24,72 @@ export function createThreeTestModule(): Record<string, unknown> {
         }
     }
 
+    class Vector3Stub {
+        x: number;
+        y: number;
+        z: number;
+
+        constructor(x: number = 0, y: number = 0, z: number = 0) {
+            this.x = x;
+            this.y = y;
+            this.z = z;
+        }
+
+        set(x: number = 0, y: number = 0, z: number = 0): this {
+            this.x = x;
+            this.y = y;
+            this.z = z;
+            return this;
+        }
+
+        copy(vector: { x: number; y: number; z: number }): this {
+            this.x = vector.x;
+            this.y = vector.y;
+            this.z = vector.z;
+            return this;
+        }
+
+        add(vector: { x: number; y: number; z: number }): this {
+            this.x += vector.x;
+            this.y += vector.y;
+            this.z += vector.z;
+            return this;
+        }
+
+        subVectors(a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }): this {
+            this.x = a.x - b.x;
+            this.y = a.y - b.y;
+            this.z = a.z - b.z;
+            return this;
+        }
+
+        length(): number {
+            return Math.hypot(this.x, this.y, this.z);
+        }
+
+        normalize(): this {
+            const len = this.length();
+            if (len > 0) {
+                this.x /= len;
+                this.y /= len;
+                this.z /= len;
+            }
+            return this;
+        }
+
+        multiplyScalar(scale: number): this {
+            this.x *= scale;
+            this.y *= scale;
+            this.z *= scale;
+            return this;
+        }
+    }
+
     class MeshStub {
-        position = { set() {}, x: 0, y: 0, z: 0 };
+        position = new Vector3Stub();
         rotation = { x: 0, y: 0, z: 0 };
         scale = { set() {} };
+        quaternion = { setFromUnitVectors() {} };
         renderOrder = 0;
         userData: Record<string, unknown> = {};
         material = {
@@ -70,28 +132,6 @@ export function createThreeTestModule(): Record<string, unknown> {
         add(): void {}
 
         remove(): void {}
-    }
-
-    class Vector3Stub {
-        x = 0;
-        y = 0;
-        z = 0;
-
-        set(): this {
-            return this;
-        }
-
-        copy(): this {
-            return this;
-        }
-
-        normalize(): this {
-            return this;
-        }
-
-        multiplyScalar(): this {
-            return this;
-        }
     }
 
     class LineStub {

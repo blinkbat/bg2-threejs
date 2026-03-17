@@ -14,9 +14,9 @@ import type { Unit, Skill, CombatLogEntry, SelectionBox, CharacterStats, StatusE
 import { getCurrentArea, getCurrentAreaId, setCurrentArea, AREAS, DEFAULT_STARTING_AREA, type AreaId, type AreaTransition } from "./game/areas";
 import { UNIT_DATA, CORE_PLAYER_IDS, getEffectiveMaxHp, getEffectiveMaxMana, getXpForLevel, isCorePlayerId } from "./game/playerUnits";
 import { LEVEL_UP_HP, LEVEL_UP_MANA, LEVEL_UP_STAT_POINTS, LEVEL_UP_SKILL_POINTS, HP_PER_VITALITY, MP_PER_INTELLIGENCE } from "./game/statBonuses";
-import { ENEMY_STATS, getMonsterTypeLabel } from "./game/enemyStats";
+import { ENEMY_STATS, getMonsterTypeLabel, isEnemyPermanentDeath } from "./game/enemyStats";
 import { SKILLS } from "./game/skills";
-import { rollEnemyLoot } from "./game/enemyLoot";
+import { formatRolledEnemyLootSummary, rollEnemyLoot } from "./game/enemyLoot";
 import {
     initializeEquipmentState,
     getPartyInventory,
@@ -1682,7 +1682,7 @@ function Game({
 
             if (!prevAliveEnemiesRef.current.has(u.id)) continue;
 
-            if (u.id >= 100 && u.id <= staticEnemyMaxId) {
+            if (u.id >= 100 && u.id <= staticEnemyMaxId && isEnemyPermanentDeath(u)) {
                 const spawnIndex = u.id - 100;
                 newlyDead.push(`${areaId}-${spawnIndex}`);
             }
@@ -1701,11 +1701,7 @@ function Game({
 
         if (sceneState.scene) {
             for (const u of newlyDeadUnits) {
-                // Skip loot for amoebas that split (not truly dead)
-                if (u.enemyType === "giant_amoeba") {
-                    const maxSplits = ENEMY_STATS.giant_amoeba.maxSplitCount ?? 3;
-                    if ((u.splitCount ?? 0) < maxSplits) continue;
-                }
+                if (!isEnemyPermanentDeath(u)) continue;
                 const rolledLoot = rollEnemyLoot(u.enemyType);
                 if (!rolledLoot) continue;
 
@@ -1717,14 +1713,12 @@ function Game({
                 gameRefs.current.lootBags.push(bag);
 
                 queueMicrotask(() => {
-                    const lootParts: string[] = [];
-                    if (rolledLoot.gold > 0) {
-                        lootParts.push(`${rolledLoot.gold} gold`);
-                    }
-                    for (const itemId of rolledLoot.items) {
-                        const item = getItem(itemId);
-                        lootParts.push(item?.name ?? itemId);
-                    };
+                    const lootSummary = formatRolledEnemyLootSummary(
+                        rolledLoot,
+                        itemId => getItem(itemId)?.name
+                    );
+                    if (!lootSummary) return;
+                    addLog(lootSummary, COLORS.damageCrit);
                 });
             }
         }

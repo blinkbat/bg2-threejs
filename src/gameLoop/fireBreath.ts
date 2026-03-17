@@ -3,9 +3,9 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitGroup, DamageText, EnemyStats, EnemyBreathSkill } from "../core/types";
+import type { Unit, UnitGroup, DamageText, EnemyBreathSkill } from "../core/types";
 import { COLORS, FIRE_BREATH_BASE_OPACITY, FIRE_BREATH_OPACITY_AMPLITUDE, FIRE_BREATH_PULSE_SPEED } from "../core/constants";
-import { getUnitStats } from "../game/units";
+import { getUnitStats, getEnemyUnitStats } from "../game/units";
 import { getGameTime, accumulateDelta } from "../core/gameClock";
 import { calculateDamageWithCrit, rollHit, getEffectiveArmor, isUnitAlive, setSkillCooldown } from "../combat/combatMath";
 import { applyDamageToUnit, buildDamageContext } from "../combat/damageEffects";
@@ -111,7 +111,7 @@ export function startFireBreath(
         setSkillCooldowns
     });
 
-    const enemyData = getUnitStats(unit) as EnemyStats;
+    const enemyData = getEnemyUnitStats(unit);
     addLog(`${enemyData.name} breathes fire!`, COLORS.fireBreath);
 }
 
@@ -212,7 +212,7 @@ export function processFireBreaths(
         if (breath.timeSinceTick >= breath.skill.tickInterval) {
             breath.timeSinceTick = 0;
 
-            const casterStats = getUnitStats(unit) as EnemyStats;
+            const casterStats = getEnemyUnitStats(unit);
             const dmgCtx = buildDamageContext(scene, damageTexts, hitFlashRef, unitsRef, unitsState, setUnits, addLog, now, defeatedThisFrame);
 
             for (const target of unitsState) {

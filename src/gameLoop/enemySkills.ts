@@ -5,7 +5,7 @@
 import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, EnemyStats, EnemySkill, EnemyHealSkill } from "../core/types";
 import { COLORS, SWIPE_ANIMATE_DURATION } from "../core/constants";
-import { getUnitStats } from "../game/units";
+import { getUnitStats, getEnemyUnitStats } from "../game/units";
 import { calculateDamageWithCrit, rollHit, rollDamage, getEffectiveArmor, logAoeHit, logAoeMiss } from "../combat/combatMath";
 import { applyDamageToUnit, animateExpandingMesh, getAliveUnitsInRange, spawnDamageNumber, buildDamageContext, createAnimatedRing } from "../combat/damageEffects";
 import { soundFns } from "../audio";
@@ -142,7 +142,7 @@ export function executeEnemyHeal(
             continue;
         }
 
-        const allyStats = getUnitStats(ally) as EnemyStats;
+        const allyStats = getEnemyUnitStats(ally);
         const missingHp = allyStats.maxHp - ally.hp;
 
         // Only heal if missing at least 25% HP
@@ -156,7 +156,7 @@ export function executeEnemyHeal(
     if (!bestTarget) return false;
 
     const healAmount = rollDamage(skill.heal[0], skill.heal[1]);
-    const targetStats = getUnitStats(bestTarget.unit) as EnemyStats;
+    const targetStats = getEnemyUnitStats(bestTarget.unit);
     const targetId = bestTarget.unit.id;
 
     // Estimate heal for visual (actual heal uses fresh state inside callback)
@@ -166,7 +166,7 @@ export function executeEnemyHeal(
     setUnits(prev => prev.map(u => {
         if (u.id !== targetId) return u;
         if (u.hp <= 0) return u; // Don't heal dead units
-        const maxHp = (getUnitStats(u) as EnemyStats).maxHp;
+        const maxHp = getEnemyUnitStats(u).maxHp;
         return { ...u, hp: Math.min(u.hp + healAmount, maxHp) };
     }));
 

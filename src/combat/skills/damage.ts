@@ -6,8 +6,9 @@ import * as THREE from "three";
 import type { Unit, Skill, UnitGroup, BasicProjectile, MagicMissileProjectile, PiercingProjectile, StatusEffect } from "../../core/types";
 import { COLORS, BUFF_TICK_INTERVAL, SUN_STANCE_BONUS_DAMAGE, MAGIC_MISSILE_START_OFFSET, MAGIC_MISSILE_SPEED, MAGIC_MISSILE_ZIGZAG_PHASE_STEP, GLACIAL_WHORL_SPEED, GLACIAL_WHORL_MAX_DISTANCE, HOLY_DAMAGE_PER_TICK, getDamageTypeColor, getSkillTextColor } from "../../core/constants";
 import { UNIT_DATA, getEffectiveUnitData } from "../../game/playerUnits";
+import { CRIT_MULTIPLIER } from "../../game/statBonuses";
 import { getUnitStats } from "../../game/units";
-import { rollChance, rollDamage, calculateDamageWithCrit, rollSkillHit, getEffectiveArmor, logHit, logMiss, logPoisoned, logCast, logAoeHit, logAoeMiss, calculateSkillStatBonusBudget, checkEnemyDefenses, hasStatusEffect, applyStatusEffect, getDistributedStatBonus } from "../combatMath";
+import { rollChance, rollDamage, calculateDamageWithCrit, rollSkillHit, getEffectiveArmor, logHit, logMiss, logPoisoned, logCast, logAoeHit, logAoeMiss, calculateSkillStatBonusBudget, checkEnemyDefenses, hasStatusEffect, applyStatusEffect, getDistributedStatBonus, applyArmor } from "../combatMath";
 import { ENEMY_STATS } from "../../game/enemyStats";
 import { getUnitRadius, isInRange } from "../../rendering/range";
 import { isPointInRectangle } from "../../game/geometry";
@@ -107,6 +108,9 @@ export function executeAoeSkill(
     const casterG = unitsRef.current[casterId];
     if (!casterG) return;
 
+    const { aoeRadius, damageRange } = skill;
+    if (!aoeRadius || !damageRange) return;
+
     consumeSkill(ctx, casterId, skill);
 
     createAnimatedRing(scene, casterG.position.x, casterG.position.z, skill.projectileColor ?? COLORS.dmgFire, {
@@ -124,8 +128,8 @@ export function executeAoeSkill(
         mesh: projectile,
         attackerId: casterId,
         speed: getProjectileSpeed("aoe"),
-        aoeRadius: skill.aoeRadius!,
-        damage: skill.damageRange!,
+        aoeRadius,
+        damage: damageRange,
         damageType: skill.damageType,
         targetPos: { x: targetX, z: targetZ }
     });
@@ -166,6 +170,9 @@ function executeTargetedDamageSkill(
     targetUnitId?: number
 ): boolean {
     const { scene, unitsStateRef, unitsRef, hitFlashRef, damageTexts, setUnits, addLog, defeatedThisFrame, swingAnimationsRef, projectilesRef } = ctx;
+
+    const { damageRange } = skill;
+    if (!damageRange) return false;
 
     // --- Phase 1: Find target ---
     let targetEnemy: Unit | undefined;
@@ -300,7 +307,7 @@ function executeTargetedDamageSkill(
     if (rollSkillHit(skill, casterData.accuracy, casterUnit)) {
         const statBonus = calculateSkillStatBonusBudget(casterUnit, skill.damageType, skill);
         const { damage: dmg, isCrit } = calculateDamageWithCrit(
-            skill.damageRange![0] + statBonus, skill.damageRange![1] + statBonus,
+            damageRange[0] + statBonus, damageRange[1] + statBonus,
             getEffectiveArmor(targetEnemy, targetData.armor), skill.damageType, casterUnit
         );
         const willPoison = delivery.mode === "melee" && skill.poisonChance ? rollChance(skill.poisonChance) : false;
@@ -389,6 +396,9 @@ export function executeChainLightningSkill(
 ): boolean {
     const { scene, unitsStateRef, unitsRef, setUnits, addLog, hitFlashRef, damageTexts, defeatedThisFrame } = ctx;
 
+    const { damageRange } = skill;
+    if (!damageRange) return false;
+
     let primaryTarget: Unit | undefined;
     let primaryGroup: UnitGroup | undefined;
     if (targetUnitId !== undefined) {
@@ -429,6 +439,7 @@ export function executeChainLightningSkill(
     let sourceZ = casterG.position.z;
     let currentTarget: Unit | undefined = primaryTarget;
     let currentGroup: UnitGroup | undefined = primaryGroup;
+    let currentBaseDamage = 0;
     let currentDamage = 0;
 
     let hitCount = 0;
@@ -454,18 +465,26 @@ export function executeChainLightningSkill(
                 return true;
             }
             const initialStatBonus = getDistributedStatBonus(totalStatBonus, chainIndex, CHAIN_LIGHTNING_CHAIN_COUNT + 1);
+            const armor = getEffectiveArmor(currentTarget, targetData.armor);
+            const rawDamage = rollDamage(damageRange[0], damageRange[1]);
             const result = calculateDamageWithCrit(
-                skill.damageRange![0] + initialStatBonus,
-                skill.damageRange![1] + initialStatBonus,
-                getEffectiveArmor(currentTarget, targetData.armor),
+                rawDamage + initialStatBonus,
+                rawDamage + initialStatBonus,
+                armor,
                 skill.damageType,
                 casterUnit
+            );
+            currentBaseDamage = applyArmor(
+                result.isCrit ? Math.floor(rawDamage * CRIT_MULTIPLIER) : rawDamage,
+                armor,
+                skill.damageType
             );
             currentDamage = result.damage;
             if (result.isCrit) crits++;
         } else {
             const bounceStatBonus = getDistributedStatBonus(totalStatBonus, chainIndex, CHAIN_LIGHTNING_CHAIN_COUNT + 1);
-            currentDamage = Math.max(1, Math.floor((currentDamage + bounceStatBonus) * 0.5));
+            currentBaseDamage = Math.max(1, Math.floor(currentBaseDamage * 0.5));
+            currentDamage = currentBaseDamage + bounceStatBonus;
         }
 
         applyDamageToUnit(dmgCtx, currentTarget.id, currentGroup, currentDamage, targetData.name, {
@@ -558,6 +577,9 @@ export function executeFlurrySkill(
 ): boolean {
     const { scene, unitsStateRef, unitsRef, setUnits, addLog, hitFlashRef, damageTexts, defeatedThisFrame } = ctx;
 
+    const { damageRange } = skill;
+    if (!damageRange) return false;
+
     const casterG = unitsRef.current[casterId];
     if (!casterG) return false;
 
@@ -621,7 +643,7 @@ export function executeFlurrySkill(
 
         if (rollSkillHit(skill, casterData.accuracy, casterUnit)) {
             const hitStatBonus = getDistributedStatBonus(totalStatBonus, i, hitCount);
-            const { damage: dmg, isCrit } = calculateDamageWithCrit(skill.damageRange![0] + hitStatBonus, skill.damageRange![1] + hitStatBonus, getEffectiveArmor(target, targetData.armor), skill.damageType, casterUnit);
+            const { damage: dmg, isCrit } = calculateDamageWithCrit(damageRange[0] + hitStatBonus, damageRange[1] + hitStatBonus, getEffectiveArmor(target, targetData.armor), skill.damageType, casterUnit);
 
             applyDamageToUnit(dmgCtx, target.id, targetG, dmg, targetData.name, {
                 color: COLORS.damagePlayer,
@@ -672,6 +694,9 @@ export function executeMagicWaveSkill(
     targetZ: number
 ): boolean {
     const { scene, unitsRef, projectilesRef, addLog } = ctx;
+
+    const { damageRange } = skill;
+    if (!damageRange) return false;
 
     const casterG = unitsRef.current[casterId];
     if (!casterG) return false;
@@ -751,10 +776,11 @@ export function executeMagicWaveSkill(
             type: "magic_missile",
             mesh: missile,
             attackerId: casterId,
+            attackerName: casterData.name,
             targetId: -1,
             targetPos: { x: waveEndX, z: waveEndZ },
             speed: MAGIC_MISSILE_SPEED,
-            damage: skill.damageRange!,
+            damage: damageRange,
             damageType: skill.damageType ?? "chaos",
             statBonus: getDistributedStatBonus(totalStatBonus, i, missileCount),
             zigzagOffset: 0,
@@ -803,6 +829,9 @@ export function executeHolyCrossSkill(
         addLog("Holy Cross cannot be cast right now.", COLORS.logWarning);
         return false;
     }
+
+    const { damageRange } = skill;
+    if (!damageRange) return false;
 
     const casterG = unitsRef.current[casterId];
     if (!casterG) return false;
@@ -905,8 +934,8 @@ export function executeHolyCrossSkill(
         if (!rollSkillHit(skill, casterData.accuracy, casterUnit)) continue;
 
         const { damage: dmg, isCrit } = calculateDamageWithCrit(
-            skill.damageRange![0] + statBonus,
-            skill.damageRange![1] + statBonus,
+            damageRange[0] + statBonus,
+            damageRange[1] + statBonus,
             getEffectiveArmor(target, targetData.armor),
             skill.damageType,
             casterUnit
@@ -975,6 +1004,9 @@ export function executeForcePushSkill(
     targetZ: number
 ): boolean {
     const { scene, unitsStateRef, unitsRef, setUnits, addLog, hitFlashRef, damageTexts, defeatedThisFrame } = ctx;
+
+    const { damageRange } = skill;
+    if (!damageRange) return false;
 
     const casterG = unitsRef.current[casterId];
     if (!casterG) return false;
@@ -1076,8 +1108,8 @@ export function executeForcePushSkill(
         if (!rollSkillHit(skill, casterData.accuracy, casterUnit)) continue;
 
         const { damage: dmg, isCrit } = calculateDamageWithCrit(
-            skill.damageRange![0] + statBonus,
-            skill.damageRange![1] + statBonus,
+            damageRange[0] + statBonus,
+            damageRange[1] + statBonus,
             getEffectiveArmor(target, targetData.armor),
             skill.damageType,
             casterUnit
@@ -1194,6 +1226,9 @@ export function executeWellOfGravitySkill(
 ): boolean {
     const { scene, unitsStateRef, unitsRef, setUnits, addLog, hitFlashRef, damageTexts, defeatedThisFrame } = ctx;
 
+    const { damageRange } = skill;
+    if (!damageRange) return false;
+
     const casterG = unitsRef.current[casterId];
     if (!casterG) return false;
 
@@ -1278,8 +1313,8 @@ export function executeWellOfGravitySkill(
         if (!rollSkillHit(skill, casterData.accuracy, casterUnit)) continue;
 
         const { damage: dmg, isCrit } = calculateDamageWithCrit(
-            skill.damageRange![0] + statBonus,
-            skill.damageRange![1] + statBonus,
+            damageRange[0] + statBonus,
+            damageRange[1] + statBonus,
             getEffectiveArmor(target, targetData.armor),
             skill.damageType,
             casterUnit
@@ -1399,6 +1434,9 @@ export function executeHolyStrikeSkill(
 ): boolean {
     const { scene, unitsStateRef, unitsRef, setUnits, addLog, hitFlashRef, damageTexts, defeatedThisFrame } = ctx;
 
+    const { damageRange } = skill;
+    if (!damageRange) return false;
+
     const casterG = unitsRef.current[casterId];
     if (!casterG) return false;
 
@@ -1492,7 +1530,7 @@ export function executeHolyStrikeSkill(
 
         if (rollSkillHit(skill, casterData.accuracy, casterUnit)) {
             const { damage: dmg, isCrit } = calculateDamageWithCrit(
-                skill.damageRange![0] + statBonus, skill.damageRange![1] + statBonus,
+                damageRange[0] + statBonus, damageRange[1] + statBonus,
                 getEffectiveArmor(target, targetData.armor), skill.damageType, casterUnit
             );
 
@@ -1545,6 +1583,9 @@ export function executeGlacialWhorlSkill(
     targetZ: number
 ): boolean {
     const { scene, unitsRef, projectilesRef, addLog } = ctx;
+
+    const { damageRange } = skill;
+    if (!damageRange) return false;
 
     const casterG = unitsRef.current[casterId];
     if (!casterG) return false;
@@ -1599,7 +1640,7 @@ export function executeGlacialWhorlSkill(
         mesh,
         attackerId: casterId,
         speed: GLACIAL_WHORL_SPEED,
-        damage: skill.damageRange!,
+        damage: damageRange,
         damageType: skill.damageType ?? "cold",
         startX: mesh.position.x,
         startZ: mesh.position.z,
@@ -1640,6 +1681,9 @@ export function executeCleaveSkill(
     skill: Skill
 ): boolean {
     const { scene, unitsStateRef, unitsRef, hitFlashRef, damageTexts, setUnits, addLog, defeatedThisFrame, swingAnimationsRef } = ctx;
+
+    const { damageRange } = skill;
+    if (!damageRange) return false;
 
     const casterG = unitsRef.current[casterId];
     if (!casterG) return false;
@@ -1717,7 +1761,7 @@ export function executeCleaveSkill(
         }
 
         const { damage: dmg, isCrit } = calculateDamageWithCrit(
-            skill.damageRange![0] + statBonus, skill.damageRange![1] + statBonus,
+            damageRange[0] + statBonus, damageRange[1] + statBonus,
             getEffectiveArmor(enemy, targetData.armor), skill.damageType, casterUnit
         );
 
@@ -1770,6 +1814,9 @@ export function executeSmiteStrikeSkill(
     targetUnitId?: number
 ): boolean {
     const { scene, unitsStateRef, unitsRef, hitFlashRef, damageTexts, setUnits, addLog, defeatedThisFrame, swingAnimationsRef } = ctx;
+
+    const { damageRange } = skill;
+    if (!damageRange) return false;
 
     // --- Find target ---
     let targetEnemy: Unit | undefined;
@@ -1835,8 +1882,8 @@ export function executeSmiteStrikeSkill(
         const isBonusTarget = enemyStats?.monsterType === "undead" || enemyStats?.monsterType === "demon";
         const bonusMultiplier = isBonusTarget ? 1.5 : 1.0;
 
-        const minDmg = Math.floor((skill.damageRange![0] + statBonus) * bonusMultiplier);
-        const maxDmg = Math.floor((skill.damageRange![1] + statBonus) * bonusMultiplier);
+        const minDmg = Math.floor((damageRange[0] + statBonus) * bonusMultiplier);
+        const maxDmg = Math.floor((damageRange[1] + statBonus) * bonusMultiplier);
 
         const { damage: dmg, isCrit } = calculateDamageWithCrit(
             minDmg, maxDmg,
@@ -1897,6 +1944,9 @@ export function executeLeapStrikeSkill(
     targetUnitId?: number
 ): boolean {
     const { scene, unitsStateRef, unitsRef, hitFlashRef, damageTexts, setUnits, addLog, defeatedThisFrame, swingAnimationsRef } = ctx;
+
+    const { damageRange } = skill;
+    if (!damageRange) return false;
 
     // --- Find target ---
     let targetEnemy: Unit | undefined;
@@ -1995,7 +2045,7 @@ export function executeLeapStrikeSkill(
     if (rollSkillHit(skill, casterData.accuracy, casterUnit)) {
         const statBonus = calculateSkillStatBonusBudget(casterUnit, skill.damageType, skill);
         const { damage: dmg, isCrit } = calculateDamageWithCrit(
-            skill.damageRange![0] + statBonus, skill.damageRange![1] + statBonus,
+            damageRange[0] + statBonus, damageRange[1] + statBonus,
             getEffectiveArmor(targetEnemy, targetData.armor), skill.damageType, casterUnit
         );
 

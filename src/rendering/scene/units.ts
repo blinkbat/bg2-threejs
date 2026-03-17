@@ -3,7 +3,7 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitGroup, EnemyStats } from "../../core/types";
+import type { Unit, UnitGroup } from "../../core/types";
 import { SPRITE_DEFAULT_BRIGHTNESS } from "../../core/constants";
 import { getUnitStats } from "../../game/units";
 import { getUnitColor } from "../../game/unitColors";
@@ -607,7 +607,7 @@ export function addUnitToScene(
     unitMeshes[unit.id] = result.mesh;
     unitOriginalColors[unit.id] = result.baseColor.clone();
     selectRings[unit.id] = result.selectRing;
-    maxHp[unit.id] = (data as EnemyStats).maxHp ?? data.maxHp;
+    maxHp[unit.id] = data.maxHp;
 
     if (result.targetRing) {
         targetRings[unit.id] = result.targetRing;

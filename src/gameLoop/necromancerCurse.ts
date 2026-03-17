@@ -3,9 +3,9 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitGroup, DamageText, EnemyCurseSkill, EnemyStats, DamageType } from "../core/types";
+import type { Unit, UnitGroup, DamageText, EnemyCurseSkill, DamageType } from "../core/types";
 import { COLORS, DOOM_DURATION, BUFF_TICK_INTERVAL } from "../core/constants";
-import { getUnitStats } from "../game/units";
+import { getUnitStats, getEnemyUnitStats } from "../game/units";
 import { distance } from "../game/geometry";
 import { accumulateDelta } from "../core/gameClock";
 import { calculateDamageWithCrit, rollHit, getEffectiveArmor, logAoeHit } from "../combat/combatMath";
@@ -190,7 +190,7 @@ function executeCurse(
     defeatedThisFrame: Set<number>
 ): void {
     const caster = getUnitById(curse.casterId);
-    const casterStats = caster ? getUnitStats(caster) as EnemyStats : null;
+    const casterStats = caster ? getEnemyUnitStats(caster) : null;
     const accuracy = casterStats?.accuracy ?? 65;
     const casterName = casterStats?.name ?? "Necromancer";
 

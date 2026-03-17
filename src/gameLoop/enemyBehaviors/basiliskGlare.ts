@@ -3,9 +3,9 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { Unit, UnitGroup, DamageText, EnemyStats, DamageType, StatusEffect } from "../../core/types";
+import type { Unit, UnitGroup, DamageText, DamageType, StatusEffect } from "../../core/types";
 import { BUFF_TICK_INTERVAL, COLORS } from "../../core/constants";
-import { getUnitStats } from "../../game/units";
+import { getUnitStats, getEnemyUnitStats } from "../../game/units";
 import { getGameTime, accumulateDelta } from "../../core/gameClock";
 import { scheduleEffectAnimation } from "../../core/effectScheduler";
 import { calculateDamageWithCrit, rollHit, getEffectiveArmor, logAoeHit, isUnitAlive, applyStatusEffect, setSkillCooldown } from "../../combat/combatMath";
@@ -286,7 +286,7 @@ function executeGlare(
     now: number,
     defeatedThisFrame: Set<number>
 ): void {
-    const casterStats = getUnitStats(caster) as EnemyStats;
+    const casterStats = getEnemyUnitStats(caster);
     const dmgCtx = buildDamageContext(scene, damageTexts, hitFlashRef, unitsRef, unitsState, setUnits, addLog, now, defeatedThisFrame);
 
     let hitCount = 0;

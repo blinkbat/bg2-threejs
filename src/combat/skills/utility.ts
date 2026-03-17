@@ -114,6 +114,9 @@ export function executeDebuffSkill(
 ): boolean {
     const { scene, unitsRef, hitFlashRef, setUnits, addLog } = ctx;
 
+    const { duration } = skill;
+    if (!duration) return false;
+
     let targetEnemy: Unit | undefined;
     let targetG: UnitGroup | undefined;
     if (targetUnitId !== undefined) {
@@ -180,7 +183,7 @@ export function executeDebuffSkill(
         // Roll for stun chance
         const stunChance = skill.stunChance ?? DEFAULT_STUN_CHANCE;
         if (rollChance(stunChance)) {
-            const stunDuration = skill.duration!;  // Duration in ms
+            const stunDuration = duration;
 
             // Apply stunned effect
             const stunnedEffect: StatusEffect = {
@@ -248,6 +251,9 @@ export function executeBloodMarkSkill(
 ): boolean {
     const { scene, unitsRef, unitMeshRef, hitFlashRef, setUnits, addLog } = ctx;
 
+    const { duration } = skill;
+    if (!duration) return false;
+
     let targetEnemy: Unit | undefined;
     let targetG: UnitGroup | undefined;
     if (targetUnitId !== undefined) {
@@ -284,7 +290,7 @@ export function executeBloodMarkSkill(
 
     const bloodMarkEffect: StatusEffect = {
         type: "blood_marked",
-        duration: skill.duration!,
+        duration,
         tickInterval: BUFF_TICK_INTERVAL,
         timeSinceTick: 0,
         lastUpdateTime: now,
@@ -339,6 +345,9 @@ export function executeTrapSkill(
 ): boolean {
     const { scene, unitsRef, projectilesRef, addLog } = ctx;
 
+    const { duration } = skill;
+    if (!duration) return false;
+
     const casterG = unitsRef.current[casterId];
     if (!casterG) return false;
 
@@ -370,7 +379,7 @@ export function executeTrapSkill(
         speed: 0,  // Speed not used for arc trajectory
         targetPos: { x: targetX, z: targetZ },
         aoeRadius: skill.aoeRadius ?? 2,
-        pinnedDuration: skill.duration!,
+        pinnedDuration: duration,
         trapDamage: skill.trapDamage,
         startX: casterG.position.x,
         startZ: casterG.position.z,
@@ -707,6 +716,9 @@ export function executeTurnUndeadSkill(
 ): boolean {
     const { scene, unitsStateRef, unitsRef, setUnits, addLog, hitFlashRef, damageTexts, defeatedThisFrame } = ctx;
 
+    const { damageRange } = skill;
+    if (!damageRange) return false;
+
     const casterG = unitsRef.current[casterId];
     if (!casterG) return false;
 
@@ -765,8 +777,8 @@ export function executeTurnUndeadSkill(
 
         if (!rollSkillHit(skill, casterData.accuracy, casterUnit)) continue;
 
-        const minDmg = skill.damageRange![0] + statBonus;
-        const maxDmg = skill.damageRange![1] + statBonus;
+        const minDmg = damageRange[0] + statBonus;
+        const maxDmg = damageRange[1] + statBonus;
         const { damage: dmg, isCrit } = calculateDamageWithCrit(
             isUndead ? minDmg : Math.floor(minDmg / 2),
             isUndead ? maxDmg : Math.floor(maxDmg / 2),
@@ -1072,6 +1084,9 @@ export function executeFivePointPalmSkill(
 ): boolean {
     const { scene, unitsStateRef, unitsRef, hitFlashRef, damageTexts, setUnits, addLog, defeatedThisFrame, swingAnimationsRef } = ctx;
 
+    const { damageRange, duration } = skill;
+    if (!damageRange || !duration) return false;
+
     let targetEnemy: Unit | undefined;
     let targetG: UnitGroup | undefined;
     if (targetUnitId !== undefined) {
@@ -1128,7 +1143,7 @@ export function executeFivePointPalmSkill(
         // Deal damage
         const statBonus = calculateSkillStatBonusBudget(casterUnit, skill.damageType, skill);
         const { damage: dmg, isCrit } = calculateDamageWithCrit(
-            skill.damageRange![0] + statBonus, skill.damageRange![1] + statBonus,
+            damageRange[0] + statBonus, damageRange[1] + statBonus,
             getEffectiveArmor(targetEnemy, targetData.armor), skill.damageType, casterUnit
         );
 
@@ -1155,7 +1170,7 @@ export function executeFivePointPalmSkill(
         if (!defeatedThisFrame.has(targetId) && !hasStatusEffect(targetEnemy, "weakened")) {
             const weakenedEffect: StatusEffect = {
                 type: "weakened",
-                duration: skill.duration!,
+                duration,
                 tickInterval: BUFF_TICK_INTERVAL,
                 timeSinceTick: 0,
                 lastUpdateTime: now,
@@ -1206,6 +1221,9 @@ export function executeDimMakSkill(
     targetUnitId?: number
 ): boolean {
     const { scene, unitsStateRef, unitsRef, hitFlashRef, damageTexts, setUnits, addLog, defeatedThisFrame, swingAnimationsRef } = ctx;
+
+    const { damageRange } = skill;
+    if (!damageRange) return false;
 
     let targetEnemy: Unit | undefined;
     let targetG: UnitGroup | undefined;
@@ -1269,7 +1287,7 @@ export function executeDimMakSkill(
         // Deal minor damage
         const statBonus = calculateSkillStatBonusBudget(casterUnit, skill.damageType, skill);
         const { damage: dmg, isCrit } = calculateDamageWithCrit(
-            skill.damageRange![0] + statBonus, skill.damageRange![1] + statBonus,
+            damageRange[0] + statBonus, damageRange[1] + statBonus,
             getEffectiveArmor(targetEnemy, targetData.armor), skill.damageType, casterUnit
         );
 
