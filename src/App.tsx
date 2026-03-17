@@ -3,6 +3,7 @@
  * Main game component - orchestrates Three.js scene and game loop via hooks
  */
 
+import { Analytics } from "@vercel/analytics/next";
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import * as THREE from "three";
 
@@ -3087,6 +3088,7 @@ export default function App() {
                     zIndex: 9999
                 }}
             />
+            <Analytics />
         </>
     );
 }
