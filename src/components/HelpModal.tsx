@@ -15,7 +15,7 @@ const HELP_SECTIONS: ReadonlyArray<{ title: string; body: string }> = [
     },
     {
         title: "Skills",
-        body: "Each character has a basic attack and a set of class skills. Skills cost mana and have a cooldown after use. Some skills target enemies, some target allies or the caster, and some hit an area. Damage skills can deal physical, fire, cold, lightning, chaos, or holy damage. Cantrip skills use limited charges instead of mana and cooldowns."
+        body: "Each character has a basic attack plus class abilities. Skills cost mana and have a cooldown after use, while cantrips are separate charge-based abilities. Some target enemies, some target allies or the caster, and some hit an area. Damage skills can deal physical, fire, cold, lightning, chaos, or holy damage."
     },
     {
         title: "Skill Points",

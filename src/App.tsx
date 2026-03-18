@@ -13,7 +13,7 @@ import { BUFF_TICK_INTERVAL, COLORS, getSkillTextColor, setDebugSpeedMultiplier 
 import type { Unit, Skill, CombatLogEntry, SelectionBox, CharacterStats, StatusEffect, EquipmentSlot, LootPickupRequest } from "./core/types";
 
 // Game Logic
-import { getCurrentArea, getCurrentAreaId, setCurrentArea, AREAS, DEFAULT_STARTING_AREA, type AreaId, type AreaTransition } from "./game/areas";
+import { getCurrentArea, getCurrentAreaId, setCurrentArea, AREAS, DEFAULT_STARTING_AREA, type AreaId, type AreaTransition, type Waystone } from "./game/areas";
 import { UNIT_DATA, CORE_PLAYER_IDS, getEffectiveMaxHp, getEffectiveMaxMana, getXpForLevel, isCorePlayerId } from "./game/playerUnits";
 import { LEVEL_UP_HP, LEVEL_UP_MANA, LEVEL_UP_STAT_POINTS, LEVEL_UP_SKILL_POINTS, HP_PER_VITALITY, MP_PER_INTELLIGENCE } from "./game/statBonuses";
 import { ENEMY_STATS, getMonsterTypeLabel, isEnemyPermanentDeath } from "./game/enemyStats";
@@ -75,6 +75,7 @@ import { HelpModal } from "./components/HelpModal";
 import { SaveLoadModal } from "./components/SaveLoadModal";
 import { DialogModal } from "./components/DialogModal";
 import { LootPickupModal } from "./components/LootPickupModal";
+import { WaystoneTravelModal, type WaystoneDestination } from "./components/WaystoneTravelModal";
 import {
     type DialogTriggerProgress,
     type SaveLoadOperationResult,
@@ -152,6 +153,7 @@ interface GameProps {
     startDialogRef: React.MutableRefObject<((definition: DialogDefinition) => void) | null>;
     initialOpenedChests: Set<string> | null;
     initialOpenedSecretDoors: Set<string> | null;
+    initialActivatedWaystones: Set<string> | null;
     initialGold: number | null;
     initialKilledEnemies: Set<string> | null;
     initialEnemyPositions: Partial<Record<string, { x: number; z: number }>> | null;
@@ -166,6 +168,7 @@ interface SaveableGameState {
     currentAreaId: AreaId;
     openedChests: Set<string>;
     openedSecretDoors: Set<string>;
+    activatedWaystones: Set<string>;
     gold: number;
     killedEnemies: Set<string>;
     enemyPositions: Partial<Record<string, { x: number; z: number }>>;
@@ -191,6 +194,10 @@ interface LightingTuningSettings {
 }
 
 type LootPickupModalState = Pick<LootPickupRequest, "sourceLabel" | "entries">;
+
+function getWaystoneActivationKey(areaId: AreaId, waystoneIndex: number): string {
+    return `${areaId}-waystone-${waystoneIndex}`;
+}
 
 
 const DEFAULT_LIGHTING_TUNING: LightingTuningSettings = {
@@ -322,7 +329,7 @@ function Game({
     persistedPlayers, spawnPoint, spawnDirection, onSaveClick, onLoadClick,
     onOpenMenu, onCloseMenu, onOpenJukebox, onCloseJukebox, onOpenEquipment, onCloseEquipment,
     gameStateRef, startDialogRef,
-    initialOpenedChests, initialOpenedSecretDoors, initialGold, initialKilledEnemies, initialEnemyPositions, initialDialogTriggerProgress, dialogTriggersEnabled,
+    initialOpenedChests, initialOpenedSecretDoors, initialActivatedWaystones, initialGold, initialKilledEnemies, initialEnemyPositions, initialDialogTriggerProgress, dialogTriggersEnabled,
     skipNextFogSaveOnUnmountRef, onReady
 }: GameProps) {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -369,10 +376,12 @@ function Game({
     const [hoveredChest, setHoveredChest] = useState<{ x: number; y: number; chestIndex: number; chestX: number; chestZ: number } | null>(null);
     const [openedChests, setOpenedChests] = useState<Set<string>>(() => initialOpenedChests ?? new Set());
     const [openedSecretDoors, setOpenedSecretDoors] = useState<Set<string>>(() => initialOpenedSecretDoors ?? new Set());
+    const [activatedWaystones, setActivatedWaystones] = useState<Set<string>>(() => initialActivatedWaystones ?? new Set());
     const [gold, setGold] = useState(() => initialGold ?? 30);
     const [killedEnemies, setKilledEnemies] = useState<Set<string>>(() => initialKilledEnemies ?? new Set());
     const [hoveredPlayer, setHoveredPlayer] = useState<{ id: number; x: number; y: number } | null>(null);
     const [hoveredDoor, setHoveredDoor] = useState<{ targetArea: string; x: number; y: number } | null>(null);
+    const [hoveredWaystone, setHoveredWaystone] = useState<{ x: number; y: number } | null>(null);
     const [hoveredSecretDoor, setHoveredSecretDoor] = useState<{ x: number; y: number } | null>(null);
     const [hoveredLootBag, setHoveredLootBag] = useState<{ x: number; y: number; gold: number; hasItems: boolean } | null>(null);
     const [fps, setFps] = useState(0);
@@ -388,6 +397,7 @@ function Game({
     // hudMenuModalOpen replaced by menuOpen/jukeboxOpen props from App
     const [equipmentModalUnitId, setEquipmentModalUnitId] = useState<number | null>(null);
     const [lootPickupModalState, setLootPickupModalState] = useState<LootPickupModalState | null>(null);
+    const [waystoneTravelDestinations, setWaystoneTravelDestinations] = useState<WaystoneDestination[] | null>(null);
 
     // =============================================================================
     // STATE SYNC REFS
@@ -404,6 +414,7 @@ function Game({
     const infoModalOpenRef = useRef(infoModalOpen);
     const skillCooldownsRef = useRef(skillCooldowns);
     const openedChestsRef = useRef(openedChests);
+    const activatedWaystonesRef = useRef(activatedWaystones);
     const hotbarAssignmentsRef = useRef(hotbarAssignments);
     const formationOrderRef = useRef(formationOrder);
     const commandModeRef = useRef(commandMode);
@@ -438,6 +449,7 @@ function Game({
     useEffect(() => { infoModalOpenRef.current = infoModalOpen; }, [infoModalOpen]);
     useEffect(() => { skillCooldownsRef.current = skillCooldowns; }, [skillCooldowns]);
     useEffect(() => { openedChestsRef.current = openedChests; }, [openedChests]);
+    useEffect(() => { activatedWaystonesRef.current = activatedWaystones; }, [activatedWaystones]);
     useEffect(() => { hotbarAssignmentsRef.current = hotbarAssignments; }, [hotbarAssignments]);
     useEffect(() => { formationOrderRef.current = formationOrder; }, [formationOrder]);
     useEffect(() => { commandModeRef.current = commandMode; }, [commandMode]);
@@ -533,11 +545,12 @@ function Game({
     }, [dialogChoiceOptions]);
     const isDialogOpen = dialogState !== null;
     const isLootPickupModalOpen = lootPickupModalState !== null;
+    const isWaystoneTravelModalOpen = waystoneTravelDestinations !== null;
     const equipmentModalOpen = equipmentModalUnitId !== null;
     const isDialogTyping = currentDialogNode !== null && dialogTypedChars < currentDialogNode.text.length;
     const dialogVisibleText = currentDialogNode ? currentDialogNode.text.slice(0, dialogTypedChars) : "";
     const canContinueWithoutChoices = !isDialogTyping && dialogChoiceOptions.length === 0 && currentDialogNode !== null;
-    const anyMenuOpen = isDialogOpen || isLootPickupModalOpen || infoModalOpen || saveLoadOpen || menuOpen || jukeboxOpen || equipmentModalOpen;
+    const anyMenuOpen = isDialogOpen || isLootPickupModalOpen || isWaystoneTravelModalOpen || infoModalOpen || saveLoadOpen || menuOpen || jukeboxOpen || equipmentModalOpen;
 
     useEffect(() => {
         pauseToggleLockedRef.current = anyMenuOpen;
@@ -1516,15 +1529,85 @@ function Game({
         return enemyPositions;
     }, [sceneState.unitGroups]);
 
-    // Area transition handler
-    const handleAreaTransition = useCallback((transition: AreaTransition) => {
-        if (!AREAS[transition.targetArea]) {
-            addLog(`The way forward is blocked (unknown area: ${transition.targetArea}).`, "#ef4444");
+    const travelToArea = useCallback((targetArea: AreaId, spawn: { x: number; z: number }, direction?: "north" | "south" | "east" | "west") => {
+        if (!AREAS[targetArea]) {
+            addLog(`The way forward is blocked (unknown area: ${targetArea}).`, "#ef4444");
             return;
         }
         const persistedState = buildPersistedPlayers(unitsStateRef.current, false);
-        onAreaTransition(persistedState, transition.targetArea, transition.targetSpawn, transition.direction);
+        onAreaTransition(persistedState, targetArea, spawn, direction);
     }, [addLog, buildPersistedPlayers, onAreaTransition]);
+
+    const handleAreaTransition = useCallback((transition: AreaTransition) => {
+        travelToArea(transition.targetArea, transition.targetSpawn, transition.direction);
+    }, [travelToArea]);
+
+    const buildWaystoneDestinations = useCallback((sourceAreaId: AreaId, sourceWaystoneIndex: number, activatedKeys: Set<string>): WaystoneDestination[] => {
+        const destinations: WaystoneDestination[] = [];
+
+        for (const [areaIdRaw, area] of Object.entries(AREAS)) {
+            const areaId = areaIdRaw as AreaId;
+            const waystones = area.waystones ?? [];
+            const hasMultipleWaystones = waystones.length > 1;
+            waystones.forEach((waystone, index) => {
+                const key = getWaystoneActivationKey(areaId, index);
+                if (!activatedKeys.has(key)) {
+                    return;
+                }
+
+                const isCurrent = areaId === sourceAreaId && index === sourceWaystoneIndex;
+                destinations.push({
+                    key,
+                    areaId,
+                    areaName: hasMultipleWaystones ? `${area.name} (${index + 1})` : area.name,
+                    areaFlavor: area.flavor,
+                    waystoneIndex: index,
+                    x: waystone.x,
+                    z: waystone.z,
+                    direction: waystone.direction ?? "north",
+                    isCurrent,
+                });
+            });
+        }
+
+        destinations.sort((a, b) => {
+            if (a.isCurrent !== b.isCurrent) {
+                return a.isCurrent ? -1 : 1;
+            }
+            const areaCompare = a.areaName.localeCompare(b.areaName);
+            if (areaCompare !== 0) {
+                return areaCompare;
+            }
+            return a.waystoneIndex - b.waystoneIndex;
+        });
+
+        return destinations;
+    }, []);
+
+    const closeWaystoneTravelModal = useCallback(() => {
+        setWaystoneTravelDestinations(null);
+    }, []);
+
+    const handleWaystoneTravel = useCallback((destination: WaystoneDestination) => {
+        if (destination.isCurrent) {
+            return;
+        }
+        closeWaystoneTravelModal();
+        travelToArea(destination.areaId, { x: destination.x, z: destination.z }, destination.direction);
+    }, [closeWaystoneTravelModal, travelToArea]);
+
+    const handleWaystoneInteract = useCallback((_waystone: Waystone, waystoneIndex: number) => {
+        const activationKey = getWaystoneActivationKey(currentAreaId, waystoneIndex);
+        const nextActivated = new Set(activatedWaystonesRef.current);
+        if (!nextActivated.has(activationKey)) {
+            nextActivated.add(activationKey);
+            activatedWaystonesRef.current = nextActivated;
+            setActivatedWaystones(nextActivated);
+            addLog("Waystone activated.", "#60a5fa");
+        }
+
+        setWaystoneTravelDestinations(buildWaystoneDestinations(currentAreaId, waystoneIndex, nextActivated));
+    }, [addLog, buildWaystoneDestinations, currentAreaId]);
 
     // =============================================================================
     // INPUT HANDLERS HOOK
@@ -1587,6 +1670,7 @@ function Game({
         setHoveredChest,
         setHoveredPlayer,
         setHoveredDoor,
+        setHoveredWaystone,
         setHoveredSecretDoor,
         setHoveredLootBag,
         setOpenedChests,
@@ -1609,12 +1693,13 @@ function Game({
         addLog,
         getSkillContext,
         handleAreaTransition,
+        handleWaystoneInteract,
         onNpcEngaged: handleNpcEngaged,
         onCloseInfoModal,
         openLootPickupModal,
         processActionQueue: doProcessQueue,
         handleCastSkillRef
-    }), [addLog, getSkillContext, handleAreaTransition, handleNpcEngaged, onCloseInfoModal, openLootPickupModal, doProcessQueue]);
+    }), [addLog, getSkillContext, handleAreaTransition, handleWaystoneInteract, handleNpcEngaged, onCloseInfoModal, openLootPickupModal, doProcessQueue]);
 
     useInputHandlers({
         containerRef,
@@ -1804,6 +1889,7 @@ function Game({
                 currentAreaId: getCurrentAreaId(),
                 openedChests: openedChestsRef.current,
                 openedSecretDoors,
+                activatedWaystones: activatedWaystonesRef.current,
                 gold,
                 killedEnemies,
                 enemyPositions: buildPersistedEnemyPositions(unitsStateRef.current),
@@ -2339,7 +2425,7 @@ function Game({
         setSelectedIds([id]);
     }, []);
 
-    const otherModalOpen = infoModalOpen || saveLoadOpen || isDialogOpen || isLootPickupModalOpen || menuOpen || jukeboxOpen || equipmentModalOpen || sleepFadeOpacity > 0;
+    const otherModalOpen = infoModalOpen || saveLoadOpen || isDialogOpen || isLootPickupModalOpen || isWaystoneTravelModalOpen || menuOpen || jukeboxOpen || equipmentModalOpen || sleepFadeOpacity > 0;
 
     // =============================================================================
     // RENDER
@@ -2473,6 +2559,13 @@ function Game({
                 </div>
             )}
 
+            {hoveredWaystone && (
+                <div className="enemy-tooltip" style={{ left: hoveredWaystone.x + 12, top: hoveredWaystone.y - 10 }}>
+                    <div className="enemy-tooltip-name">Waystone</div>
+                    <div className="enemy-tooltip-status" style={{ color: "var(--ui-color-accent-primary-bright)" }}>Fast travel</div>
+                </div>
+            )}
+
             {hoveredSecretDoor && <div className="enemy-tooltip" style={{ left: hoveredSecretDoor.x + 12, top: hoveredSecretDoor.y - 10 }}><div className="enemy-tooltip-name">Cracked wall</div></div>}
 
             {hoveredLootBag && (
@@ -2510,6 +2603,15 @@ function Game({
                     sourceLabel={lootPickupModalState.sourceLabel}
                     entries={lootPickupModalState.entries}
                     onTake={takeLootPickup}
+                />
+            )}
+
+            {waystoneTravelDestinations && (
+                <WaystoneTravelModal
+                    currentAreaName={areaData.name}
+                    destinations={waystoneTravelDestinations}
+                    onTravel={handleWaystoneTravel}
+                    onClose={closeWaystoneTravelModal}
                 />
             )}
 
@@ -2622,6 +2724,7 @@ export default function App() {
     const [hasSaves] = useState(() => getSaveSlots().some(s => s !== null));
     const [initialOpenedChests, setInitialOpenedChests] = useState<Set<string> | null>(null);
     const [initialOpenedSecretDoors, setInitialOpenedSecretDoors] = useState<Set<string> | null>(null);
+    const [initialActivatedWaystones, setInitialActivatedWaystones] = useState<Set<string> | null>(null);
     const [initialGold, setInitialGold] = useState<number | null>(null);
     const [initialKilledEnemies, setInitialKilledEnemies] = useState<Set<string> | null>(null);
     const [initialEnemyPositions, setInitialEnemyPositions] = useState<Partial<Record<string, { x: number; z: number }>> | null>(null);
@@ -2798,6 +2901,7 @@ export default function App() {
         setSpawnDirection(undefined);
         setInitialOpenedChests(null);
         setInitialOpenedSecretDoors(null);
+        setInitialActivatedWaystones(null);
         setInitialGold(null);
         setInitialKilledEnemies(null);
         setInitialEnemyPositions(null);
@@ -2822,6 +2926,7 @@ export default function App() {
         if (worldState) {
             setInitialOpenedChests(new Set(worldState.openedChests));
             setInitialOpenedSecretDoors(new Set(worldState.openedSecretDoors));
+            setInitialActivatedWaystones(new Set(worldState.activatedWaystones));
             setInitialKilledEnemies(new Set(worldState.killedEnemies));
             setInitialGold(worldState.gold);
             setInitialDialogTriggerProgress(worldState.dialogTriggerProgress);
@@ -2961,6 +3066,7 @@ export default function App() {
         setCurrentAreaWithPathReset(saveData.areaId);
         setInitialOpenedChests(new Set(saveData.openedChests));
         setInitialOpenedSecretDoors(new Set(saveData.openedSecretDoors));
+        setInitialActivatedWaystones(new Set(saveData.activatedWaystones));
         setInitialKilledEnemies(new Set(saveData.killedEnemies));
         setInitialGold(saveData.gold);
         setInitialEnemyPositions(saveData.enemyPositions ?? null);
@@ -3037,7 +3143,7 @@ export default function App() {
                     onOpenJukebox={handleOpenJukebox} onCloseJukebox={handleCloseJukebox}
                     onOpenEquipment={handleOpenEquipment} onCloseEquipment={handleCloseEquipment}
                     gameStateRef={gameStateRef} startDialogRef={startDialogRef}
-                    initialOpenedChests={initialOpenedChests} initialOpenedSecretDoors={initialOpenedSecretDoors}
+                    initialOpenedChests={initialOpenedChests} initialOpenedSecretDoors={initialOpenedSecretDoors} initialActivatedWaystones={initialActivatedWaystones}
                     initialGold={initialGold} initialKilledEnemies={initialKilledEnemies} initialEnemyPositions={initialEnemyPositions}
                     initialDialogTriggerProgress={initialDialogTriggerProgress}
                     dialogTriggersEnabled={dialogTriggersEnabled}

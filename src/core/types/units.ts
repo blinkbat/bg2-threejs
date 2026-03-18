@@ -8,7 +8,7 @@ export type MonsterType = "beast" | "construct" | "demon" | "humanoid" | "undead
 export type EnemyTier = "enemy" | "miniboss" | "boss" | "npc";
 
 // Status effect types
-export type StatusEffectType = "poison" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed" | "chilled" | "qi_drain" | "energy_shield" | "defiance" | "doom" | "invul" | "sleep" | "sun_stance" | "thorns" | "highland_defense" | "divine_lattice" | "weakened" | "hamstrung" | "blind" | "vanquishing_light" | "enraged" | "feared" | "blood_marked";
+export type StatusEffectType = "poison" | "burn" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed" | "chilled" | "qi_drain" | "energy_shield" | "defiance" | "doom" | "invul" | "sleep" | "sun_stance" | "thorns" | "highland_defense" | "divine_lattice" | "weakened" | "hamstrung" | "blind" | "vanquishing_light" | "enraged" | "feared" | "blood_marked";
 
 export interface StatusEffect {
     type: StatusEffectType;

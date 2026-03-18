@@ -42,6 +42,9 @@ export interface Skill {
 
     // Additional optional properties
     poisonChance?: number;            // 0-100 percent chance to apply poison on hit
+    burnChance?: number;              // 0-100 percent chance to apply burn on hit
+    burnDamagePerTick?: number;       // Burn damage dealt on each tick
+    burnDuration?: number;            // Burn duration in ms
     hitCount?: number;                // Number of hits for flurry-type skills
     stunChance?: number;              // 0-100 percent chance to apply stun on hit
     selfDamage?: [number, number];    // Damage range to apply to caster (for Qi Focus)
@@ -106,6 +109,9 @@ export interface BasicProjectile extends BaseProjectile {
     skillHitChanceOverride?: number;     // Optional hit chance override for skill-based projectiles
     skillCritChanceOverride?: number;    // Optional crit chance override for skill-based projectiles
     skillOnHitEffect?: SkillOnHitEffect; // Optional on-hit effect for skill-based projectiles
+    skillBurnChance?: number;            // Optional burn proc chance for skill-based projectiles
+    skillBurnDamagePerTick?: number;     // Optional burn damage per tick for skill-based projectiles
+    skillBurnDuration?: number;          // Optional burn duration for skill-based projectiles
 }
 
 export interface AoeProjectile extends BaseProjectile {

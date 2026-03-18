@@ -19,6 +19,7 @@ import { getPortrait } from "./portraitRegistry";
 const PORTRAIT_DRAG_TYPE = "application/x-portrait";
 
 const EFFECT_ICONS: Record<StatusEffectType, { icon: string; color: string }> = {
+    burn: { icon: "F", color: COLORS.burnText },
     poison: { icon: "☠", color: COLORS.poisonText },
     shielded: { icon: "🛡", color: COLORS.shieldedText },
     stunned: { icon: "💫", color: COLORS.stunnedText },

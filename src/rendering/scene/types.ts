@@ -3,7 +3,7 @@
 // =============================================================================
 
 import * as THREE from "three";
-import type { AreaTransition, SecretDoor } from "../../game/areas";
+import type { AreaTransition, SecretDoor, Waystone } from "../../game/areas";
 import type { UnitGroup, FogTexture } from "../../core/types";
 
 export interface DoorMesh extends THREE.Mesh {
@@ -16,6 +16,18 @@ export interface SecretDoorMesh extends THREE.Group {
     userData: {
         secretDoor: SecretDoor;
         secretDoorIndex: number;
+    };
+}
+
+export interface WaystoneMesh extends THREE.Group {
+    userData: {
+        waystone: Waystone;
+        waystoneIndex: number;
+        floatGroup: THREE.Group;
+        floatBaseY: number;
+        floatPhase: number;
+        glowRing: THREE.Mesh;
+        pointLight: THREE.PointLight;
     };
 }
 
@@ -50,6 +62,7 @@ export interface SceneRefs {
     columnMeshes: THREE.Mesh[];  // Column meshes for transparency
     columnGroups: THREE.Mesh[][];  // Groups of column parts (body, base, capital) that fade together
     doorMeshes: DoorMesh[];
+    waystoneMeshes: WaystoneMesh[];
     secretDoorMeshes: SecretDoorMesh[];  // Hidden doors that reveal caves when clicked
     waterMesh: THREE.Object3D | null;  // Animated liquid tiles (water/lava)
     chestMeshes: ChestMeshData[];  // Chest lid pivots for open/close animation

@@ -33,6 +33,7 @@ import {
     type Decoration,
     type SecretDoor,
     type AreaLight,
+    type Waystone,
 } from "../game/areas/types";
 import type { CandlePosition, EnemyType } from "../core/types";
 import type { DialogSpeakerId } from "../dialog/types";
@@ -92,6 +93,9 @@ import { DIALOG_SPEAKERS } from "../dialog/speakers";
 // === TRANSITIONS ===
 // x,z,w,h:direction->targetArea@spawnX,spawnZ
 //
+// === WAYSTONES ===
+// x,z:direction=north
+//
 // === TREES ===
 // x,z:size
 //
@@ -143,6 +147,7 @@ interface ParsedArea {
     enemies: EnemySpawn[];
     chests: ChestLocation[];
     transitions: AreaTransition[];
+    waystones: Waystone[];
     trees: TreeLocation[];
     decorations: Decoration[];
     secretDoors: SecretDoor[];
@@ -284,6 +289,14 @@ export function areaDataToText(area: AreaData): string {
         lines.push("");
     }
 
+    if (area.waystones && area.waystones.length > 0) {
+        lines.push("=== WAYSTONES ===");
+        area.waystones.forEach(waystone => {
+            lines.push(`${waystone.x},${waystone.z}:direction=${waystone.direction ?? "north"}`);
+        });
+        lines.push("");
+    }
+
     // Trees
     if (area.trees.length > 0) {
         lines.push("=== TREES ===");
@@ -409,6 +422,7 @@ function parseTextFormat(text: string): ParsedArea {
         enemies: [],
         chests: [],
         transitions: [],
+        waystones: [],
         trees: [],
         decorations: [],
         secretDoors: [],
@@ -487,6 +501,9 @@ function parseTextFormat(text: string): ParsedArea {
                 break;
             case "transitions":
                 parseTransitionLine(line, result.transitions);
+                break;
+            case "waystones":
+                parseWaystoneLine(line, result.waystones);
                 break;
             case "trees":
                 parseTreeLine(line, result.trees);
@@ -645,6 +662,23 @@ function parseTransitionLine(line: string, transitions: AreaTransition[]) {
             targetSpawn: { x: parseFloat(dirMatch[3]), z: parseFloat(dirMatch[4]) }
         });
     }
+}
+
+function parseWaystoneLine(line: string, waystones: Waystone[]) {
+    const [coords, props] = line.split(":");
+    if (!coords) return;
+
+    const [xStr, zStr] = coords.split(",");
+    const x = parseFloat(xStr);
+    const z = parseFloat(zStr);
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+
+    const directionMatch = props?.match(/direction=(north|south|east|west)/);
+    waystones.push({
+        x,
+        z,
+        direction: directionMatch?.[1] as "north" | "south" | "east" | "west" | undefined,
+    });
 }
 
 function parseTreeLine(line: string, trees: TreeLocation[]) {
@@ -1204,6 +1238,7 @@ function convertParsedToAreaData(parsed: ParsedArea): AreaData {
         floorTintLayers: hasLayeredFloor ? floorTintLayers : undefined,
         enemySpawns: parsed.enemies,
         transitions: parsed.transitions,
+        waystones: parsed.waystones.length > 0 ? parsed.waystones : undefined,
         chests: parsed.chests,
         trees: parsed.trees,
         decorations: parsed.decorations.length > 0 ? parsed.decorations : undefined,

@@ -17,6 +17,7 @@ import {
     type AreaData,
     type EnemySpawn,
     type AreaTransition,
+    type Waystone,
     type ChestLocation,
     type TreeLocation,
     type Decoration,
@@ -887,6 +888,10 @@ export function MapEditor() {
                 }
                 continue;
             }
+            if (entity.type === "waystone") {
+                markCell(Math.floor(entity.x), Math.floor(entity.z), "W");
+                continue;
+            }
             if (entity.type === "secret_door") {
                 const footprint = getEntityFootprint(entity);
                 for (let dz = 0; dz < footprint.h; dz++) {
@@ -978,6 +983,16 @@ export function MapEditor() {
                         chestGold: 0,
                         chestItems: "",
                         chestDecorOnly: false,
+                    });
+                    return;
+                }
+                if (activeBrush === "W") {
+                    nextEntities.push({
+                        id: entityId,
+                        x: cell.x,
+                        z: cell.z,
+                        type: "waystone",
+                        waystoneDirection: "north",
                     });
                     return;
                 }
@@ -1792,6 +1807,15 @@ export function MapEditor() {
                 transitionDirection: t.direction, transitionW: t.w, transitionH: t.h
             });
         });
+        (area.waystones ?? []).forEach(w => {
+            entityDefs.push({
+                id: `e${entityId++}`,
+                x: w.x,
+                z: w.z,
+                type: "waystone",
+                waystoneDirection: w.direction ?? "north",
+            });
+        });
         (area.candles ?? []).forEach(c => {
             entityDefs.push({
                 id: `e${entityId++}`,
@@ -2096,6 +2120,14 @@ export function MapEditor() {
                 direction: e.transitionDirection ?? "north"
             }));
 
+        const waystoneList: Waystone[] = entities
+            .filter(e => e.type === "waystone")
+            .map(e => ({
+                x: Math.floor(e.x) + 0.5,
+                z: Math.floor(e.z) + 0.5,
+                direction: e.waystoneDirection ?? "north",
+            }));
+
         // Candles come from state
         const candleList = entities
             .filter(e => e.type === "candle" || e.type === "torch")
@@ -2165,6 +2197,7 @@ export function MapEditor() {
             floorTintLayers: hasTintData(normalizedFloorTintLayers) ? normalizedFloorTintLayers : undefined,
             enemySpawns,
             transitions: transitionList,
+            waystones: waystoneList.length > 0 ? waystoneList : undefined,
             chests: chestList,
             trees: mergedTrees,
             decorations: mergedDecorations.length > 0 ? mergedDecorations : undefined,

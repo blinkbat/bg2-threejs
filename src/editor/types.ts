@@ -27,7 +27,7 @@ export interface EntityDef {
     id: string;
     x: number;
     z: number;
-    type: "enemy" | "chest" | "transition" | "candle" | "torch" | "light" | "secret_door";
+    type: "enemy" | "chest" | "transition" | "waystone" | "candle" | "torch" | "light" | "secret_door";
     enemyType?: EnemyType;
     enemySpawnIndex?: number;
     chestGold?: number;
@@ -40,6 +40,7 @@ export interface EntityDef {
     transitionDirection?: "north" | "south" | "east" | "west";
     transitionW?: number;
     transitionH?: number;
+    waystoneDirection?: "north" | "south" | "east" | "west";
     candleDx?: number;
     candleDz?: number;
     lightColor?: string;

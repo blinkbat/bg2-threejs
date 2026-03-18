@@ -281,6 +281,9 @@ ww............................
 === TRANSITIONS ===
 29,40,1,4:west->forest@3,41
 
+=== WAYSTONES ===
+11.5,44.5:direction=north
+
 === TREES ===
 27,18:1,oak
 27,19:1,oak
@@ -414,9 +417,9 @@ ww............................
 
 === LIGHTS ===
 19.5,45.5:radius=18,angle=65,tint=#f5ae3d,brightness=30,height=10,diffusion=0.55,decay=1
-14.5,40.5:radius=18,angle=65,tint=#ff9238,brightness=30,height=10,diffusion=0.55,decay=1
 8.5,10.5:radius=18,angle=65,tint=#bdffee,brightness=30,height=10,diffusion=0.55,decay=1
 18.5,5.5:radius=18,angle=65,tint=#8ab1ff,brightness=30,height=10,diffusion=0.55,decay=1
+10.5,44.5:radius=18,angle=65,tint=#8aebff,brightness=30,height=10,diffusion=0.55,decay=1
 
 === CANDLES ===
 9,32:dir=0,1,kind=torch,color=#ff8844

@@ -187,5 +187,14 @@ export function computeAreaData(area: AreaData): ComputedAreaData {
         }
     });
 
+    // Waystones are solid world props for pathing.
+    area.waystones?.forEach(waystone => {
+        const wx = Math.floor(waystone.x);
+        const wz = Math.floor(waystone.z);
+        if (wx >= 0 && wx < area.gridWidth && wz >= 0 && wz < area.gridHeight) {
+            blocked[wx][wz] = true;
+        }
+    });
+
     return { blocked, mergedObstacles, candlePositions, treeBlocked, terrainBlocked };
 }

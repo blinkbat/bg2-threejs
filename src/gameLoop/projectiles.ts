@@ -6,7 +6,7 @@ import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, Projectile, EnemyStats, MagicMissileProjectile, TrapProjectile, FireballProjectile, PiercingProjectile, StatusEffect, DamageType, UnitData, SkillOnHitEffect } from "../core/types";
 import { HIT_DETECTION_RADIUS, COLORS, BUFF_TICK_INTERVAL, SUN_STANCE_BONUS_DAMAGE, GLACIAL_WHORL_HIT_RADIUS } from "../core/constants";
 import { getUnitStats, isEnemyData } from "../game/units";
-import { calculateDamageWithCrit, calculateDamageWithOptionalCritChance, getDirectionAndDistance, rollSkillHit, rollDamage, shouldApplyPoison, getEffectiveArmor, logHit, logLifestealHit, logMiss, logPoisoned, logAoeHit, logAoeMiss, getDamageColor, logTrapTriggered, calculateStatBonus, applyStatusEffect, checkEnemyDefenses, hasStatusEffect, rollChance, applyChilled, logStunned, logWeakened, logHamstrung } from "../combat/combatMath";
+import { calculateDamageWithCrit, calculateDamageWithOptionalCritChance, getDirectionAndDistance, rollSkillHit, rollDamage, shouldApplyPoison, getEffectiveArmor, logHit, logLifestealHit, logMiss, logPoisoned, logBurning, logAoeHit, logAoeMiss, getDamageColor, logTrapTriggered, calculateStatBonus, applyStatusEffect, checkEnemyDefenses, hasStatusEffect, rollChance, applyChilled, logStunned, logWeakened, logHamstrung } from "../combat/combatMath";
 import { accumulateDelta } from "../core/gameClock";
 import { isBlocked } from "../ai/pathfinding";
 import { isTreeBlocked } from "../game/areas";
@@ -1179,6 +1179,7 @@ export function updateProjectiles(
                 const enemyAttackerData = !isSkillShot && attackerUnit.team === "enemy" && isEnemyData(attackerData) ? attackerData : null;
                 const willPoison = !!enemyAttackerData && shouldApplyPoison(enemyAttackerData);
                 const poisonDmg = willPoison ? enemyAttackerData.poisonDamage : undefined;
+                const willBurn = !!proj.skillBurnChance && rollChance(proj.skillBurnChance);
 
                 // Calculate lifesteal heal amount for log message
                 const lifesteal = enemyAttackerData?.lifesteal;
@@ -1194,6 +1195,7 @@ export function updateProjectiles(
                 applyDamageToUnit(dmgCtx, targetUnit.id, targetG, dmg, targetData.name, {
                     color: damageColor,
                     poison: willPoison ? { sourceId: attackerUnit.id, damagePerTick: poisonDmg } : undefined,
+                    burn: willBurn ? { sourceId: attackerUnit.id, damagePerTick: proj.skillBurnDamagePerTick, duration: proj.skillBurnDuration } : undefined,
                     attackerName: attackerUnit.team === "player" ? attackerData.name : undefined,
                     hitMessage: { text: hitText, color: damageColor },
                     targetUnit: targetUnit,
@@ -1233,6 +1235,18 @@ export function updateProjectiles(
                 }
                 if (willPoison) {
                     addLog(logPoisoned(targetData.name), COLORS.poisonText);
+                }
+                if (willBurn) {
+                    const updatedTarget = dmgCtx.unitsStateRef.current.find(u => u.id === targetUnit.id);
+                    if (updatedTarget?.statusEffects?.some(effect => effect.type === "burn")) {
+                        createAnimatedRing(scene, targetG.position.x, targetG.position.z, COLORS.burnText, {
+                            innerRadius: 0.16,
+                            outerRadius: 0.34,
+                            maxScale: 1.25,
+                            duration: 260
+                        });
+                        addLog(logBurning(targetData.name), COLORS.burnText);
+                    }
                 }
 
                 // Apply lifesteal heal using fresh state to avoid race condition

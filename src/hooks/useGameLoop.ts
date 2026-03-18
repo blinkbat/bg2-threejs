@@ -167,7 +167,8 @@ function updateVisualEffects(
     sceneState: InitializedSceneState,
     gameRefs: GameRefs
 ): void {
-    const { doorMeshes } = sceneState;
+    const { doorMeshes, waystoneMeshes } = sceneState;
+    const now = getGameTime() * 0.001;
 
     // Door hover glow effect
     doorMeshes.forEach(doorMesh => {
@@ -175,6 +176,17 @@ function updateVisualEffects(
         const isHovered = doorMesh.userData.transition.targetArea === gameRefs.hoveredDoor;
         const targetOpacity = isHovered ? 0.35 : 0.08;
         mat.opacity += (targetOpacity - mat.opacity) * 0.15;
+    });
+
+    // Waystones gently bob and pulse to read as magical landmarks.
+    waystoneMeshes.forEach(waystoneMesh => {
+        const bob = Math.sin(now * 1.6 + waystoneMesh.userData.floatPhase) * 0.14;
+        const pulse = 0.5 + 0.5 * Math.sin(now * 2.3 + waystoneMesh.userData.floatPhase);
+        waystoneMesh.userData.floatGroup.position.y = waystoneMesh.userData.floatBaseY + bob;
+        waystoneMesh.userData.floatGroup.rotation.y += 0.006;
+        const glowMaterial = waystoneMesh.userData.glowRing.material as THREE.MeshBasicMaterial;
+        glowMaterial.opacity = 0.16 + pulse * 0.08;
+        waystoneMesh.userData.pointLight.intensity = 1.7 + pulse * 0.5;
     });
 }
 

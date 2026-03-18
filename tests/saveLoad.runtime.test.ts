@@ -32,6 +32,7 @@ function createState(): SaveSnapshotState {
         currentAreaId: "coast",
         openedChests: new Set(["coast-1"]),
         openedSecretDoors: new Set(["coast-s1"]),
+        activatedWaystones: new Set(["coast-waystone-0"]),
         killedEnemies: new Set(["coast-2"]),
         gold: 25,
         hotbarAssignments: { 1: ["Attack", null, null, null, null] },
@@ -73,6 +74,7 @@ describe("saveLoad runtime", () => {
 
         state.players[0].hp = 1;
         state.openedChests.add("coast-99");
+        state.activatedWaystones.add("forest-waystone-1");
         state.hotbarAssignments[1][0] = "Changed";
         state.fogVisibilityByArea.coast[0][1] = 2;
         equipment[1].leftHand = "battleaxe";
@@ -80,6 +82,7 @@ describe("saveLoad runtime", () => {
 
         expect(slot.players[0].hp).toBe(12);
         expect(slot.openedChests).toEqual(["coast-1"]);
+        expect(slot.activatedWaystones).toEqual(["coast-waystone-0"]);
         expect(slot.hotbarAssignments?.[1][0]).toBe("Attack");
         expect(slot.fogVisibilityByArea).toEqual({
             coast: [[0, 1], [2, 2]],
@@ -99,6 +102,7 @@ describe("saveLoad runtime", () => {
             currentAreaId: "missing_area",
             openedChests: [],
             openedSecretDoors: [],
+            activatedWaystones: [],
             killedEnemies: [],
             gold: 0,
             equipment: createEquipmentMap(),
@@ -121,6 +125,7 @@ describe("saveLoad runtime", () => {
             currentAreaId: "coast",
             openedChests: ["coast-1"],
             openedSecretDoors: ["coast-s1"],
+            activatedWaystones: ["coast-waystone-0"],
             killedEnemies: ["coast-2"],
             gold: 9,
             equipment: createEquipmentMap(),
@@ -142,6 +147,7 @@ describe("saveLoad runtime", () => {
 
         expect(result.data.spawnPoint).toEqual({ x: 4, z: 5 });
         expect(result.data.openedChests).toEqual(new Set(["coast-1"]));
+        expect(result.data.activatedWaystones).toEqual(new Set(["coast-waystone-0"]));
         expect(result.data.dialogTriggerProgress).toEqual({ coast: ["intro_1"] });
 
         input.players[0].hp = 1;
@@ -149,6 +155,7 @@ describe("saveLoad runtime", () => {
         input.inventory.items[0].quantity = 99;
         input.hotbarAssignments?.[1].splice(0, 1, "Changed");
         input.formationOrder?.push(99);
+        input.activatedWaystones.push("forest-waystone-1");
         input.dialogTriggerProgress?.coast?.push("new");
         input.fogVisibilityByArea?.coast?.[0].splice(0, 1, 2);
 
@@ -157,6 +164,7 @@ describe("saveLoad runtime", () => {
         expect(result.data.inventory.items[0].quantity).toBe(2);
         expect(result.data.hotbarAssignments?.[1][0]).toBe("Attack");
         expect(result.data.formationOrder).toEqual([1, 2]);
+        expect(result.data.activatedWaystones).toEqual(new Set(["coast-waystone-0"]));
         expect(result.data.dialogTriggerProgress).toEqual({ coast: ["intro_1"] });
         expect(result.data.fogVisibilityByArea).toEqual({
             coast: [[0, 1], [2, 2]],

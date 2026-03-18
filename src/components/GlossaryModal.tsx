@@ -57,7 +57,7 @@ const CORE_GLOSSARY: ReadonlyArray<GlossaryEntry> = [
     {
         term: "Cantrip",
         category: "Core System",
-        body: "Cantrips use limited charges instead of the normal action cooldown. They are ideal for clutch utility, but once a unit runs out of uses that cantrip is unavailable until its charges are restored."
+        body: "Cantrips are charge-based abilities rather than normal skills. They use limited charges instead of the usual mana-and-cooldown loop, making them ideal for clutch utility."
     },
     {
         term: "Cooldown",
@@ -97,7 +97,7 @@ const CORE_GLOSSARY: ReadonlyArray<GlossaryEntry> = [
     {
         term: "Hotbar",
         category: "Core System",
-        body: "The hotbar is the five-slot shortcut row for quick skill access. Assigned actions can be fired with the number keys when one party member is selected."
+        body: "The hotbar is the five-slot shortcut row for quick ability access. Assigned skills and cantrips can be fired with the number keys when one party member is selected."
     },
     {
         term: "Level",
@@ -142,7 +142,7 @@ const CORE_GLOSSARY: ReadonlyArray<GlossaryEntry> = [
     {
         term: "Skills",
         category: "Core System",
-        body: "Skills are active abilities with their own mana costs, targeting rules, and cooldowns or cantrip charges. Each class has a distinct toolkit built around its combat role."
+        body: "Skills are mana-based active abilities with their own targeting rules and cooldowns. Cantrips are separate charge-based abilities, and together they make up each class's toolkit."
     },
     {
         term: "Stat Points",
@@ -232,6 +232,11 @@ const STATUS_GLOSSARY: Record<StatusEffectType, GlossaryEntry> = {
         term: "Blood Marked",
         category: "Status",
         body: "Blood Marked enemies heal attackers when they are struck by melee hits. It turns focused melee pressure into sustain for your front line."
+    },
+    burn: {
+        term: "Burn",
+        category: "Status",
+        body: "Burn deals heavy fire damage over a short duration. It ends sooner than poison, but each tick hits harder."
     },
     cleansed: {
         term: "Cleansed",

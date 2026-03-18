@@ -8,7 +8,7 @@ import { COLORS, BUFF_TICK_INTERVAL, SUN_STANCE_BONUS_DAMAGE, MAGIC_MISSILE_STAR
 import { UNIT_DATA, getEffectiveUnitData } from "../../game/playerUnits";
 import { CRIT_MULTIPLIER } from "../../game/statBonuses";
 import { getUnitStats } from "../../game/units";
-import { rollChance, rollDamage, calculateDamageWithCrit, rollSkillHit, getEffectiveArmor, logHit, logMiss, logPoisoned, logCast, logAoeHit, logAoeMiss, calculateSkillStatBonusBudget, checkEnemyDefenses, hasStatusEffect, applyStatusEffect, getDistributedStatBonus, applyArmor } from "../combatMath";
+import { rollChance, rollDamage, calculateDamageWithCrit, rollSkillHit, getEffectiveArmor, logHit, logMiss, logPoisoned, logBurning, logCast, logAoeHit, logAoeMiss, calculateSkillStatBonusBudget, checkEnemyDefenses, hasStatusEffect, applyStatusEffect, getDistributedStatBonus, applyArmor } from "../combatMath";
 import { ENEMY_STATS } from "../../game/enemyStats";
 import { getUnitRadius, isInRange } from "../../rendering/range";
 import { isPointInRectangle } from "../../game/geometry";
@@ -240,6 +240,11 @@ function executeTargetedDamageSkill(
             if (skill.onHitEffect) {
                 basicProjectile.skillOnHitEffect = skill.onHitEffect;
             }
+            if (skill.burnChance) {
+                basicProjectile.skillBurnChance = skill.burnChance;
+                basicProjectile.skillBurnDamagePerTick = skill.burnDamagePerTick;
+                basicProjectile.skillBurnDuration = skill.burnDuration;
+            }
         }
 
         projectilesRef.current.push(basicProjectile);
@@ -311,6 +316,7 @@ function executeTargetedDamageSkill(
             getEffectiveArmor(targetEnemy, targetData.armor), skill.damageType, casterUnit
         );
         const willPoison = delivery.mode === "melee" && skill.poisonChance ? rollChance(skill.poisonChance) : false;
+        const willBurn = skill.burnChance ? rollChance(skill.burnChance) : false;
         const damageColor = getDamageTypeColor(skill.damageType);
 
         const dmgCtx: DamageContext = {
@@ -320,6 +326,7 @@ function executeTargetedDamageSkill(
         applyDamageToUnit(dmgCtx, targetId, targetG, dmg, targetData.name, {
             color: damageColor,
             poison: willPoison ? { sourceId: casterId } : undefined,
+            burn: willBurn ? { sourceId: casterId, damagePerTick: skill.burnDamagePerTick, duration: skill.burnDuration } : undefined,
             attackerName: casterData.name,
             hitMessage: { text: logHit(casterData.name, skill.name, targetData.name, dmg) + (isCrit ? " Critical hit!" : ""), color: isCrit ? COLORS.damageCrit : damageColor },
             targetUnit: targetEnemy,
@@ -353,6 +360,18 @@ function executeTargetedDamageSkill(
 
         if (willPoison) {
             addLog(logPoisoned(targetData.name), COLORS.poisonText);
+        }
+        if (willBurn) {
+            const updatedTarget = unitsStateRef.current.find(u => u.id === targetId);
+            if (updatedTarget?.statusEffects?.some(effect => effect.type === "burn")) {
+                createAnimatedRing(scene, targetG.position.x, targetG.position.z, COLORS.burnText, {
+                    innerRadius: 0.16,
+                    outerRadius: 0.34,
+                    maxScale: 1.25,
+                    duration: 260
+                });
+                addLog(logBurning(targetData.name), COLORS.burnText);
+            }
         }
     } else {
         soundFns.playMiss();

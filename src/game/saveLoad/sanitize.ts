@@ -26,6 +26,7 @@ const DAMAGE_TYPES: ReadonlySet<DamageType> = new Set([
 
 const STATUS_EFFECT_TYPES: ReadonlySet<StatusEffectType> = new Set([
     "poison",
+    "burn",
     "regen",
     "shielded",
     "stunned",
@@ -528,6 +529,7 @@ function sanitizeSaveSlotV1(raw: Record<string, unknown>): SaveSlotData | null {
         currentAreaId,
         openedChests: sanitizeStringArray(getField(raw, "openedChests")),
         openedSecretDoors: sanitizeStringArray(getField(raw, "openedSecretDoors")),
+        activatedWaystones: sanitizeStringArray(getField(raw, "activatedWaystones")),
         killedEnemies: sanitizeStringArray(getField(raw, "killedEnemies")),
         gold: Math.max(0, readFiniteNumber(raw, "gold") ?? 0),
         equipment: sanitizeEquipmentMap(getField(raw, "equipment")),

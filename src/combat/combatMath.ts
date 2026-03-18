@@ -4,7 +4,7 @@
 
 import type { Unit, UnitData, EnemyStats, StatusEffect, StatusEffectType, DamageType } from "../core/types";
 import { isEnemyData } from "../game/units";
-import { POISON_DURATION, POISON_TICK_INTERVAL, POISON_DAMAGE_PER_TICK, SLOW_DURATION, BUFF_TICK_INTERVAL, COLORS, SLOW_COOLDOWN_MULT, SLOW_MOVE_MULT, DEFIANCE_COOLDOWN_MULT, SLEEP_MIN_DURATION, SLEEP_MAX_DURATION, CHILLED_DURATION, CHILLED_COOLDOWN_MULT, CHILLED_MOVE_MULT, WEAKENED_COOLDOWN_MULT, HAMSTRUNG_MOVE_MULT, BLIND_ACCURACY_MULT } from "../core/constants";
+import { POISON_DURATION, POISON_TICK_INTERVAL, POISON_DAMAGE_PER_TICK, BURN_DURATION, BURN_TICK_INTERVAL, BURN_DAMAGE_PER_TICK, SLOW_DURATION, BUFF_TICK_INTERVAL, COLORS, SLOW_COOLDOWN_MULT, SLOW_MOVE_MULT, DEFIANCE_COOLDOWN_MULT, SLEEP_MIN_DURATION, SLEEP_MAX_DURATION, CHILLED_DURATION, CHILLED_COOLDOWN_MULT, CHILLED_MOVE_MULT, WEAKENED_COOLDOWN_MULT, HAMSTRUNG_MOVE_MULT, BLIND_ACCURACY_MULT } from "../core/constants";
 import { getStrengthDamageBonus, getIntelligenceMagicDamageBonus, getFaithHolyDamageBonus, getDexterityCritChance, CRIT_MULTIPLIER } from "../game/statBonuses";
 import { getEffectivePlayerBonusMagicDamage, getEffectivePlayerMoveSpeedMultiplier } from "../game/equipmentState";
 import { normalizeAngle } from "../game/geometry";
@@ -279,6 +279,51 @@ export function applyPoison(unit: Unit, sourceId: number, now: number, customDam
             statusEffects: [...existingEffects, newPoison]
         };
     }
+}
+
+/**
+ * Apply or refresh burn on a unit.
+ * Burn is shorter and hotter than poison, front-loading more damage over less time.
+ * @param customDamage - Optional custom damage per tick (defaults to BURN_DAMAGE_PER_TICK)
+ * @param customDuration - Optional custom duration in ms (defaults to BURN_DURATION)
+ */
+export function applyBurn(unit: Unit, sourceId: number, now: number, customDamage?: number, customDuration?: number): Unit {
+    const existingEffects = unit.statusEffects || [];
+    const existingBurn = existingEffects.find(e => e.type === "burn");
+    const damage = customDamage ?? BURN_DAMAGE_PER_TICK;
+    const duration = customDuration ?? BURN_DURATION;
+
+    if (existingBurn) {
+        return {
+            ...unit,
+            statusEffects: existingEffects.map(e =>
+                e.type === "burn"
+                    ? {
+                        ...e,
+                        duration: Math.max(e.duration, duration),
+                        timeSinceTick: 0,
+                        lastUpdateTime: now,
+                        damagePerTick: Math.max(e.damagePerTick, damage)
+                    }
+                    : e
+            )
+        };
+    }
+
+    const newBurn: StatusEffect = {
+        type: "burn",
+        duration,
+        tickInterval: BURN_TICK_INTERVAL,
+        timeSinceTick: 0,
+        lastUpdateTime: now,
+        damagePerTick: damage,
+        sourceId
+    };
+
+    return {
+        ...unit,
+        statusEffects: [...existingEffects, newBurn]
+    };
 }
 
 /**
@@ -570,6 +615,11 @@ export function logHeal(casterName: string, skillName: string, targetName: strin
 /** "{target} is poisoned!" */
 export function logPoisoned(targetName: string): string {
     return `${targetName} is poisoned!`;
+}
+
+/** "{target} is burning!" */
+export function logBurning(targetName: string): string {
+    return `${targetName} is burning!`;
 }
 
 /** "{target} is slowed!" */

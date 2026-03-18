@@ -122,6 +122,14 @@ export function computeEntitiesFromArea(area: AreaData, width: number, height: n
         }
     }
 
+    if (area.waystones) {
+        for (const waystone of area.waystones) {
+            const x = Math.floor(waystone.x);
+            const z = Math.floor(waystone.z);
+            if (x >= 0 && x < width && z >= 0 && z < height) grid[z][x] = "W";
+        }
+    }
+
     // Candles
     if (area.candles) {
         for (const candle of area.candles) {

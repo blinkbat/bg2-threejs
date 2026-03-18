@@ -38,6 +38,7 @@ export interface SaveSlotData {
     currentAreaId: AreaId;
     openedChests: string[];
     openedSecretDoors: string[];
+    activatedWaystones: string[];
     killedEnemies: string[];
     gold: number;
 

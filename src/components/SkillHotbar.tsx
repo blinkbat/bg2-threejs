@@ -108,6 +108,7 @@ function HotbarSlot({
     };
 
     const skillColor = skill ? getSkillTextColor(skill.type, skill.damageType) : undefined;
+    const abilityLabel = skill?.isCantrip ? "Cantrip" : "Skill";
 
     const slotClass = [
         "hotbar-slot",
@@ -124,22 +125,24 @@ function HotbarSlot({
             content={locked && skill ? (
                 <div className="hotbar-tooltip">
                     <div className="hotbar-tooltip-name" style={{ color: getSkillTextColor(skill.type, skill.damageType) }}>{skill.name}</div>
+                    <div className="hotbar-tooltip-hint">{abilityLabel}</div>
                     <div className="hotbar-tooltip-hint" style={{ color: "var(--ui-color-accent-warning)" }}>Not yet learned</div>
-                    <div className="hotbar-tooltip-hint">Drag skills here to assign</div>
+                    <div className="hotbar-tooltip-hint">Drag abilities here to assign</div>
                 </div>
             ) : skill ? (
                 <div className="hotbar-tooltip">
                     <div className="hotbar-tooltip-name" style={{ color: getSkillTextColor(skill.type, skill.damageType) }}>{skill.name}</div>
+                    <div className="hotbar-tooltip-hint">{abilityLabel}</div>
                     {skill.manaCost > 0 && <div className="hotbar-tooltip-cost">{skill.manaCost} MP</div>}
                     {isCantrip && usesLeft !== undefined && (
-                        <div className="hotbar-tooltip-cost">{usesLeft} uses remaining</div>
+                        <div className="hotbar-tooltip-cost">{usesLeft} cantrip uses remaining</div>
                     )}
                     <div className="hotbar-tooltip-hint">Press {slotIndex + 1} to use</div>
                     <div className="hotbar-tooltip-hint">Drag to rearrange · drag off to clear</div>
                 </div>
             ) : (
                 <div className="hotbar-tooltip">
-                    <div className="hotbar-tooltip-hint">Drag skills here to assign</div>
+                    <div className="hotbar-tooltip-hint">Drag abilities here to assign</div>
                     <div className="hotbar-tooltip-hint">Press {slotIndex + 1} to use</div>
                 </div>
             )}

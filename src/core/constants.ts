@@ -24,6 +24,11 @@ export const POISON_DURATION = 8000;       // 8 seconds
 export const POISON_TICK_INTERVAL = 1000;  // tick every 1 second
 export const POISON_DAMAGE_PER_TICK = 2;   // 2 damage per tick
 
+// Status Effects - Burn
+export const BURN_DURATION = 4000;         // 4 seconds
+export const BURN_TICK_INTERVAL = 1000;    // tick every 1 second
+export const BURN_DAMAGE_PER_TICK = 3;     // 3 damage per tick
+
 // Status Effects - Buffs (shielded, stunned, cleansed, pinned)
 export const BUFF_TICK_INTERVAL = 100;     // tick every 100ms for smooth duration countdown
 
@@ -235,6 +240,9 @@ export const COLORS = {
     poison: "#4a7c4a",
     poisonText: "#7cba7c",
     poisonBg: "#1a2a1a",
+    burn: "#8a3412",
+    burnText: "#ff8c42",
+    burnBg: "#2a1408",
     shielded: "#d4a017",
     shieldedText: "#f1c40f",
     shieldedBg: "#2a2510",

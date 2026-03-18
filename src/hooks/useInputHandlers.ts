@@ -11,7 +11,7 @@ import type { SecretDoorMesh } from "../rendering/scene";
 import type { LootBag } from "../core/types";
 import { updateCamera } from "../rendering/scene";
 import { blocked } from "../game/dungeon";
-import { getCurrentArea, getBlocked, isTerrainBlocked, type AreaTransition } from "../game/areas";
+import { getCurrentArea, getBlocked, isTerrainBlocked, type AreaTransition, type Waystone } from "../game/areas";
 import { getUnitById } from "../game/unitQuery";
 import { getBasicAttackSkill, getAllSkills, isCorePlayerId } from "../game/playerUnits";
 import { getItem } from "../game/items";
@@ -111,6 +111,7 @@ interface InputSetters {
     setHoveredChest: React.Dispatch<React.SetStateAction<{ x: number; y: number; chestIndex: number; chestX: number; chestZ: number } | null>>;
     setHoveredPlayer: React.Dispatch<React.SetStateAction<{ id: number; x: number; y: number } | null>>;
     setHoveredDoor: React.Dispatch<React.SetStateAction<{ targetArea: string; x: number; y: number } | null>>;
+    setHoveredWaystone: React.Dispatch<React.SetStateAction<{ x: number; y: number } | null>>;
     setHoveredSecretDoor: React.Dispatch<React.SetStateAction<{ x: number; y: number } | null>>;
     setHoveredLootBag: React.Dispatch<React.SetStateAction<{ x: number; y: number; gold: number; hasItems: boolean } | null>>;
     setOpenedChests: React.Dispatch<React.SetStateAction<Set<string>>>;
@@ -123,6 +124,7 @@ interface InputCallbacks {
     addLog: (text: string, color?: string) => void;
     getSkillContext: (defeatedThisFrame?: Set<number>) => SkillExecutionContext;
     handleAreaTransition: (transition: AreaTransition) => void;
+    handleWaystoneInteract: (waystone: Waystone, waystoneIndex: number) => void;
     onNpcEngaged: (unitId: number) => void;
     onCloseInfoModal: () => void;
     openLootPickupModal: (request: LootPickupRequest) => void;
@@ -147,6 +149,7 @@ const TOOLTIP_ENEMY_HEIGHT_OFFSET = 1.35;
 const TOOLTIP_PLAYER_HEIGHT_OFFSET = 1.45;
 const TOOLTIP_CHEST_HEIGHT = 0.9;
 const TOOLTIP_DOOR_HEIGHT = 1.0;
+const TOOLTIP_WAYSTONE_HEIGHT = 2.1;
 const TOOLTIP_SECRET_DOOR_HEIGHT = 1.2;
 const TOOLTIP_LOOT_BAG_HEIGHT = 0.7;
 const INVALID_MOVE_MARKER_DURATION_MS = 420;
@@ -281,6 +284,7 @@ export function useInputHandlers({
     const hoveredChestRef = useRef<{ x: number; y: number; chestIndex: number; chestX: number; chestZ: number } | null>(null);
     const hoveredPlayerRef = useRef<{ id: number; x: number; y: number } | null>(null);
     const hoveredDoorRef = useRef<{ targetArea: string; x: number; y: number } | null>(null);
+    const hoveredWaystoneRef = useRef<{ x: number; y: number } | null>(null);
     const hoveredSecretDoorRef = useRef<{ x: number; y: number } | null>(null);
     const hoveredLootBagRef = useRef<{ x: number; y: number; gold: number; hasItems: boolean } | null>(null);
     // Drag-line targeting state (Wall of Fire etc.)
@@ -299,7 +303,7 @@ export function useInputHandlers({
         const raycaster = raycasterRef.current;
         const mouse = mouseRef.current;
         const tooltipProjection = new THREE.Vector3();
-        const staticHoverNames = new Set(["ground", "chest", "door", "secretDoor"]);
+        const staticHoverNames = new Set(["ground", "chest", "door", "waystone", "secretDoor"]);
         const staticHoverRaycastRoots: THREE.Object3D[] = [];
         scene.traverse(obj => {
             if (!staticHoverNames.has(obj.name)) return;
@@ -359,12 +363,14 @@ export function useInputHandlers({
             hoveredChestRef.current = null;
             hoveredPlayerRef.current = null;
             hoveredDoorRef.current = null;
+            hoveredWaystoneRef.current = null;
             hoveredSecretDoorRef.current = null;
             hoveredLootBagRef.current = null;
             setters.setHoveredEnemy(null);
             setters.setHoveredChest(null);
             setters.setHoveredPlayer(null);
             setters.setHoveredDoor(null);
+            setters.setHoveredWaystone(null);
             setters.setHoveredSecretDoor(null);
             setters.setHoveredLootBag(null);
         };
@@ -590,6 +596,7 @@ export function useInputHandlers({
             let foundChest: { x: number; y: number; chestIndex: number; chestX: number; chestZ: number } | null = null;
             let foundPlayer: { id: number; x: number; y: number } | null = null;
             let foundDoor: { targetArea: string; x: number; y: number } | null = null;
+            let foundWaystone: { x: number; y: number } | null = null;
             let foundSecretDoor: { x: number; y: number } | null = null;
             let foundLootBag: { x: number; y: number; gold: number; hasItems: boolean } | null = null;
 
@@ -643,6 +650,18 @@ export function useInputHandlers({
                             transition.z + transition.h * 0.5
                         );
                         foundDoor = { targetArea: transition.targetArea, x: anchor.x, y: anchor.y };
+                    }
+                    break;
+                }
+                if (hit.object.name === "waystone") {
+                    const waystone = hit.object.userData?.waystone as Waystone | undefined;
+                    if (waystone) {
+                        const anchor = projectTooltipPosition(
+                            waystone.x,
+                            TOOLTIP_WAYSTONE_HEIGHT,
+                            waystone.z
+                        );
+                        foundWaystone = { x: anchor.x, y: anchor.y };
                     }
                     break;
                 }
@@ -716,6 +735,15 @@ export function useInputHandlers({
             ) {
                 hoveredDoorRef.current = foundDoor;
                 setters.setHoveredDoor(foundDoor);
+            }
+
+            const previousWaystone = hoveredWaystoneRef.current;
+            if (
+                previousWaystone?.x !== foundWaystone?.x
+                || previousWaystone?.y !== foundWaystone?.y
+            ) {
+                hoveredWaystoneRef.current = foundWaystone;
+                setters.setHoveredWaystone(foundWaystone);
             }
 
             const previousSecretDoor = hoveredSecretDoorRef.current;
@@ -959,6 +987,26 @@ export function useInputHandlers({
                             callbacks.handleAreaTransition(transition);
                         } else {
                             callbacks.addLog("You must gather your party before venturing forth.", "#f59e0b");
+                        }
+                        return;
+                    }
+                }
+
+                if (h.object.name === "waystone") {
+                    const waystone = h.object.userData?.waystone as Waystone | undefined;
+                    const waystoneIndex = h.object.userData?.waystoneIndex as number | undefined;
+                    if (waystone && waystoneIndex !== undefined) {
+                        const waystoneRange = 8;
+                        const alivePlayers = stateRefs.unitsStateRef.current.filter(u => u.team === "player" && u.hp > 0);
+                        const allPlayersInRange = alivePlayers.every(player => {
+                            const playerG = unitGroups[player.id];
+                            if (!playerG) return false;
+                            return isInRange(waystone.x, waystone.z, playerG.position.x, playerG.position.z, getUnitRadius(player), waystoneRange);
+                        });
+                        if (allPlayersInRange) {
+                            callbacks.handleWaystoneInteract(waystone, waystoneIndex);
+                        } else {
+                            callbacks.addLog("You must gather your party before using the waystone.", "#f59e0b");
                         }
                         return;
                     }

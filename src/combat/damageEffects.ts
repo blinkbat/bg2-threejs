@@ -21,7 +21,7 @@ import { getGameTime } from "../core/gameClock";
 import { getUnitStats } from "../game/units";
 import { scheduleEffectAnimation } from "../core/effectScheduler";
 import { applySyncedUnitUpdate, applySyncedUnitsUpdate } from "../core/stateUtils";
-import { logDefeated, applyPoison, applySlowed, hasStatusEffect, isUnitAlive } from "./combatMath";
+import { logDefeated, applyPoison, applyBurn, applySlowed, hasStatusEffect, isUnitAlive } from "./combatMath";
 import { tryKillBark } from "./barks";
 import { getNextUnitId } from "../core/unitIds";
 import { ENEMY_STATS, getAmoebaMaxHpForSplitCount } from "../game/enemyStats";
@@ -431,6 +431,7 @@ export function applyLifesteal(
 
 interface DamageOptions {
     poison?: { sourceId: number; damagePerTick?: number };  // Optional custom poison damage
+    burn?: { sourceId: number; damagePerTick?: number; duration?: number };  // Optional burn damage-over-time
     slow?: { sourceId: number };  // Apply slow debuff (1.5x cooldowns, 0.5x move speed)
     color?: string;
     skipDefeatTracking?: boolean;
@@ -470,6 +471,7 @@ export function applyDamageToUnit(
     const { scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now, defeatedThisFrame } = ctx;
     const {
         poison,
+        burn,
         slow,
         color = COLORS.damageEnemy,
         skipDefeatTracking = false,
@@ -717,6 +719,9 @@ export function applyDamageToUnit(
         // Shielded units are immune to poison
         if (poison && !hasStatusEffect(u, "shielded")) {
             updated = applyPoison(updated, poison.sourceId, now, poison.damagePerTick);
+        }
+        if (burn) {
+            updated = applyBurn(updated, burn.sourceId, now, burn.damagePerTick, burn.duration);
         }
         // Apply slow debuff
         if (slow) {

@@ -10,6 +10,7 @@ export interface SaveSnapshotState {
     currentAreaId: AreaId;
     openedChests: Set<string>;
     openedSecretDoors: Set<string>;
+    activatedWaystones: Set<string>;
     killedEnemies: Set<string>;
     gold: number;
     hotbarAssignments: HotbarAssignments;
@@ -37,6 +38,7 @@ interface ResolvedLoadedSaveState {
     players: SavedPlayer[];
     openedChests: Set<string>;
     openedSecretDoors: Set<string>;
+    activatedWaystones: Set<string>;
     killedEnemies: Set<string>;
     gold: number;
     equipment: Record<number, CharacterEquipment>;
@@ -152,6 +154,7 @@ export function buildSaveSlotData(input: BuildSaveSlotDataInput): SaveSlotData {
         currentAreaId: state.currentAreaId,
         openedChests: Array.from(state.openedChests),
         openedSecretDoors: Array.from(state.openedSecretDoors),
+        activatedWaystones: Array.from(state.activatedWaystones),
         killedEnemies: Array.from(state.killedEnemies),
         gold: state.gold,
         equipment: cloneEquipmentMap(equipment),
@@ -194,6 +197,7 @@ export function resolveLoadedSaveState(
             players: saveData.players.map(player => ({ ...player })),
             openedChests: new Set(saveData.openedChests),
             openedSecretDoors: new Set(saveData.openedSecretDoors),
+            activatedWaystones: new Set(saveData.activatedWaystones),
             killedEnemies: new Set(saveData.killedEnemies),
             gold: saveData.gold,
             equipment: cloneEquipmentMap(saveData.equipment),

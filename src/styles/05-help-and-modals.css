@@ -461,6 +461,160 @@
 }
 
 /* -----------------------------------------------------------------------------
+   WAYSTONE MODAL
+   ----------------------------------------------------------------------------- */
+.waystone-modal {
+    width: min(860px, calc(100vw - var(--ui-modal-edge-gap)));
+    max-width: 860px;
+}
+
+.waystone-modal-subtitle {
+    margin-top: 4px;
+    color: var(--ui-color-text-dim);
+    font-size: 13px;
+}
+
+.waystone-modal-layout {
+    display: grid;
+    grid-template-columns: minmax(220px, 270px) minmax(0, 1fr);
+    gap: 16px;
+    margin-top: 12px;
+}
+
+.waystone-destination-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 420px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.waystone-destination-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    width: 100%;
+    padding: 12px 14px;
+    background: var(--ui-color-surface-muted);
+    border: 1px solid var(--ui-color-border-soft);
+    border-radius: 8px;
+    color: var(--ui-color-text-secondary);
+    cursor: pointer;
+    transition: background 0.14s ease, border-color 0.14s ease, transform 0.14s ease;
+    text-align: left;
+}
+
+.waystone-destination-btn:hover {
+    background: var(--ui-color-surface-muted-hover);
+    border-color: var(--ui-color-border-soft-strong);
+    transform: translateY(-1px);
+}
+
+.waystone-destination-btn.selected {
+    background: rgba(49, 84, 122, 0.45);
+    border-color: #5aaeff;
+    color: var(--ui-color-text);
+}
+
+.waystone-destination-btn.current {
+    border-color: rgba(109, 186, 255, 0.28);
+}
+
+.waystone-destination-name {
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.waystone-destination-status {
+    font-size: 12px;
+    color: var(--ui-color-accent-primary-bright);
+}
+
+.waystone-preview-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    min-width: 0;
+}
+
+.waystone-preview-frame {
+    width: min(100%, 312px);
+}
+
+.waystone-preview-canvas,
+.waystone-preview-empty {
+    width: 100%;
+    max-width: 100%;
+    min-height: 176px;
+    border-radius: 10px;
+    border: 1px solid var(--ui-color-border-muted);
+    background: rgba(19, 25, 36, 0.8);
+    display: block;
+}
+
+.waystone-preview-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ui-color-text-dim);
+    font-size: 14px;
+}
+
+.waystone-preview-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--ui-color-text);
+}
+
+.waystone-preview-flavor {
+    color: var(--ui-color-text-secondary);
+    font-size: 13px;
+    line-height: 1.45;
+    max-width: 52ch;
+}
+
+.waystone-preview-note {
+    color: var(--ui-color-text-dim);
+    font-size: 13px;
+}
+
+.waystone-travel-btn {
+    align-self: flex-start;
+    margin-top: 2px;
+    padding: 10px 18px;
+    background: linear-gradient(135deg, #2b5a87 0%, #3aa4ff 100%);
+    border: 1px solid #66c4ff;
+    border-radius: 8px;
+    color: #f3fbff;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: filter 0.14s ease, transform 0.14s ease;
+}
+
+.waystone-travel-btn:hover {
+    filter: brightness(1.08);
+    transform: translateY(-1px);
+}
+
+@media (max-width: 840px) {
+    .waystone-modal-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .waystone-destination-list {
+        max-height: 220px;
+    }
+
+    .waystone-preview-frame {
+        width: 100%;
+    }
+}
+
+/* -----------------------------------------------------------------------------
    JUKEBOX MODAL
    ----------------------------------------------------------------------------- */
 .jukebox-modal {
@@ -850,4 +1004,3 @@
         max-height: 260px;
     }
 }
-

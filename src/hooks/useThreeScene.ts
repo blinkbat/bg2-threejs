@@ -8,7 +8,7 @@ import * as THREE from "three";
 import { getCurrentArea, getCurrentAreaId } from "../game/areas";
 import type { Unit, FogTexture, Projectile, SwingAnimation, DamageText, UnitGroup, SanctuaryTile, HolyTile, SmokeTile, FireTile } from "../core/types";
 import type { AcidTile, LootBag } from "../core/types";
-import { createScene, updateChestStates, updateCamera, type DoorMesh, type SecretDoorMesh, type ChestMeshData } from "../rendering/scene";
+import { createScene, updateChestStates, updateCamera, type DoorMesh, type WaystoneMesh, type SecretDoorMesh, type ChestMeshData } from "../rendering/scene";
 import { disposeLoadedTextures } from "../rendering/scene/units";
 import { resetFogCache, resetSpriteFacing, clearChargeAttacks, clearFireBreaths, clearCurses, clearGlares, clearLeaps, clearTentacles, clearShadePhases, clearSubmergedKrakens, resetLootBagIds, resetProjectileState } from "../gameLoop";
 import { resetAllBroodMotherScreeches, resetAllEnemyKiteCooldowns, resetAllEnemyKitingState } from "../game/enemyState";
@@ -51,6 +51,7 @@ export interface ThreeSceneState {
     columnMeshes: THREE.Mesh[];
     columnGroups: THREE.Mesh[][];
     doorMeshes: DoorMesh[];
+    waystoneMeshes: WaystoneMesh[];
     secretDoorMeshes: SecretDoorMesh[];
     waterMesh: THREE.Object3D | null;
     chestMeshes: ChestMeshData[];
@@ -134,6 +135,7 @@ function createEmptySceneState(): ThreeSceneState {
         columnMeshes: [],
         columnGroups: [],
         doorMeshes: [],
+        waystoneMeshes: [],
         secretDoorMeshes: [],
         waterMesh: null,
         chestMeshes: [],
@@ -335,6 +337,7 @@ export function useThreeScene({
             columnMeshes: sceneRefs.columnMeshes,
             columnGroups: sceneRefs.columnGroups,
             doorMeshes: sceneRefs.doorMeshes,
+            waystoneMeshes: sceneRefs.waystoneMeshes,
             secretDoorMeshes: sceneRefs.secretDoorMeshes,
             waterMesh: sceneRefs.waterMesh,
             chestMeshes: sceneRefs.chestMeshes,

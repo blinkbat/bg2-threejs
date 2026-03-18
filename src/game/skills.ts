@@ -9,7 +9,9 @@ import {
     VISHAS_EYES_ORB_HEAL_RANGE,
     FIRE_TILE_DURATION,
     FIRE_DAMAGE_PER_TICK,
-    FIRE_TICK_INTERVAL
+    FIRE_TICK_INTERVAL,
+    BURN_DURATION,
+    BURN_DAMAGE_PER_TICK
 } from "../core/constants";
 
 // =============================================================================
@@ -17,6 +19,23 @@ import {
 // =============================================================================
 
 export const SKILLS: Record<string, Skill> = {
+    fireBolt: {
+        name: "Fire Bolt",
+        description: "Loose a quick bolt of flame that may set the target ablaze.",
+        flavor: "\"The small fires count too.\" - Archmage Konen",
+        manaCost: 6,
+        cooldown: 2500,
+        type: "damage",
+        targetType: "enemy",
+        delivery: "ranged",
+        range: 10,
+        damageRange: [5, 8],
+        damageType: "fire",
+        projectileColor: "#ff8c42",
+        burnChance: 40,
+        burnDamagePerTick: BURN_DAMAGE_PER_TICK,
+        burnDuration: BURN_DURATION
+    },
     fireball: {
         name: "Fireball",
         description: "Hurl a ball of fire that explodes on impact, damaging all units in the area.",
@@ -72,8 +91,8 @@ export const SKILLS: Record<string, Skill> = {
         name: "Poison Dagger",
         description: "A quick strike with a venomous blade that may poison the target.",
         flavor: "True power does not echo -- it whispers.",
-        manaCost: 8,
-        cooldown: 4000,
+        manaCost: 4,
+        cooldown: 3500,
         type: "damage",
         targetType: "enemy",
         range: 1.8,  // melee range
@@ -244,16 +263,16 @@ export const SKILLS: Record<string, Skill> = {
         name: "Force Push",
         description: "Unleash a concussive wave that batters enemies backward and may leave them stunned.",
         flavor: "\"Wind and will are one motion.\" - Master Shen",
-        manaCost: 10,
-        cooldown: 5500,
+        manaCost: 5,
+        cooldown: 4500,
         type: "damage",
         targetType: "aoe",
         range: 6.5,
         lineWidth: 2.2,
-        damageRange: [6, 10],
+        damageRange: [5, 8],
         damageType: "physical",
         knockbackDistance: 2.2,
-        stunChance: 35,
+        stunChance: 25,
         duration: 1800
     },
     stunningBlow: {
@@ -396,7 +415,7 @@ export const SKILLS: Record<string, Skill> = {
     },
     restoration: {
         name: "Restoration",
-        description: "Purge doom, poison, and slow from an ally, then heal them for 3 HP per second over 10 seconds.",
+        description: "Purge doom, poison, burn, and slowing afflictions from an ally, then heal them for 3 HP per second over 10 seconds.",
         flavor: "\"Even death's shadow retreats before the light.\"",
         manaCost: 10,
         cooldown: 8000,
@@ -593,8 +612,8 @@ export const SKILLS: Record<string, Skill> = {
         name: "Cleave",
         description: "Swing in a wide arc, striking all enemies in front of you.",
         flavor: "\"One stroke, many fall.\" - Kvel of the North",
-        manaCost: 8,
-        cooldown: 3500,
+        manaCost: 4,
+        cooldown: 3000,
         type: "cleave",
         targetType: "self",
         range: 2.5,
@@ -618,8 +637,8 @@ export const SKILLS: Record<string, Skill> = {
         name: "Smite",
         description: "Strike with holy vengeance. Deals bonus damage to undead and demons.",
         flavor: "\"By the light that binds, I strike thee down.\" - Torin the Golden",
-        manaCost: 10,
-        cooldown: 4000,
+        manaCost: 5,
+        cooldown: 3500,
         type: "damage",
         targetType: "enemy",
         delivery: "melee",

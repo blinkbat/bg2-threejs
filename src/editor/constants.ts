@@ -88,6 +88,7 @@ const ENTITY_BRUSHES: BrushDef[] = [
     { char: "E", label: "Enemy", color: "#f44" },
     { char: "X", label: "Chest", color: "#ff0" },
     { char: "D", label: "Door", color: "#84f" },
+    { char: "W", label: "Waystone", color: "#4cc9ff" },
     { char: "L", label: "Candle", color: "#fa4" },
     { char: "Y", label: "Torch", color: "#f74" },
     { char: "H", label: "High Light", color: "#fd8" },

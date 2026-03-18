@@ -54,8 +54,8 @@ import {
 } from "./sceneSetupHelpers";
 
 // Re-export types
-export type { DoorMesh, SecretDoorMesh, ChestMeshData } from "./types";
-import type { DoorMesh, SecretDoorMesh, ChestMeshData, SceneRefs } from "./types";
+export type { DoorMesh, WaystoneMesh, SecretDoorMesh, ChestMeshData } from "./types";
+import type { DoorMesh, WaystoneMesh, SecretDoorMesh, ChestMeshData, SceneRefs } from "./types";
 
 // Re-export update functions
 export {
@@ -1852,6 +1852,96 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         }
     });
 
+    const waystoneMeshes: WaystoneMesh[] = [];
+    if (area.waystones) {
+        area.waystones.forEach((waystone, index) => {
+            const waystoneGroup = new THREE.Group() as WaystoneMesh;
+            waystoneGroup.position.set(waystone.x, 0, waystone.z);
+            waystoneGroup.name = "waystone";
+
+            const glowRing = new THREE.Mesh(
+                new THREE.RingGeometry(0.5, 0.86, 28),
+                new THREE.MeshBasicMaterial({
+                    color: "#48b6ff",
+                    transparent: true,
+                    opacity: 0.2,
+                    depthWrite: false,
+                    side: THREE.DoubleSide,
+                })
+            );
+            glowRing.rotation.x = -Math.PI / 2;
+            glowRing.position.y = 0.035;
+            glowRing.name = "waystone";
+            waystoneGroup.add(glowRing);
+
+            const floatGroup = new THREE.Group();
+            const floatBaseY = 1.42;
+            floatGroup.position.y = floatBaseY;
+            floatGroup.name = "waystone";
+            waystoneGroup.add(floatGroup);
+
+            const crystalMaterial = new THREE.MeshStandardMaterial({
+                color: "#7ad1ff",
+                emissive: "#1e78ff",
+                emissiveIntensity: 0.95,
+                metalness: 0.08,
+                roughness: 0.16,
+                transparent: true,
+                opacity: 0.94,
+            });
+            const crystal = new THREE.Mesh(
+                new THREE.OctahedronGeometry(0.66, 0),
+                crystalMaterial
+            );
+            crystal.scale.set(0.82, 1.42, 0.82);
+            crystal.name = "waystone";
+            floatGroup.add(crystal);
+
+            const innerCrystal = new THREE.Mesh(
+                new THREE.OctahedronGeometry(0.32, 0),
+                new THREE.MeshStandardMaterial({
+                    color: "#d9f2ff",
+                    emissive: "#5ec8ff",
+                    emissiveIntensity: 1.3,
+                    metalness: 0.02,
+                    roughness: 0.08,
+                    transparent: true,
+                    opacity: 0.82,
+                })
+            );
+            innerCrystal.scale.set(0.78, 1.55, 0.78);
+            innerCrystal.name = "waystone";
+            floatGroup.add(innerCrystal);
+
+            const pointLight = new THREE.PointLight("#4fb6ff", 1.8, 8.5, 1.75);
+            pointLight.position.set(0, 0.1, 0);
+            pointLight.userData.baseIntensity = 1.8;
+            pointLight.userData.flickerStrength = 0;
+            pointLight.userData.lightRole = "area";
+            floatGroup.add(pointLight);
+            candleLights.push(pointLight);
+
+            const waystoneData = {
+                waystone,
+                waystoneIndex: index,
+                floatGroup,
+                floatBaseY,
+                floatPhase: index * 0.9,
+                glowRing,
+                pointLight,
+            };
+            waystoneGroup.userData = waystoneData;
+            glowRing.userData = waystoneData;
+            floatGroup.userData = waystoneData;
+            crystal.userData = waystoneData;
+            innerCrystal.userData = waystoneData;
+            pointLight.userData = { ...pointLight.userData, ...waystoneData };
+
+            scene.add(waystoneGroup);
+            waystoneMeshes.push(waystoneGroup);
+        });
+    }
+
     // Secret doors - wall segment with cracks that gets removed when clicked
     const secretDoorMeshes: SecretDoorMesh[] = [];
     if (area.secretDoors) {
@@ -2117,6 +2207,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         columnMeshes,
         columnGroups,
         doorMeshes,
+        waystoneMeshes,
         secretDoorMeshes,
         waterMesh,
         chestMeshes,

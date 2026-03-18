@@ -799,7 +799,7 @@ export function executeCleanseSkill(
 // =============================================================================
 
 /**
- * Execute Restoration skill - removes doom, poison, movement/attack debuffs, and sleep, then applies regen HoT.
+ * Execute Restoration skill - removes doom, poison, burn, movement/attack debuffs, and sleep, then applies regen HoT.
  */
 export function executeRestorationSkill(
     ctx: SkillExecutionContext,
@@ -830,6 +830,7 @@ export function executeRestorationSkill(
     // Check if target actually needs restoration (has harmful effects or is not at full HP)
     const hasDoom = hasStatusEffect(targetAlly, "doom");
     const hasPoison = hasStatusEffect(targetAlly, "poison");
+    const hasBurn = hasStatusEffect(targetAlly, "burn");
     const hasSlow = hasStatusEffect(targetAlly, "slowed");
     const hasHamstrung = hasStatusEffect(targetAlly, "hamstrung");
     const hasWeakened = hasStatusEffect(targetAlly, "weakened");
@@ -837,7 +838,7 @@ export function executeRestorationSkill(
     const targetMaxHp = getEffectiveMaxHp(targetAlly.id, targetAlly);
     const needsHealing = targetAlly.hp < targetMaxHp;
 
-    if (!hasDoom && !hasPoison && !hasSlow && !hasHamstrung && !hasWeakened && !hasSleep && !needsHealing) {
+    if (!hasDoom && !hasPoison && !hasBurn && !hasSlow && !hasHamstrung && !hasWeakened && !hasSleep && !needsHealing) {
         addLog(`${UNIT_DATA[casterId].name}: ${targetData.name} doesn't need restoration!`, COLORS.logNeutral);
         return false;
     }
@@ -863,10 +864,11 @@ export function executeRestorationSkill(
 
     setUnits(prev => prev.map(u => {
         if (u.id !== targetId) return u;
-        // Remove doom, poison, movement/attack debuffs, and sleep
+        // Remove doom, poison, burn, movement/attack debuffs, and sleep
         const cleansedEffects = (u.statusEffects ?? []).filter(
             e => e.type !== "doom"
                 && e.type !== "poison"
+                && e.type !== "burn"
                 && e.type !== "slowed"
                 && e.type !== "hamstrung"
                 && e.type !== "weakened"
@@ -879,6 +881,7 @@ export function executeRestorationSkill(
     const removedEffects: string[] = [];
     if (hasDoom) removedEffects.push("Doom");
     if (hasPoison) removedEffects.push("Poison");
+    if (hasBurn) removedEffects.push("Burn");
     if (hasSlow) removedEffects.push("Slow");
     if (hasHamstrung) removedEffects.push("Hamstrung");
     if (hasWeakened) removedEffects.push("Weakened");

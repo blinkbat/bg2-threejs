@@ -162,6 +162,22 @@ export function EntityEditPopup({ entity, itemRegistryRevision = 0, onSave, onCl
                 </>
             )}
 
+            {draft.type === "waystone" && (
+                <label style={{ display: "block", marginBottom: 10 }}>
+                    <span style={{ fontSize: 12, display: "block", marginBottom: 4 }}>Facing Direction</span>
+                    <select
+                        style={selectStyle}
+                        value={draft.waystoneDirection || "north"}
+                        onChange={e => setDraft({ ...draft, waystoneDirection: e.target.value as "north" | "south" | "east" | "west" })}
+                    >
+                        <option value="north">north</option>
+                        <option value="south">south</option>
+                        <option value="east">east</option>
+                        <option value="west">west</option>
+                    </select>
+                </label>
+            )}
+
             {(draft.type === "candle" || draft.type === "torch") && (
                 <>
                     <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>

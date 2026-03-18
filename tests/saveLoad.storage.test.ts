@@ -32,7 +32,7 @@ class LocalStorageMock {
 const localStorageMock = new LocalStorageMock();
 
 function createValidSaveData(overrides: Partial<SaveSlotData> = {}): SaveSlotData {
-    return {
+    const saveData: SaveSlotData = {
         version: 1,
         timestamp: 123456789,
         slotName: "Test Slot",
@@ -40,6 +40,7 @@ function createValidSaveData(overrides: Partial<SaveSlotData> = {}): SaveSlotDat
         currentAreaId: "coast",
         openedChests: ["coast-1"],
         openedSecretDoors: ["coast-secret-1"],
+        activatedWaystones: ["coast-waystone-0"],
         killedEnemies: ["coast-3"],
         gold: 45,
         equipment: {
@@ -66,6 +67,9 @@ function createValidSaveData(overrides: Partial<SaveSlotData> = {}): SaveSlotDat
         },
         ...overrides,
     };
+
+    saveData.activatedWaystones = overrides.activatedWaystones ?? ["coast-waystone-0"];
+    return saveData;
 }
 
 beforeAll(() => {

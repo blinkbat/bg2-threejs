@@ -200,6 +200,7 @@ const STAT_INFO: Record<keyof CharacterStats, { label: string; name: string; col
 
 /** Effect metadata for display */
 const EFFECT_INFO: Record<string, { icon: string; color: string; description: string }> = {
+    burn: { icon: "F", color: COLORS.burnText, description: "Taking heavy fire damage over time" },
     poison: { icon: "☠", color: COLORS.poisonText, description: "Taking damage over time" },
     shielded: { icon: "🛡", color: COLORS.shieldedText, description: "Armor doubled, cooldowns doubled" },
     stunned: { icon: "💫", color: COLORS.stunnedText, description: "Cannot act" },
@@ -428,9 +429,15 @@ function SkillTooltip({ skill, isShielded, cantripUses }: { skill: Skill; isShie
     const isRanged = skill.range > 2;
     const baseCooldown = skill.cooldown / 1000;
     const effectiveCooldown = isShielded ? baseCooldown * 2 : baseCooldown;
+    const abilityLabel = skill.name === "Attack"
+        ? "Basic Attack"
+        : skill.isCantrip
+            ? "Cantrip"
+            : "Skill";
 
     // Build tooltip lines
     const lines: { label: string; value: string; color?: string }[] = [];
+    lines.push({ label: "Type", value: abilityLabel, color: skill.isCantrip ? "var(--ui-color-accent-arcane)" : undefined });
 
     // Damage/heal/effect value
     if (skill.type === "damage") {
@@ -610,6 +617,16 @@ function SkillTooltip({ skill, isShielded, cantripUses }: { skill: Skill; isShie
     if (skill.poisonChance) {
         lines.push({ label: "Poison chance", value: `${skill.poisonChance}%`, color: COLORS.poisonText });
     }
+    if (skill.burnChance) {
+        lines.push({ label: "Burn chance", value: `${skill.burnChance}%`, color: COLORS.burnText });
+    }
+    if (skill.burnDamagePerTick) {
+        lines.push({ label: "Burn/tick", value: `${skill.burnDamagePerTick}`, color: COLORS.burnText });
+    }
+    if (skill.burnDuration) {
+        const burnSeconds = Math.round((skill.burnDuration / 1000) * 10) / 10;
+        lines.push({ label: "Burn duration", value: `${burnSeconds}s`, color: COLORS.burnText });
+    }
     if (skill.knockbackDistance) {
         lines.push({ label: "Knockback", value: `${skill.knockbackDistance}`, color: "var(--ui-color-accent-success-bright)" });
     }
@@ -665,7 +682,7 @@ function SkillTooltip({ skill, isShielded, cantripUses }: { skill: Skill; isShie
 
     // Cantrip uses
     if (cantripUses !== undefined) {
-        lines.push({ label: "Uses", value: `${cantripUses} remaining`, color: "var(--ui-color-accent-arcane)" });
+        lines.push({ label: "Cantrip uses", value: `${cantripUses} remaining`, color: "var(--ui-color-accent-arcane)" });
     }
 
     return (
@@ -771,6 +788,7 @@ function SkillCard({
                         style={!isQueued ? { color: skillTextColor } : undefined}
                     >
                         {skill.name}
+                        {skill.isCantrip && <span className="skill-tag">CANTRIP</span>}
                         {isBasicAttack && isRanged && <span className="skill-tag">RANGED</span>}
                         {isBasicAttack && !isRanged && <span className="skill-tag">MELEE</span>}
                         {isQueued && <span className="skill-tag skill-tag-queued">QUEUED</span>}

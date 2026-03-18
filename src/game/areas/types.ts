@@ -30,6 +30,12 @@ export interface AreaTransition {
     direction: "north" | "south" | "east" | "west";  // Which way door faces
 }
 
+export interface Waystone {
+    x: number;
+    z: number;
+    direction?: "north" | "south" | "east" | "west";
+}
+
 export interface AreaDialogChoice {
     id: string;
     label: string;
@@ -252,6 +258,7 @@ export interface AreaData {
     floorTintLayers?: number[][][];    // Optional per-tile tint % per floor layer (same dimensions as floorLayers)
     enemySpawns: EnemySpawn[];
     transitions: AreaTransition[];
+    waystones?: Waystone[];
     chests: ChestLocation[];
     trees: TreeLocation[];
     decorations?: Decoration[];  // Columns, broken walls, etc.

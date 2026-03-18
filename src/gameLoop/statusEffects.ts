@@ -19,6 +19,7 @@ import { ENEMY_STATS } from "../game/enemyStats";
 
 /** Visual config for damage-over-time effects - keyed by effect type */
 const DOT_VISUAL_CONFIG: Partial<Record<StatusEffectType, { color: string; messageTemplate: (name: string, dmg: number) => string }>> = {
+    burn: { color: COLORS.burnText, messageTemplate: (name, dmg) => `${name} takes ${dmg} burn damage.` },
     poison: { color: COLORS.poisonText, messageTemplate: (name, dmg) => `${name} takes ${dmg} poison damage.` },
     qi_drain: { color: "#9b59b6", messageTemplate: (name, dmg) => `${name} loses ${dmg} HP from Qi drain.` }
 };
