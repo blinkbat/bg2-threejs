@@ -176,20 +176,41 @@ export function buildFogFootprintFromBounds(
     return { centerX, centerZ, radius, cells };
 }
 
+function shiftSkyColor(
+    baseColor: THREE.Color,
+    hueOffsetDegrees: number,
+    saturationOffset: number,
+    lightnessOffset: number
+): THREE.Color {
+    const shifted = baseColor.clone();
+    const hsl = { h: 0, s: 0, l: 0 };
+    shifted.getHSL(hsl);
+    const shiftedHue = ((hsl.h + (hueOffsetDegrees / 360)) % 1 + 1) % 1;
+    shifted.setHSL(
+        shiftedHue,
+        THREE.MathUtils.clamp(hsl.s + saturationOffset, 0, 1),
+        THREE.MathUtils.clamp(hsl.l + lightnessOffset, 0, 1)
+    );
+
+    return shifted;
+}
+
 export function createSkyTexture(backgroundColor: string, isForestArea: boolean): THREE.CanvasTexture {
+    void isForestArea;
     const canvas = document.createElement("canvas");
     canvas.width = 2;
     canvas.height = 256;
     const ctx = canvas.getContext("2d")!;
-    const gradient = ctx.createLinearGradient(0, 0, 0, 256);
     const backgroundBase = new THREE.Color(backgroundColor);
-    const topColor = backgroundBase.clone().lerp(new THREE.Color("#000000"), isForestArea ? 0.72 : 0.82);
-    const midColor = backgroundBase.clone().lerp(new THREE.Color("#000000"), isForestArea ? 0.52 : 0.68);
-    const bottomColor = backgroundBase.clone().lerp(new THREE.Color("#000000"), isForestArea ? 0.28 : 0.5);
+    const topColor = shiftSkyColor(backgroundBase, -14, -0.08, -0.18);
+    const bottomColor = shiftSkyColor(backgroundBase, 14, -0.04, 0.16);
+    const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
     gradient.addColorStop(0, `#${topColor.getHexString()}`);
-    gradient.addColorStop(0.5, `#${midColor.getHexString()}`);
     gradient.addColorStop(1, `#${bottomColor.getHexString()}`);
     ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 2, 256);
-    return new THREE.CanvasTexture(canvas);
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    return texture;
 }

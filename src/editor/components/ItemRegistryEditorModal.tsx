@@ -917,7 +917,7 @@ export function ItemRegistryEditorModal({ onClose, onApplied }: ItemRegistryEdit
                             className="editor-trigger-input"
                             rows={8}
                             placeholder="Paste a JSON array of item definitions here."
-                            style={{ fontFamily: "\"DM Mono\", monospace" }}
+                            style={{ fontFamily: "\"DM Mono\"" }}
                         />
                         <div style={{ display: "flex", gap: 8 }}>
                             <button type="button" className="editor-btn editor-btn--small editor-btn--muted" onClick={loadDraftFromJson}>

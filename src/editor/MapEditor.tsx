@@ -671,7 +671,7 @@ export function MapEditor() {
                 ctx.fillStyle = "#000";
                 ctx.fillRect(x * CELL_SIZE, z * CELL_SIZE - 16, w * CELL_SIZE, 14);
                 ctx.fillStyle = "#4cf";
-                ctx.font = "600 10px \"DM Mono\", monospace";
+                ctx.font = "600 10px \"DM Mono\"";
                 ctx.textAlign = "center";
                 ctx.textBaseline = "middle";
                 ctx.fillText(target, centerX, z * CELL_SIZE - 9);
@@ -695,7 +695,7 @@ export function MapEditor() {
                 ctx.strokeRect(drawX, drawZ, drawW, drawH);
 
                 ctx.fillStyle = isSelected ? "#f0e0ff" : "#d7c0ff";
-                ctx.font = "600 10px \"DM Mono\", monospace";
+                ctx.font = "600 10px \"DM Mono\"";
                 ctx.textAlign = "left";
                 ctx.textBaseline = "top";
                 ctx.fillText(`loc:${location.id}`, drawX + 3, drawZ + 3);
@@ -719,7 +719,7 @@ export function MapEditor() {
                 ctx.strokeRect(drawX, drawZ, drawW, drawH);
 
                 ctx.fillStyle = "#9af2ff";
-                ctx.font = "600 10px \"DM Mono\", monospace";
+                ctx.font = "600 10px \"DM Mono\"";
                 ctx.textAlign = "left";
                 ctx.textBaseline = "top";
                 ctx.fillText(`dlg:${trigger.id}`, drawX + 3, drawZ + 3);

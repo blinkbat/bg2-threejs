@@ -987,7 +987,7 @@ export function spawnDamageNumber(
     const ctx = canvas.getContext("2d")!;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.font = isCrit ? "600 28px \"DM Mono\", monospace" : "600 24px \"DM Mono\", monospace";
+    ctx.font = isCrit ? "600 28px \"DM Mono\"" : "600 24px \"DM Mono\"";
     ctx.fillStyle = isCrit ? COLORS.damageCrit : color;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";

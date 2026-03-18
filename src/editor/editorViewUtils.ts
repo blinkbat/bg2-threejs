@@ -66,7 +66,7 @@ export function drawLayer(
             // Draw char label (skip for floor layer - just show color)
             if (layerType !== "floor") {
                 ctx.fillStyle = "#fff";
-                ctx.font = "14px monospace";
+                ctx.font = "14px \"DM Mono\"";
                 ctx.textAlign = "center";
                 ctx.textBaseline = "middle";
                 ctx.fillText(char, x * cellSize + cellSize / 2, z * cellSize + cellSize / 2);

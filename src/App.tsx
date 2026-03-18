@@ -1947,7 +1947,7 @@ function Game({
                     const canvas = document.createElement("canvas");
                     canvas.width = 48; canvas.height = 24;
                     const ctx = canvas.getContext("2d")!;
-                    ctx.fillStyle = "#ffffff"; ctx.font = "600 14px \"DM Mono\", monospace"; ctx.textAlign = "center";
+                    ctx.fillStyle = "#ffffff"; ctx.font = "600 14px \"DM Mono\""; ctx.textAlign = "center";
                     ctx.fillText(`${x},${z}`, 24, 17);
                     const texture = new THREE.CanvasTexture(canvas);
                     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
