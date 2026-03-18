@@ -7,6 +7,7 @@ ground: #ab9e78
 ambient: 0.55
 directional: 0.75
 fog: true
+effects: rain,lightning
 spawn: 25,7
 
 === GEOMETRY ===

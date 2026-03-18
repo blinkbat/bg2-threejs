@@ -11,6 +11,7 @@ import {
     DEFAULT_AREA_LIGHT_HEIGHT,
     DEFAULT_AREA_LIGHT_RADIUS,
     DEFAULT_AREA_LIGHT_TINT,
+    AREA_SCENE_EFFECT_IDS,
     type AreaData,
     type AreaDialogChoice,
     type AreaDialogChoiceCondition,
@@ -30,6 +31,8 @@ import {
     type ChestLocation,
     type TreeLocation,
     type TreeType,
+    type AreaSceneEffectId,
+    type AreaSceneEffects,
     type Decoration,
     type SecretDoor,
     type AreaLight,
@@ -59,6 +62,7 @@ import { DIALOG_SPEAKERS } from "../dialog/speakers";
 // ambient: 0.55
 // directional: 0.85
 // fog: true
+// effects: rain,lightning
 // spawn: 47,25
 //
 // === GEOMETRY ===
@@ -133,6 +137,7 @@ interface ParsedArea {
         ambient: number;
         directional: number;
         fog: boolean;
+        sceneEffects?: AreaSceneEffects;
         invulnerable?: boolean;
         spawnX: number;
         spawnZ: number;
@@ -163,6 +168,24 @@ function normalizeHexColor(color: string | undefined, fallback: string): string 
         return color.toLowerCase();
     }
     return fallback;
+}
+
+function getAreaSceneEffectList(sceneEffects: AreaSceneEffects | undefined): AreaSceneEffectId[] {
+    if (!sceneEffects) return [];
+    return AREA_SCENE_EFFECT_IDS.filter(effectId => sceneEffects[effectId] === true);
+}
+
+function parseAreaSceneEffects(value: string): AreaSceneEffects | undefined {
+    const sceneEffects: AreaSceneEffects = {};
+    const entries = value.split(",").map(entry => entry.trim().toLowerCase()).filter(Boolean);
+
+    for (const entry of entries) {
+        if ((AREA_SCENE_EFFECT_IDS as readonly string[]).includes(entry)) {
+            sceneEffects[entry as AreaSceneEffectId] = true;
+        }
+    }
+
+    return getAreaSceneEffectList(sceneEffects).length > 0 ? sceneEffects : undefined;
 }
 
 function writeSparseTintSections(
@@ -215,6 +238,8 @@ export function areaDataToText(area: AreaData): string {
     lines.push(`ambient: ${area.ambientLight}`);
     lines.push(`directional: ${area.directionalLight}`);
     lines.push(`fog: ${area.hasFogOfWar}`);
+    const sceneEffects = getAreaSceneEffectList(area.sceneEffects);
+    if (sceneEffects.length > 0) lines.push(`effects: ${sceneEffects.join(",")}`);
     if (area.invulnerable) lines.push(`invulnerable: true`);
     lines.push(`spawn: ${area.defaultSpawn.x},${area.defaultSpawn.z}`);
     lines.push("");
@@ -409,6 +434,7 @@ function parseTextFormat(text: string): ParsedArea {
             ambient: 0.4,
             directional: 0.5,
             fog: true,
+            sceneEffects: undefined,
             spawnX: 5,
             spawnZ: 5,
         },
@@ -593,6 +619,9 @@ function parseMetadataLine(line: string, metadata: ParsedArea["metadata"]) {
             break;
         case "fog":
             metadata.fog = value === "true";
+            break;
+        case "effects":
+            metadata.sceneEffects = parseAreaSceneEffects(value);
             break;
         case "invulnerable":
             metadata.invulnerable = value === "true";
@@ -1227,6 +1256,7 @@ function convertParsedToAreaData(parsed: ParsedArea): AreaData {
         ambientLight: parsed.metadata.ambient,
         directionalLight: parsed.metadata.directional,
         hasFogOfWar: parsed.metadata.fog,
+        sceneEffects: parsed.metadata.sceneEffects,
         invulnerable: parsed.metadata.invulnerable || undefined,
         defaultSpawn: { x: parsed.metadata.spawnX, z: parsed.metadata.spawnZ },
         geometry: parsed.geometry,

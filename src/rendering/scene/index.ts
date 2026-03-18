@@ -43,6 +43,7 @@ import {
     applyStaticRenderOrder,
     buildFogFootprintFromBounds,
     createSkyTexture,
+    createSkyTextureWithLightnessBoost,
     DIRECTIONAL_SHADOW_MAP_SIZE,
     ENABLE_DOOR_POINT_LIGHTS,
     hashAreaIdToUnitRange,
@@ -61,7 +62,9 @@ import type { DoorMesh, WaystoneMesh, SecretDoorMesh, ChestMeshData, SceneRefs }
 export {
     updateChestStates,
     updateCamera,
+    updateLightning,
     updateWater,
+    updateRain,
     updateBillboards,
     updateLightLOD,
     updateWallTransparency,
@@ -79,15 +82,65 @@ import { createUnitSceneGroup, ensureTexturesLoaded } from "./units";
 // MAIN SCENE CREATION
 // =============================================================================
 
+function createRainTexture(): THREE.CanvasTexture {
+    const canvas = document.createElement("canvas");
+    canvas.width = 80;
+    canvas.height = 128;
+    const ctx = canvas.getContext("2d")!;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.lineCap = "round";
+
+    for (let index = 0; index < 22; index++) {
+        const startX = ((index * 17) % (canvas.width + 16)) - 8;
+        const startY = ((index * 23) % (canvas.height + 32)) - 16;
+        const length = 13 + (index % 4) * 3;
+        const alpha = index % 6 === 0 ? 0.56 : 0.42;
+
+        ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+        ctx.lineWidth = index % 5 === 0 ? 0.22 : 0.17;
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(startX, startY + length);
+        ctx.stroke();
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.magFilter = THREE.LinearFilter;
+    texture.minFilter = THREE.LinearFilter;
+    texture.generateMipmaps = false;
+    texture.colorSpace = THREE.SRGBColorSpace;
+    return texture;
+}
+
 export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs {
     // Front-load texture decoding before building meshes
     ensureTexturesLoaded(units);
 
     const area = getCurrentArea();
     const computed = getComputedAreaData();
+    const hasRainEffect = area.sceneEffects?.rain === true;
+    const hasLightningEffect = area.sceneEffects?.lightning === true;
 
     const scene = new THREE.Scene();
-    scene.background = createSkyTexture(area.backgroundColor, area.id === "forest");
+    const baseSkyTexture = createSkyTexture(area.backgroundColor, area.id === "forest");
+    scene.background = baseSkyTexture;
+    if (hasLightningEffect) {
+        scene.userData.lightningBackground = {
+            textures: [
+                baseSkyTexture,
+                createSkyTextureWithLightnessBoost(area.backgroundColor, 0.035),
+                createSkyTextureWithLightnessBoost(area.backgroundColor, 0.07),
+            ],
+            nextEventTimeMs: 3500 + Math.random() * 6500,
+            flashStartTimeMs: 0,
+            flashEndTimeMs: 0,
+            burstFlashesRemaining: 0,
+            exposureBoost: 0,
+        };
+    }
 
     const aspect = container.clientWidth / container.clientHeight;
     const camera = new THREE.OrthographicCamera(-15 * aspect, 15 * aspect, 15, -15, 0.1, 1000);
@@ -165,6 +218,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
 
     // Floor and terrain tiles (layer-aware, with per-tile tint and natural rounding)
     let waterMesh: THREE.Object3D | null = null;
+    let rainOverlay: THREE.Mesh | null = null;
     let hasLiquidTiles = false;
     const liquidTiles = new THREE.Group();
     liquidTiles.name = "liquidTiles";
@@ -2494,6 +2548,29 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     fogMesh.frustumCulled = false;
     scene.add(fogMesh);
 
+    if (hasRainEffect) {
+        const rainTexture = createRainTexture();
+        const rainMaterial = new THREE.MeshBasicMaterial({
+            map: rainTexture,
+            color: "#d9e5ec",
+            transparent: true,
+            opacity: 0.42,
+            depthWrite: false,
+            toneMapped: false,
+            fog: false
+        });
+        rainMaterial.depthTest = false;
+
+        rainOverlay = new THREE.Mesh(
+            new THREE.PlaneGeometry(1, 1),
+            rainMaterial
+        );
+        rainOverlay.name = "rainOverlay";
+        rainOverlay.renderOrder = RENDER_ORDER_FOG - 4;
+        rainOverlay.frustumCulled = false;
+        scene.add(rainOverlay);
+    }
+
     // Move marker
     const moveMarker = new THREE.Mesh(
         new THREE.RingGeometry(0.2, 0.3, 4),
@@ -2590,6 +2667,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         waystoneMeshes,
         secretDoorMeshes,
         waterMesh,
+        rainOverlay,
         chestMeshes,
         billboards,
     };

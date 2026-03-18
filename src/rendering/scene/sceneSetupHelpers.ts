@@ -197,13 +197,22 @@ function shiftSkyColor(
 
 export function createSkyTexture(backgroundColor: string, isForestArea: boolean): THREE.CanvasTexture {
     void isForestArea;
+    return createSkyTextureWithLightnessBoost(backgroundColor, 0);
+}
+
+export function createSkyTextureWithLightnessBoost(
+    backgroundColor: string,
+    lightnessBoost: number
+): THREE.CanvasTexture {
     const canvas = document.createElement("canvas");
     canvas.width = 2;
     canvas.height = 256;
     const ctx = canvas.getContext("2d")!;
     const backgroundBase = new THREE.Color(backgroundColor);
-    const topColor = shiftSkyColor(backgroundBase, -14, -0.08, -0.18);
-    const bottomColor = shiftSkyColor(backgroundBase, 14, -0.04, 0.16);
+    const clampedLightnessBoost = THREE.MathUtils.clamp(lightnessBoost, 0, 0.4);
+    const saturationShift = -clampedLightnessBoost * 0.22;
+    const topColor = shiftSkyColor(backgroundBase, -14, -0.08 + saturationShift, -0.18 + clampedLightnessBoost);
+    const bottomColor = shiftSkyColor(backgroundBase, 14, -0.04 + saturationShift, 0.16 + clampedLightnessBoost);
     const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
     gradient.addColorStop(0, `#${topColor.getHexString()}`);
     gradient.addColorStop(1, `#${bottomColor.getHexString()}`);

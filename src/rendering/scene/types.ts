@@ -65,6 +65,7 @@ export interface SceneRefs {
     waystoneMeshes: WaystoneMesh[];
     secretDoorMeshes: SecretDoorMesh[];  // Hidden doors that reveal caves when clicked
     waterMesh: THREE.Object3D | null;  // Animated liquid tiles (water/lava)
+    rainOverlay: THREE.Mesh | null;  // Lightweight camera-facing weather overlay
     chestMeshes: ChestMeshData[];  // Chest lid pivots for open/close animation
     billboards: THREE.Mesh[];  // Billboard meshes that face the camera
 }

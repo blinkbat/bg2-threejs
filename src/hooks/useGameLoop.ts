@@ -22,7 +22,7 @@ import { getEffectiveMaxHp } from "../game/playerUnits";
 import { getEffectivePlayerHpRegen } from "../game/equipmentState";
 import { createLiveUnitsDispatch } from "../core/stateUtils";
 import { publishHpBarOverlayFrame, resetHpBarOverlayFrame } from "./hpBarOverlayStore";
-import { updateCamera, updateWater, updateWallTransparency, updateTreeFogVisibility, updateFogOccluderVisibility, revealAllTreeMeshes, revealAllFogOccluderMeshes, updateLightLOD, addUnitToScene, updateBillboards } from "../rendering/scene";
+import { updateCamera, updateLightning, updateWater, updateRain, updateWallTransparency, updateTreeFogVisibility, updateFogOccluderVisibility, revealAllTreeMeshes, revealAllFogOccluderMeshes, updateLightLOD, addUnitToScene, updateBillboards } from "../rendering/scene";
 import { updateDynamicObstacles } from "../ai/pathfinding";
 import { updateAvoidanceCache, updateTargetingCache } from "../ai/unitAI";
 import { buildUnitSpatialFrame, type UnitSpatialEntry } from "../ai/spatialCache";
@@ -572,7 +572,7 @@ export function useGameLoop({
             scene, camera, renderer, flames, candleLights, fogTexture, fogMesh, moveMarker,
             rangeIndicator, unitGroups, selectRings, targetRings, shieldIndicators,
             unitMeshes, unitOriginalColors, maxHp, wallMeshes, treeMeshes, fogOccluderMeshes,
-            columnMeshes, columnGroups, billboards, candleMeshes, waterMesh
+            columnMeshes, columnGroups, billboards, candleMeshes, waterMesh, rainOverlay
         } = sceneState;
 
         let animId: number;
@@ -966,7 +966,9 @@ export function useGameLoop({
             sectionStart = performance.now();
             updateMarkerAnimations(moveMarker, refs.moveMarkerStart, targetRings, refs.targetRingTimers, now);
             updateRangeIndicator(stateRefs.targetingModeRef.current, rangeIndicator, unitGroups);
+            updateLightning(scene, renderer, gameNow);
             updateWater(waterMesh, gameNow, camera);
+            updateRain(rainOverlay, camera, gameNow);
             visualMs += performance.now() - sectionStart;
 
             // Shared transient effect animations (rings, beams, flash overlays, etc.)

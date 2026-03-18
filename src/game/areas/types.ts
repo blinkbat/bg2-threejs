@@ -227,6 +227,13 @@ export const DEFAULT_AREA_LIGHT_BRIGHTNESS = 30;
 export const DEFAULT_AREA_LIGHT_HEIGHT = 10;
 export const DEFAULT_AREA_LIGHT_DIFFUSION = 0.55;
 export const DEFAULT_AREA_LIGHT_DECAY = 1.0;
+export const AREA_SCENE_EFFECT_IDS = ["rain", "lightning"] as const;
+export type AreaSceneEffectId = typeof AREA_SCENE_EFFECT_IDS[number];
+
+export interface AreaSceneEffects {
+    rain?: boolean;
+    lightning?: boolean;
+}
 
 export interface AreaLight {
     x: number;
@@ -268,6 +275,7 @@ export interface AreaData {
     ambientLight: number;        // Ambient light intensity
     directionalLight: number;    // Directional light intensity
     hasFogOfWar: boolean;
+    sceneEffects?: AreaSceneEffects;
     invulnerable?: boolean;              // All units immune to damage, enemies don't aggro
     defaultSpawn: { x: number; z: number };  // Default spawn point for debug warps
     dialogs?: AreaDialogDefinition[];

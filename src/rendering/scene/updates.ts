@@ -320,6 +320,149 @@ export function updateWater(waterMesh: THREE.Object3D | null, time: number, came
 }
 
 // =============================================================================
+// WEATHER
+// =============================================================================
+
+const _rainForward = new THREE.Vector3();
+const LIGHTNING_MIN_QUIET_MS = 6500;
+const LIGHTNING_MAX_QUIET_MS = 14500;
+const LIGHTNING_MIN_GAP_MS = 90;
+const LIGHTNING_MAX_GAP_MS = 240;
+const LIGHTNING_MIN_FLASH_MS = 75;
+const LIGHTNING_MAX_FLASH_MS = 135;
+const LIGHTNING_ATTACK_PORTION = 0.22;
+
+interface LightningBackgroundState {
+    textures: THREE.Texture[];
+    nextEventTimeMs: number;
+    flashStartTimeMs: number;
+    flashEndTimeMs: number;
+    burstFlashesRemaining: number;
+    exposureBoost: number;
+}
+
+function randomInRange(min: number, max: number): number {
+    return min + Math.random() * (max - min);
+}
+
+function readLightningBackgroundState(scene: THREE.Scene): { record: Record<string, unknown>; state: LightningBackgroundState; } | null {
+    const record = asRecord(Reflect.get(scene.userData, "lightningBackground"));
+    if (!record) return null;
+
+    const textures = record.textures;
+    const nextEventTimeMs = readFiniteNumber(record.nextEventTimeMs);
+    const flashStartTimeMs = readFiniteNumber(record.flashStartTimeMs) ?? 0;
+    const flashEndTimeMs = readFiniteNumber(record.flashEndTimeMs);
+    const burstFlashesRemaining = readFiniteNumber(record.burstFlashesRemaining);
+    const exposureBoost = readFiniteNumber(record.exposureBoost);
+    if (!Array.isArray(textures) || textures.length < 2) return null;
+    if (!textures.every(texture => texture instanceof THREE.Texture)) return null;
+    if (nextEventTimeMs === null || flashEndTimeMs === null || burstFlashesRemaining === null || exposureBoost === null) return null;
+
+    return {
+        record,
+        state: {
+            textures,
+            nextEventTimeMs,
+            flashStartTimeMs,
+            flashEndTimeMs,
+            burstFlashesRemaining,
+            exposureBoost,
+        },
+    };
+}
+
+function writeLightningBackgroundState(record: Record<string, unknown>, state: LightningBackgroundState): void {
+    Reflect.set(record, "nextEventTimeMs", state.nextEventTimeMs);
+    Reflect.set(record, "flashStartTimeMs", state.flashStartTimeMs);
+    Reflect.set(record, "flashEndTimeMs", state.flashEndTimeMs);
+    Reflect.set(record, "burstFlashesRemaining", state.burstFlashesRemaining);
+    Reflect.set(record, "exposureBoost", state.exposureBoost);
+}
+
+export function updateLightning(
+    scene: THREE.Scene,
+    renderer: THREE.WebGLRenderer,
+    time: number
+): void {
+    const lightningData = readLightningBackgroundState(scene);
+    if (!lightningData) return;
+
+    const { record, state } = lightningData;
+    const baseExposure = readFiniteNumber(Reflect.get(scene.userData, "baseExposure")) ?? 1.1;
+
+    if (state.flashEndTimeMs <= 0 && time >= state.nextEventTimeMs) {
+        if (state.burstFlashesRemaining <= 0) {
+            state.burstFlashesRemaining = 1 + Math.floor(Math.random() * 3);
+        }
+
+        state.burstFlashesRemaining -= 1;
+        const useStrongFlash = state.textures.length > 2 && Math.random() < 0.38;
+        const flashTexture = useStrongFlash ? state.textures[2] : state.textures[1];
+        state.exposureBoost = useStrongFlash ? 0.03 : 0.015;
+        state.flashStartTimeMs = time;
+        state.flashEndTimeMs = time + randomInRange(LIGHTNING_MIN_FLASH_MS, LIGHTNING_MAX_FLASH_MS);
+        state.nextEventTimeMs = state.burstFlashesRemaining > 0
+            ? state.flashEndTimeMs + randomInRange(LIGHTNING_MIN_GAP_MS, LIGHTNING_MAX_GAP_MS)
+            : state.flashEndTimeMs + randomInRange(LIGHTNING_MIN_QUIET_MS, LIGHTNING_MAX_QUIET_MS);
+
+        scene.background = flashTexture;
+    }
+
+    if (state.flashEndTimeMs > 0) {
+        const flashDurationMs = Math.max(1, state.flashEndTimeMs - state.flashStartTimeMs);
+        const flashProgress = THREE.MathUtils.clamp((time - state.flashStartTimeMs) / flashDurationMs, 0, 1);
+        const attackEnd = LIGHTNING_ATTACK_PORTION;
+        const flashIntensity = flashProgress <= attackEnd
+            ? THREE.MathUtils.smoothstep(flashProgress / attackEnd, 0, 1)
+            : 1 - THREE.MathUtils.smoothstep((flashProgress - attackEnd) / (1 - attackEnd), 0, 1);
+
+        renderer.toneMappingExposure = baseExposure + state.exposureBoost * flashIntensity;
+
+        if (flashProgress >= 1) {
+            scene.background = state.textures[0];
+            renderer.toneMappingExposure = baseExposure;
+            state.flashStartTimeMs = 0;
+            state.flashEndTimeMs = 0;
+            state.exposureBoost = 0;
+        }
+    } else {
+        renderer.toneMappingExposure = baseExposure;
+    }
+
+    writeLightningBackgroundState(record, state);
+}
+
+export function updateRain(
+    rainOverlay: THREE.Mesh | null,
+    camera: THREE.OrthographicCamera | null,
+    time: number
+): void {
+    if (!rainOverlay || !camera) return;
+    const material = rainOverlay.material;
+    if (!(material instanceof THREE.MeshBasicMaterial)) return;
+    if (!(material.map instanceof THREE.Texture)) return;
+
+    camera.getWorldDirection(_rainForward);
+    rainOverlay.position.copy(camera.position).addScaledVector(_rainForward, 8);
+    rainOverlay.quaternion.copy(camera.quaternion);
+
+    const viewWidth = Math.abs(camera.right - camera.left);
+    const viewHeight = Math.abs(camera.top - camera.bottom);
+    rainOverlay.scale.set(viewWidth * 1.14, viewHeight * 1.2, 1);
+
+    const rainTexture = material.map;
+    rainTexture.repeat.set(
+        Math.max(6.2, viewWidth / 3.2),
+        Math.max(7.2, viewHeight / 2.6)
+    );
+
+    const t = time * 0.001;
+    rainTexture.offset.x = 0;
+    rainTexture.offset.y = ((t * 2.15) % 1 + 1) % 1;
+}
+
+// =============================================================================
 // BILLBOARDS
 // =============================================================================
 

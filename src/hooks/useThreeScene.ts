@@ -54,6 +54,7 @@ export interface ThreeSceneState {
     waystoneMeshes: WaystoneMesh[];
     secretDoorMeshes: SecretDoorMesh[];
     waterMesh: THREE.Object3D | null;
+    rainOverlay: THREE.Mesh | null;
     chestMeshes: ChestMeshData[];
     billboards: THREE.Mesh[];
 }
@@ -138,6 +139,7 @@ function createEmptySceneState(): ThreeSceneState {
         waystoneMeshes: [],
         secretDoorMeshes: [],
         waterMesh: null,
+        rainOverlay: null,
         chestMeshes: [],
         billboards: []
     };
@@ -163,6 +165,11 @@ function disposeCanvasTexture(texture: THREE.Texture, disposedTextures: Set<THRE
     if (disposedTextures.has(texture)) return;
     disposedTextures.add(texture);
     texture.dispose();
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+    if (!value || typeof value !== "object") return null;
+    return value as Record<string, unknown>;
 }
 
 function disposeMaterial(
@@ -212,6 +219,17 @@ function disposeSceneResources(scene: THREE.Scene): void {
     }
     if (scene.environment instanceof THREE.Texture) {
         disposeCanvasTexture(scene.environment, disposedTextures);
+    }
+
+    const sceneData = asRecord(scene.userData);
+    const lightningBackground = asRecord(sceneData?.lightningBackground);
+    const lightningTextures = lightningBackground?.textures;
+    if (Array.isArray(lightningTextures)) {
+        for (const texture of lightningTextures) {
+            if (texture instanceof THREE.Texture) {
+                disposeCanvasTexture(texture, disposedTextures);
+            }
+        }
     }
 
     scene.clear();
@@ -340,6 +358,7 @@ export function useThreeScene({
             waystoneMeshes: sceneRefs.waystoneMeshes,
             secretDoorMeshes: sceneRefs.secretDoorMeshes,
             waterMesh: sceneRefs.waterMesh,
+            rainOverlay: sceneRefs.rainOverlay,
             chestMeshes: sceneRefs.chestMeshes,
             billboards: sceneRefs.billboards
         };
