@@ -42,6 +42,8 @@ interface HUDProps {
     playtestSkipDialogsEnabled?: boolean;
     onToggleFastMove?: () => void;
     fastMoveEnabled?: boolean;
+    onToggleDebugFogOfWar?: () => void;
+    debugFogOfWarDisabled?: boolean;
     lightingTuning?: LightingTuningSettings;
     onUpdateLightingTuning?: (patch: Partial<LightingTuningSettings>) => void;
     onResetLightingTuning?: () => void;
@@ -79,6 +81,8 @@ export const HUD = memo(function HUD({
     playtestSkipDialogsEnabled,
     onToggleFastMove,
     fastMoveEnabled,
+    onToggleDebugFogOfWar,
+    debugFogOfWarDisabled,
     lightingTuning,
     onUpdateLightingTuning,
     onResetLightingTuning,
@@ -273,6 +277,19 @@ export const HUD = memo(function HUD({
                                 )}
                             </div>
                         </div>
+                        {onToggleDebugFogOfWar && (
+                            <div className="hud-debug-group">
+                                <div className="hud-debug-label">Visuals</div>
+                                <div className="hud-debug-buttons">
+                                    <button
+                                        className={`btn btn-tiny ${debugFogOfWarDisabled ? "btn-active" : ""}`}
+                                        onClick={onToggleDebugFogOfWar}
+                                    >
+                                        Hide FoW
+                                    </button>
+                                </div>
+                            </div>
+                        )}
 
                         <UIColorAdjuster />
 

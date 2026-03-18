@@ -158,7 +158,7 @@ export function computeAreaData(area: AreaData): ComputedAreaData {
     });
 
     // Block decoration positions for pathing (large types) and LOS (tall things only)
-    const nonBlockingDecorations = new Set(["small_rock", "mushroom", "small_mushroom", "fern", "small_fern", "weeds", "small_weeds", "chair"]);
+    const nonBlockingDecorations = new Set(["bones", "crystals", "stalactite", "small_rock", "mushroom", "small_mushroom", "fern", "small_fern", "weeds", "small_weeds", "chair"]);
     if (area.decorations) {
         area.decorations.forEach(dec => {
             const dx = Math.floor(dec.x);

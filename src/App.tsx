@@ -386,6 +386,7 @@ function Game({
     const [hoveredLootBag, setHoveredLootBag] = useState<{ x: number; y: number; gold: number; hasItems: boolean } | null>(null);
     const [fps, setFps] = useState(0);
     const [debug, setDebug] = useState(false);
+    const [debugFogOfWarDisabled, setDebugFogOfWarDisabled] = useState(false);
     const [fastMove, setFastMove] = useState(false);
     const [commandMode, setCommandMode] = useState<"attackMove" | null>(null);
     const [hotbarAssignments, setHotbarAssignments] = useState<HotbarAssignments>(loadHotbarAssignments);
@@ -1743,7 +1744,8 @@ function Game({
         gameRefs,
         stateRefs: gameLoopStateRefs,
         callbacks: gameLoopCallbacks,
-        keysPressed
+        keysPressed,
+        debugFogOfWarDisabled
     });
 
     // =============================================================================
@@ -2346,6 +2348,14 @@ function Game({
     // =============================================================================
 
     const handleToggleDebug = useCallback(() => setDebug(d => !d), []);
+    const handleToggleDebugFogOfWar = useCallback(() => {
+        const nextValue = !debugFogOfWarDisabled;
+        setDebugFogOfWarDisabled(nextValue);
+        addLog(
+            `Debug: Fog of War ${nextValue ? "hidden" : "restored"}.`,
+            nextValue ? "#9b59b6" : "#888"
+        );
+    }, [addLog, debugFogOfWarDisabled]);
     const handleToggleFastMove = useCallback(() => setFastMove(f => !f), []);
     const handleAttackMove = useCallback(() => setCommandMode("attackMove"), []);
     const handleClosePanel = useCallback(() => setShowPanel(false), []);
@@ -2631,7 +2641,7 @@ function Game({
             <div style={{ position: "absolute", top: 10, right: 10, color: "var(--ui-color-text-dim)", fontSize: 11, opacity: 0.6 }}>{fps} fps</div>
 
             {/* UI Components */}
-            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onShowControls={onShowControls} onShowHelp={onShowHelp} onShowGlossary={onShowGlossary} onRestart={onRestart} onSaveClick={onSaveClick} onLoadClick={onLoadClick} debug={debug} onToggleDebug={handleToggleDebug} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} onStatBoost={handleStatBoost} onTogglePlaytestUnlockAllSkills={handleTogglePlaytestUnlockAllSkills} playtestUnlockAllSkillsEnabled={playtestSettings.unlockAllSkills} onTogglePlaytestSkipDialogs={handleTogglePlaytestSkipDialogs} playtestSkipDialogsEnabled={playtestSettings.skipDialogs} onToggleFastMove={handleToggleFastMove} fastMoveEnabled={fastMove} lightingTuning={lightingTuning} onUpdateLightingTuning={handleUpdateLightingTuning} onResetLightingTuning={handleResetLightingTuning} lightingTuningOutput={lightingTuningOutput} menuOpen={menuOpen} jukeboxOpen={jukeboxOpen} onOpenMenu={onOpenMenu} onCloseMenu={onCloseMenu} onOpenJukebox={onOpenJukebox} onCloseJukebox={onCloseJukebox} otherModalOpen={otherModalOpen} hasSelection={selectedIds.length > 0} />
+            <HUD areaName={areaData.name} areaFlavor={areaData.flavor} alivePlayers={alivePlayers} paused={paused} onTogglePause={handleTogglePause} onShowControls={onShowControls} onShowHelp={onShowHelp} onShowGlossary={onShowGlossary} onRestart={onRestart} onSaveClick={onSaveClick} onLoadClick={onLoadClick} debug={debug} onToggleDebug={handleToggleDebug} onWarpToArea={handleWarpToArea} onAddXp={handleAddXp} onStatBoost={handleStatBoost} onTogglePlaytestUnlockAllSkills={handleTogglePlaytestUnlockAllSkills} playtestUnlockAllSkillsEnabled={playtestSettings.unlockAllSkills} onTogglePlaytestSkipDialogs={handleTogglePlaytestSkipDialogs} playtestSkipDialogsEnabled={playtestSettings.skipDialogs} onToggleFastMove={handleToggleFastMove} fastMoveEnabled={fastMove} onToggleDebugFogOfWar={handleToggleDebugFogOfWar} debugFogOfWarDisabled={debugFogOfWarDisabled} lightingTuning={lightingTuning} onUpdateLightingTuning={handleUpdateLightingTuning} onResetLightingTuning={handleResetLightingTuning} lightingTuningOutput={lightingTuningOutput} menuOpen={menuOpen} jukeboxOpen={jukeboxOpen} onOpenMenu={onOpenMenu} onCloseMenu={onCloseMenu} onOpenJukebox={onOpenJukebox} onCloseJukebox={onCloseJukebox} otherModalOpen={otherModalOpen} hasSelection={selectedIds.length > 0} />
             <CombatLog log={combatLog} />
             <FormationIndicator units={playerUnits} formationOrder={formationOrder} onReorderFormation={handleReorderFormation} />
             <div className="bottom-bar-container">

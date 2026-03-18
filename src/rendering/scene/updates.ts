@@ -1194,6 +1194,29 @@ export function updateTreeFogVisibility(
     return false;
 }
 
+export function revealAllTreeMeshes(treeMeshes: THREE.Mesh[]): void {
+    for (const mesh of treeMeshes) {
+        const meshData = mesh.userData as FogMeshUserData;
+        meshData.fogRenderState = FOG_STATE_VISIBLE;
+        meshData.fogResolvedOpacity = 1;
+        mesh.visible = true;
+
+        if (meshData.isTrunk) {
+            const fullHeight = readFiniteNumber(meshData.fullHeight);
+            if (fullHeight !== null && fullHeight > 0) {
+                mesh.scale.y = 1;
+                mesh.position.y = fullHeight / 2;
+            }
+        } else if (meshData.isFoliage) {
+            const fullY = readFiniteNumber(meshData.fullY);
+            if (fullY !== null) {
+                mesh.scale.y = 1;
+                mesh.position.y = fullY;
+            }
+        }
+    }
+}
+
 function getFogOccluderMaterial(mesh: THREE.Mesh): THREE.MeshStandardMaterial | THREE.MeshBasicMaterial | null {
     const mat = mesh.material;
     if (Array.isArray(mat)) return null;
@@ -1201,6 +1224,32 @@ function getFogOccluderMaterial(mesh: THREE.Mesh): THREE.MeshStandardMaterial | 
         return mat;
     }
     return null;
+}
+
+export function revealAllFogOccluderMeshes(fogOccluderMeshes: THREE.Mesh[]): void {
+    for (const mesh of fogOccluderMeshes) {
+        const meshData = mesh.userData as FogMeshUserData;
+        const fullY = readFiniteNumber(meshData.fogClipFullY);
+        const fullScaleY = readFiniteNumber(meshData.fogClipFullScaleY);
+        const mat = getFogOccluderMaterial(mesh);
+
+        meshData.fogRenderState = FOG_STATE_VISIBLE;
+        mesh.visible = true;
+
+        if (fullScaleY !== null) {
+            mesh.scale.y = fullScaleY;
+        }
+        if (fullY !== null) {
+            mesh.position.y = fullY;
+        }
+
+        if (mat) {
+            applyFogOpacity(mesh, mat, 1);
+            meshData.fogResolvedOpacity = mat.opacity;
+        } else {
+            meshData.fogResolvedOpacity = 1;
+        }
+    }
 }
 
 /**

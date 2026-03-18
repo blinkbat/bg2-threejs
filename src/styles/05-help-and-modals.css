@@ -464,8 +464,8 @@
    WAYSTONE MODAL
    ----------------------------------------------------------------------------- */
 .waystone-modal {
-    width: min(860px, calc(100vw - var(--ui-modal-edge-gap)));
-    max-width: 860px;
+    width: min(680px, calc(100vw - var(--ui-modal-edge-gap)));
+    max-width: 680px;
 }
 
 .waystone-modal-subtitle {
@@ -476,8 +476,8 @@
 
 .waystone-modal-layout {
     display: grid;
-    grid-template-columns: minmax(220px, 270px) minmax(0, 1fr);
-    gap: 16px;
+    grid-template-columns: minmax(220px, 250px) minmax(0, 1fr);
+    gap: 14px;
     margin-top: 12px;
 }
 
@@ -485,7 +485,7 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-    max-height: 420px;
+    max-height: 360px;
     overflow-y: auto;
     padding-right: 4px;
 }
@@ -541,30 +541,28 @@
 }
 
 .waystone-preview-frame {
-    width: min(100%, 312px);
+    width: min(100%, 228px);
 }
 
-.waystone-preview-canvas,
-.waystone-preview-empty {
+.waystone-preview-placeholder {
     width: 100%;
     max-width: 100%;
-    min-height: 176px;
+    min-height: 136px;
     border-radius: 10px;
-    border: 1px solid var(--ui-color-border-muted);
-    background: rgba(19, 25, 36, 0.8);
+    border: 1px dashed var(--ui-color-border-muted-strong);
+    background: rgba(19, 25, 36, 0.72);
     display: block;
-}
-
-.waystone-preview-empty {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--ui-color-text-dim);
-    font-size: 14px;
+    color: var(--ui-color-text-faint);
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
 }
 
 .waystone-preview-title {
-    font-size: 17px;
+    font-size: 16px;
     font-weight: 700;
     color: var(--ui-color-text);
 }
@@ -573,7 +571,7 @@
     color: var(--ui-color-text-secondary);
     font-size: 13px;
     line-height: 1.45;
-    max-width: 52ch;
+    max-width: 34ch;
 }
 
 .waystone-preview-note {

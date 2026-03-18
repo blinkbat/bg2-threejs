@@ -207,6 +207,9 @@ export function extractEntitiesFromGrid(entitiesLayer: string[][]): { enemies: {
 }
 
 const NON_BLOCKING_PROP_DECORATIONS = new Set<Decoration["type"]>([
+    "bones",
+    "crystals",
+    "stalactite",
     "small_rock",
     "mushroom",
     "small_mushroom",

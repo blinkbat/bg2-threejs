@@ -200,6 +200,23 @@ DD................................................
 === TRANSITIONS ===
 5,0,3,1:south->forest@25,47
 
+=== DECORATIONS ===
+4,1:stalagmite
+11,1:stalagmite
+1,4:stalactite
+1,8:stalactite
+3,12:robed_statue
+26,15:bones
+24,16:bones
+28,18:beast_statue
+18,19:beast_statue
+31,22:bones
+20,26:beast_statue
+31,26:beast_statue
+21,29:bones
+26,29:bones
+24,31:bones
+
 === LIGHTS ===
 6.5,9.5:radius=12,angle=45,tint=#774646,brightness=40,height=8,diffusion=0.35,decay=1.2
 6.5,21.5:radius=12,angle=45,tint=#ffd28a,brightness=40,height=8,diffusion=0.35,decay=1.2

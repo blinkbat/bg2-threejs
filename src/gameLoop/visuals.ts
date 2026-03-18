@@ -392,7 +392,8 @@ export function updateFogOfWar(
     unitsRef: Record<number, UnitGroup>,
     fogTexture: FogTexture,
     unitsState: Unit[],
-    fogMesh: THREE.Mesh
+    fogMesh: THREE.Mesh,
+    debugFogOfWarDisabled: boolean = false
 ): boolean {
     const area = getCurrentArea();
     if (lastFogAreaId !== area.id) {
@@ -402,7 +403,7 @@ export function updateFogOfWar(
     }
 
     // If area doesn't have fog of war, clear and hide it
-    if (!area.hasFogOfWar) {
+    if (!area.hasFogOfWar || debugFogOfWarDisabled) {
         fogMesh.visible = false;
         hasFogVisibilityKey = false;
         // Make all enemies visible (except hidden enemy states).

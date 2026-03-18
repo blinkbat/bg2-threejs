@@ -66,7 +66,9 @@ export {
     updateLightLOD,
     updateWallTransparency,
     updateTreeFogVisibility,
-    updateFogOccluderVisibility
+    updateFogOccluderVisibility,
+    revealAllTreeMeshes,
+    revealAllFogOccluderMeshes
 } from "./updates";
 
 // Re-export unit functions
@@ -1345,6 +1347,117 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                     rubble.rotation.y = Math.random() * Math.PI;
                     scene.add(rubble);
                 }
+            } else if (dec.type === "stalactite") {
+                const stalactiteGroup = new THREE.Group();
+                stalactiteGroup.position.set(dec.x, 0, dec.z);
+                stalactiteGroup.rotation.y = dec.rotation ?? Math.random() * Math.PI * 2;
+                scene.add(stalactiteGroup);
+
+                const mainHeight = 1.5 * size;
+                const mainRadius = 0.22 * size;
+                const spikeMaterial = new THREE.MeshStandardMaterial({ color: "#8e919b", metalness: 0.04, roughness: 0.94 });
+                const mainSpike = new THREE.Mesh(
+                    new THREE.ConeGeometry(mainRadius, mainHeight, 7),
+                    spikeMaterial
+                );
+                mainSpike.position.y = 2.5 - mainHeight * 0.5;
+                mainSpike.rotation.x = Math.PI;
+                mainSpike.name = "decoration";
+                stalactiteGroup.add(mainSpike);
+
+                const sideOffsets: Array<[number, number, number]> = [
+                    [-0.22 * size, 0.85, -0.08 * size],
+                    [0.18 * size, 0.7, 0.12 * size],
+                ];
+                sideOffsets.forEach(([ox, scale, oz]) => {
+                    const sideSpike = new THREE.Mesh(
+                        new THREE.ConeGeometry(mainRadius * 0.62, mainHeight * scale, 6),
+                        spikeMaterial.clone()
+                    );
+                    sideSpike.position.set(ox, 2.5 - mainHeight * scale * 0.5, oz);
+                    sideSpike.rotation.x = Math.PI;
+                    stalactiteGroup.add(sideSpike);
+                });
+            } else if (dec.type === "stalagmite") {
+                const stalagmiteGroup = new THREE.Group();
+                stalagmiteGroup.position.set(dec.x, 0, dec.z);
+                stalagmiteGroup.rotation.y = dec.rotation ?? 0;
+                scene.add(stalagmiteGroup);
+
+                const mainHeight = 1.28 * size;
+                const mainRadius = 0.26 * size;
+                const spikeMaterial = new THREE.MeshStandardMaterial({ color: "#8b8478", metalness: 0.05, roughness: 0.95, transparent: true, opacity: 1 });
+                const mainSpike = new THREE.Mesh(
+                    new THREE.ConeGeometry(mainRadius, mainHeight, 8),
+                    spikeMaterial
+                );
+                mainSpike.position.y = mainHeight * 0.5;
+                mainSpike.name = "decoration";
+                stalagmiteGroup.add(mainSpike);
+                columnMeshes.push(mainSpike);
+                registerFogOccluderMesh(mainSpike, dec.x, dec.z, 0, mainHeight);
+
+                const sideOffsets: Array<[number, number, number, number]> = [
+                    [-0.18 * size, 0.75, -0.12 * size, 0.58],
+                    [0.16 * size, 0.66, 0.14 * size, 0.52],
+                ];
+                sideOffsets.forEach(([ox, oyScale, oz, radiusScale]) => {
+                    const sideSpike = new THREE.Mesh(
+                        new THREE.ConeGeometry(mainRadius * radiusScale, mainHeight * oyScale, 7),
+                        spikeMaterial.clone()
+                    );
+                    sideSpike.position.set(ox, mainHeight * oyScale * 0.5, oz);
+                    stalagmiteGroup.add(sideSpike);
+                    columnMeshes.push(sideSpike);
+                });
+            } else if (dec.type === "geyser") {
+                const geyserGroup = new THREE.Group();
+                geyserGroup.position.set(dec.x, 0, dec.z);
+                geyserGroup.rotation.y = dec.rotation ?? 0;
+                scene.add(geyserGroup);
+
+                const basin = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.42 * size, 0.5 * size, 0.24 * size, 10),
+                    new THREE.MeshStandardMaterial({ color: "#756f66", metalness: 0.05, roughness: 0.94, transparent: true, opacity: 1 })
+                );
+                basin.position.y = 0.12 * size;
+                basin.name = "decoration";
+                geyserGroup.add(basin);
+                columnMeshes.push(basin);
+
+                const plumeMaterial = new THREE.MeshStandardMaterial({
+                    color: "#b8e6ff",
+                    emissive: "#62bfff",
+                    emissiveIntensity: 0.32,
+                    metalness: 0.0,
+                    roughness: 0.26,
+                    transparent: true,
+                    opacity: 0.58,
+                });
+                const plume = new THREE.Mesh(
+                    new THREE.ConeGeometry(0.15 * size, 1.25 * size, 8),
+                    plumeMaterial
+                );
+                plume.position.y = 0.24 * size + 0.625 * size;
+                geyserGroup.add(plume);
+                columnMeshes.push(plume);
+                registerFogOccluderMesh(plume, dec.x, dec.z, 0, 1.5 * size);
+
+                const innerCore = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.07 * size, 0.05 * size, 0.95 * size, 8),
+                    new THREE.MeshStandardMaterial({
+                        color: "#ebf9ff",
+                        emissive: "#7bd4ff",
+                        emissiveIntensity: 0.45,
+                        metalness: 0.0,
+                        roughness: 0.2,
+                        transparent: true,
+                        opacity: 0.7,
+                    })
+                );
+                innerCore.position.y = 0.24 * size + 0.48 * size;
+                geyserGroup.add(innerCore);
+                columnMeshes.push(innerCore);
             } else if (dec.type === "rock") {
                 // Large rock - irregular boulder shape
                 const rockSize = 0.75 * size;  // Slightly bigger
@@ -1372,6 +1485,116 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 rock.userData.disableOcclusionFade = true;
                 rock.name = "decoration";
                 scene.add(rock);
+            } else if (dec.type === "bones") {
+                const bonesGroup = new THREE.Group();
+                bonesGroup.position.set(dec.x, 0, dec.z);
+                bonesGroup.rotation.y = dec.rotation ?? Math.random() * Math.PI * 2;
+                scene.add(bonesGroup);
+
+                const boneMaterial = new THREE.MeshStandardMaterial({ color: "#d7d0c2", metalness: 0.01, roughness: 0.96 });
+                const shaftGeo = new THREE.CylinderGeometry(0.032 * size, 0.036 * size, 0.34 * size, 6);
+                const knobGeo = new THREE.SphereGeometry(0.055 * size, 6, 5);
+                const boneLayouts: Array<[number, number, number]> = [
+                    [0, 0.03 * size, 0],
+                    [-0.1 * size, 0.02 * size, 0.12 * size],
+                    [0.14 * size, 0.02 * size, -0.08 * size],
+                ];
+
+                boneLayouts.forEach(([ox, oy, oz], index) => {
+                    const bone = new THREE.Group();
+                    bone.position.set(ox, oy, oz);
+                    bone.rotation.y = (index - 1) * 0.75;
+                    bone.rotation.z = 0.3 - index * 0.18;
+
+                    const shaft = new THREE.Mesh(shaftGeo, boneMaterial.clone());
+                    shaft.rotation.z = Math.PI * 0.5;
+                    if (index === 0) shaft.name = "decoration";
+                    bone.add(shaft);
+
+                    const leftKnobA = new THREE.Mesh(knobGeo, boneMaterial.clone());
+                    leftKnobA.position.set(-0.14 * size, 0.03 * size, 0);
+                    bone.add(leftKnobA);
+                    const leftKnobB = new THREE.Mesh(knobGeo, boneMaterial.clone());
+                    leftKnobB.position.set(-0.14 * size, -0.03 * size, 0);
+                    bone.add(leftKnobB);
+                    const rightKnobA = new THREE.Mesh(knobGeo, boneMaterial.clone());
+                    rightKnobA.position.set(0.14 * size, 0.03 * size, 0);
+                    bone.add(rightKnobA);
+                    const rightKnobB = new THREE.Mesh(knobGeo, boneMaterial.clone());
+                    rightKnobB.position.set(0.14 * size, -0.03 * size, 0);
+                    bone.add(rightKnobB);
+
+                    bonesGroup.add(bone);
+                });
+            } else if (dec.type === "crystals") {
+                const crystalGroup = new THREE.Group();
+                crystalGroup.position.set(dec.x, 0, dec.z);
+                crystalGroup.rotation.y = dec.rotation ?? 0;
+                scene.add(crystalGroup);
+
+                const crystalMaterial = new THREE.MeshStandardMaterial({
+                    color: "#7bd7ff",
+                    emissive: "#2a76d8",
+                    emissiveIntensity: 0.42,
+                    metalness: 0.03,
+                    roughness: 0.2,
+                    transparent: true,
+                    opacity: 0.88,
+                });
+                const crystalLayout: Array<[number, number, number, number]> = [
+                    [0, 0.42, 0, 0.17],
+                    [-0.12, 0.3, 0.1, 0.12],
+                    [0.14, 0.34, -0.08, 0.13],
+                    [0.08, 0.24, 0.14, 0.1],
+                ];
+                crystalLayout.forEach(([ox, height, oz, radius], index) => {
+                    const crystal = new THREE.Mesh(
+                        new THREE.OctahedronGeometry(radius * size, 0),
+                        crystalMaterial.clone()
+                    );
+                    crystal.scale.set(0.75, height / radius, 0.75);
+                    crystal.position.set(ox * size, height * size * 0.5, oz * size);
+                    crystal.rotation.y = index * 0.55;
+                    if (index === 0) crystal.name = "decoration";
+                    crystalGroup.add(crystal);
+                });
+            } else if (dec.type === "large_crystals") {
+                const crystalGroup = new THREE.Group();
+                crystalGroup.position.set(dec.x, 0, dec.z);
+                crystalGroup.rotation.y = dec.rotation ?? 0;
+                scene.add(crystalGroup);
+
+                const crystalMaterial = new THREE.MeshStandardMaterial({
+                    color: "#76c3ff",
+                    emissive: "#376bff",
+                    emissiveIntensity: 0.6,
+                    metalness: 0.04,
+                    roughness: 0.18,
+                    transparent: true,
+                    opacity: 0.9,
+                });
+                const crystalLayout: Array<[number, number, number, number]> = [
+                    [0, 1.28, 0, 0.26],
+                    [-0.24, 0.9, 0.18, 0.18],
+                    [0.26, 0.82, -0.12, 0.16],
+                ];
+                let mainCrystal: THREE.Mesh | null = null;
+                crystalLayout.forEach(([ox, height, oz, radius], index) => {
+                    const crystal = new THREE.Mesh(
+                        new THREE.OctahedronGeometry(radius * size, 0),
+                        crystalMaterial.clone()
+                    );
+                    crystal.scale.set(0.82, height / radius, 0.82);
+                    crystal.position.set(ox * size, height * size * 0.5, oz * size);
+                    crystal.rotation.y = index * 0.7;
+                    if (index === 0) crystal.name = "decoration";
+                    if (index === 0) mainCrystal = crystal;
+                    crystalGroup.add(crystal);
+                    columnMeshes.push(crystal);
+                });
+                if (mainCrystal) {
+                    registerFogOccluderMesh(mainCrystal, dec.x, dec.z, 0, 1.35 * size);
+                }
             } else if (dec.type === "mushroom") {
                 // Large mushroom - stem + cap with randomized proportions
                 const sizeJitter = 0.8 + Math.random() * 0.4;  // 0.8-1.2x
@@ -1783,6 +2006,163 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 pillowRight.position.set(bedWidth * 0.2, pillowY, pillowZ);
                 bedGroup.add(pillowRight);
                 columnMeshes.push(pillowRight);
+            } else if (dec.type === "warrior_statue") {
+                const statueGroup = new THREE.Group();
+                statueGroup.position.set(dec.x, 0, dec.z);
+                statueGroup.rotation.y = dec.rotation ?? 0;
+                scene.add(statueGroup);
+
+                const stoneMaterial = new THREE.MeshStandardMaterial({ color: "#948d82", metalness: 0.05, roughness: 0.94, transparent: true, opacity: 1 });
+                const pedestal = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.36 * size, 0.42 * size, 0.24 * size, 10),
+                    stoneMaterial
+                );
+                pedestal.position.y = 0.12 * size;
+                pedestal.name = "decoration";
+                statueGroup.add(pedestal);
+                columnMeshes.push(pedestal);
+
+                const legs = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.22 * size, 0.54 * size, 0.18 * size),
+                    stoneMaterial.clone()
+                );
+                legs.position.y = 0.24 * size + 0.27 * size;
+                statueGroup.add(legs);
+                columnMeshes.push(legs);
+
+                const torso = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.34 * size, 0.62 * size, 0.2 * size),
+                    stoneMaterial.clone()
+                );
+                torso.position.y = 0.24 * size + 0.54 * size + 0.31 * size;
+                statueGroup.add(torso);
+                columnMeshes.push(torso);
+                registerFogOccluderMesh(torso, dec.x, dec.z, 0, 1.65 * size);
+
+                const head = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.14 * size, 8, 6),
+                    stoneMaterial.clone()
+                );
+                head.position.y = torso.position.y + 0.44 * size;
+                statueGroup.add(head);
+                columnMeshes.push(head);
+
+                const sword = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.06 * size, 0.9 * size, 0.06 * size),
+                    new THREE.MeshStandardMaterial({ color: "#7c827f", metalness: 0.2, roughness: 0.8, transparent: true, opacity: 1 })
+                );
+                sword.position.set(0.2 * size, 0.72 * size, 0);
+                sword.rotation.z = -0.18;
+                statueGroup.add(sword);
+                columnMeshes.push(sword);
+
+                const shield = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.14 * size, 0.14 * size, 0.06 * size, 10),
+                    stoneMaterial.clone()
+                );
+                shield.rotation.z = Math.PI * 0.5;
+                shield.position.set(-0.2 * size, torso.position.y, 0.08 * size);
+                statueGroup.add(shield);
+                columnMeshes.push(shield);
+            } else if (dec.type === "robed_statue") {
+                const statueGroup = new THREE.Group();
+                statueGroup.position.set(dec.x, 0, dec.z);
+                statueGroup.rotation.y = dec.rotation ?? 0;
+                scene.add(statueGroup);
+
+                const stoneMaterial = new THREE.MeshStandardMaterial({ color: "#8f897f", metalness: 0.04, roughness: 0.95, transparent: true, opacity: 1 });
+                const pedestal = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.36 * size, 0.42 * size, 0.22 * size, 10),
+                    stoneMaterial
+                );
+                pedestal.position.y = 0.11 * size;
+                pedestal.name = "decoration";
+                statueGroup.add(pedestal);
+                columnMeshes.push(pedestal);
+
+                const robe = new THREE.Mesh(
+                    new THREE.ConeGeometry(0.3 * size, 1.18 * size, 10),
+                    stoneMaterial.clone()
+                );
+                robe.position.y = 0.22 * size + 0.59 * size;
+                statueGroup.add(robe);
+                columnMeshes.push(robe);
+                registerFogOccluderMesh(robe, dec.x, dec.z, 0, 1.45 * size);
+
+                const shoulders = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.34 * size, 0.14 * size, 0.18 * size),
+                    stoneMaterial.clone()
+                );
+                shoulders.position.y = robe.position.y + 0.42 * size;
+                statueGroup.add(shoulders);
+                columnMeshes.push(shoulders);
+
+                const head = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.13 * size, 8, 6),
+                    stoneMaterial.clone()
+                );
+                head.position.y = shoulders.position.y + 0.22 * size;
+                statueGroup.add(head);
+                columnMeshes.push(head);
+            } else if (dec.type === "beast_statue") {
+                const statueGroup = new THREE.Group();
+                statueGroup.position.set(dec.x, 0, dec.z);
+                statueGroup.rotation.y = dec.rotation ?? 0;
+                scene.add(statueGroup);
+
+                const stoneMaterial = new THREE.MeshStandardMaterial({ color: "#888074", metalness: 0.05, roughness: 0.95, transparent: true, opacity: 1 });
+                const pedestal = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.9 * size, 0.2 * size, 0.62 * size),
+                    stoneMaterial
+                );
+                pedestal.position.y = 0.1 * size;
+                pedestal.name = "decoration";
+                statueGroup.add(pedestal);
+                columnMeshes.push(pedestal);
+
+                const body = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.56 * size, 0.28 * size, 0.28 * size),
+                    stoneMaterial.clone()
+                );
+                body.position.set(0, 0.34 * size, 0);
+                statueGroup.add(body);
+                columnMeshes.push(body);
+                registerFogOccluderMesh(body, dec.x, dec.z, 0, 0.9 * size);
+
+                const head = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.22 * size, 0.22 * size, 0.2 * size),
+                    stoneMaterial.clone()
+                );
+                head.position.set(0.3 * size, 0.42 * size, 0);
+                statueGroup.add(head);
+                columnMeshes.push(head);
+
+                const earGeo = new THREE.ConeGeometry(0.05 * size, 0.14 * size, 4);
+                const leftEar = new THREE.Mesh(earGeo, stoneMaterial.clone());
+                leftEar.position.set(0.34 * size, 0.58 * size, -0.06 * size);
+                leftEar.rotation.z = -0.18;
+                statueGroup.add(leftEar);
+                columnMeshes.push(leftEar);
+
+                const rightEar = new THREE.Mesh(earGeo, stoneMaterial.clone());
+                rightEar.position.set(0.34 * size, 0.58 * size, 0.06 * size);
+                rightEar.rotation.z = -0.18;
+                statueGroup.add(rightEar);
+                columnMeshes.push(rightEar);
+
+                const legGeo = new THREE.BoxGeometry(0.08 * size, 0.22 * size, 0.08 * size);
+                const legOffsets: Array<[number, number]> = [
+                    [-0.18, -0.09],
+                    [0.08, -0.09],
+                    [-0.18, 0.09],
+                    [0.08, 0.09],
+                ];
+                legOffsets.forEach(([lx, lz]) => {
+                    const leg = new THREE.Mesh(legGeo, stoneMaterial.clone());
+                    leg.position.set(lx * size, 0.21 * size, lz * size);
+                    statueGroup.add(leg);
+                    columnMeshes.push(leg);
+                });
             }
         });
     }

@@ -68,8 +68,14 @@ const PROP_BRUSHES: PropBrushDef[] = [
     { char: "C", label: "Column", color: "#888", decorationType: "column" },
     { char: "c", label: "Broken Col", color: "#888", decorationType: "broken_column" },
     { char: "W", label: "Broken Wall", color: "#665", decorationType: "broken_wall" },
+    { char: "L", label: "Stalactite", color: "#8c909b", decorationType: "stalactite" },
+    { char: "I", label: "Stalagmite", color: "#8a8378", decorationType: "stalagmite" },
+    { char: "G", label: "Geyser", color: "#85c7e5", decorationType: "geyser" },
     { char: "R", label: "Rock", color: "#6a5a4a", decorationType: "rock" },
     { char: "r", label: "Small Rock", color: "#7a6a5a", decorationType: "small_rock" },
+    { char: "N", label: "Bones", color: "#d7d0c4", decorationType: "bones" },
+    { char: "Y", label: "Crystals", color: "#6dcfff", decorationType: "crystals" },
+    { char: "y", label: "Lg Crystal", color: "#4aa9ff", decorationType: "large_crystals" },
     { char: "M", label: "Mushroom", color: "#a44", decorationType: "mushroom" },
     { char: "m", label: "Small Mush", color: "#c66", decorationType: "small_mushroom" },
     { char: "F", label: "Fern", color: "#4a5", decorationType: "fern" },
@@ -80,6 +86,9 @@ const PROP_BRUSHES: PropBrushDef[] = [
     { char: "B", label: "Bar", color: "#8b4f32", decorationType: "bar" },
     { char: "h", label: "Chair", color: "#9b6a3e", decorationType: "chair" },
     { char: "b", label: "Bed", color: "#6f5a6f", decorationType: "bed" },
+    { char: "U", label: "War Statue", color: "#9b9388", decorationType: "warrior_statue" },
+    { char: "V", label: "Robed Stat", color: "#8e897f", decorationType: "robed_statue" },
+    { char: "Z", label: "Beast Stat", color: "#857d73", decorationType: "beast_statue" },
 ];
 
 const ENTITY_BRUSHES: BrushDef[] = [

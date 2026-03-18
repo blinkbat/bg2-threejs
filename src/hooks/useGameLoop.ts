@@ -22,7 +22,7 @@ import { getEffectiveMaxHp } from "../game/playerUnits";
 import { getEffectivePlayerHpRegen } from "../game/equipmentState";
 import { createLiveUnitsDispatch } from "../core/stateUtils";
 import { publishHpBarOverlayFrame, resetHpBarOverlayFrame } from "./hpBarOverlayStore";
-import { updateCamera, updateWater, updateWallTransparency, updateTreeFogVisibility, updateFogOccluderVisibility, updateLightLOD, addUnitToScene, updateBillboards } from "../rendering/scene";
+import { updateCamera, updateWater, updateWallTransparency, updateTreeFogVisibility, updateFogOccluderVisibility, revealAllTreeMeshes, revealAllFogOccluderMeshes, updateLightLOD, addUnitToScene, updateBillboards } from "../rendering/scene";
 import { updateDynamicObstacles } from "../ai/pathfinding";
 import { updateAvoidanceCache, updateTargetingCache } from "../ai/unitAI";
 import { buildUnitSpatialFrame, type UnitSpatialEntry } from "../ai/spatialCache";
@@ -100,6 +100,7 @@ interface UseGameLoopOptions {
     stateRefs: GameLoopStateRefs;
     callbacks: GameLoopCallbacks;
     keysPressed: React.MutableRefObject<Set<string>>;
+    debugFogOfWarDisabled: boolean;
 }
 
 export interface PerfFrameSample {
@@ -546,7 +547,8 @@ export function useGameLoop({
     gameRefs,
     stateRefs,
     callbacks,
-    keysPressed
+    keysPressed,
+    debugFogOfWarDisabled
 }: UseGameLoopOptions): void {
     // FPS tracking refs
     const fpsFrameCount = useRef(0);
@@ -859,21 +861,31 @@ export function useGameLoop({
             }
             const playerUnits = playerUnitsBuffer;
             let fogVisibilityChanged = false;
-            if (fogTexture && fogMesh) {
-                fogVisibilityChanged = updateFogOfWar(refs.visibility, playerUnits, unitGroups, fogTexture, currentUnits, fogMesh);
-            }
-
-            if (getCurrentArea().hasFogOfWar) {
-                // Update tree and tall obstacle visibility only when visibility changes
-                // or while previous transitions are still animating.
-                if (fogVisibilityChanged || fogVisualTransitionsActive) {
-                    const treeTransitionsActive = updateTreeFogVisibility(treeMeshes, refs.visibility);
-                    const occluderTransitionsActive = updateFogOccluderVisibility(fogOccluderMeshes, refs.visibility);
-                    fogVisualTransitionsActive = treeTransitionsActive || occluderTransitionsActive;
+                if (fogTexture && fogMesh) {
+                    fogVisibilityChanged = updateFogOfWar(
+                        refs.visibility,
+                        playerUnits,
+                        unitGroups,
+                        fogTexture,
+                        currentUnits,
+                        fogMesh,
+                        debugFogOfWarDisabled
+                    );
                 }
-            } else {
-                fogVisualTransitionsActive = false;
-            }
+
+                if (getCurrentArea().hasFogOfWar && !debugFogOfWarDisabled) {
+                    // Update tree and tall obstacle visibility only when visibility changes
+                    // or while previous transitions are still animating.
+                    if (fogVisibilityChanged || fogVisualTransitionsActive) {
+                        const treeTransitionsActive = updateTreeFogVisibility(treeMeshes, refs.visibility);
+                        const occluderTransitionsActive = updateFogOccluderVisibility(fogOccluderMeshes, refs.visibility);
+                        fogVisualTransitionsActive = treeTransitionsActive || occluderTransitionsActive;
+                    }
+                } else {
+                    revealAllTreeMeshes(treeMeshes);
+                    revealAllFogOccluderMeshes(fogOccluderMeshes);
+                    fogVisualTransitionsActive = false;
+                }
             const fogMs = performance.now() - sectionStart;
             let aiMs = 0;
             let unitAiMs = 0;
@@ -1059,5 +1071,5 @@ export function useGameLoop({
             cancelAnimationFrame(animId);
             resetHpBarOverlayFrame();
         };
-    }, [sceneState, gameRefs, stateRefs, callbacks, keysPressed, updateCam]);
+    }, [sceneState, gameRefs, stateRefs, callbacks, keysPressed, updateCam, debugFogOfWarDisabled]);
 }

@@ -59,8 +59,14 @@ export function DecorationEditPopup({ decoration, onSave, onClose }: DecorationE
                     <option value="column">column</option>
                     <option value="broken_column">broken_column</option>
                     <option value="broken_wall">broken_wall</option>
+                    <option value="stalactite">stalactite</option>
+                    <option value="stalagmite">stalagmite</option>
+                    <option value="geyser">geyser</option>
                     <option value="rock">rock</option>
                     <option value="small_rock">small_rock</option>
+                    <option value="bones">bones</option>
+                    <option value="crystals">crystals</option>
+                    <option value="large_crystals">large_crystals</option>
                     <option value="mushroom">mushroom</option>
                     <option value="small_mushroom">small_mushroom</option>
                     <option value="weeds">weeds</option>
@@ -71,6 +77,9 @@ export function DecorationEditPopup({ decoration, onSave, onClose }: DecorationE
                     <option value="bar">bar</option>
                     <option value="chair">chair</option>
                     <option value="bed">bed</option>
+                    <option value="warrior_statue">warrior_statue</option>
+                    <option value="robed_statue">robed_statue</option>
+                    <option value="beast_statue">beast_statue</option>
                 </select>
             </label>
             <label style={{ display: "block", marginBottom: 10 }}>
