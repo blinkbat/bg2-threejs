@@ -49,6 +49,7 @@ import {
     TILE_EMPTY,
 } from "../game/areas/tileLayers";
 import { DIALOG_SPEAKERS } from "../dialog/speakers";
+import { ENEMY_STATS } from "../game/enemyStats";
 
 // =============================================================================
 // TEXT FORMAT SPECIFICATION
@@ -118,6 +119,43 @@ import { DIALOG_SPEAKERS } from "../dialog/speakers";
 // === DIALOGS ===
 // One JSON object per line (AreaDialogDefinition)
 //
+
+type AreaDirection = AreaTransition["direction"];
+type DecorationType = Decoration["type"];
+
+const AREA_SCENE_EFFECT_ID_SET = new Set<string>(AREA_SCENE_EFFECT_IDS);
+const AREA_DIRECTIONS: readonly AreaDirection[] = ["north", "south", "east", "west"];
+const AREA_DIRECTION_SET = new Set<string>(AREA_DIRECTIONS);
+const ENEMY_TYPE_SET = new Set<string>(Object.keys(ENEMY_STATS));
+const TREE_TYPES: readonly TreeType[] = ["pine", "palm", "oak"];
+const TREE_TYPE_SET = new Set<string>(TREE_TYPES);
+const DECORATION_TYPES: readonly DecorationType[] = [
+    "column",
+    "broken_column",
+    "broken_wall",
+    "stalactite",
+    "stalagmite",
+    "geyser",
+    "rock",
+    "small_rock",
+    "bones",
+    "crystals",
+    "large_crystals",
+    "mushroom",
+    "small_mushroom",
+    "weeds",
+    "small_weeds",
+    "fern",
+    "small_fern",
+    "bookshelf",
+    "bar",
+    "chair",
+    "bed",
+    "warrior_statue",
+    "robed_statue",
+    "beast_statue",
+];
+const DECORATION_TYPE_SET = new Set<string>(DECORATION_TYPES);
 // === LOCATIONS ===
 // One JSON object per line (AreaLocation)
 //
@@ -170,6 +208,42 @@ function normalizeHexColor(color: string | undefined, fallback: string): string 
     return fallback;
 }
 
+function toAreaId(value: string): AreaId {
+    return value as AreaId;
+}
+
+function parseAreaId(value: string | undefined): AreaId | null {
+    if (typeof value !== "string") return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? toAreaId(trimmed) : null;
+}
+
+function isAreaSceneEffectId(value: string): value is AreaSceneEffectId {
+    return AREA_SCENE_EFFECT_ID_SET.has(value);
+}
+
+function isAreaDirection(value: string): value is AreaDirection {
+    return AREA_DIRECTION_SET.has(value);
+}
+
+function isEnemyType(value: string): value is EnemyType {
+    return ENEMY_TYPE_SET.has(value);
+}
+
+function isTreeType(value: string): value is TreeType {
+    return TREE_TYPE_SET.has(value);
+}
+
+function isDecorationType(value: string): value is DecorationType {
+    return DECORATION_TYPE_SET.has(value);
+}
+
+function warnInvalidAreaLine(section: string, line: string): void {
+    if (import.meta.env.DEV) {
+        console.warn(`[areaTextFormat] Ignoring invalid ${section} entry: "${line}"`);
+    }
+}
+
 function getAreaSceneEffectList(sceneEffects: AreaSceneEffects | undefined): AreaSceneEffectId[] {
     if (!sceneEffects) return [];
     return AREA_SCENE_EFFECT_IDS.filter(effectId => sceneEffects[effectId] === true);
@@ -180,8 +254,8 @@ function parseAreaSceneEffects(value: string): AreaSceneEffects | undefined {
     const entries = value.split(",").map(entry => entry.trim().toLowerCase()).filter(Boolean);
 
     for (const entry of entries) {
-        if ((AREA_SCENE_EFFECT_IDS as readonly string[]).includes(entry)) {
-            sceneEffects[entry as AreaSceneEffectId] = true;
+        if (isAreaSceneEffectId(entry)) {
+            sceneEffects[entry] = true;
         }
     }
 
@@ -424,7 +498,7 @@ function parseTextFormat(text: string): ParsedArea {
 
     const result: ParsedArea = {
         metadata: {
-            id: "dungeon" as AreaId,
+            id: toAreaId("dungeon"),
             name: "",
             flavor: "",
             width: GRID_SIZE,
@@ -468,7 +542,8 @@ function parseTextFormat(text: string): ParsedArea {
         // Section headers
         if (line.startsWith("=== AREA:")) {
             const match = line.match(/^=== AREA: (.+) ===$/);
-            if (match) result.metadata.id = match[1].trim() as AreaId;
+            const areaId = parseAreaId(match?.[1]);
+            if (areaId) result.metadata.id = areaId;
             currentSection = "metadata";
             continue;
         }
@@ -638,7 +713,12 @@ function parseMetadataLine(line: string, metadata: ParsedArea["metadata"]) {
 function parseEnemyLine(line: string, enemies: EnemySpawn[]) {
     const [coords, type] = line.split(":");
     const [x, z] = coords.split(",").map(Number);
-    enemies.push({ x, z, type: type as EnemyType });
+    const enemyType = type?.trim();
+    if (!Number.isFinite(x) || !Number.isFinite(z) || !enemyType || !isEnemyType(enemyType)) {
+        warnInvalidAreaLine("enemy", line);
+        return;
+    }
+    enemies.push({ x, z, type: enemyType });
 }
 
 function parseChestLine(line: string, chests: ChestLocation[]) {
@@ -682,15 +762,28 @@ function parseTransitionLine(line: string, transitions: AreaTransition[]) {
     const [coords, rest] = line.split(":");
     const [x, z, w, h] = coords.split(",").map(Number);
 
+    if (!rest || !Number.isFinite(x) || !Number.isFinite(z) || !Number.isFinite(w) || !Number.isFinite(h)) {
+        warnInvalidAreaLine("transition", line);
+        return;
+    }
+
     const dirMatch = rest.match(/(\w+)->(\w+)@([\d.]+),([\d.]+)/);
     if (dirMatch) {
+        const direction = dirMatch[1];
+        const targetArea = parseAreaId(dirMatch[2]);
+        if (!isAreaDirection(direction) || !targetArea) {
+            warnInvalidAreaLine("transition", line);
+            return;
+        }
         transitions.push({
             x, z, w, h,
-            direction: dirMatch[1] as "north" | "south" | "east" | "west",
-            targetArea: dirMatch[2] as AreaId,
+            direction,
+            targetArea,
             targetSpawn: { x: parseFloat(dirMatch[3]), z: parseFloat(dirMatch[4]) }
         });
+        return;
     }
+    warnInvalidAreaLine("transition", line);
 }
 
 function parseWaystoneLine(line: string, waystones: Waystone[]) {
@@ -702,29 +795,56 @@ function parseWaystoneLine(line: string, waystones: Waystone[]) {
     const z = parseFloat(zStr);
     if (!Number.isFinite(x) || !Number.isFinite(z)) return;
 
-    const directionMatch = props?.match(/direction=(north|south|east|west)/);
+    const directionMatch = props?.match(/direction=([^,]+)/);
+    const rawDirection = directionMatch?.[1]?.trim().toLowerCase();
+    const direction = rawDirection && isAreaDirection(rawDirection)
+        ? rawDirection
+        : undefined;
+    if (rawDirection && !direction) {
+        warnInvalidAreaLine("waystone", line);
+    }
     waystones.push({
         x,
         z,
-        direction: directionMatch?.[1] as "north" | "south" | "east" | "west" | undefined,
+        ...(direction ? { direction } : {}),
     });
 }
 
 function parseTreeLine(line: string, trees: TreeLocation[]) {
     const [coords, rest] = line.split(":");
     const [x, z] = coords.split(",").map(Number);
+    if (!rest || !Number.isFinite(x) || !Number.isFinite(z)) {
+        warnInvalidAreaLine("tree", line);
+        return;
+    }
     const parts = rest.split(",");
     const size = parseFloat(parts[0]);
-    const type = parts[1] as TreeType | undefined;
+    if (!Number.isFinite(size)) {
+        warnInvalidAreaLine("tree", line);
+        return;
+    }
+    const rawType = parts[1]?.trim().toLowerCase();
+    const type = rawType && isTreeType(rawType) ? rawType : undefined;
+    if (rawType && !type) {
+        warnInvalidAreaLine("tree", line);
+    }
     trees.push({ x, z, size, ...(type ? { type } : {}) });
 }
 
 function parseDecorationLine(line: string, decorations: Decoration[]) {
     const [coords, props] = line.split(":");
     const [x, z] = coords.split(",").map(Number);
+    if (!props || !Number.isFinite(x) || !Number.isFinite(z)) {
+        warnInvalidAreaLine("decoration", line);
+        return;
+    }
 
     const parts = props.split(",");
-    const type = parts[0] as Decoration["type"];
+    const type = parts[0]?.trim().toLowerCase();
+    if (!type || !isDecorationType(type)) {
+        warnInvalidAreaLine("decoration", line);
+        return;
+    }
 
     const dec: Decoration = { x, z, type };
 
@@ -824,26 +944,34 @@ function parseLightLine(line: string, lights: AreaLight[]) {
 }
 
 const DIALOG_SPEAKER_IDS = new Set<string>(Object.keys(DIALOG_SPEAKERS));
-const DIALOG_MENU_IDS = new Set<AreaDialogMenuId>(["controls", "startup_controls", "help", "glossary", "equipment", "save_game", "load_game", "menu", "jukebox"]);
-const DIALOG_EVENT_IDS = new Set<AreaDialogEventId>(["spend_the_night"]);
+const DIALOG_MENU_IDS = new Set<string>(["controls", "startup_controls", "help", "glossary", "equipment", "save_game", "load_game", "menu", "jukebox"]);
+const DIALOG_EVENT_IDS = new Set<string>(["spend_the_night"]);
 
 function isDialogSpeakerId(value: string): value is DialogSpeakerId {
     return DIALOG_SPEAKER_IDS.has(value);
+}
+
+function isAreaDialogMenuId(value: string): value is AreaDialogMenuId {
+    return DIALOG_MENU_IDS.has(value);
+}
+
+function isAreaDialogEventId(value: string): value is AreaDialogEventId {
+    return DIALOG_EVENT_IDS.has(value);
 }
 
 function sanitizeAreaDialogUiAction(raw: unknown): AreaDialogUiAction | undefined {
     if (!isRecord(raw)) return undefined;
     if (raw.type === "open_menu") {
         if (typeof raw.menuId !== "string") return undefined;
-        if (!DIALOG_MENU_IDS.has(raw.menuId as AreaDialogMenuId)) return undefined;
+        if (!isAreaDialogMenuId(raw.menuId)) return undefined;
         const action: AreaDialogOpenMenuAction = {
             type: "open_menu",
-            menuId: raw.menuId as AreaDialogMenuId,
+            menuId: raw.menuId,
         };
         if (isRecord(raw.chainAction)) {
             const chain = raw.chainAction;
-            if (chain.type === "open_menu" && typeof chain.menuId === "string" && DIALOG_MENU_IDS.has(chain.menuId as AreaDialogMenuId)) {
-                action.chainAction = { type: "open_menu", menuId: chain.menuId as AreaDialogMenuId };
+            if (chain.type === "open_menu" && typeof chain.menuId === "string" && isAreaDialogMenuId(chain.menuId)) {
+                action.chainAction = { type: "open_menu", menuId: chain.menuId };
             } else if (chain.type === "open_dialog" && typeof chain.dialogId === "string" && chain.dialogId.length > 0) {
                 action.chainAction = { type: "open_dialog", dialogId: chain.dialogId };
             }
@@ -852,10 +980,10 @@ function sanitizeAreaDialogUiAction(raw: unknown): AreaDialogUiAction | undefine
     }
     if (raw.type === "event") {
         if (typeof raw.eventId !== "string") return undefined;
-        if (!DIALOG_EVENT_IDS.has(raw.eventId as AreaDialogEventId)) return undefined;
+        if (!isAreaDialogEventId(raw.eventId)) return undefined;
         return {
             type: "event",
-            eventId: raw.eventId as AreaDialogEventId,
+            eventId: raw.eventId,
         };
     }
     return undefined;
@@ -993,7 +1121,7 @@ function sanitizeAreaDialogDefinition(raw: unknown): AreaDialogDefinition | null
 
 function parseDialogDefinitionLine(line: string, dialogs: AreaDialogDefinition[]): void {
     try {
-        const parsed = JSON.parse(line) as unknown;
+        const parsed: unknown = JSON.parse(line);
         const dialogDefinition = sanitizeAreaDialogDefinition(parsed);
         if (!dialogDefinition) return;
         dialogs.push(dialogDefinition);
@@ -1038,7 +1166,7 @@ function sanitizeLocation(raw: unknown): AreaLocation | null {
 
 function parseLocationLine(line: string, locations: AreaLocation[]): void {
     try {
-        const parsed = JSON.parse(line) as unknown;
+        const parsed: unknown = JSON.parse(line);
         const location = sanitizeLocation(parsed);
         if (!location) return;
         locations.push(location);
@@ -1162,7 +1290,7 @@ function sanitizeDialogTrigger(raw: unknown): AreaDialogTrigger | null {
 
 function parseDialogTriggerLine(line: string, dialogTriggers: AreaDialogTrigger[]): void {
     try {
-        const parsed = JSON.parse(line) as unknown;
+        const parsed: unknown = JSON.parse(line);
         const trigger = sanitizeDialogTrigger(parsed);
         if (!trigger) return;
         if (dialogTriggers.some(existing => existing.id === trigger.id)) {

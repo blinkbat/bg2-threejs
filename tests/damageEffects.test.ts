@@ -141,6 +141,28 @@ function makeCtx(units: Unit[], unitsRef: Record<number, UnitGroup> = {}): Damag
     };
 }
 
+function makeStatefulCtx(units: Unit[], unitsRef: Record<number, UnitGroup> = {}): DamageContext {
+    const ref: RefObject<Unit[]> = { current: units };
+    const setUnits: Dispatch<SetStateAction<Unit[]>> = vi.fn((update: SetStateAction<Unit[]>) => {
+        const previous = ref.current ?? [];
+        ref.current = typeof update === "function"
+            ? update(previous)
+            : update;
+    });
+
+    return {
+        scene: makeScene(),
+        damageTexts: [] as DamageText[],
+        hitFlashRef: {},
+        unitsRef,
+        unitsStateRef: ref,
+        setUnits,
+        addLog: vi.fn(),
+        now: 1000,
+        defeatedThisFrame: new Set<number>(),
+    };
+}
+
 afterEach(() => {
     vi.restoreAllMocks();
 });
@@ -410,6 +432,63 @@ describe("damageEffects", () => {
                 const updatedPlayer = ctx.unitsStateRef.current.find(u => u.id === 1);
                 expect(updatedPlayer?.exp).toBeGreaterThan(0);
             });
+        });
+
+        it("preserves the original damage type when Highland Defense redirects damage", () => {
+            const target = makeUnit({ id: 2, hp: 50, team: "player" });
+            const defender = makeUnit({
+                id: 1,
+                hp: 40,
+                team: "player",
+                statusEffects: [
+                    makeStatusEffect("highland_defense", { interceptRemaining: 50, interceptCooldownEnd: 0 }),
+                    makeStatusEffect("energy_shield", { shieldAmount: 30 }),
+                ],
+            });
+            const targetG = makeUnitGroup({ position: { x: 5, y: 0, z: 5 } });
+            const defenderG = makeUnitGroup({ position: { x: 6, y: 0, z: 5 } });
+            const ctx = makeCtx([target, defender], { 1: defenderG, 2: targetG });
+
+            applyDamageToUnit(ctx, 2, targetG, 10, "Paladin", { damageType: "chaos" });
+
+            const updatedTarget = ctx.unitsStateRef.current.find(u => u.id === 2);
+            const updatedDefender = ctx.unitsStateRef.current.find(u => u.id === 1);
+            const shield = updatedDefender?.statusEffects?.find(effect => effect.type === "energy_shield");
+
+            expect(updatedTarget?.hp).toBe(50);
+            expect(shield?.shieldAmount).toBe(20);
+        });
+
+        it("heals the attacker from Blood Mark on a killing blow", () => {
+            const attacker = makeUnit({
+                id: 3,
+                hp: 10,
+                team: "player",
+                stats: {
+                    strength: 0,
+                    dexterity: 0,
+                    vitality: 0,
+                    intelligence: 0,
+                    faith: 0,
+                },
+            });
+            const target = makeUnit({
+                id: 10,
+                hp: 5,
+                team: "enemy",
+                statusEffects: [makeStatusEffect("blood_marked", { lifestealPercent: 0.35 })],
+            });
+            const attackerG = makeUnitGroup({ position: { x: 4, y: 0, z: 5 } });
+            const targetG = makeUnitGroup({ position: { x: 5, y: 0, z: 5 } });
+            const ctx = makeStatefulCtx([attacker, target], { 3: attackerG, 10: targetG });
+
+            applyDamageToUnit(ctx, 10, targetG, 10, "Kobold", {
+                attackerId: 3,
+                isMeleeHit: true,
+            });
+
+            const updatedAttacker = ctx.unitsStateRef.current.find(unit => unit.id === 3);
+            expect(updatedAttacker?.hp).toBe(13);
         });
     });
 

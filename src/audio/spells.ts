@@ -39,6 +39,36 @@ export const playHeal = () => {
     });
 };
 
+// Lullaby - gentle descending chime for resting
+export const playLullaby = () => {
+    if (isMuted()) return;
+    const ctx = getAudioCtx();
+    const notes = [784, 659, 523, 392]; // G5, E5, C5, G4 — descending
+
+    notes.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const filter = ctx.createBiquadFilter();
+
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(freq, ctx.currentTime);
+
+        filter.type = "lowpass";
+        filter.frequency.setValueAtTime(2000, ctx.currentTime);
+
+        const startTime = ctx.currentTime + i * 0.18;
+        gain.gain.setValueAtTime(0, startTime);
+        gain.gain.linearRampToValueAtTime(0.07, startTime + 0.04);
+        gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.5);
+
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(startTime);
+        osc.stop(startTime + 0.55);
+    });
+};
+
 // Warcry - aggressive shout with echo
 export const playWarcry = () => {
     if (isMuted()) return;
@@ -249,6 +279,7 @@ export const playThunder = () => {
     crackFilter.connect(crackGain);
     crackGain.connect(ctx.destination);
     crack.start();
+    crack.stop(ctx.currentTime + 0.08);
 
     // Mid-frequency crackle layer - the "CRRACK" texture
     const crackleBuffer = createNoiseBuffer(ctx, 0.15, (i, size) => {
@@ -269,6 +300,7 @@ export const playThunder = () => {
     crackleFilter.connect(crackleGain);
     crackleGain.connect(ctx.destination);
     crackle.start();
+    crackle.stop(ctx.currentTime + 0.15);
 
     // Deep rumble - follows the crack
     const rumble = ctx.createOscillator();
@@ -409,6 +441,7 @@ export const playVines = () => {
     rustleFilter.connect(rustleGain);
     rustleGain.connect(ctx.destination);
     rustleNoise.start();
+    rustleNoise.stop(ctx.currentTime + 0.4);
 
     // Low earthy tone - vines rising from ground
     const earth = ctx.createOscillator();

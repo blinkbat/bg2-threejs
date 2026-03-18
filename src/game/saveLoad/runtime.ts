@@ -1,4 +1,5 @@
-﻿import type { CharacterEquipment, PartyInventory } from "../../core/types";
+import type { CharacterEquipment, PartyInventory } from "../../core/types";
+import { getGameTime } from "../../core/gameClock";
 import type { HotbarAssignments } from "../../hooks/localStorage";
 import type { AreaId } from "../areas";
 import type { FogVisibilityByArea } from "../fogMemory";
@@ -18,6 +19,7 @@ export interface SaveSnapshotState {
     dialogTriggerProgress: DialogTriggerProgress;
     enemyPositions: EnemyPositionMap;
     fogVisibilityByArea: FogVisibilityByArea;
+    lastWaystone?: { areaId: AreaId; waystoneIndex: number };
 }
 
 interface BuildSaveSlotDataInput {
@@ -48,6 +50,7 @@ interface ResolvedLoadedSaveState {
     dialogTriggerProgress: DialogTriggerProgress;
     enemyPositions: EnemyPositionMap;
     fogVisibilityByArea: FogVisibilityByArea;
+    lastWaystone?: { areaId: AreaId; waystoneIndex: number };
 }
 
 type ResolveLoadedSaveResult =
@@ -80,6 +83,58 @@ function cloneInventory(inventory: PartyInventory): PartyInventory {
     return {
         items: inventory.items.map(entry => ({ ...entry })),
     };
+}
+
+function cloneSinglePlayer(player: SavedPlayer): SavedPlayer {
+    return {
+        id: player.id,
+        hp: player.hp,
+        x: player.x,
+        z: player.z,
+        mana: player.mana,
+        level: player.level,
+        exp: player.exp,
+        stats: player.stats ? { ...player.stats } : undefined,
+        statPoints: player.statPoints,
+        skillPoints: player.skillPoints,
+        learnedSkills: player.learnedSkills ? [...player.learnedSkills] : undefined,
+        statusEffects: player.statusEffects?.map(effect => ({ ...effect })),
+        cantripUses: player.cantripUses ? { ...player.cantripUses } : undefined,
+        summonType: player.summonType,
+        summonedBy: player.summonedBy,
+        summonExpireAt: player.summonExpireAt,
+        summonRemainingDurationMs: player.summonRemainingDurationMs,
+    };
+}
+
+function serializeSavedPlayers(players: SavedPlayer[]): SavedPlayer[] {
+    const gameNow = getGameTime();
+
+    return players.map(player => {
+        const cloned = cloneSinglePlayer(player);
+        if (cloned.summonExpireAt === undefined || !Number.isFinite(cloned.summonExpireAt)) {
+            return cloned;
+        }
+
+        cloned.summonRemainingDurationMs = Math.max(0, cloned.summonExpireAt - gameNow);
+        cloned.summonExpireAt = undefined;
+        return cloned;
+    });
+}
+
+function restoreSavedPlayers(players: SavedPlayer[]): SavedPlayer[] {
+    const gameNow = getGameTime();
+
+    return players.map(player => {
+        const cloned = cloneSinglePlayer(player);
+        if (cloned.summonRemainingDurationMs === undefined || !Number.isFinite(cloned.summonRemainingDurationMs)) {
+            return cloned;
+        }
+
+        cloned.summonExpireAt = gameNow + cloned.summonRemainingDurationMs;
+        cloned.summonRemainingDurationMs = undefined;
+        return cloned;
+    });
 }
 
 function cloneHotbarAssignments(assignments: HotbarAssignments): HotbarAssignments {
@@ -150,7 +205,7 @@ export function buildSaveSlotData(input: BuildSaveSlotDataInput): SaveSlotData {
         version: SAVE_VERSION,
         timestamp,
         slotName,
-        players: state.players.map(player => ({ ...player })),
+        players: serializeSavedPlayers(state.players),
         currentAreaId: state.currentAreaId,
         openedChests: Array.from(state.openedChests),
         openedSecretDoors: Array.from(state.openedSecretDoors),
@@ -164,6 +219,7 @@ export function buildSaveSlotData(input: BuildSaveSlotDataInput): SaveSlotData {
         dialogTriggerProgress: normalizeDialogTriggerProgress(state.dialogTriggerProgress),
         enemyPositions: normalizeEnemyPositions(state.enemyPositions),
         fogVisibilityByArea: cloneFogVisibilityByArea(state.fogVisibilityByArea),
+        lastWaystone: state.lastWaystone ? { ...state.lastWaystone } : undefined,
     };
 }
 
@@ -194,7 +250,7 @@ export function resolveLoadedSaveState(
         data: {
             areaId: saveData.currentAreaId,
             spawnPoint,
-            players: saveData.players.map(player => ({ ...player })),
+            players: restoreSavedPlayers(saveData.players),
             openedChests: new Set(saveData.openedChests),
             openedSecretDoors: new Set(saveData.openedSecretDoors),
             activatedWaystones: new Set(saveData.activatedWaystones),
@@ -207,6 +263,7 @@ export function resolveLoadedSaveState(
             dialogTriggerProgress: normalizeDialogTriggerProgress(saveData.dialogTriggerProgress),
             enemyPositions: normalizeEnemyPositions(saveData.enemyPositions),
             fogVisibilityByArea: cloneFogVisibilityByArea(saveData.fogVisibilityByArea),
+            lastWaystone: saveData.lastWaystone ? { ...saveData.lastWaystone } : undefined,
         },
     };
 }

@@ -100,6 +100,20 @@ describe("item registry storage", () => {
         expect(localStorage.getItem(ITEM_REGISTRY_STORAGE_KEY)).toBeNull();
     });
 
+    it("clears structurally invalid stored payloads without throwing", () => {
+        localStorage.setItem(ITEM_REGISTRY_STORAGE_KEY, JSON.stringify({
+            version: 1,
+            items: [null],
+        }));
+
+        let errors: string[] = [];
+        expect(() => {
+            errors = loadItemRegistryFromStorage();
+        }).not.toThrow();
+        expect(errors.length).toBeGreaterThan(0);
+        expect(localStorage.getItem(ITEM_REGISTRY_STORAGE_KEY)).toBeNull();
+    });
+
     it("can clear stored registry explicitly", () => {
         localStorage.setItem(ITEM_REGISTRY_STORAGE_KEY, JSON.stringify({
             version: 1,

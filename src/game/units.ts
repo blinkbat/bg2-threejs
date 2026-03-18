@@ -43,11 +43,11 @@ export function getUnitStats(unit: Unit): UnitData | EnemyStats {
     let result: UnitData | EnemyStats;
     if (unit.team === "player") {
         result = getEffectiveUnitData(unit.id, unit);
-    } else if (!unit.enemyType) {
-        result = ENEMY_STATS.kobold;
     } else {
-        const baseEnemyStats = ENEMY_STATS[unit.enemyType];
-        if (unit.enemyType === "giant_amoeba") {
+        const baseEnemyStats = unit.enemyType ? ENEMY_STATS[unit.enemyType] : undefined;
+        if (!baseEnemyStats) {
+            result = ENEMY_STATS.kobold;
+        } else if (unit.enemyType === "giant_amoeba") {
             const stageMaxHp = getAmoebaMaxHpForSplitCount(unit.splitCount ?? 0);
             result = {
                 ...baseEnemyStats,
@@ -74,7 +74,15 @@ export function isEnemyData(data: UnitData | EnemyStats): data is EnemyStats {
  * Falls back to kobold stats for enemies with missing enemyType.
  */
 export function getEnemyUnitStats(unit: Unit): EnemyStats {
-    return getUnitStats(unit) as EnemyStats;
+    if (unit.team === "player") {
+        if (import.meta.env.DEV) {
+            console.warn(`[units] getEnemyUnitStats called for player unit ${unit.id}; falling back to kobold stats.`);
+        }
+        return ENEMY_STATS.kobold;
+    }
+
+    const stats = getUnitStats(unit);
+    return isEnemyData(stats) ? stats : ENEMY_STATS.kobold;
 }
 
 /** Get the attack range for any unit (player or enemy) */

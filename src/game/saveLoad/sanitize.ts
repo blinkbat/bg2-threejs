@@ -312,6 +312,14 @@ function sanitizeSavedPlayer(raw: unknown): SavedPlayer | null {
     const summonedBy = readPositiveInteger(raw, "summonedBy");
     if (summonedBy !== undefined) player.summonedBy = summonedBy;
 
+    const summonExpireAt = readFiniteNumber(raw, "summonExpireAt");
+    if (summonExpireAt !== undefined) player.summonExpireAt = summonExpireAt;
+
+    const summonRemainingDurationMs = readNonNegativeInteger(raw, "summonRemainingDurationMs");
+    if (summonRemainingDurationMs !== undefined) {
+        player.summonRemainingDurationMs = summonRemainingDurationMs;
+    }
+
     return player;
 }
 
@@ -506,6 +514,18 @@ function sanitizeFogVisibilityByArea(raw: unknown): FogVisibilityByArea {
     return sanitized;
 }
 
+function sanitizeLastWaystone(raw: unknown): NonNullable<SaveSlotData["lastWaystone"]> | undefined {
+    if (!isRecord(raw)) return undefined;
+
+    const areaId = readString(raw, "areaId")?.trim();
+    const waystoneIndex = readNonNegativeInteger(raw, "waystoneIndex");
+    if (!areaId || waystoneIndex === undefined) {
+        return undefined;
+    }
+
+    return { areaId, waystoneIndex };
+}
+
 function parseVersion(raw: Record<string, unknown>): number | null {
     const version = readFiniteNumber(raw, "version");
     if (version === undefined) return SAVE_VERSION;
@@ -554,6 +574,13 @@ function sanitizeSaveSlotV1(raw: Record<string, unknown>): SaveSlotData | null {
 
     if (hasField(raw, "fogVisibilityByArea")) {
         saveData.fogVisibilityByArea = sanitizeFogVisibilityByArea(getField(raw, "fogVisibilityByArea"));
+    }
+
+    if (hasField(raw, "lastWaystone")) {
+        const lastWaystone = sanitizeLastWaystone(getField(raw, "lastWaystone"));
+        if (lastWaystone) {
+            saveData.lastWaystone = lastWaystone;
+        }
     }
 
     return saveData;

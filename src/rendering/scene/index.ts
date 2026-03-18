@@ -78,6 +78,14 @@ export {
 export { addUnitToScene } from "./units";
 import { createUnitSceneGroup, ensureTexturesLoaded } from "./units";
 
+function attachUserData<TObject extends THREE.Object3D, TUserData extends Record<string, unknown>>(
+    object: TObject,
+    userData: TUserData
+): TObject & { userData: TUserData } {
+    object.userData = userData;
+    return Object.assign(object, { userData });
+}
+
 // =============================================================================
 // MAIN SCENE CREATION
 // =============================================================================
@@ -2255,10 +2263,11 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
             side: THREE.DoubleSide
         });
 
-        const doorMesh = new THREE.Mesh(
+        const doorData: DoorMesh["userData"] = { transition };
+        const doorMesh = attachUserData(new THREE.Mesh(
             new THREE.BoxGeometry(doorWidth, 2.2, doorDepth),
             doorMat
-        );
+        ), doorData);
 
         doorMesh.position.set(
             transition.x + transition.w / 2,
@@ -2266,9 +2275,8 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
             transition.z + transition.h / 2
         );
         doorMesh.name = "door";
-        doorMesh.userData.transition = transition;
         scene.add(doorMesh);
-        doorMeshes.push(doorMesh as unknown as DoorMesh);
+        doorMeshes.push(doorMesh);
 
         // Inner glow light - subtle point light inside the portal
         if (ENABLE_DOOR_POINT_LIGHTS) {
@@ -2289,7 +2297,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     const waystoneMeshes: WaystoneMesh[] = [];
     if (area.waystones) {
         area.waystones.forEach((waystone, index) => {
-            const waystoneGroup = new THREE.Group() as WaystoneMesh;
+            const waystoneGroup = new THREE.Group();
             waystoneGroup.position.set(waystone.x, 0, waystone.z);
             waystoneGroup.name = "waystone";
 
@@ -2355,7 +2363,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
             floatGroup.add(pointLight);
             candleLights.push(pointLight);
 
-            const waystoneData = {
+            const waystoneData: WaystoneMesh["userData"] = {
                 waystone,
                 waystoneIndex: index,
                 floatGroup,
@@ -2364,15 +2372,15 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 glowRing,
                 pointLight,
             };
-            waystoneGroup.userData = waystoneData;
+            const typedWaystoneGroup = attachUserData(waystoneGroup, waystoneData);
             glowRing.userData = waystoneData;
             floatGroup.userData = waystoneData;
             crystal.userData = waystoneData;
             innerCrystal.userData = waystoneData;
             pointLight.userData = { ...pointLight.userData, ...waystoneData };
 
-            scene.add(waystoneGroup);
-            waystoneMeshes.push(waystoneGroup);
+            scene.add(typedWaystoneGroup);
+            waystoneMeshes.push(typedWaystoneGroup);
         });
     }
 
@@ -2380,8 +2388,8 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     const secretDoorMeshes: SecretDoorMesh[] = [];
     if (area.secretDoors) {
         area.secretDoors.forEach((secretDoor, index) => {
-            const group = new THREE.Group() as SecretDoorMesh;
-            const secretDoorData = { secretDoor, secretDoorIndex: index };
+            const group = new THREE.Group();
+            const secretDoorData: SecretDoorMesh["userData"] = { secretDoor, secretDoorIndex: index };
             const { blockingWall } = secretDoor;
 
             // Create the blocking wall mesh (same style as other walls)
@@ -2459,9 +2467,9 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 });
             }
 
-            group.userData = secretDoorData;
-            scene.add(group);
-            secretDoorMeshes.push(group);
+            const typedGroup = attachUserData(group, secretDoorData);
+            scene.add(typedGroup);
+            secretDoorMeshes.push(typedGroup);
         });
     }
 

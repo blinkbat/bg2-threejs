@@ -603,7 +603,7 @@ export function applyDamageToUnit(
                     targetUnit: chosenDefender.unit,
                     attackerId,
                     attackerPosition: { x: targetGroup.position.x, z: targetGroup.position.z },
-                    damageType: "physical",
+                    damageType,
                     skipHighlandDefense: true
                 });
 
@@ -787,7 +787,7 @@ export function applyDamageToUnit(
     }
 
     // Blood Mark lifesteal: when a player melee-hits a blood_marked enemy, heal the attacker.
-    if (isMeleeHit && attackerId !== undefined && newHp > 0 && refUnit && hasStatusEffect(refUnit, "blood_marked")) {
+    if (isMeleeHit && attackerId !== undefined && refUnit && hasStatusEffect(refUnit, "blood_marked")) {
         const attackerUnit = unitsStateRef.current.find(u => u.id === attackerId && u.team === "player" && u.hp > 0);
         const attackerGroup = unitsRef[attackerId];
         if (attackerUnit && attackerGroup) {

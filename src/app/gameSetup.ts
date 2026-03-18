@@ -32,6 +32,7 @@ export interface PersistedPlayer {
     cantripUses?: Record<string, number>;
     summonType?: SummonType;
     summonedBy?: number;
+    summonExpireAt?: number;
 }
 
 interface CreateUnitsForAreaOptions {
@@ -41,6 +42,29 @@ interface CreateUnitsForAreaOptions {
     initialKilledEnemies: Set<string> | null;
     initialEnemyPositions: Partial<Record<string, { x: number; z: number }>> | null;
     playtestUnlockAllSkills: boolean;
+}
+
+function getAncestorSummonPosition(
+    spawn: { x: number; z: number },
+    forward: { x: number; z: number },
+    side: { x: number; z: number },
+    index: number
+): { x: number; z: number } {
+    const rank = Math.floor(index / 2);
+    const lane = index % 2 === 0 ? -1 : 1;
+    const desiredX = spawn.x - forward.x * (3.3 + rank * 1.2) + side.x * lane * 1.2;
+    const desiredZ = spawn.z - forward.z * (3.3 + rank * 1.2) + side.z * lane * 1.2;
+    return findNearestPassable(desiredX, desiredZ, 5) ?? { x: spawn.x, z: spawn.z };
+}
+
+function getVishasEyeSummonPosition(
+    anchor: { x: number; z: number },
+    orbIndex: number
+): { x: number; z: number } {
+    const angle = (Math.PI * 2 * orbIndex) / 3;
+    const desiredX = anchor.x + Math.cos(angle) * 1.35;
+    const desiredZ = anchor.z + Math.sin(angle) * 1.35;
+    return findNearestPassable(desiredX, desiredZ, 4) ?? anchor;
 }
 
 export function createUnitsForArea(options: CreateUnitsForAreaOptions): Unit[] {
@@ -96,25 +120,42 @@ export function createUnitsForArea(options: CreateUnitsForAreaOptions): Unit[] {
         };
     });
 
-    const summonPersisted = (persistedPlayers ?? [])
-        .filter(player => player.summonType === "ancestor_warrior" && player.hp > 0)
-        .slice(0, 1);
     const forward = getForwardVectorForDirection(spawnDirection);
     const side = { x: -forward.z, z: forward.x };
+    const summonPersisted = (persistedPlayers ?? [])
+        .filter(player => player.summonType !== undefined && player.hp > 0)
+        .sort((left, right) => left.id - right.id);
+    const corePlayerPositionById = new Map<number, { x: number; z: number }>(
+        players.map(player => [player.id, { x: player.x, z: player.z }])
+    );
+    const ancestorCountBySummoner = new Map<number, number>();
+    const orbCountBySummoner = new Map<number, number>();
     const summons: Unit[] = [];
-    summonPersisted.forEach((persisted, index) => {
+    summonPersisted.forEach((persisted) => {
         const data = UNIT_DATA[persisted.id];
         if (!data) return;
+
         let pos: { x: number; z: number };
         if (persisted.x !== undefined && persisted.z !== undefined) {
             pos = { x: persisted.x, z: persisted.z };
+        } else if (persisted.summonType === "ancestor_warrior") {
+            const summonerId = persisted.summonedBy ?? -1;
+            const summonIndex = ancestorCountBySummoner.get(summonerId) ?? 0;
+            ancestorCountBySummoner.set(summonerId, summonIndex + 1);
+            pos = getAncestorSummonPosition(spawn, forward, side, summonIndex);
+        } else if (persisted.summonType === "vishas_eye_orb") {
+            const summonerAnchor = persisted.summonedBy !== undefined
+                ? corePlayerPositionById.get(persisted.summonedBy)
+                : undefined;
+            const anchor = summonerAnchor ?? { x: spawn.x, z: spawn.z };
+            const summonerId = persisted.summonedBy ?? -1;
+            const orbIndex = orbCountBySummoner.get(summonerId) ?? 0;
+            orbCountBySummoner.set(summonerId, orbIndex + 1);
+            pos = getVishasEyeSummonPosition(anchor, orbIndex);
         } else {
-            const rank = Math.floor(index / 2);
-            const lane = index % 2 === 0 ? -1 : 1;
-            const desiredX = spawn.x - forward.x * (3.3 + rank * 1.2) + side.x * lane * 1.2;
-            const desiredZ = spawn.z - forward.z * (3.3 + rank * 1.2) + side.z * lane * 1.2;
-            pos = findNearestPassable(desiredX, desiredZ, 5) ?? { x: spawn.x, z: spawn.z };
+            pos = { x: spawn.x, z: spawn.z };
         }
+
         summons.push({
             id: persisted.id,
             x: pos.x,
@@ -134,6 +175,7 @@ export function createUnitsForArea(options: CreateUnitsForAreaOptions): Unit[] {
             cantripUses: persisted.cantripUses,
             summonType: persisted.summonType,
             summonedBy: persisted.summonedBy,
+            summonExpireAt: persisted.summonExpireAt,
         });
     });
 

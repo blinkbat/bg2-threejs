@@ -12,6 +12,7 @@ import type {
 import {
     getAllItemDefinitions,
     getDefaultItemDefinitions,
+    parseItemRegistryCandidates,
     replaceItemRegistry,
     validateItemDefinition,
     validateItemRegistry,
@@ -620,12 +621,16 @@ export function ItemRegistryEditorModal({ onClose, onApplied }: ItemRegistryEdit
             setMessage({ tone: "error", text: "JSON must be an array of item objects." });
             return;
         }
-        const candidateItems = parsed as Item[];
-        const errors = validateItemRegistry(candidateItems);
+        const parsedRegistry = parseItemRegistryCandidates(parsed);
+        const errors = [
+            ...parsedRegistry.errors,
+            ...validateItemRegistry(parsedRegistry.items),
+        ];
         if (errors.length > 0) {
             setMessage({ tone: "error", text: `Draft import failed (${errors.length} issue${errors.length === 1 ? "" : "s"}).` });
             return;
         }
+        const candidateItems = parsedRegistry.items;
         const nextDraft = candidateItems.map(cloneItem);
         setDraftItems(nextDraft);
         setSelectedItemId(nextDraft[0]?.id ?? null);

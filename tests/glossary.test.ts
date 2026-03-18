@@ -4,8 +4,9 @@ import { GLOSSARY_ENTRIES } from "../src/components/GlossaryModal";
 const EXPECTED_STATUS_TERMS = [
     "Blind",
     "Blood Marked",
-    "Cleansed",
+    "Burn",
     "Chilled",
+    "Cleansed",
     "Defiance",
     "Divine Lattice",
     "Doom",
@@ -26,7 +27,7 @@ const EXPECTED_STATUS_TERMS = [
     "Sun Stance",
     "Thorns",
     "Vanquishing Light",
-    "Weakened"
+    "Weakened",
 ];
 
 const EXPECTED_STAT_TERMS = [
@@ -56,8 +57,8 @@ describe("glossary data", () => {
             .map(entry => entry.term);
         const categoryNames = new Set<string>(GLOSSARY_ENTRIES.map(entry => entry.category));
 
-        expect(sortTerms(statusTerms)).toEqual(sortTerms(EXPECTED_STATUS_TERMS));
-        expect(sortTerms(statTerms)).toEqual(sortTerms(EXPECTED_STAT_TERMS));
+        expect(statusTerms).toEqual(EXPECTED_STATUS_TERMS);
+        expect(statTerms).toEqual(EXPECTED_STAT_TERMS);
         expect(categoryNames.has("Skill")).toBe(false);
     });
 });

@@ -20,6 +20,8 @@ export interface SavedPlayer {
     cantripUses?: Record<string, number>;
     summonType?: SummonType;
     summonedBy?: number;
+    summonExpireAt?: number;
+    summonRemainingDurationMs?: number;
 }
 
 export type DialogTriggerProgress = Partial<Record<AreaId, string[]>>;
@@ -56,6 +58,8 @@ export interface SaveSlotData {
     enemyPositions?: EnemyPositionMap;
     // Per-area fog memory, including explored and currently visible cells.
     fogVisibilityByArea?: FogVisibilityByArea;
+    // Last waystone the party interacted with (for Waystone Fragment recall)
+    lastWaystone?: { areaId: AreaId; waystoneIndex: number };
 }
 
 /** Storage structure in localStorage */

@@ -181,4 +181,19 @@ describe("saveLoad storage", () => {
             expect(result.code).toBe("unknown_area");
         }
     });
+
+    it("round-trips last waystone data through storage", () => {
+        const saveData = createValidSaveData({
+            lastWaystone: { areaId: "forest", waystoneIndex: 1 },
+        });
+
+        const saveResult = saveGame(0, saveData);
+        expect(saveResult.ok).toBe(true);
+
+        const loaded = loadGame(0);
+        expect(loaded.ok).toBe(true);
+        if (!loaded.ok) return;
+
+        expect(loaded.data.lastWaystone).toEqual({ areaId: "forest", waystoneIndex: 1 });
+    });
 });

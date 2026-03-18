@@ -53,6 +53,7 @@ describe("saveLoad sanitize", () => {
                     },
                     summonType: "ancestor_warrior",
                     summonedBy: 2,
+                    summonRemainingDurationMs: 3750.9,
                 },
                 {
                     id: "bad",
@@ -97,6 +98,10 @@ describe("saveLoad sanitize", () => {
                 forest: [[0, 1], [2]],
                 bad_values: [[0, 3]],
             },
+            lastWaystone: {
+                areaId: " forest ",
+                waystoneIndex: 2.9,
+            },
         });
 
         const parsed = parseSaveSlotData(raw);
@@ -107,6 +112,7 @@ describe("saveLoad sanitize", () => {
 
         expect(data.players).toHaveLength(1);
         expect(data.players[0].mana).toBe(0);
+        // tickInterval: 0 is invalid (would cause infinite ticks), sanitized to 1000ms default
         expect(data.players[0].statusEffects).toEqual([
             {
                 type: "poison",
@@ -125,6 +131,8 @@ describe("saveLoad sanitize", () => {
         });
         expect(data.players[0].summonType).toBe("ancestor_warrior");
         expect(data.players[0].summonedBy).toBe(2);
+        // Float durations are truncated via Math.floor to ensure integer ms
+        expect(data.players[0].summonRemainingDurationMs).toBe(3750);
 
         expect(data.gold).toBe(0);
         expect(data.equipment).toEqual({
@@ -142,6 +150,10 @@ describe("saveLoad sanitize", () => {
         expect(data.dialogTriggerProgress).toEqual({ coast: ["intro_1"] });
         expect(data.fogVisibilityByArea).toEqual({
             coast: [[0, 1], [2, 2]],
+        });
+        expect(data.lastWaystone).toEqual({
+            areaId: "forest",
+            waystoneIndex: 2,
         });
     });
 

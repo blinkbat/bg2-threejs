@@ -21,6 +21,8 @@ const nextPathRecalcAt: Record<number, number> = {};
 const REPATH_COOLDOWN_TARGET_MOVED_MS = 90;
 const REPATH_COOLDOWN_UNIT_DEVIATED_MS = 180;
 const REPATH_COOLDOWN_NO_PATH_MS = 260;
+// When unit is close to its target (short path), use longer cooldowns to reduce thrashing
+const REPATH_NEAR_TARGET_MULTIPLIER = 4;
 
 // Throttle target acquisition - don't scan for targets every frame
 const lastTargetScan: Record<number, number> = {};
@@ -230,11 +232,13 @@ export function canRecalculatePath(unitId: number, now: number): boolean {
 export function recordPathRecalculation(
     unitId: number,
     reason: "no_path" | "target_moved" | "unit_deviated" | "none",
-    now: number
+    now: number,
+    nearTarget: boolean = false
 ): void {
     let cooldown = REPATH_COOLDOWN_NO_PATH_MS;
     if (reason === "target_moved") cooldown = REPATH_COOLDOWN_TARGET_MOVED_MS;
     else if (reason === "unit_deviated") cooldown = REPATH_COOLDOWN_UNIT_DEVIATED_MS;
+    if (nearTarget) cooldown *= REPATH_NEAR_TARGET_MULTIPLIER;
     nextPathRecalcAt[unitId] = now + cooldown;
 }
 

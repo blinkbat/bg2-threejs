@@ -68,7 +68,7 @@ export type ConsumableSound = "gulp" | "crunch";
 // Consumable item
 export interface ConsumableItem extends ItemBase {
     category: "consumable";
-    effect: "heal" | "mana" | "exp" | "revive" | "cleanse";
+    effect: "heal" | "mana" | "exp" | "revive" | "cleanse" | "camp" | "waystone_recall";
     value: number;
     cooldown: number;               // Cooldown in ms (default 5000)
     sound?: ConsumableSound;        // Sound to play on use

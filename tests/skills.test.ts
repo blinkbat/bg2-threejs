@@ -107,6 +107,7 @@ vi.mock("../src/game/equipmentState", () => ({
 }));
 
 import { executeSkill } from "../src/combat/skills/index";
+import { SKILLS } from "../src/game/skills";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -174,6 +175,10 @@ function makeCtx(units: Unit[], unitsRef: Record<number, UnitGroup> = {}): Skill
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 describe("executeSkill", () => {
+    it("keeps Visha's Eyes as a zero-cost cantrip", () => {
+        expect(SKILLS.vishasEyes.manaCost).toBe(0);
+    });
+
     describe("precondition checks", () => {
         it("returns false when caster is dead", () => {
             const caster = makeUnit({ id: 1, hp: 0, mana: 50 });
@@ -397,29 +402,33 @@ describe("executeSkill", () => {
             expect(updatedUnits.get(103)?.hp).toBe(97);
         });
 
-        it("routes taunt skills", () => {
+        it("routes taunt skills and taunts enemies in range", () => {
             const caster = makeUnit({ id: 1, hp: 30, mana: 50 });
             const casterG = makeUnitGroup();
-            // Need enemies in range for taunt to work
             const enemy = makeUnit({ id: 100, hp: 20, team: "enemy" });
             const enemyG = makeUnitGroup();
             const ctx = makeCtx([caster, enemy], { 1: casterG, 100: enemyG });
             const skill: Skill = { name: "Warcry", manaCost: 10, cooldown: 8000, type: "taunt", targetType: "self", range: 5, aoeRadius: 5, damageType: "physical" };
 
             const result = executeSkill(ctx, 1, skill, 5, 5);
-            // Whether true or false depends on taunt implementation finding targets,
-            // but it should not crash
-            expect(typeof result).toBe("boolean");
+
+            expect(result).toBe(true);
+            expect(ctx.setUnits).toHaveBeenCalled();
         });
 
-        it("routes dodge/movement skills", () => {
+        it("returns false for dodge without cantrip uses", () => {
             const caster = makeUnit({ id: 1, hp: 30, mana: 50 });
             const casterG = makeUnitGroup();
             const ctx = makeCtx([caster], { 1: casterG });
             const skill: Skill = { name: "Dodge", manaCost: 5, cooldown: 3000, type: "dodge", targetType: "self", range: 5, damageType: "physical" };
 
             const result = executeSkill(ctx, 1, skill, 10, 10);
-            expect(typeof result).toBe("boolean");
+
+            expect(result).toBe(false);
+            expect(ctx.addLog).toHaveBeenCalledWith(
+                expect.stringContaining("No uses remaining"),
+                expect.any(String)
+            );
         });
 
         it("returns false for unrecognized skill type", () => {

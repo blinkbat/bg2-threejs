@@ -419,6 +419,24 @@ const CONSUMABLES: Record<string, ConsumableItem> = {
         cooldown: 5000,
         targetType: "dead_ally",
     },
+    campingKit: {
+        id: "campingKit",
+        name: "Camping Kit",
+        description: "A bedroll, flint, and rations for a night under the stars. The party must be gathered and out of danger.",
+        category: "consumable",
+        effect: "camp",
+        value: 0,
+        cooldown: 2000,
+    },
+    waystoneFragment: {
+        id: "waystoneFragment",
+        name: "Waystone Fragment",
+        description: "A shard of crystallized travel magic. Shatters to return the party to the last visited waystone.",
+        category: "consumable",
+        effect: "waystone_recall",
+        value: 0,
+        cooldown: 2000,
+    },
 };
 
 // =============================================================================
@@ -449,15 +467,16 @@ export const ITEM_CATEGORY_LABELS: Record<ItemCategory, string> = {
 
 export const KNOWN_DAMAGE_TYPES: readonly DamageType[] = ["physical", "fire", "cold", "lightning", "chaos", "holy"];
 export const KNOWN_WEAPON_GRIPS: readonly WeaponGrip[] = ["oneHand", "twoHand"];
-export const KNOWN_CONSUMABLE_EFFECTS: readonly ConsumableEffect[] = ["heal", "mana", "exp", "revive", "cleanse"];
+export const KNOWN_CONSUMABLE_EFFECTS: readonly ConsumableEffect[] = ["heal", "mana", "exp", "revive", "cleanse", "camp", "waystone_recall"];
 export const KNOWN_CONSUMABLE_SOUNDS: readonly ConsumableSound[] = ["gulp", "crunch"];
 export const KNOWN_CONSUMABLE_TARGET_TYPES: readonly ConsumableTargetType[] = ["dead_ally"];
 
-const VALID_DAMAGE_TYPES = new Set(KNOWN_DAMAGE_TYPES);
-const VALID_WEAPON_GRIPS = new Set(KNOWN_WEAPON_GRIPS);
-const VALID_CONSUMABLE_EFFECTS = new Set(KNOWN_CONSUMABLE_EFFECTS);
-const VALID_CONSUMABLE_SOUNDS = new Set(KNOWN_CONSUMABLE_SOUNDS);
-const VALID_CONSUMABLE_TARGET_TYPES = new Set(KNOWN_CONSUMABLE_TARGET_TYPES);
+const VALID_DAMAGE_TYPES = new Set<string>(KNOWN_DAMAGE_TYPES);
+const VALID_ITEM_CATEGORIES = new Set<string>(ITEM_CATEGORY_ORDER);
+const VALID_WEAPON_GRIPS = new Set<string>(KNOWN_WEAPON_GRIPS);
+const VALID_CONSUMABLE_EFFECTS = new Set<string>(KNOWN_CONSUMABLE_EFFECTS);
+const VALID_CONSUMABLE_SOUNDS = new Set<string>(KNOWN_CONSUMABLE_SOUNDS);
+const VALID_CONSUMABLE_TARGET_TYPES = new Set<string>(KNOWN_CONSUMABLE_TARGET_TYPES);
 const ITEM_REGISTRY_STORAGE_VERSION = 1;
 export const ITEM_REGISTRY_STORAGE_KEY = "bg2_item_registry_v1";
 
@@ -469,7 +488,7 @@ interface ItemCategoryGroup {
 
 interface ItemRegistryStoragePayload {
     version: number;
-    items: Item[];
+    items: unknown[];
 }
 
 const DEFAULT_ITEMS: Item[] = Object.values(ITEMS).map(cloneItemDefinition);
@@ -500,6 +519,165 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null;
 }
 
+function isItemCategory(value: unknown): value is ItemCategory {
+    return typeof value === "string" && VALID_ITEM_CATEGORIES.has(value);
+}
+
+function isWeaponGripValue(value: unknown): value is WeaponGrip {
+    return typeof value === "string" && VALID_WEAPON_GRIPS.has(value);
+}
+
+function isDamageTypeValue(value: unknown): value is DamageType {
+    return typeof value === "string" && VALID_DAMAGE_TYPES.has(value);
+}
+
+function isConsumableEffectValue(value: unknown): value is ConsumableItem["effect"] {
+    return typeof value === "string" && VALID_CONSUMABLE_EFFECTS.has(value);
+}
+
+function isConsumableSoundValue(value: unknown): value is ConsumableSound {
+    return typeof value === "string" && VALID_CONSUMABLE_SOUNDS.has(value);
+}
+
+function isConsumableTargetTypeValue(value: unknown): value is ConsumableTargetType {
+    return typeof value === "string" && VALID_CONSUMABLE_TARGET_TYPES.has(value);
+}
+
+function getItemCandidateLabel(value: unknown, index: number): string {
+    if (!isRecord(value)) return `Item ${index + 1}`;
+    return typeof value.id === "string" && value.id.trim().length > 0
+        ? value.id
+        : `Item ${index + 1}`;
+}
+
+function parseItemCandidate(value: unknown): Item | null {
+    if (!isRecord(value)) return null;
+
+    const { id, name, description, category } = value;
+    if (typeof id !== "string" || typeof name !== "string" || typeof description !== "string" || !isItemCategory(category)) {
+        return null;
+    }
+
+    if (category === "weapon") {
+        const { grip, damage, damageType, range, projectileColor, attackCooldown } = value;
+        if (!isWeaponGripValue(grip) || !Array.isArray(damage) || damage.length !== 2) return null;
+        const [minDamage, maxDamage] = damage;
+        if (typeof minDamage !== "number" || typeof maxDamage !== "number" || !isDamageTypeValue(damageType)) return null;
+        if (range !== undefined && typeof range !== "number") return null;
+        if (projectileColor !== undefined && typeof projectileColor !== "string") return null;
+        if (attackCooldown !== undefined && typeof attackCooldown !== "number") return null;
+        const item: WeaponItem = {
+            id,
+            name,
+            description,
+            category,
+            grip,
+            damage: [minDamage, maxDamage],
+            damageType,
+            ...(range !== undefined ? { range } : {}),
+            ...(projectileColor !== undefined ? { projectileColor } : {}),
+            ...(attackCooldown !== undefined ? { attackCooldown } : {}),
+        };
+        return item;
+    }
+
+    if (category === "shield" || category === "armor") {
+        const { armor } = value;
+        if (typeof armor !== "number") return null;
+        if (category === "shield") {
+            const item: ShieldItem = { id, name, description, category, armor };
+            return item;
+        }
+        const item: ArmorItem = { id, name, description, category, armor };
+        return item;
+    }
+
+    if (category === "accessory") {
+        const {
+            bonusMaxHp,
+            bonusMagicDamage,
+            bonusArmor,
+            hpRegen,
+            hpRegenInterval,
+            aggroReduction,
+            bonusMoveSpeed,
+        } = value;
+        if (bonusMaxHp !== undefined && typeof bonusMaxHp !== "number") return null;
+        if (bonusMagicDamage !== undefined && typeof bonusMagicDamage !== "number") return null;
+        if (bonusArmor !== undefined && typeof bonusArmor !== "number") return null;
+        if (hpRegen !== undefined && typeof hpRegen !== "number") return null;
+        if (hpRegenInterval !== undefined && typeof hpRegenInterval !== "number") return null;
+        if (aggroReduction !== undefined && typeof aggroReduction !== "number") return null;
+        if (bonusMoveSpeed !== undefined && typeof bonusMoveSpeed !== "number") return null;
+        const item: AccessoryItem = {
+            id,
+            name,
+            description,
+            category,
+            ...(bonusMaxHp !== undefined ? { bonusMaxHp } : {}),
+            ...(bonusMagicDamage !== undefined ? { bonusMagicDamage } : {}),
+            ...(bonusArmor !== undefined ? { bonusArmor } : {}),
+            ...(hpRegen !== undefined ? { hpRegen } : {}),
+            ...(hpRegenInterval !== undefined ? { hpRegenInterval } : {}),
+            ...(aggroReduction !== undefined ? { aggroReduction } : {}),
+            ...(bonusMoveSpeed !== undefined ? { bonusMoveSpeed } : {}),
+        };
+        return item;
+    }
+
+    if (category === "key") {
+        const { keyId } = value;
+        if (typeof keyId !== "string") return null;
+        const item: KeyItem = { id, name, description, category, keyId };
+        return item;
+    }
+
+    const {
+        effect,
+        value: consumableValue,
+        cooldown,
+        sound,
+        targetType,
+        poisonChanceOnUse,
+        poisonDamageOnUse,
+    } = value;
+    if (!isConsumableEffectValue(effect) || typeof consumableValue !== "number" || typeof cooldown !== "number") return null;
+    if (sound !== undefined && !isConsumableSoundValue(sound)) return null;
+    if (targetType !== undefined && !isConsumableTargetTypeValue(targetType)) return null;
+    if (poisonChanceOnUse !== undefined && typeof poisonChanceOnUse !== "number") return null;
+    if (poisonDamageOnUse !== undefined && typeof poisonDamageOnUse !== "number") return null;
+    const item: ConsumableItem = {
+        id,
+        name,
+        description,
+        category,
+        effect,
+        value: consumableValue,
+        cooldown,
+        ...(sound !== undefined ? { sound } : {}),
+        ...(targetType !== undefined ? { targetType } : {}),
+        ...(poisonChanceOnUse !== undefined ? { poisonChanceOnUse } : {}),
+        ...(poisonDamageOnUse !== undefined ? { poisonDamageOnUse } : {}),
+    };
+    return item;
+}
+
+export function parseItemRegistryCandidates(items: readonly unknown[]): { items: Item[]; errors: string[] } {
+    const parsedItems: Item[] = [];
+    const errors: string[] = [];
+
+    items.forEach((candidate, index) => {
+        const parsed = parseItemCandidate(candidate);
+        if (!parsed) {
+            errors.push(`${getItemCandidateLabel(candidate, index)}: Item is malformed or has an invalid category-specific payload.`);
+            return;
+        }
+        parsedItems.push(parsed);
+    });
+
+    return { items: parsedItems, errors };
+}
+
 function readStoredRegistryPayload(): ItemRegistryStoragePayload | null {
     const storage = getBrowserStorage();
     if (!storage) return null;
@@ -514,7 +692,7 @@ function readStoredRegistryPayload(): ItemRegistryStoragePayload | null {
         if (!Array.isArray(items)) return null;
         return {
             version,
-            items: items as Item[],
+            items,
         };
     } catch {
         return null;
@@ -819,7 +997,12 @@ export function loadItemRegistryFromStorage(): string[] {
     if (payload.version > ITEM_REGISTRY_STORAGE_VERSION) {
         return ["Saved item registry version is newer than supported."];
     }
-    const errors = replaceItemRegistryInternal(payload.items, false);
+    const parsedRegistry = parseItemRegistryCandidates(payload.items);
+    if (parsedRegistry.errors.length > 0) {
+        clearStoredItemRegistry();
+        return parsedRegistry.errors;
+    }
+    const errors = replaceItemRegistryInternal(parsedRegistry.items, false);
     if (errors.length > 0) {
         clearStoredItemRegistry();
         return errors;

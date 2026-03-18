@@ -158,6 +158,7 @@ interface GameProps {
     initialKilledEnemies: Set<string> | null;
     initialEnemyPositions: Partial<Record<string, { x: number; z: number }>> | null;
     initialDialogTriggerProgress: DialogTriggerProgress | null;
+    initialLastWaystone?: { areaId: AreaId; waystoneIndex: number } | null;
     dialogTriggersEnabled: boolean;
     skipNextFogSaveOnUnmountRef: React.MutableRefObject<boolean>;
     onReady?: () => void;
@@ -177,6 +178,7 @@ interface SaveableGameState {
     dialogTriggerProgress: DialogTriggerProgress;
     fogVisibilityByArea: FogVisibilityByArea;
     saveLockReason: string | null;
+    lastWaystone?: { areaId: AreaId; waystoneIndex: number };
 }
 
 interface LightingTuningSettings {
@@ -219,8 +221,8 @@ const DIALOG_CHARS_PER_TICK = 3;
 const DIALOG_MIN_BLIP_INTERVAL_MS = 38;
 const DIALOG_TRIGGER_REPEAT_GUARD_MS = 1500;
 const DIALOG_PARTY_GATHERED_DEFAULT_MAX_DISTANCE = 8;
-const SPEND_NIGHT_FADE_MS = 420;
-const SPEND_NIGHT_BLACK_HOLD_MS = 260;
+const SPEND_NIGHT_FADE_MS = 1200;
+const SPEND_NIGHT_BLACK_HOLD_MS = 600;
 const DIALOG_TRIGGER_SNAPSHOT_HASH_SEED = 2166136261;
 const DIALOG_TRIGGER_SNAPSHOT_HASH_PRIME = 16777619;
 const DIALOG_TRIGGER_POSITION_QUANT = 4;
@@ -329,7 +331,7 @@ function Game({
     persistedPlayers, spawnPoint, spawnDirection, onSaveClick, onLoadClick,
     onOpenMenu, onCloseMenu, onOpenJukebox, onCloseJukebox, onOpenEquipment, onCloseEquipment,
     gameStateRef, startDialogRef,
-    initialOpenedChests, initialOpenedSecretDoors, initialActivatedWaystones, initialGold, initialKilledEnemies, initialEnemyPositions, initialDialogTriggerProgress, dialogTriggersEnabled,
+    initialOpenedChests, initialOpenedSecretDoors, initialActivatedWaystones, initialGold, initialKilledEnemies, initialEnemyPositions, initialDialogTriggerProgress, initialLastWaystone, dialogTriggersEnabled,
     skipNextFogSaveOnUnmountRef, onReady
 }: GameProps) {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -434,6 +436,11 @@ function Game({
     const skippedDialogTriggerLogIdsRef = useRef<Set<string>>(new Set());
     const spendNightFadeTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
     const spendNightRestoreTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+    const spendNightPauseForcedRef = useRef(false);
+    const lastWaystoneRef = useRef<{ areaId: AreaId; waystoneIndex: number } | null>(initialLastWaystone ?? null);
+    const getSaveLockReasonRef = useRef<() => string | null>(() => null);
+    const runSpendNightEventRef = useRef<() => void>(() => {});
+    const travelToAreaRef = useRef<(targetArea: AreaId, spawn: { x: number; z: number }, direction?: "north" | "south" | "east" | "west") => void>(() => {});
     const dialogTriggerRuntimeStateRef = useRef<DialogTriggerRuntimeState>({
         stickySatisfiedConditionKeys: new Set(),
         previousRegionInsideByConditionKey: new Map(),
@@ -554,8 +561,8 @@ function Game({
     const anyMenuOpen = isDialogOpen || isLootPickupModalOpen || isWaystoneTravelModalOpen || infoModalOpen || saveLoadOpen || menuOpen || jukeboxOpen || equipmentModalOpen;
 
     useEffect(() => {
-        pauseToggleLockedRef.current = anyMenuOpen;
-    }, [anyMenuOpen]);
+        pauseToggleLockedRef.current = anyMenuOpen || sleepFadeOpacity > 0;
+    }, [anyMenuOpen, sleepFadeOpacity]);
 
     useEffect(() => {
         dialogTriggerAreaLoadedAtRef.current = Date.now();
@@ -1002,6 +1009,31 @@ function Game({
             if (sceneState.scene) {
                 createLightningPillar(sceneState.scene, reviveX, reviveZ, { color: "#ffd700", duration: 600, radius: 0.3, height: 10 });
             }
+        } else if (item.effect === "camp") {
+            const lockReason = getSaveLockReasonRef.current();
+            if (lockReason) {
+                addLog("Cannot camp here. " + lockReason, "#ef4444");
+                return false;
+            }
+            if (!isPartyGatheredForDialog(DIALOG_PARTY_GATHERED_DEFAULT_MAX_DISTANCE)) {
+                addLog("The party must be gathered before making camp.", "#ef4444");
+                return false;
+            }
+        } else if (item.effect === "waystone_recall") {
+            if (!lastWaystoneRef.current) {
+                addLog("No waystone has been visited yet.", "#ef4444");
+                return false;
+            }
+            const { areaId, waystoneIndex } = lastWaystoneRef.current;
+            if (areaId === getCurrentAreaId()) {
+                addLog("You are already near this waystone.", "#ef4444");
+                return false;
+            }
+            const targetArea = AREAS[areaId];
+            if (!targetArea?.waystones?.[waystoneIndex]) {
+                addLog("The waystone's connection has faded.", "#ef4444");
+                return false;
+            }
         } else {
             return false;
         }
@@ -1011,8 +1043,18 @@ function Game({
 
         setPartyInventory(removeFromInventory(inventory, itemId, 1));
         actionCooldownRef.current[unitId] = Date.now() + item.cooldown;
+
+        // Post-consume side effects
+        if (item.effect === "camp") {
+            runSpendNightEventRef.current();
+        } else if (item.effect === "waystone_recall") {
+            const { areaId, waystoneIndex } = lastWaystoneRef.current!;
+            const waystone = AREAS[areaId].waystones![waystoneIndex];
+            travelToAreaRef.current(areaId as AreaId, { x: waystone.x, z: waystone.z }, waystone.direction);
+        }
+
         return true;
-    }, [addLog, sceneState]);
+    }, [addLog, sceneState, isPartyGatheredForDialog]);
 
     // Process action queue wrapper
     const doProcessQueue = useCallback((defeatedThisFrame: Set<number>) => {
@@ -1169,6 +1211,19 @@ function Game({
 
     const runSpendNightEvent = useCallback(() => {
         clearSpendNightTimers();
+
+        // Route sleep through the standard pause pipeline so game-clock and cooldown
+        // timing stay consistent while the party rests.
+        pauseToggleLockedRef.current = true;
+        if (!pausedRef.current) {
+            spendNightPauseForcedRef.current = true;
+            togglePause(
+                getPauseRuntimeRefs(),
+                { pausedRef },
+                { setPaused, setSkillCooldowns },
+                doProcessQueue
+            );
+        }
         setSleepFadeOpacity(1);
 
         spendNightFadeTimeoutRef.current = window.setTimeout(() => {
@@ -1187,7 +1242,7 @@ function Game({
                 };
             }));
 
-            soundFns.playHeal();
+            soundFns.playLullaby();
             addLog("The party spends the night and wakes restored.", "#22c55e");
 
             // Respawn all enemy-tier enemies across all areas
@@ -1238,9 +1293,19 @@ function Game({
             spendNightRestoreTimeoutRef.current = window.setTimeout(() => {
                 spendNightRestoreTimeoutRef.current = null;
                 setSleepFadeOpacity(0);
+                if (spendNightPauseForcedRef.current && pausedRef.current) {
+                    togglePause(
+                        getPauseRuntimeRefs(),
+                        { pausedRef },
+                        { setPaused, setSkillCooldowns },
+                        doProcessQueue
+                    );
+                }
+                spendNightPauseForcedRef.current = false;
             }, SPEND_NIGHT_BLACK_HOLD_MS);
         }, SPEND_NIGHT_FADE_MS);
-    }, [addLog, clearSpendNightTimers]);
+    }, [addLog, clearSpendNightTimers, doProcessQueue, getPauseRuntimeRefs]);
+    runSpendNightEventRef.current = runSpendNightEvent;
 
     useEffect(() => {
         return () => {
@@ -1477,34 +1542,35 @@ function Game({
     const buildPersistedPlayers = useCallback((allUnits: Unit[], includePositions: boolean): PersistedPlayer[] => {
         const players = allUnits.filter(u => u.team === "player");
         const corePlayers = players.filter(u => !u.summonType);
-        const summon = players.find(u => u.summonType === "ancestor_warrior" && u.hp > 0);
+        const summons = players.filter(u => u.summonType !== undefined && u.hp > 0);
 
         const toPersisted = (u: Unit): PersistedPlayer => {
             const unitGroup = sceneState.unitGroups[u.id];
             const x = unitGroup?.position.x ?? u.x;
             const z = unitGroup?.position.z ?? u.z;
             return {
-            id: u.id,
-            hp: u.hp,
-            x: includePositions ? x : undefined,
-            z: includePositions ? z : undefined,
-            mana: u.mana,
-            level: u.level,
-            exp: u.exp,
-            stats: u.stats,
-            statPoints: u.statPoints,
-            skillPoints: u.skillPoints,
-            learnedSkills: u.learnedSkills,
-            statusEffects: u.statusEffects,
-            cantripUses: u.cantripUses,
-            summonType: u.summonType,
-            summonedBy: u.summonedBy
+                id: u.id,
+                hp: u.hp,
+                x: includePositions ? x : undefined,
+                z: includePositions ? z : undefined,
+                mana: u.mana,
+                level: u.level,
+                exp: u.exp,
+                stats: u.stats,
+                statPoints: u.statPoints,
+                skillPoints: u.skillPoints,
+                learnedSkills: u.learnedSkills,
+                statusEffects: u.statusEffects,
+                cantripUses: u.cantripUses,
+                summonType: u.summonType,
+                summonedBy: u.summonedBy,
+                summonExpireAt: u.summonExpireAt,
             };
         };
 
         return [
             ...corePlayers.map(toPersisted),
-            ...(summon ? [toPersisted(summon)] : [])
+            ...summons.map(toPersisted),
         ];
     }, [sceneState.unitGroups]);
 
@@ -1538,6 +1604,7 @@ function Game({
         const persistedState = buildPersistedPlayers(unitsStateRef.current, false);
         onAreaTransition(persistedState, targetArea, spawn, direction);
     }, [addLog, buildPersistedPlayers, onAreaTransition]);
+    travelToAreaRef.current = travelToArea;
 
     const handleAreaTransition = useCallback((transition: AreaTransition) => {
         travelToArea(transition.targetArea, transition.targetSpawn, transition.direction);
@@ -1593,6 +1660,7 @@ function Game({
         if (destination.isCurrent) {
             return;
         }
+        lastWaystoneRef.current = { areaId: destination.areaId as AreaId, waystoneIndex: destination.waystoneIndex };
         closeWaystoneTravelModal();
         travelToArea(destination.areaId, { x: destination.x, z: destination.z }, destination.direction);
     }, [closeWaystoneTravelModal, travelToArea]);
@@ -1607,6 +1675,7 @@ function Game({
             addLog("Waystone activated.", "#60a5fa");
         }
 
+        lastWaystoneRef.current = { areaId: currentAreaId as AreaId, waystoneIndex };
         setWaystoneTravelDestinations(buildWaystoneDestinations(currentAreaId, waystoneIndex, nextActivated));
     }, [addLog, buildWaystoneDestinations, currentAreaId]);
 
@@ -1882,6 +1951,7 @@ function Game({
 
         return null;
     }, [gameRefs, sceneState.unitGroups]);
+    getSaveLockReasonRef.current = getSaveLockReason;
 
     // Expose game state for save
     useEffect(() => {
@@ -1900,6 +1970,7 @@ function Game({
                 dialogTriggerProgress: serializeDialogTriggerProgressForSave(dialogTriggerProgressByAreaRef.current),
                 fogVisibilityByArea: captureFogVisibilityMemory(getCurrentAreaId(), gameRefs.current.visibility),
                 saveLockReason: getSaveLockReason(),
+                lastWaystone: lastWaystoneRef.current ?? undefined,
             };
         };
         return () => { gameStateRef.current = null; };
@@ -2739,6 +2810,7 @@ export default function App() {
     const [initialKilledEnemies, setInitialKilledEnemies] = useState<Set<string> | null>(null);
     const [initialEnemyPositions, setInitialEnemyPositions] = useState<Partial<Record<string, { x: number; z: number }>> | null>(null);
     const [initialDialogTriggerProgress, setInitialDialogTriggerProgress] = useState<DialogTriggerProgress | null>(null);
+    const [initialLastWaystone, setInitialLastWaystone] = useState<{ areaId: AreaId; waystoneIndex: number } | null>(null);
     const [savePreviewState, setSavePreviewState] = useState<SaveSlotData | null>(null);
     const [saveDisabledReason, setSaveDisabledReason] = useState<string | null>(null);
     const gameStateRef = useRef<(() => SaveableGameState) | null>(null);
@@ -2916,6 +2988,7 @@ export default function App() {
         setInitialKilledEnemies(null);
         setInitialEnemyPositions(null);
         setInitialDialogTriggerProgress(null);
+        setInitialLastWaystone(null);
         clearFogVisibilityMemory();
         initializeEquipmentState();
         setCurrentAreaWithPathReset(DEFAULT_STARTING_AREA);
@@ -2940,6 +3013,7 @@ export default function App() {
             setInitialKilledEnemies(new Set(worldState.killedEnemies));
             setInitialGold(worldState.gold);
             setInitialDialogTriggerProgress(worldState.dialogTriggerProgress);
+            setInitialLastWaystone(worldState.lastWaystone ?? null);
         }
 
         // Store pending transition and start fade to black
@@ -3082,6 +3156,7 @@ export default function App() {
         setInitialEnemyPositions(saveData.enemyPositions ?? null);
         setPersistedPlayers(saveData.players);
         setInitialDialogTriggerProgress(saveData.dialogTriggerProgress);
+        setInitialLastWaystone(saveData.lastWaystone ?? null);
         setSpawnPoint(saveData.spawnPoint);
         // Restore UI state to localStorage so Game reads it on remount
         if (saveData.hotbarAssignments) saveHotbarAssignments(saveData.hotbarAssignments);
@@ -3156,6 +3231,7 @@ export default function App() {
                     initialOpenedChests={initialOpenedChests} initialOpenedSecretDoors={initialOpenedSecretDoors} initialActivatedWaystones={initialActivatedWaystones}
                     initialGold={initialGold} initialKilledEnemies={initialKilledEnemies} initialEnemyPositions={initialEnemyPositions}
                     initialDialogTriggerProgress={initialDialogTriggerProgress}
+                    initialLastWaystone={initialLastWaystone}
                     dialogTriggersEnabled={dialogTriggersEnabled}
                     skipNextFogSaveOnUnmountRef={skipNextFogSaveOnUnmountRef}
                     onReady={handleSceneReady}

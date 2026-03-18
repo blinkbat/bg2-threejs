@@ -810,7 +810,12 @@ export function runPathFollowingPhase(ctx: PathContext): { targetX: number; targ
             ? { isStuck: false, isReallyStuck: !!(moveStart && (now - moveStart.time) > PLAYER_MOVE_TIMEOUT_MS), isJittering: false }
             : checkIfStuck(unit.id, g.position.x, g.position.z, moveStart, now);
 
-        if (stuckResult.isReallyStuck || stuckResult.isStuck || stuckResult.isJittering) {
+        // Suppress jitter-triggered give-up when unit has an attack target —
+        // melee units jostling through crowds to reach their target is expected.
+        const hasAttackTarget = g.userData.attackTarget !== null && g.userData.attackTarget !== undefined;
+        const effectiveJitter = stuckResult.isJittering && !hasAttackTarget;
+
+        if (stuckResult.isReallyStuck || stuckResult.isStuck || effectiveJitter) {
             // Player formation commands get one forced repath before giving up.
             const shouldRegroup = isPlayerMoveCommand && stuckResult.isReallyStuck && !g.userData.formationRegroupAttempted;
             if (shouldRegroup) {
@@ -1197,7 +1202,11 @@ export function runMovementPhase(ctx: MovementContext): void {
     let moveZ = desiredZ + avoidZ;
     const moveMag = Math.hypot(moveX, moveZ);
 
-    if (moveMag > MOVEMENT_MIN_MAGNITUDE) {
+    // Use a higher threshold when avoidance nearly cancels desired direction —
+    // this prevents micro-oscillation that triggers jitter detection in crowds.
+    const effectiveMinMag = (avoidX !== 0 || avoidZ !== 0) ? 0.05 : MOVEMENT_MIN_MAGNITUDE;
+
+    if (moveMag > effectiveMinMag) {
         // Normalize and apply speed (with optional multiplier for faster/slower enemies)
         const speed = MOVE_SPEED * speedMultiplier * getDebugSpeedMultiplier();
         moveX = (moveX / moveMag) * speed;
@@ -1246,7 +1255,9 @@ export function recalculatePathIfNeeded(
         isFlying,
         canTraverseWaterTerrain
     );
-    recordPathRecalculation(unit.id, reason, now);
+    // When path is short (unit near target), use longer repath cooldown to reduce thrashing
+    const nearTarget = result.path.length <= 3;
+    recordPathRecalculation(unit.id, reason, now, nearTarget);
     pathsRef[unit.id] = result.path;
     if (result.success) {
         moveStartRef[unit.id] = { time: now, x: g.position.x, z: g.position.z };

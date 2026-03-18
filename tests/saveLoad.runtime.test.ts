@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CharacterEquipment, PartyInventory } from "../src/core/types";
+import { getGameTime } from "../src/core/gameClock";
 import type { SaveSlotData } from "../src/game/saveLoad";
 import {
     buildSaveSlotData,
@@ -43,6 +44,7 @@ function createState(): SaveSnapshotState {
             coast: [[0, 1], [2, 2]],
             forest: [[1, 0], [0, 1]],
         },
+        lastWaystone: { areaId: "forest", waystoneIndex: 1 },
     };
 }
 
@@ -91,6 +93,40 @@ describe("saveLoad runtime", () => {
         expect(slot.equipment[1].leftHand).toBe("largeBranch");
         expect(slot.inventory.items[0].quantity).toBe(2);
         expect(slot.dialogTriggerProgress).toEqual({ coast: ["intro_1"] });
+        expect(slot.lastWaystone).toEqual({ areaId: "forest", waystoneIndex: 1 });
+    });
+
+    it("stores summon timers as remaining duration and restores them onto the game clock", () => {
+        const state = createState();
+        const gameNow = getGameTime();
+        state.players = [{
+            id: 8,
+            hp: 12,
+            summonType: "vishas_eye_orb",
+            summonedBy: 6,
+            summonExpireAt: gameNow + 4000,
+        }];
+
+        const slot = buildSaveSlotData({
+            timestamp: 222,
+            slotName: "slot-b",
+            state,
+            equipment: createEquipmentMap(),
+            inventory: createInventory(),
+        });
+
+        expect(slot.players[0].summonExpireAt).toBeUndefined();
+        expect(slot.players[0].summonRemainingDurationMs).toBe(4000);
+
+        const result = resolveLoadedSaveState(slot, {
+            coast: { defaultSpawn: { x: 4, z: 5 } },
+        });
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+
+        expect(result.data.players[0].summonRemainingDurationMs).toBeUndefined();
+        expect(result.data.players[0].summonExpireAt).toBe(getGameTime() + 4000);
     });
 
     it("returns unknown_area when loading a save for an unregistered area", () => {
@@ -136,6 +172,7 @@ describe("saveLoad runtime", () => {
             fogVisibilityByArea: {
                 coast: [[0, 1], [2, 2]],
             },
+            lastWaystone: { areaId: "forest", waystoneIndex: 1 },
         };
 
         const result = resolveLoadedSaveState(input, {
@@ -149,6 +186,7 @@ describe("saveLoad runtime", () => {
         expect(result.data.openedChests).toEqual(new Set(["coast-1"]));
         expect(result.data.activatedWaystones).toEqual(new Set(["coast-waystone-0"]));
         expect(result.data.dialogTriggerProgress).toEqual({ coast: ["intro_1"] });
+        expect(result.data.lastWaystone).toEqual({ areaId: "forest", waystoneIndex: 1 });
 
         input.players[0].hp = 1;
         input.equipment[1].leftHand = "battleaxe";
@@ -158,6 +196,10 @@ describe("saveLoad runtime", () => {
         input.activatedWaystones.push("forest-waystone-1");
         input.dialogTriggerProgress?.coast?.push("new");
         input.fogVisibilityByArea?.coast?.[0].splice(0, 1, 2);
+        if (input.lastWaystone) {
+            input.lastWaystone.areaId = "coast";
+            input.lastWaystone.waystoneIndex = 0;
+        }
 
         expect(result.data.players[0].hp).toBe(10);
         expect(result.data.equipment[1].leftHand).toBe("largeBranch");
@@ -169,5 +211,6 @@ describe("saveLoad runtime", () => {
         expect(result.data.fogVisibilityByArea).toEqual({
             coast: [[0, 1], [2, 2]],
         });
+        expect(result.data.lastWaystone).toEqual({ areaId: "forest", waystoneIndex: 1 });
     });
 });

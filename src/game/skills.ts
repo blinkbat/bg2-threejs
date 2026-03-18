@@ -320,7 +320,7 @@ export const SKILLS: Record<string, Skill> = {
         name: "Visha's Eyes",
         description: "Summon three floating holy orbs that fire at foes, then heal nearby allies when they fade or are destroyed.",
         flavor: "\"The saint sees all, and what she sees, she shields.\"",
-        manaCost: 12,
+        manaCost: 0,
         cooldown: 800,
         type: "summon",
         targetType: "self",
