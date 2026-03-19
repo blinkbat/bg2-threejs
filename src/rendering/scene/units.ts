@@ -368,6 +368,47 @@ interface UnitCreationResult {
     targetRing?: THREE.Mesh;
     shieldIndicator?: THREE.Mesh;
     billboard?: THREE.Mesh;
+    hpBarGroup?: THREE.Group;
+}
+
+// =============================================================================
+// HP BAR MESHES
+// =============================================================================
+
+const HP_BAR_WIDTH = 0.8;
+const HP_BAR_HEIGHT = 0.08;
+const HP_BAR_Y_OFFSET = 2.2;
+
+function createHpBarGroup(): THREE.Group {
+    const group = new THREE.Group();
+    group.position.set(0, 0, 0);
+
+    const bgGeom = new THREE.PlaneGeometry(HP_BAR_WIDTH, HP_BAR_HEIGHT);
+    const bgMat = new THREE.MeshBasicMaterial({
+        color: 0x121222,
+        depthTest: false,
+        transparent: true,
+        toneMapped: false,
+    });
+    const bg = new THREE.Mesh(bgGeom, bgMat);
+    bg.renderOrder = 1200;
+    group.add(bg);
+
+    const fillGeom = new THREE.PlaneGeometry(HP_BAR_WIDTH, HP_BAR_HEIGHT);
+    fillGeom.translate(HP_BAR_WIDTH / 2, 0, 0);
+    const fillMat = new THREE.MeshBasicMaterial({
+        color: 0x22c55e,
+        depthTest: false,
+        transparent: true,
+        toneMapped: false,
+    });
+    const fill = new THREE.Mesh(fillGeom, fillMat);
+    fill.position.set(-HP_BAR_WIDTH / 2, 0, 0.001);
+    fill.renderOrder = 1201;
+    group.add(fill);
+
+    group.userData.fillMesh = fill;
+    return group;
 }
 
 const UNIT_RING_SEGMENTS = 64;
@@ -552,6 +593,14 @@ function buildUnitGroup(
         }
     }
 
+    // HP bar (player units only) — added to scene root (not group) so renderOrder is global
+    let hpBarGroup: THREE.Group | undefined;
+    if (isPlayer) {
+        hpBarGroup = createHpBarGroup();
+        hpBarGroup.position.set(unit.x, flyHeight + HP_BAR_Y_OFFSET, unit.z);
+        scene.add(hpBarGroup);
+    }
+
     // Set position (flyHeight determined earlier for shadow)
     group.position.set(unit.x, flyHeight, unit.z);
     group.userData = { unitId: unit.id, targetX: unit.x, targetZ: unit.z, attackTarget: null, flyHeight };
@@ -564,7 +613,8 @@ function buildUnitGroup(
         selectRing,
         targetRing,
         shieldIndicator,
-        billboard
+        billboard,
+        hpBarGroup,
     };
 }
 
@@ -598,7 +648,8 @@ export function addUnitToScene(
     unitMeshes: Record<number, THREE.Mesh>,
     unitOriginalColors: Record<number, THREE.Color>,
     maxHp: Record<number, number>,
-    billboards?: THREE.Mesh[]
+    billboards?: THREE.Mesh[],
+    hpBarGroups?: Record<number, THREE.Group>
 ): void {
     const result = buildUnitGroup(scene, unit, billboards);
     const data = getUnitStats(unit);
@@ -614,5 +665,8 @@ export function addUnitToScene(
     }
     if (result.shieldIndicator) {
         shieldIndicators[unit.id] = result.shieldIndicator;
+    }
+    if (result.hpBarGroup && hpBarGroups) {
+        hpBarGroups[unit.id] = result.hpBarGroup;
     }
 }

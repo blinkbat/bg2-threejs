@@ -21,8 +21,7 @@ import { ENEMY_STATS } from "../game/enemyStats";
 import { getEffectiveMaxHp } from "../game/playerUnits";
 import { getEffectivePlayerHpRegen } from "../game/equipmentState";
 import { createLiveUnitsDispatch } from "../core/stateUtils";
-import { publishHpBarOverlayFrame, resetHpBarOverlayFrame } from "./hpBarOverlayStore";
-import { updateCamera, updateLightning, updateWater, updateRain, updateWallTransparency, updateTreeFogVisibility, updateFogOccluderVisibility, revealAllTreeMeshes, revealAllFogOccluderMeshes, updateLightLOD, addUnitToScene, updateBillboards } from "../rendering/scene";
+import { updateCamera, updateLightning, updateWater, updateRain, updateWallTransparency, updateTreeFogVisibility, updateFogOccluderVisibility, revealAllTreeMeshes, revealAllFogOccluderMeshes, updateLightLOD, addUnitToScene, updateBillboards, updateHpBarBillboards, updateHpBars } from "../rendering/scene";
 import { updateDynamicObstacles } from "../ai/pathfinding";
 import { updateAvoidanceCache, updateTargetingCache } from "../ai/unitAI";
 import { buildUnitSpatialFrame, type UnitSpatialEntry } from "../ai/spatialCache";
@@ -36,7 +35,6 @@ import {
     pruneStaleVolleys,
     updateFogOfWar,
     updateUnitAI,
-    updateHpBarPositions,
     updateSwingAnimations,
     processStatusEffects,
     updatePoisonVisuals,
@@ -132,7 +130,6 @@ export interface PerfFrameSample {
     fogMs: number;
     aiMs: number;
     unitAiMs: number;
-    hpBarsMs: number;
     wallMs: number;
     lightLodMs: number;
     renderMs: number;
@@ -560,11 +557,10 @@ export function useGameLoop({
         if (sceneState?.camera) {
             updateCamera(sceneState.camera, gameRefs.current.cameraOffset);
         }
-    }, [sceneState?.camera, gameRefs]);
+    }, [sceneState, gameRefs]);
 
     useEffect(() => {
         if (!sceneState) {
-            resetHpBarOverlayFrame();
             return;
         }
 
@@ -572,12 +568,11 @@ export function useGameLoop({
             scene, camera, renderer, flames, candleLights, fogTexture, fogMesh, moveMarker,
             rangeIndicator, unitGroups, selectRings, targetRings, shieldIndicators,
             unitMeshes, unitOriginalColors, maxHp, wallMeshes, treeMeshes, fogOccluderMeshes,
-            columnMeshes, columnGroups, billboards, candleMeshes, waterMesh, rainOverlay
+            columnMeshes, columnGroups, billboards, candleMeshes, waterMesh, rainOverlay,
+            hpBarGroups
         } = sceneState;
 
         let animId: number;
-        let hpBarFrame = 0;
-        let cachedRect = renderer.domElement.getBoundingClientRect();
         const playerUnitsBuffer: Unit[] = [];
         const spatialAliveEntriesBuffer: UnitSpatialEntry[] = [];
         const spatialTargetingEntriesBuffer: UnitSpatialEntry[] = [];
@@ -909,7 +904,8 @@ export function useGameLoop({
                             unitMeshes,
                             unitOriginalColors,
                             maxHp,
-                            billboards
+                            billboards,
+                            hpBarGroups
                         );
                         refs.paths[unit.id] = [];
                     }
@@ -974,15 +970,6 @@ export function useGameLoop({
             // Shared transient effect animations (rings, beams, flash overlays, etc.)
             updateEffectAnimations(gameNow);
 
-            // HP bar positions (rect measurement cached; only re-measured every 60 frames)
-            sectionStart = performance.now();
-            hpBarFrame++;
-            if (hpBarFrame % 60 === 0) {
-                cachedRect = renderer.domElement.getBoundingClientRect();
-            }
-            publishHpBarOverlayFrame(updateHpBarPositions(currentUnits, unitGroups, camera, cachedRect, refs.zoomLevel, maxHp));
-            const hpBarsMs = performance.now() - sectionStart;
-
             // Wall/tree/candle transparency
             sectionStart = performance.now();
             updateWallTransparency(camera, wallMeshes, unitGroups, currentUnits, treeMeshes, columnMeshes, columnGroups, candleMeshes, flames);
@@ -996,8 +983,10 @@ export function useGameLoop({
             sectionStart = performance.now();
             updateAncestorGhostVisuals(currentUnits, unitGroups, unitMeshes, gameNow);
 
-            // Billboard rotation
+            // Billboard rotation + HP bars
             updateBillboards(billboards, camera);
+            updateHpBarBillboards(hpBarGroups);
+            updateHpBars(hpBarGroups, unitGroups, currentUnits, maxHp);
             visualMs += performance.now() - sectionStart;
 
             // Render
@@ -1057,7 +1046,6 @@ export function useGameLoop({
                     fogMs,
                     aiMs,
                     unitAiMs,
-                    hpBarsMs,
                     wallMs,
                     lightLodMs,
                     renderMs
@@ -1071,7 +1059,6 @@ export function useGameLoop({
 
         return () => {
             cancelAnimationFrame(animId);
-            resetHpBarOverlayFrame();
         };
     }, [sceneState, gameRefs, stateRefs, callbacks, keysPressed, updateCam, debugFogOfWarDisabled]);
 }

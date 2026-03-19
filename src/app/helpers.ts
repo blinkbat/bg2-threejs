@@ -91,7 +91,6 @@ export function formatPerfLogLine(sample: PerfFrameSample): string {
         `t_fog=${sample.fogMs.toFixed(2)}`,
         `t_ai=${sample.aiMs.toFixed(2)}`,
         `t_unitAi=${sample.unitAiMs.toFixed(2)}`,
-        `t_hp=${sample.hpBarsMs.toFixed(2)}`,
         `t_wall=${sample.wallMs.toFixed(2)}`,
         `t_lod=${sample.lightLodMs.toFixed(2)}`,
         `t_render=${sample.renderMs.toFixed(2)}`

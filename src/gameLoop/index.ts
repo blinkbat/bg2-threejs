@@ -508,59 +508,6 @@ export function updateUnitAI(
 }
 
 // =============================================================================
-// HP BAR POSITIONS
-// =============================================================================
-
-// Reusable vector for HP bar position calculations
-const _hpWorldPos = new THREE.Vector3();
-
-interface HpBarPosition {
-    id: number;
-    x: number;
-    y: number;
-    visible: boolean;
-    hp: number;
-    maxHp: number;
-}
-
-interface HpBarPositionsFrame {
-    bars: HpBarPosition[];
-    scale: number;
-}
-
-export function updateHpBarPositions(
-    unitsState: Unit[],
-    unitsRef: Record<number, UnitGroup>,
-    camera: THREE.OrthographicCamera,
-    rendererRect: DOMRect,
-    zoomLevel: number,
-    maxHpById: Record<number, number>
-): HpBarPositionsFrame {
-    const bars: HpBarPosition[] = [];
-    const halfWidth = rendererRect.width * 0.5;
-    const halfHeight = rendererRect.height * 0.5;
-
-    for (const u of unitsState) {
-        if (u.team !== "player") continue;
-        const g = unitsRef[u.id];
-        if (!g) continue;
-        const boxH = 1.8;
-        _hpWorldPos.set(g.position.x, boxH + 0.4, g.position.z);
-        _hpWorldPos.project(camera);
-        bars.push({
-            id: u.id,
-            x: (_hpWorldPos.x + 1) * halfWidth,
-            y: (-_hpWorldPos.y + 1) * halfHeight,
-            visible: g.visible && u.hp > 0,
-            hp: u.hp,
-            maxHp: Math.max(1, maxHpById[u.id] ?? 1)
-        });
-    }
-
-    return { bars, scale: 10 / zoomLevel };
-}
-
-// =============================================================================
 // SHIELD FACING UPDATE
 // =============================================================================
 

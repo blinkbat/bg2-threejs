@@ -487,6 +487,55 @@ export function updateBillboards(billboards: THREE.Mesh[], camera: THREE.Camera)
 }
 
 // =============================================================================
+// HP BAR UPDATES
+// =============================================================================
+
+const _hpColorHigh = new THREE.Color(0x22c55e);
+const _hpColorMedium = new THREE.Color(0xeab308);
+const _hpColorLow = new THREE.Color(0xef4444);
+
+export function updateHpBarBillboards(
+    hpBarGroups: Record<number, THREE.Group>
+): void {
+    for (const id in hpBarGroups) {
+        hpBarGroups[id].quaternion.copy(_billboardQuat);
+    }
+}
+
+const HP_BAR_Y_OFFSET = 2.2;
+
+export function updateHpBars(
+    hpBarGroups: Record<number, THREE.Group>,
+    unitGroups: Record<number, UnitGroup>,
+    units: Unit[],
+    maxHpById: Record<number, number>
+): void {
+    for (const u of units) {
+        if (u.team !== "player") continue;
+        const barGroup = hpBarGroups[u.id];
+        if (!barGroup) continue;
+        const g = unitGroups[u.id];
+        if (!g) continue;
+        const fillMesh = barGroup.userData.fillMesh as THREE.Mesh | undefined;
+        if (!fillMesh) continue;
+
+        // Sync position and visibility from UnitGroup
+        barGroup.position.set(g.position.x, g.position.y + HP_BAR_Y_OFFSET, g.position.z);
+        barGroup.visible = g.visible && u.hp > 0;
+
+        const maxHp = Math.max(1, maxHpById[u.id] ?? 1);
+        const pct = Math.max(0, Math.min(1, u.hp / maxHp));
+
+        fillMesh.scale.x = pct;
+
+        const mat = fillMesh.material as THREE.MeshBasicMaterial;
+        if (pct > 0.5) mat.color.copy(_hpColorHigh);
+        else if (pct > 0.25) mat.color.copy(_hpColorMedium);
+        else mat.color.copy(_hpColorLow);
+    }
+}
+
+// =============================================================================
 // LIGHT LOD
 // =============================================================================
 

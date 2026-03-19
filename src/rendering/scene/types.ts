@@ -68,4 +68,5 @@ export interface SceneRefs {
     rainOverlay: THREE.Mesh | null;  // Lightweight camera-facing weather overlay
     chestMeshes: ChestMeshData[];  // Chest lid pivots for open/close animation
     billboards: THREE.Mesh[];  // Billboard meshes that face the camera
+    hpBarGroups: Record<number, THREE.Group>;  // Player HP bar billboard groups
 }

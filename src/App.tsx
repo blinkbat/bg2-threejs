@@ -67,7 +67,6 @@ import { loadPlaytestSettings, savePlaytestSettings, type PlaytestSettings } fro
 import { CombatLog } from "./components/CombatLog";
 import { HUD } from "./components/HUD";
 import { FormationIndicator } from "./components/FormationIndicator";
-import { HpBarsOverlay } from "./components/HpBarsOverlay";
 import { loadFormationOrder, saveFormationOrder } from "./hooks/formationStorage";
 import { ControlsModal } from "./components/ControlsModal";
 import { GlossaryModal } from "./components/GlossaryModal";
@@ -2581,8 +2580,6 @@ function Game({
                     }}
                 />
             )}
-            <HpBarsOverlay />
-
             {/* Tooltips */}
             {hoveredEnemy && (() => {
                 const enemy = hoveredEnemyUnit;

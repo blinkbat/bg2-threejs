@@ -57,6 +57,7 @@ export interface ThreeSceneState {
     rainOverlay: THREE.Mesh | null;
     chestMeshes: ChestMeshData[];
     billboards: THREE.Mesh[];
+    hpBarGroups: Record<number, THREE.Group>;
 }
 
 /** Mutable refs for game state that persists across frames */
@@ -141,7 +142,8 @@ function createEmptySceneState(): ThreeSceneState {
         waterMesh: null,
         rainOverlay: null,
         chestMeshes: [],
-        billboards: []
+        billboards: [],
+        hpBarGroups: {}
     };
 }
 
@@ -360,7 +362,8 @@ export function useThreeScene({
             waterMesh: sceneRefs.waterMesh,
             rainOverlay: sceneRefs.rainOverlay,
             chestMeshes: sceneRefs.chestMeshes,
-            billboards: sceneRefs.billboards
+            billboards: sceneRefs.billboards,
+            hpBarGroups: sceneRefs.hpBarGroups
         };
         setSceneState(initializedState);
 

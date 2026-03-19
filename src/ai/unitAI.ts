@@ -347,7 +347,11 @@ function validateCurrentTarget(
  * If alerted is true, ignores aggro range and searches entire map.
  * Broodlings can also see through their mother's eyes if she's alive.
  */
-function findNearestTarget(ctx: TargetingContext, alerted: boolean = false): number | null {
+function findNearestTarget(
+    ctx: TargetingContext,
+    alerted: boolean = false,
+    excludedTargets?: ReadonlySet<number>
+): number | null {
     const { unit, g, unitsRef, unitsState, visibility, now, defeatedThisFrame, aggroRange } = ctx;
     const isPlayer = unit.team === "player";
     const enemyTeam = isPlayer ? "enemy" : "player";
@@ -364,7 +368,7 @@ function findNearestTarget(ctx: TargetingContext, alerted: boolean = false): num
     // regardless of the broodling's own limited aggro range
     if (!isPlayer && unit.enemyType === "broodling") {
         const motherTarget = getMothersSightTarget(unit, unitsState, unitsRef, defeatedThisFrame);
-        if (motherTarget && !blockedTargets?.has(motherTarget.targetId)) {
+        if (motherTarget && !blockedTargets?.has(motherTarget.targetId) && !excludedTargets?.has(motherTarget.targetId)) {
             // Mother can see a player - broodling ALWAYS targets them (missile behavior)
             // Set this as the target and use its distance as the reference
             nearest = motherTarget.targetId;
@@ -379,6 +383,7 @@ function findNearestTarget(ctx: TargetingContext, alerted: boolean = false): num
         if (hasStatusEffect(candidate, "divine_lattice")) return;
         if (defeatedThisFrame.has(candidate.id)) return;
         if (blockedTargets?.has(candidate.id)) return;
+        if (excludedTargets?.has(candidate.id)) return;
         // Skip untargetable enemies.
         if (isEnemyUntargetable(candidate.id)) return;
 
@@ -503,6 +508,49 @@ function acquireTarget(ctx: TargetingContext, targetId: number): boolean {
     }
 }
 
+interface AcquireReachableTargetOptions {
+    alerted?: boolean;
+    preferredTargetId?: number | null;
+}
+
+function tryAcquireReachableTarget(
+    ctx: TargetingContext,
+    options: AcquireReachableTargetOptions = {}
+): boolean {
+    const { unit, unitsState } = ctx;
+    const isPlayer = unit.team === "player";
+    const attemptedTargets = new Set<number>();
+    const enemyTeam = isPlayer ? "enemy" : "player";
+    const maxAttempts = isPlayer
+        ? 1
+        : unitsState.reduce((count, candidate) => (
+            candidate.team === enemyTeam ? count + 1 : count
+        ), 0);
+    let preferredTargetId = options.preferredTargetId ?? null;
+
+    while (attemptedTargets.size < maxAttempts) {
+        const nextTargetId = preferredTargetId !== null && !attemptedTargets.has(preferredTargetId)
+            ? preferredTargetId
+            : findNearestTarget(ctx, options.alerted === true, attemptedTargets);
+        preferredTargetId = null;
+
+        if (nextTargetId === null || attemptedTargets.has(nextTargetId)) {
+            return false;
+        }
+
+        attemptedTargets.add(nextTargetId);
+        if (acquireTarget(ctx, nextTargetId)) {
+            return true;
+        }
+
+        if (isPlayer) {
+            return false;
+        }
+    }
+
+    return false;
+}
+
 /**
  * Find the unit that recently damaged this enemy (for front-shielded enemies).
  * Returns the unit ID if they're still alive and in aggro range.
@@ -603,10 +651,8 @@ export function runTargetingPhase(ctx: TargetingContext): void {
 
     // Alerted enemies immediately search for nearest target, ignoring normal constraints
     if (isAlerted && !targetStillValid) {
-        const nearest = findNearestTarget(ctx, true);
-        if (nearest !== null) {
-            acquireTarget(ctx, nearest);
-        }
+        tryAcquireReachableTarget(ctx, { alerted: true });
+        recordTargetScan(unit.id, now);
         // Clear alerted flag once they've acquired a target (or tried to)
         g.userData.alerted = false;
         return;
@@ -619,20 +665,17 @@ export function runTargetingPhase(ctx: TargetingContext): void {
         const damageSourceTarget = findRecentDamageSource(ctx);
         if (damageSourceTarget !== null && damageSourceTarget !== g.userData.attackTarget) {
             // Switch to whoever is attacking us
-            acquireTarget(ctx, damageSourceTarget);
+            tryAcquireReachableTarget(ctx, { preferredTargetId: damageSourceTarget });
             recordTargetScan(unit.id, now);
             return;
         }
     }
 
     // Fast-retarget units (medium+ or slow movers) bypass scan cooldown when target is lost.
-    if (!isPlayer && (shouldRetargetToDamageSource || usesFastRetargeting) && !targetStillValid && !recentlyGaveUp(unit.id, now)) {
-        const nearest = findNearestTarget(ctx);
-        if (nearest !== null) {
-            acquireTarget(ctx, nearest);
-            recordTargetScan(unit.id, now);
-            return;
-        }
+    if (!isPlayer && (shouldRetargetToDamageSource || usesFastRetargeting) && !targetStillValid) {
+        tryAcquireReachableTarget(ctx);
+        recordTargetScan(unit.id, now);
+        return;
     }
 
     // Determine if we should look for a new target
@@ -645,15 +688,11 @@ export function runTargetingPhase(ctx: TargetingContext): void {
         : canScanForTargets(unit.id, now);
 
     if (canAutoTarget && canScan) {
-        recordTargetScan(unit.id, now);
-
-        // Don't start new path if we recently gave up (prevents jitter)
-        if (!recentlyGaveUp(unit.id, now)) {
-            const nearest = findNearestTarget(ctx);
-            if (nearest !== null) {
-                acquireTarget(ctx, nearest);
-            }
+        const shouldAcquireTarget = !isPlayer || !recentlyGaveUp(unit.id, now);
+        if (shouldAcquireTarget) {
+            tryAcquireReachableTarget(ctx);
         }
+        recordTargetScan(unit.id, now);
     }
 }
 

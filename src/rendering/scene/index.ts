@@ -66,6 +66,8 @@ export {
     updateWater,
     updateRain,
     updateBillboards,
+    updateHpBarBillboards,
+    updateHpBars,
     updateLightLOD,
     updateWallTransparency,
     updateTreeFogVisibility,
@@ -2620,6 +2622,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     const unitOriginalColors: Record<number, THREE.Color> = {};
     const maxHp: Record<number, number> = {};
     const billboards: THREE.Mesh[] = [];
+    const hpBarGroups: Record<number, THREE.Group> = {};
 
     units.forEach(unit => {
         // Skip dead units - don't create scene objects for them
@@ -2639,6 +2642,9 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         }
         if (result.shieldIndicator) {
             shieldIndicators[unit.id] = result.shieldIndicator;
+        }
+        if (result.hpBarGroup) {
+            hpBarGroups[unit.id] = result.hpBarGroup;
         }
     });
 
@@ -2678,5 +2684,6 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         rainOverlay,
         chestMeshes,
         billboards,
+        hpBarGroups,
     };
 }
