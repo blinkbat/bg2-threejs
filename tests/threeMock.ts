@@ -15,6 +15,17 @@ function createCanvasContextStub() {
 
 export function createThreeTestModule(): Record<string, unknown> {
     class ColorStub {
+        value: unknown;
+
+        constructor(value?: unknown) {
+            this.value = value;
+        }
+
+        set(value: unknown): this {
+            this.value = value;
+            return this;
+        }
+
         copy(): this {
             return this;
         }
@@ -85,59 +96,214 @@ export function createThreeTestModule(): Record<string, unknown> {
         }
     }
 
-    class MeshStub {
+    class Object3DStub {
         position = new Vector3Stub();
         rotation = { x: 0, y: 0, z: 0 };
-        scale = { set() {} };
+        scale = new Vector3Stub(1, 1, 1);
         quaternion = { setFromUnitVectors() {} };
         renderOrder = 0;
         userData: Record<string, unknown> = {};
-        material = {
-            map: {
-                image: {
-                    getContext() {
-                        return createCanvasContextStub();
-                    },
-                },
-                needsUpdate: false,
-            },
-            opacity: 1,
-            dispose() {},
-        };
-        geometry = { dispose() {} };
-    }
+        visible = true;
+        parent: Object3DStub | null = null;
+        children: Object3DStub[] = [];
 
-    class MeshPhongMaterialStub {
-        color = new ColorStub();
-        emissive = new ColorStub();
-        emissiveIntensity = 0;
-        shininess = 0;
-        transparent = false;
-        opacity = 1;
+        add(child: Object3DStub): this {
+            child.parent = this;
+            this.children.push(child);
+            return this;
+        }
 
-        dispose(): void {}
+        remove(child: Object3DStub): this {
+            this.children = this.children.filter(existing => existing !== child);
+            child.parent = null;
+            return this;
+        }
 
-        clone(): MeshPhongMaterialStub {
-            return new MeshPhongMaterialStub();
+        traverse(visitor: (object: Object3DStub) => void): void {
+            visitor(this);
+            for (const child of this.children) {
+                child.traverse(visitor);
+            }
         }
     }
 
-    class MeshBasicMaterialStub {
-        opacity = 1;
+    class GeometryStub {
+        parameters: Record<string, unknown>;
+
+        constructor(parameters: Record<string, unknown> = {}) {
+            this.parameters = parameters;
+        }
+
+        translate(): this {
+            return this;
+        }
 
         dispose(): void {}
     }
 
-    class SceneStub {
-        add(): void {}
-
-        remove(): void {}
+    class PlaneGeometryStub extends GeometryStub {
+        constructor(width: number = 0, height: number = 0) {
+            super({ width, height });
+        }
     }
 
-    class LineStub {
-        position = { set() {} };
-        userData: Record<string, unknown> = {};
+    class CircleGeometryStub extends GeometryStub {
+        constructor(radius: number = 0, segments?: number) {
+            super({ radius, segments });
+        }
     }
+
+    class SphereGeometryStub extends GeometryStub {
+        constructor(radius: number = 0, widthSegments?: number, heightSegments?: number) {
+            super({ radius, widthSegments, heightSegments });
+        }
+    }
+
+    class RingGeometryStub extends GeometryStub {
+        constructor(innerRadius: number = 0, outerRadius: number = 0, thetaSegments?: number) {
+            super({ innerRadius, outerRadius, radius: outerRadius, thetaSegments });
+        }
+    }
+
+    class CylinderGeometryStub extends GeometryStub {
+        constructor(radiusTop?: number, radiusBottom?: number, height?: number) {
+            super({ radiusTop, radiusBottom, height });
+        }
+    }
+
+    class OctahedronGeometryStub extends GeometryStub {
+        constructor(radius?: number, detail?: number) {
+            super({ radius, detail });
+        }
+    }
+
+    class IcosahedronGeometryStub extends GeometryStub {
+        constructor(radius?: number, detail?: number) {
+            super({ radius, detail });
+        }
+    }
+
+    class BufferGeometryStub extends GeometryStub {}
+
+    class MeshBasicMaterialStub {
+        color = new ColorStub();
+        opacity = 1;
+        transparent = false;
+        depthWrite = true;
+        side = 0;
+        blending = 0;
+        map = {
+            image: {
+                getContext() {
+                    return createCanvasContextStub();
+                },
+            },
+            needsUpdate: false,
+        };
+
+        constructor(init: Record<string, unknown> = {}) {
+            if (init.color !== undefined) {
+                this.color.set(init.color);
+            }
+            if (typeof init.opacity === "number") {
+                this.opacity = init.opacity;
+            }
+            if (typeof init.transparent === "boolean") {
+                this.transparent = init.transparent;
+            }
+            if (typeof init.depthWrite === "boolean") {
+                this.depthWrite = init.depthWrite;
+            }
+            if (typeof init.side === "number") {
+                this.side = init.side;
+            }
+            if (typeof init.blending === "number") {
+                this.blending = init.blending;
+            }
+        }
+
+        dispose(): void {}
+
+        clone(): MeshBasicMaterialStub {
+            return new MeshBasicMaterialStub({
+                opacity: this.opacity,
+                transparent: this.transparent,
+                depthWrite: this.depthWrite,
+                side: this.side,
+                blending: this.blending,
+                color: this.color.value,
+            });
+        }
+    }
+
+    class MeshPhongMaterialStub extends MeshBasicMaterialStub {
+        emissive = new ColorStub();
+        emissiveIntensity = 0;
+        shininess = 0;
+        specular = new ColorStub();
+
+        constructor(init: Record<string, unknown> = {}) {
+            super(init);
+            if (init.emissive !== undefined) {
+                this.emissive.set(init.emissive);
+            }
+            if (typeof init.emissiveIntensity === "number") {
+                this.emissiveIntensity = init.emissiveIntensity;
+            }
+            if (typeof init.shininess === "number") {
+                this.shininess = init.shininess;
+            }
+            if (init.specular !== undefined) {
+                this.specular.set(init.specular);
+            }
+        }
+
+        clone(): MeshPhongMaterialStub {
+            return new MeshPhongMaterialStub({
+                opacity: this.opacity,
+                transparent: this.transparent,
+                depthWrite: this.depthWrite,
+                side: this.side,
+                blending: this.blending,
+                color: this.color.value,
+                emissive: this.emissive.value,
+                emissiveIntensity: this.emissiveIntensity,
+                shininess: this.shininess,
+                specular: this.specular.value,
+            });
+        }
+    }
+
+    class MeshStandardMaterialStub extends MeshPhongMaterialStub {}
+
+    class MeshStub extends Object3DStub {
+        material: MeshBasicMaterialStub | MeshPhongMaterialStub | MeshStandardMaterialStub;
+        geometry: GeometryStub;
+
+        constructor(
+            geometry: GeometryStub = new GeometryStub(),
+            material: MeshBasicMaterialStub | MeshPhongMaterialStub | MeshStandardMaterialStub = new MeshBasicMaterialStub({
+                map: {
+                    image: {
+                        getContext() {
+                            return createCanvasContextStub();
+                        },
+                    },
+                    needsUpdate: false,
+                },
+            })
+        ) {
+            super();
+            this.geometry = geometry;
+            this.material = material;
+        }
+    }
+
+    class GroupStub extends Object3DStub {}
+
+    class SceneStub extends GroupStub {}
+
+    class LineStub extends Object3DStub {}
 
     class CanvasTextureStub {
         generateMipmaps = false;
@@ -151,20 +317,26 @@ export function createThreeTestModule(): Record<string, unknown> {
     return {
         Scene: SceneStub,
         Mesh: MeshStub,
-        PlaneGeometry: EmptyStub,
+        Object3D: Object3DStub,
+        Group: GroupStub,
+        PlaneGeometry: PlaneGeometryStub,
+        CircleGeometry: CircleGeometryStub,
         MeshBasicMaterial: MeshBasicMaterialStub,
         MeshPhongMaterial: MeshPhongMaterialStub,
-        SphereGeometry: EmptyStub,
-        RingGeometry: EmptyStub,
-        CylinderGeometry: EmptyStub,
-        IcosahedronGeometry: EmptyStub,
-        BufferGeometry: EmptyStub,
+        MeshStandardMaterial: MeshStandardMaterialStub,
+        SphereGeometry: SphereGeometryStub,
+        RingGeometry: RingGeometryStub,
+        CylinderGeometry: CylinderGeometryStub,
+        IcosahedronGeometry: IcosahedronGeometryStub,
+        OctahedronGeometry: OctahedronGeometryStub,
+        BufferGeometry: BufferGeometryStub,
         LineBasicMaterial: EmptyStub,
         Line: LineStub,
         CanvasTexture: CanvasTextureStub,
         LinearFilter: 0,
         SRGBColorSpace: "",
         DoubleSide: 0,
+        AdditiveBlending: 1,
         Color: ColorStub,
         Vector3: Vector3Stub,
     };

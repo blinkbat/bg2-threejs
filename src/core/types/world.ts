@@ -72,6 +72,7 @@ export interface UnitGroup extends THREE.Group {
         facingRight?: boolean;  // Sprite facing direction (true = right, default)
         attackMoveTarget?: { x: number; z: number };  // Attack-move destination (resume after combat)
         visualFacing?: number;  // Smooth per-frame shield facing (decoupled from React state)
+        shieldFacingSamplePosition?: { x: number; z: number };  // Last sampled world position for stationary vs moving shield turns
         viewFadeOpacity?: number;  // Runtime fog visibility fade (0-1)
         attackBump?: { startTime: number; dx: number; dz: number; appliedX: number; appliedZ: number };  // Forward bump on attack
     };

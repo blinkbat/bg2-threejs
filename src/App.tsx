@@ -33,8 +33,8 @@ import {
 } from "./game/areas";
 import {
     buildSaveSlotData,
+    hasAnySaveSlots,
     deleteSave,
-    getSaveSlots,
     loadGame,
     resolveLoadedSaveState,
     saveGame,
@@ -73,7 +73,6 @@ export default function App() {
     const [spawnDirection, setSpawnDirection] = useState<"north" | "south" | "east" | "west" | undefined>(undefined);
     const [showSaveLoad, setShowSaveLoad] = useState(false);
     const [saveLoadMode, setSaveLoadMode] = useState<"save" | "load">("save");
-    const [hasSaves] = useState(() => getSaveSlots().some(s => s !== null));
     const [initialOpenedChests, setInitialOpenedChests] = useState<Set<string> | null>(null);
     const [initialOpenedSecretDoors, setInitialOpenedSecretDoors] = useState<Set<string> | null>(null);
     const [initialActivatedWaystones, setInitialActivatedWaystones] = useState<Set<string> | null>(null);
@@ -347,6 +346,7 @@ export default function App() {
     const transitionDurationMs = startupPhase === "booting"
         ? STARTUP_SCENE_FADE_IN_DURATION
         : AREA_FADE_DURATION;
+    const hasSaves = hasAnySaveSlots();
 
     const buildCurrentSavePreview = useCallback((timestamp: number): SaveSlotData | null => {
         if (!gameStateRef.current) return null;

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from "react";
 import type { Color, Mesh, Scene } from "three";
 import type { Skill, Unit, UnitGroup } from "../src/core/types";
@@ -108,6 +108,17 @@ vi.mock("../src/game/equipmentState", () => ({
 
 import { executeSkill } from "../src/combat/skills/index";
 import { SKILLS } from "../src/game/skills";
+
+let randomSpy: { mockRestore(): void } | undefined;
+
+beforeEach(() => {
+    randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.5);
+});
+
+afterEach(() => {
+    randomSpy?.mockRestore();
+    randomSpy = undefined;
+});
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

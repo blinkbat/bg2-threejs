@@ -178,4 +178,23 @@ describe("saveLoad sanitize", () => {
         expect(slots[1]).toBeNull();
         expect(slots[2]).toBeNull();
     });
+
+    it("deduplicates repeated player ids to avoid duplicate units on load", () => {
+        const parsed = parseSaveSlotData(createMinimalValidRawSave({
+            players: [
+                { id: 1, hp: 10, level: 2 },
+                { id: 1, hp: 1, level: 99 },
+                { id: 8, hp: 12, summonType: "vishas_eye_orb", summonedBy: 6 },
+                { id: 8, hp: 4, summonType: "vishas_eye_orb", summonedBy: 2 },
+            ],
+        }));
+
+        expect(parsed.ok).toBe(true);
+        if (!parsed.ok) return;
+
+        expect(parsed.data.players).toEqual([
+            { id: 1, hp: 10, level: 2 },
+            { id: 8, hp: 12, summonType: "vishas_eye_orb", summonedBy: 6 },
+        ]);
+    });
 });

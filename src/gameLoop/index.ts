@@ -514,6 +514,7 @@ export function updateUnitAI(
 // Turn speed in radians per frame (at 60fps)
 const TURN_SPEED_STATIONARY = 0.35;  // Fast turn when standing still
 const TURN_SPEED_MOVING = 0.10;      // Slower turn when moving
+const SHIELD_MOVEMENT_EPSILON = 0.01;
 const DAMAGE_SOURCE_PRIORITY_TIME = 2000;  // ms - prioritize damage source for 2 seconds
 // Only sync facing to React state when visual differs from committed state by this much
 const FACING_REACT_THRESHOLD = 0.05;  // ~3 degrees
@@ -549,6 +550,14 @@ export function updateShieldFacing(
 
         // Use visual facing for smooth per-frame tracking (independent of React state)
         let currentFacing: number = g.userData.visualFacing ?? (unit.facing ?? 0);
+        const previousShieldFacingSamplePosition = g.userData.shieldFacingSamplePosition;
+        const isMoving = previousShieldFacingSamplePosition !== undefined
+            ? Math.hypot(
+                g.position.x - previousShieldFacingSamplePosition.x,
+                g.position.z - previousShieldFacingSamplePosition.z
+            ) > SHIELD_MOVEMENT_EPSILON
+            : false;
+        g.userData.shieldFacingSamplePosition = { x: g.position.x, z: g.position.z };
 
         // Determine target position - prioritize recent damage source
         let targetX: number | undefined;
@@ -586,10 +595,6 @@ export function updateShieldFacing(
 
             while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
             while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-
-            const moveDistX = Math.abs(targetX - g.position.x);
-            const moveDistZ = Math.abs(targetZ - g.position.z);
-            const isMoving = moveDistX > 0.2 || moveDistZ > 0.2;
 
             const baseTurnSpeed = isMoving ? TURN_SPEED_MOVING : TURN_SPEED_STATIONARY;
             const turnSpeed = baseTurnSpeed * (data.turnSpeed ?? 1);

@@ -66,6 +66,11 @@ export function getSaveSlots(): (SaveSlotData | null)[] {
     return normalizeSlots(raw.rawSlots);
 }
 
+/** Check whether any save slots currently contain save data. */
+export function hasAnySaveSlots(): boolean {
+    return getSaveSlots().some(slot => slot !== null);
+}
+
 /** Get a single save slot */
 export function loadGame(slot: number): SaveLoadDataResult {
     if (!isSlotIndexValid(slot)) {

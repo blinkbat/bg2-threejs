@@ -326,9 +326,12 @@ function sanitizeSavedPlayer(raw: unknown): SavedPlayer | null {
 function sanitizeSavedPlayers(raw: unknown): SavedPlayer[] {
     if (!Array.isArray(raw)) return [];
     const sanitized: SavedPlayer[] = [];
+    const seenIds = new Set<number>();
     for (const entry of raw) {
         const player = sanitizeSavedPlayer(entry);
-        if (player) sanitized.push(player);
+        if (!player || seenIds.has(player.id)) continue;
+        seenIds.add(player.id);
+        sanitized.push(player);
     }
     return sanitized;
 }

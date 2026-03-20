@@ -2,7 +2,9 @@
 import {
     MAX_SLOTS,
     STORAGE_KEY,
+    deleteSave,
     getSaveSlots,
+    hasAnySaveSlots,
     loadGame,
     resolveLoadedSaveState,
     saveGame,
@@ -195,5 +197,17 @@ describe("saveLoad storage", () => {
         if (!loaded.ok) return;
 
         expect(loaded.data.lastWaystone).toEqual({ areaId: "forest", waystoneIndex: 1 });
+    });
+
+    it("reports save availability from current storage contents", () => {
+        expect(hasAnySaveSlots()).toBe(false);
+
+        const saveResult = saveGame(0, createValidSaveData());
+        expect(saveResult.ok).toBe(true);
+        expect(hasAnySaveSlots()).toBe(true);
+
+        const deleteResult = deleteSave(0);
+        expect(deleteResult.ok).toBe(true);
+        expect(hasAnySaveSlots()).toBe(false);
     });
 });
