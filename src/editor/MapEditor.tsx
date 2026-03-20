@@ -1,7 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
-import { Link } from "react-router-dom";
-import Tippy from "@tippyjs/react";
 import {
+    AREA_SCENE_EFFECT_IDS,
     DEFAULT_AREA_LIGHT_ANGLE,
     DEFAULT_AREA_LIGHT_BRIGHTNESS,
     DEFAULT_AREA_LIGHT_DECAY,
@@ -14,14 +13,7 @@ import {
     type AreaDialogTriggerCondition,
     type AreaLocation,
     type AreaId,
-    type AreaData,
-    type EnemySpawn,
-    type AreaTransition,
-    type Waystone,
-    type ChestLocation,
-    type TreeLocation,
-    type Decoration,
-    type AreaLight,
+    type AreaSceneEffectId,
 } from "../game/areas/types";
 import { AREAS } from "../game/areas";
 import { areaDataToText } from "./areaTextFormat";
@@ -32,26 +24,15 @@ import { getDialogDefinitionIds } from "../dialog/registry";
 import type { Tool, Layer, MapMetadata, EntityDef, TreeDef, DecorationDef, EditorSnapshot } from "./types";
 import { getAvailableAreaIds, BASE_CELL_SIZE, MAX_HISTORY, LAYER_BRUSHES, PROP_TYPE_TO_CHAR, PROP_TREE_TYPE_TO_CHAR } from "./constants";
 import { registerAreaFromText } from "../game/areas";
-import { EntityEditPopup, TreeEditPopup, DecorationEditPopup, LocationEditPopup } from "./popups";
-import { ConnectionsPanel } from "./panels";
-import { DialogEditorModal, ItemRegistryEditorModal } from "./components";
 import {
-    clampFiniteNumber,
     clampTreeSizeByType,
-    computeEntitiesFromArea,
-    computePropsFromArea,
     createEmptyLayer,
-    extractEntitiesFromGrid,
-    extractPropsFromLayer,
     isBlockingPropCell,
-    normalizeLightHexColor,
     resizeLayer,
     resizeTintLayer,
-    sanitizeEnemySpawns,
 } from "./areaConversion";
 import {
     drawLayer,
-    getCharColor,
     getLayerColor,
     loadLastSavedAreaId,
     normalizeSecretDoorEntity,
@@ -64,7 +45,6 @@ import {
     composeTileLayers,
     composeTintLayers,
     createEmptyTintGrid,
-    hasTintData,
     normalizeTileLayerStack,
     normalizeTintLayerStack,
     TILE_EMPTY,
@@ -86,145 +66,20 @@ import {
     type EditorClipboard,
     type EditorContextMenuState,
 } from "./mapEditorHelpers";
+import { buildAreaDataFromEditor as buildAreaDataFromEditorState } from "./mapEditorAreaBuilder";
+import { createLoadedAreaState, createNewAreaState } from "./mapEditorAreaState";
+import { MapEditorView } from "./MapEditorView";
+import {
+    createEditorSnapshot,
+    getBrushCells,
+    normalizeAreaId,
+    remapEnemyLinkedTriggerConditions,
+} from "./mapEditorShared";
 import "../styles/07-map-editor.css";
 
 // =============================================================================
 // COMPONENT
 // =============================================================================
-
-const DEFAULT_AREA_ID = "area";
-
-function normalizeAreaId(value: string, fallback: string = DEFAULT_AREA_ID): string {
-    const normalized = value
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9_]+/g, "_")
-        .replace(/^_+|_+$/g, "");
-    return normalized.length > 0 ? normalized : fallback;
-}
-
-interface EditorSnapshotSource {
-    metadata: MapMetadata;
-    geometryLayer: string[][];
-    terrainLayers: string[][][];
-    floorLayers: string[][][];
-    terrainTintLayers: number[][][];
-    floorTintLayers: number[][][];
-    propsLayer: string[][];
-    entitiesLayer: string[][];
-    entities: EntityDef[];
-    trees: TreeDef[];
-    decorations: DecorationDef[];
-    dialogs: AreaDialogDefinition[];
-    locations: AreaLocation[];
-    dialogTriggers: AreaDialogTrigger[];
-}
-
-function createEditorSnapshot(source: EditorSnapshotSource): EditorSnapshot {
-    return {
-        metadata: { ...source.metadata },
-        geometryLayer: source.geometryLayer.map(row => [...row]),
-        terrainLayers: cloneTileLayerStack(source.terrainLayers),
-        floorLayers: cloneTileLayerStack(source.floorLayers),
-        terrainTintLayers: cloneTintLayerStack(source.terrainTintLayers),
-        floorTintLayers: cloneTintLayerStack(source.floorTintLayers),
-        propsLayer: source.propsLayer.map(row => [...row]),
-        entitiesLayer: source.entitiesLayer.map(row => [...row]),
-        entities: source.entities.map(entity => ({ ...entity })),
-        trees: source.trees.map(tree => ({ ...tree })),
-        decorations: source.decorations.map(decoration => ({ ...decoration })),
-        dialogs: source.dialogs.map(cloneDialogDefinition),
-        locations: source.locations.map(cloneDialogLocation),
-        dialogTriggers: source.dialogTriggers.map(cloneDialogTrigger),
-    };
-}
-
-function getBrushCells(x: number, z: number, size: number, width: number, height: number): Array<{ x: number; z: number }> {
-    const cells: Array<{ x: number; z: number }> = [];
-    const halfSize = Math.floor(size / 2);
-    for (let dz = -halfSize; dz < size - halfSize; dz++) {
-        for (let dx = -halfSize; dx < size - halfSize; dx++) {
-            const cellX = x + dx;
-            const cellZ = z + dz;
-            if (cellX < 0 || cellX >= width || cellZ < 0 || cellZ >= height) {
-                continue;
-            }
-            cells.push({ x: cellX, z: cellZ });
-        }
-    }
-    return cells;
-}
-
-function remapEnemyLinkedTriggerConditions(
-    triggers: AreaDialogTrigger[],
-    previousEntities: EntityDef[],
-    nextEntities: EntityDef[]
-): AreaDialogTrigger[] {
-    const previousEnemies = getOrderedEnemyEntities(previousEntities);
-    const nextEnemies = getOrderedEnemyEntities(nextEntities);
-    const previousEnemyIds = previousEnemies.map(enemy => enemy.id);
-    const nextEnemyIds = nextEnemies.map(enemy => enemy.id);
-    const enemyOrderChanged = previousEnemyIds.length !== nextEnemyIds.length
-        || previousEnemyIds.some((enemyId, index) => nextEnemyIds[index] !== enemyId);
-    if (!enemyOrderChanged) {
-        return triggers;
-    }
-
-    const nextIndexByEnemyId = new Map<string, number>();
-    nextEnemies.forEach((enemy, index) => {
-        nextIndexByEnemyId.set(enemy.id, index);
-    });
-    const invalidSpawnIndex = nextEnemies.length;
-
-    return triggers.map(trigger => {
-        let didChange = false;
-        let removedTarget = false;
-        const nextConditions = trigger.conditions.map(condition => {
-            if (
-                condition.type !== "enemy_killed"
-                && condition.type !== "unit_seen"
-                && condition.type !== "npc_engaged"
-            ) {
-                return condition;
-            }
-
-            const previousEnemy = previousEnemies[condition.spawnIndex];
-            if (!previousEnemy) {
-                return condition;
-            }
-
-            const nextIndex = nextIndexByEnemyId.get(previousEnemy.id);
-            if (nextIndex === undefined) {
-                didChange = true;
-                removedTarget = true;
-                return {
-                    ...condition,
-                    spawnIndex: invalidSpawnIndex,
-                };
-            }
-
-            if (nextIndex === condition.spawnIndex) {
-                return condition;
-            }
-
-            didChange = true;
-            return {
-                ...condition,
-                spawnIndex: nextIndex,
-            };
-        });
-
-        if (!didChange) {
-            return trigger;
-        }
-
-        return {
-            ...trigger,
-            ...(removedTarget ? { wip: true } : {}),
-            conditions: nextConditions,
-        };
-    });
-}
 
 export function MapEditor() {
     // Map metadata
@@ -239,6 +94,7 @@ export function MapEditor() {
         ambient: 0.4,
         directional: 0.5,
         fog: true,
+        sceneEffects: undefined,
         spawnX: 3,
         spawnZ: 10,
     });
@@ -301,7 +157,6 @@ export function MapEditor() {
 
     // Canvas refs
     const canvasRef = useRef<HTMLCanvasElement>(null);
-    const saveMapRef = useRef<(() => void) | null>(null);
     const [isPainting, setIsPainting] = useState(false);
     const [zoom, setZoom] = useState(1);
     const [isometric, setIsometric] = useState(false);
@@ -432,6 +287,23 @@ export function MapEditor() {
         pushHistory();
         setMetadata(prev => updater(prev));
     }, [pushHistory]);
+
+    const setMetadataSceneEffect = useCallback((effectId: AreaSceneEffectId, checked: boolean): void => {
+        setMetadataWithHistory((prev) => {
+            const nextSceneEffects = { ...(prev.sceneEffects ?? {}) };
+            if (checked) {
+                nextSceneEffects[effectId] = true;
+            } else {
+                delete nextSceneEffects[effectId];
+            }
+
+            const hasSceneEffect = AREA_SCENE_EFFECT_IDS.some((id) => nextSceneEffects[id] === true);
+            return {
+                ...prev,
+                sceneEffects: hasSceneEffect ? nextSceneEffects : undefined,
+            };
+        });
+    }, [setMetadataWithHistory]);
 
     const undo = useCallback(() => {
         if (historyIndexRef.current > 0) {
@@ -1732,238 +1604,58 @@ export function MapEditor() {
         const area = AREAS[areaId];
         if (!area) return;
 
-        const loadedMetadata: MapMetadata = {
-            id: area.id,
-            name: area.name,
-            flavor: area.flavor,
-            width: area.gridWidth,
-            height: area.gridHeight,
-            background: area.backgroundColor,
-            ground: area.groundColor,
-            ambient: area.ambientLight,
-            directional: area.directionalLight,
-            fog: area.hasFogOfWar,
-            spawnX: area.defaultSpawn.x,
-            spawnZ: area.defaultSpawn.z,
-        };
-
-        // Use geometry, terrain, and floor directly from area data
-        const loadedGeometryLayer = area.geometry.map(row => [...row]);
-        const loadedTerrainLayers = normalizeTileLayerStack(area.terrainLayers ?? [area.terrain], area.gridWidth, area.gridHeight, TILE_EMPTY);
-        const loadedFloorLayers = normalizeTileLayerStack(
-            area.floor && area.floor.length > 0 ? (area.floorLayers ?? [area.floor]) : [createEmptyLayer(area.gridWidth, area.gridHeight, TILE_EMPTY)],
-            area.gridWidth,
-            area.gridHeight,
-            TILE_EMPTY
-        );
-        const loadedTerrainTintLayers = normalizeTintLayerStack(area.terrainTintLayers, loadedTerrainLayers.length, area.gridWidth, area.gridHeight);
-        const loadedFloorTintLayers = normalizeTintLayerStack(area.floorTintLayers, loadedFloorLayers.length, area.gridWidth, area.gridHeight);
-
-        // Compute props layer from trees and decorations
-        const newProps = computePropsFromArea(area, area.gridWidth, area.gridHeight);
-
-        // Compute entities layer from enemies, chests, transitions
-        const newEntities = computeEntitiesFromArea(area, area.gridWidth, area.gridHeight);
-
-        // Store detailed data that can't be shown in grid
-        const loadedTrees = area.trees.map(t => {
-            const normalizedType = t.type ?? "pine";
-            return {
-                x: t.x,
-                z: t.z,
-                size: clampTreeSizeByType(t.size, normalizedType),
-                type: normalizedType,
-            };
-        });
-        const loadedDecorations = (area.decorations ?? []).map(d => ({ x: d.x, z: d.z, type: d.type, rotation: d.rotation, size: d.size }));
-
-        // Build entity definitions
-        const entityDefs: EntityDef[] = [];
-        let entityId = 0;
-        area.enemySpawns.forEach((e, spawnIndex) => {
-            entityDefs.push({
-                id: `e${entityId++}`,
-                x: e.x,
-                z: e.z,
-                type: "enemy",
-                enemyType: e.type,
-                enemySpawnIndex: spawnIndex,
-            });
-        });
-        area.chests.forEach(c => {
-            const items = c.contents.map(i => `${i.itemId}:${i.quantity}`).join(",");
-            entityDefs.push({
-                id: `e${entityId++}`, x: c.x, z: c.z, type: "chest",
-                chestGold: c.gold,
-                chestItems: items,
-                chestLocked: c.locked ? (c.requiredKeyId ?? "true") : undefined,
-                chestDecorOnly: c.decorOnly ?? false
-            });
-        });
-        area.transitions.forEach(t => {
-            entityDefs.push({
-                id: `e${entityId++}`, x: t.x, z: t.z, type: "transition",
-                transitionTarget: t.targetArea, transitionSpawnX: t.targetSpawn.x, transitionSpawnZ: t.targetSpawn.z,
-                transitionDirection: t.direction, transitionW: t.w, transitionH: t.h
-            });
-        });
-        (area.waystones ?? []).forEach(w => {
-            entityDefs.push({
-                id: `e${entityId++}`,
-                x: w.x,
-                z: w.z,
-                type: "waystone",
-                waystoneDirection: w.direction ?? "north",
-            });
-        });
-        (area.candles ?? []).forEach(c => {
-            entityDefs.push({
-                id: `e${entityId++}`,
-                x: c.x,
-                z: c.z,
-                type: c.kind === "torch" ? "torch" : "candle",
-                candleDx: c.dx,
-                candleDz: c.dz,
-                lightColor: normalizeLightHexColor(c.lightColor, c.kind === "torch" ? DEFAULT_TORCH_LIGHT_COLOR : DEFAULT_CANDLE_LIGHT_COLOR),
-            });
-        });
-        (area.lights ?? []).forEach(l => {
-            entityDefs.push({
-                id: `e${entityId++}`,
-                x: l.x,
-                z: l.z,
-                type: "light",
-                lightRadius: l.radius,
-                lightAngle: l.angle,
-                lightColor: normalizeLightHexColor(l.tint, DEFAULT_AREA_LIGHT_TINT),
-                lightBrightness: l.brightness,
-                lightHeight: l.height,
-                lightDiffusion: l.diffusion,
-                lightDecay: l.decay ?? DEFAULT_AREA_LIGHT_DECAY,
-            });
-        });
-        (area.secretDoors ?? []).forEach(s => {
-            const secretDoor = normalizeSecretDoorEntity({
-                id: `e${entityId++}`, x: s.x, z: s.z, type: "secret_door",
-                secretBlockX: s.blockingWall.x, secretBlockZ: s.blockingWall.z,
-                secretBlockW: s.blockingWall.w, secretBlockH: s.blockingWall.h
-            });
-            entityDefs.push(secretDoor);
-        });
-        const loadedDialogs = (area.dialogs ?? []).map(cloneDialogDefinition);
-        const loadedLocations = (area.locations ?? []).map(cloneDialogLocation);
-
-        const loadedTriggers = (area.dialogTriggers ?? []).map(cloneDialogTrigger);
-        setMetadata(loadedMetadata);
-        setGeometryLayer(loadedGeometryLayer);
-        setTerrainLayers(loadedTerrainLayers);
-        setFloorLayers(loadedFloorLayers);
-        setTerrainTintLayers(loadedTerrainTintLayers);
-        setFloorTintLayers(loadedFloorTintLayers);
-        setActiveTerrainPaintLayer(Math.max(0, loadedTerrainLayers.length - 1));
-        setActiveFloorPaintLayer(Math.max(0, loadedFloorLayers.length - 1));
-        setPropsLayer(newProps);
-        setEntitiesLayer(newEntities);
-        setEntities(entityDefs);
-        setTrees(loadedTrees);
-        setDecorations(loadedDecorations);
-        setDialogs(loadedDialogs);
-        setDialogLocations(loadedLocations);
-        setSelectedDialogLocationId(loadedLocations[0]?.id ?? null);
-        setDialogTriggers(loadedTriggers);
+        const loadedState = createLoadedAreaState(area);
+        setMetadata(loadedState.metadata);
+        setGeometryLayer(loadedState.geometryLayer);
+        setTerrainLayers(loadedState.terrainLayers);
+        setFloorLayers(loadedState.floorLayers);
+        setTerrainTintLayers(loadedState.terrainTintLayers);
+        setFloorTintLayers(loadedState.floorTintLayers);
+        setActiveTerrainPaintLayer(loadedState.activeTerrainPaintLayer);
+        setActiveFloorPaintLayer(loadedState.activeFloorPaintLayer);
+        setPropsLayer(loadedState.propsLayer);
+        setEntitiesLayer(loadedState.entitiesLayer);
+        setEntities(loadedState.entities);
+        setTrees(loadedState.trees);
+        setDecorations(loadedState.decorations);
+        setDialogs(loadedState.dialogs);
+        setDialogLocations(loadedState.locations);
+        setSelectedDialogLocationId(loadedState.locations[0]?.id ?? null);
+        setDialogTriggers(loadedState.dialogTriggers);
         setDialogTriggersDraft(null);
         setDialogRegionDrag(null);
         setDialogEditorOpen(false);
         setEditingLocation(null);
         setContextMenu(null);
-        resetHistory(createEditorSnapshot({
-            metadata: loadedMetadata,
-            geometryLayer: loadedGeometryLayer,
-            terrainLayers: loadedTerrainLayers,
-            floorLayers: loadedFloorLayers,
-            terrainTintLayers: loadedTerrainTintLayers,
-            floorTintLayers: loadedFloorTintLayers,
-            propsLayer: newProps,
-            entitiesLayer: newEntities,
-            entities: entityDefs,
-            trees: loadedTrees,
-            decorations: loadedDecorations,
-            dialogs: loadedDialogs,
-            locations: loadedLocations,
-            dialogTriggers: loadedTriggers,
-        }));
+        resetHistory(createEditorSnapshot(loadedState));
     }, [resetHistory]);
 
     const createNewArea = () => {
-        const newId = normalizeAreaId(`area_${Date.now()}`);
-        const width = 30;
-        const height = 20;
-        const spawnX = 3;
-        const spawnZ = 10;
-        const newMetadata: MapMetadata = {
-            id: newId,
-            name: "New Area",
-            flavor: "A mysterious place.",
-            width,
-            height,
-            background: "#1a1a2e",
-            ground: "#2a2a3e",
-            ambient: 0.4,
-            directional: 0.5,
-            fog: true,
-            spawnX,
-            spawnZ,
-        };
-        const newGeometryLayer = createEmptyLayer(width, height, ".");
-        const newTerrainLayers = [createEmptyLayer(width, height, TILE_EMPTY)];
-        const newFloorLayers = [createEmptyLayer(width, height, TILE_EMPTY)];
-        const newTerrainTintLayers = [createEmptyTintGrid(width, height)];
-        const newFloorTintLayers = [createEmptyTintGrid(width, height)];
-        const newPropsLayer = createEmptyLayer(width, height, ".");
-        const newEntitiesLayer = createEmptyLayer(width, height, ".");
-        if (spawnZ >= 0 && spawnZ < height && spawnX >= 0 && spawnX < width) {
-            newEntitiesLayer[spawnZ][spawnX] = "@";
-        }
-
-        setMetadata(newMetadata);
-        setGeometryLayer(newGeometryLayer);
-        setTerrainLayers(newTerrainLayers);
-        setFloorLayers(newFloorLayers);
-        setTerrainTintLayers(newTerrainTintLayers);
-        setFloorTintLayers(newFloorTintLayers);
-        setActiveTerrainPaintLayer(0);
-        setActiveFloorPaintLayer(0);
-        setActiveTileTint(0);
-        setPropsLayer(newPropsLayer);
-        setEntitiesLayer(newEntitiesLayer);
-        setEntities([]);
-        setTrees([]);
-        setDecorations([]);
-        setDialogs([]);
-        setDialogLocations([]);
+        const newAreaState = createNewAreaState();
+        setMetadata(newAreaState.metadata);
+        setGeometryLayer(newAreaState.geometryLayer);
+        setTerrainLayers(newAreaState.terrainLayers);
+        setFloorLayers(newAreaState.floorLayers);
+        setTerrainTintLayers(newAreaState.terrainTintLayers);
+        setFloorTintLayers(newAreaState.floorTintLayers);
+        setActiveTerrainPaintLayer(newAreaState.activeTerrainPaintLayer);
+        setActiveFloorPaintLayer(newAreaState.activeFloorPaintLayer);
+        setActiveTileTint(newAreaState.activeTileTint);
+        setPropsLayer(newAreaState.propsLayer);
+        setEntitiesLayer(newAreaState.entitiesLayer);
+        setEntities(newAreaState.entities);
+        setTrees(newAreaState.trees);
+        setDecorations(newAreaState.decorations);
+        setDialogs(newAreaState.dialogs);
+        setDialogLocations(newAreaState.locations);
         setSelectedDialogLocationId(null);
-        setDialogTriggers([]);
+        setDialogTriggers(newAreaState.dialogTriggers);
         setDialogTriggersDraft(null);
         setDialogRegionDrag(null);
         setDialogEditorOpen(false);
         setEditingLocation(null);
         setContextMenu(null);
-        resetHistory(createEditorSnapshot({
-            metadata: newMetadata,
-            geometryLayer: newGeometryLayer,
-            terrainLayers: newTerrainLayers,
-            floorLayers: newFloorLayers,
-            terrainTintLayers: newTerrainTintLayers,
-            floorTintLayers: newFloorTintLayers,
-            propsLayer: newPropsLayer,
-            entitiesLayer: newEntitiesLayer,
-            entities: [],
-            trees: [],
-            decorations: [],
-            dialogs: [],
-            locations: [],
-            dialogTriggers: [],
-        }));
+        resetHistory(createEditorSnapshot(newAreaState));
     };
 
     // Load last saved map on mount when available, otherwise fall back to coast.
@@ -1978,7 +1670,41 @@ export function MapEditor() {
 
     const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
-    const saveMap = async () => {
+    const buildAreaDataFromEditor = useCallback(() => {
+        return buildAreaDataFromEditorState({
+            metadata,
+            geometryLayer,
+            terrainLayers,
+            floorLayers,
+            terrainTintLayers,
+            floorTintLayers,
+            propsLayer,
+            entitiesLayer,
+            entities,
+            trees,
+            decorations,
+            dialogs,
+            dialogLocations,
+            dialogTriggers,
+        });
+    }, [
+        metadata,
+        geometryLayer,
+        terrainLayers,
+        floorLayers,
+        terrainTintLayers,
+        floorTintLayers,
+        propsLayer,
+        entitiesLayer,
+        entities,
+        trees,
+        decorations,
+        dialogs,
+        dialogLocations,
+        dialogTriggers,
+    ]);
+
+    const saveMap = useCallback(async () => {
         const area = buildAreaDataFromEditor();
         const content = areaDataToText(area);
         if (area.id !== metadata.id) {
@@ -2007,12 +1733,7 @@ export function MapEditor() {
             console.error("Save error:", err);
             setSaveStatus("error");
         }
-    };
-    saveMapRef.current = () => {
-        if (saveStatus !== "saving") {
-            void saveMap();
-        }
-    };
+    }, [buildAreaDataFromEditor, metadata.id]);
 
     useEffect(() => {
         const handleSaveKeyDown = (e: KeyboardEvent) => {
@@ -2022,12 +1743,14 @@ export function MapEditor() {
             }
 
             e.preventDefault();
-            saveMapRef.current?.();
+            if (saveStatus !== "saving") {
+                void saveMap();
+            }
         };
 
         window.addEventListener("keydown", handleSaveKeyDown);
         return () => window.removeEventListener("keydown", handleSaveKeyDown);
-    }, []);
+    }, [saveMap, saveStatus]);
 
     const enemySpawnOptions = useMemo(() => {
         const orderedEnemies = getOrderedEnemyEntities(entities);
@@ -2040,175 +1763,6 @@ export function MapEditor() {
             };
         });
     }, [entities]);
-
-    const buildAreaDataFromEditor = (): AreaData => {
-        const areaId = normalizeAreaId(metadata.id);
-        const normalizedTerrainLayers = normalizeTileLayerStack(terrainLayers, metadata.width, metadata.height, TILE_EMPTY);
-        const normalizedFloorLayers = normalizeTileLayerStack(floorLayers, metadata.width, metadata.height, TILE_EMPTY);
-        const normalizedTerrainTintLayers = normalizeTintLayerStack(terrainTintLayers, normalizedTerrainLayers.length, metadata.width, metadata.height);
-        const normalizedFloorTintLayers = normalizeTintLayerStack(floorTintLayers, normalizedFloorLayers.length, metadata.width, metadata.height);
-        const composedTerrain = composeTileLayers(normalizedTerrainLayers, metadata.width, metadata.height, TILE_EMPTY);
-        const composedFloor = composeTileLayers(normalizedFloorLayers, metadata.width, metadata.height, TILE_EMPTY);
-
-        // Extract trees and decorations from props layer, merging with detailed state for metadata
-        const gridProps = extractPropsFromLayer(propsLayer);
-        const mergedTrees: TreeLocation[] = gridProps.trees.map(gt => {
-            // Find matching tree in state for metadata (size), grid-derived type wins
-            const stateTree = trees.find(t => Math.floor(t.x) === gt.x && Math.floor(t.z) === gt.z);
-            const normalizedType = gt.type ?? stateTree?.type ?? "pine";
-            const sourceSize = stateTree?.size ?? gt.size;
-            return {
-                x: gt.x,
-                z: gt.z,
-                size: clampTreeSizeByType(sourceSize, normalizedType),
-                type: normalizedType,
-            };
-        });
-        const mergedDecorations: Decoration[] = gridProps.decorations.map(gd => {
-            // Find matching decoration in state for metadata (rotation, size)
-            const stateDec = decorations.find(d => Math.floor(d.x) === gd.x && Math.floor(d.z) === gd.z);
-            return stateDec ? { ...stateDec } : { x: gd.x, z: gd.z, type: gd.type };
-        });
-
-        // Extract enemies from detailed state so trigger spawnIndex ordering remains stable.
-        const orderedEnemies = getOrderedEnemyEntities(entities);
-        const rawEnemySpawns: EnemySpawn[] = orderedEnemies.map(enemy => {
-            return {
-                x: Math.floor(enemy.x) + 0.5,
-                z: Math.floor(enemy.z) + 0.5,
-                type: enemy.enemyType ?? "skeleton_warrior",
-            };
-        });
-        // Extract chests from entities layer, merging with detailed state.
-        const gridEntities = extractEntitiesFromGrid(entitiesLayer);
-        const enemySpawns = sanitizeEnemySpawns(
-            rawEnemySpawns,
-            geometryLayer,
-            composedTerrain,
-            propsLayer,
-            metadata.width,
-            metadata.height
-        );
-        const chestList: ChestLocation[] = gridEntities.chests.map(gc => {
-            const stateChest = entities.find(e => e.type === "chest" && Math.floor(e.x) === gc.x && Math.floor(e.z) === gc.z);
-            if (stateChest) {
-                const contents = (stateChest.chestItems ?? "").split(",").filter(Boolean).map(item => {
-                    const [itemId, qty] = item.split(":");
-                    return { itemId, quantity: parseInt(qty) || 1 };
-                });
-                const chest: ChestLocation = { x: gc.x + 0.5, z: gc.z + 0.5, contents };
-                if (stateChest.chestGold) chest.gold = stateChest.chestGold;
-                if (stateChest.chestLocked) {
-                    chest.locked = true;
-                    if (stateChest.chestLocked !== "true") chest.requiredKeyId = stateChest.chestLocked;
-                }
-                if (stateChest.chestDecorOnly) {
-                    chest.decorOnly = true;
-                }
-                return chest;
-            }
-            return { x: gc.x + 0.5, z: gc.z + 0.5, contents: [] };
-        });
-
-        // Transitions come from state (can't be represented well in grid)
-        const transitionList: AreaTransition[] = entities
-            .filter(e => e.type === "transition")
-            .map(e => ({
-                x: e.x, z: e.z, w: e.transitionW ?? 1, h: e.transitionH ?? 1,
-                targetArea: e.transitionTarget!,
-                targetSpawn: { x: e.transitionSpawnX ?? 0, z: e.transitionSpawnZ ?? 0 },
-                direction: e.transitionDirection ?? "north"
-            }));
-
-        const waystoneList: Waystone[] = entities
-            .filter(e => e.type === "waystone")
-            .map(e => ({
-                x: Math.floor(e.x) + 0.5,
-                z: Math.floor(e.z) + 0.5,
-                direction: e.waystoneDirection ?? "north",
-            }));
-
-        // Candles come from state
-        const candleList = entities
-            .filter(e => e.type === "candle" || e.type === "torch")
-            .map(e => {
-                const kind: "candle" | "torch" = e.type === "torch" ? "torch" : "candle";
-                const defaultColor = kind === "torch" ? DEFAULT_TORCH_LIGHT_COLOR : DEFAULT_CANDLE_LIGHT_COLOR;
-                const normalizedColor = normalizeLightHexColor(e.lightColor, defaultColor);
-                return {
-                    x: e.x,
-                    z: e.z,
-                    dx: e.candleDx ?? 0,
-                    dz: e.candleDz ?? 0,
-                    kind,
-                    lightColor: normalizedColor,
-                };
-            });
-
-        // High lights come from state
-        const lightList: AreaLight[] = entities
-            .filter(e => e.type === "light")
-            .map(e => ({
-                x: e.x,
-                z: e.z,
-                radius: clampFiniteNumber(e.lightRadius, 1, 60, DEFAULT_AREA_LIGHT_RADIUS),
-                angle: clampFiniteNumber(e.lightAngle, 5, 90, DEFAULT_AREA_LIGHT_ANGLE),
-                tint: normalizeLightHexColor(e.lightColor, DEFAULT_AREA_LIGHT_TINT),
-                brightness: clampFiniteNumber(e.lightBrightness, 0, 50, DEFAULT_AREA_LIGHT_BRIGHTNESS),
-                height: clampFiniteNumber(e.lightHeight, 1, 30, DEFAULT_AREA_LIGHT_HEIGHT),
-                diffusion: clampFiniteNumber(e.lightDiffusion, 0, 1, DEFAULT_AREA_LIGHT_DIFFUSION),
-                decay: clampFiniteNumber(e.lightDecay, 0, 3, DEFAULT_AREA_LIGHT_DECAY),
-            }));
-
-        // Secret doors come from state
-        const secretDoorList = entities
-            .filter(e => e.type === "secret_door")
-            .map(e => normalizeSecretDoorEntity(e))
-            .map(e => ({
-                x: e.x,
-                z: e.z,
-                blockingWall: {
-                    x: e.secretBlockX ?? 0,
-                    z: e.secretBlockZ ?? 0,
-                    w: e.secretBlockW ?? 1,
-                    h: e.secretBlockH ?? 1
-                }
-            }));
-
-        return {
-            id: areaId as AreaId,
-            name: metadata.name,
-            flavor: metadata.flavor,
-            gridSize: Math.max(metadata.width, metadata.height),
-            gridWidth: metadata.width,
-            gridHeight: metadata.height,
-            backgroundColor: metadata.background,
-            groundColor: metadata.ground,
-            ambientLight: metadata.ambient,
-            directionalLight: metadata.directional,
-            hasFogOfWar: metadata.fog,
-            defaultSpawn: { x: metadata.spawnX, z: metadata.spawnZ },
-            geometry: geometryLayer,
-            terrain: composedTerrain,
-            floor: composedFloor,
-            terrainLayers: normalizedTerrainLayers.length > 1 || hasTintData(normalizedTerrainTintLayers) ? normalizedTerrainLayers : undefined,
-            floorLayers: normalizedFloorLayers.length > 1 || hasTintData(normalizedFloorTintLayers) ? normalizedFloorLayers : undefined,
-            terrainTintLayers: hasTintData(normalizedTerrainTintLayers) ? normalizedTerrainTintLayers : undefined,
-            floorTintLayers: hasTintData(normalizedFloorTintLayers) ? normalizedFloorTintLayers : undefined,
-            enemySpawns,
-            transitions: transitionList,
-            waystones: waystoneList.length > 0 ? waystoneList : undefined,
-            chests: chestList,
-            trees: mergedTrees,
-            decorations: mergedDecorations.length > 0 ? mergedDecorations : undefined,
-            candles: candleList.length > 0 ? candleList : undefined,
-            lights: lightList.length > 0 ? lightList : undefined,
-            secretDoors: secretDoorList.length > 0 ? secretDoorList : undefined,
-            dialogs: dialogs.length > 0 ? dialogs.map(cloneDialogDefinition) : undefined,
-            locations: dialogLocations.length > 0 ? dialogLocations.map(cloneDialogLocation) : undefined,
-            dialogTriggers: dialogTriggers.length > 0 ? dialogTriggers.map(cloneDialogTrigger) : undefined,
-        };
-    };
 
     const getBrushOptions = (): { char: string; label: string }[] => {
         return LAYER_BRUSHES[activeLayer];
@@ -2252,674 +1806,185 @@ export function MapEditor() {
         setActiveFloorPaintLayer(prev => Math.max(0, Math.min(prev - 1, floorLayers.length - 2)));
     };
 
+    const handleCanvasMouseLeave = useCallback(() => {
+        setIsPainting(false);
+        setDoorDrag(null);
+    }, []);
+
+    const openDialogEditor = useCallback(() => {
+        setDialogTriggersDraft(dialogTriggers.map(cloneDialogTrigger));
+        setDialogEditorOpen(true);
+    }, [dialogTriggers]);
+
+    const closeDialogEditor = useCallback(() => {
+        setDialogEditorOpen(false);
+        setDialogTriggersDraft(null);
+    }, []);
+
+    const openPropertiesFromContextMenu = useCallback(() => {
+        if (!contextMenu) return;
+        openPropertiesPopup(contextMenu);
+        setContextMenu(null);
+    }, [contextMenu, openPropertiesPopup]);
+
+    const copyContextMenuSelection = useCallback(() => {
+        if (!contextMenu) return;
+        copyFromContextMenu(contextMenu);
+        setContextMenu(null);
+    }, [contextMenu, copyFromContextMenu]);
+
+    const pasteClipboardFromContextMenu = useCallback(() => {
+        if (!contextMenu) return;
+        pasteClipboardAt(contextMenu.tileX, contextMenu.tileZ);
+        setContextMenu(null);
+    }, [contextMenu, pasteClipboardAt]);
+
+    const saveEditingLocation = useCallback((nextLocation: AreaLocation) => {
+        if (!editingLocation) return;
+        const didSave = saveDialogLocation(editingLocation.location.id, nextLocation);
+        if (didSave) {
+            setEditingLocation(null);
+        }
+    }, [editingLocation, saveDialogLocation]);
+
+    const deleteEditingLocation = useCallback(() => {
+        if (!editingLocation) return;
+        removeDialogLocation(editingLocation.location.id);
+        setEditingLocation(null);
+    }, [editingLocation, removeDialogLocation]);
+
     const availableAreaIds = getAvailableAreaIds();
     const selectedAreaId = availableAreaIds.includes(metadata.id) ? metadata.id : "";
 
     return (
-        <div style={{ display: "flex", height: "100vh", background: "#1a1a2e", color: "#eee" }}>
-            <button
-                onClick={saveMap}
-                disabled={saveStatus === "saving"}
-                title="Save map (Ctrl+S)"
-                style={{
-                    position: "fixed",
-                    top: 16,
-                    right: 16,
-                    zIndex: 1000,
-                    padding: "14px 34px",
-                    fontSize: 18,
-                    fontWeight: 600,
-                    background: saveStatus === "saved" ? "#2a6" : saveStatus === "error" ? "#a44" : "#4a9",
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: 6,
-                    cursor: saveStatus === "saving" ? "wait" : "pointer",
-                    boxShadow: "0 4px 10px rgba(0, 0, 0, 0.35)",
-                }}
-            >
-                {saveStatus === "saving" ? "Saving..." : saveStatus === "saved" ? "Saved!" : saveStatus === "error" ? "Error" : "Save Map"}
-            </button>
-
-            {/* Left Panel - Tools */}
-            <div style={{ width: 280, padding: 20, borderRight: "1px solid #333", display: "flex", flexDirection: "column", gap: 20, overflowY: "auto" }}>
-                <Link to="/" style={{ color: "#4af", textDecoration: "none" }}>&larr; Back to Game</Link>
-
-                <h2 style={{ margin: 0, fontSize: 22 }}>Map Editor</h2>
-
-                {/* Load Existing Area */}
-                <div>
-                    <h3 style={{ margin: "0 0 12px", fontSize: 16 }}>Load Area</h3>
-                    <select
-                        value={selectedAreaId}
-                        onChange={(e) => e.target.value && loadArea(e.target.value as AreaId)}
-                        style={{
-                            width: "100%",
-                            padding: "8px 12px",
-                            fontSize: 14,
-                            background: "#333",
-                            color: "#fff",
-                            border: "1px solid #555",
-                            borderRadius: 4,
-                        }}
-                    >
-                        <option value="">-- Select area --</option>
-                        {availableAreaIds.map((id: string) => (
-                            <option key={id} value={id}>{id}</option>
-                        ))}
-                    </select>
-                    <button
-                        onClick={createNewArea}
-                        style={{
-                            width: "100%",
-                            marginTop: 8,
-                            padding: "8px 12px",
-                            fontSize: 14,
-                            background: "#4a9",
-                            color: "#fff",
-                            border: "none",
-                            borderRadius: 4,
-                            cursor: "pointer",
-                        }}
-                    >
-                        + New Area
-                    </button>
-                </div>
-
-                {/* Layer Selection */}
-                <div>
-                    <h3 style={{ margin: "0 0 12px", fontSize: 16 }}>Layers</h3>
-                    {(["geometry", "terrain", "floor", "props", "entities", "locations"] as Layer[]).map(layer => (
-                        <div key={layer} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                            <input
-                                type="checkbox"
-                                checked={layerVisibility[layer]}
-                                onChange={() => setLayerVisibility(prev => ({ ...prev, [layer]: !prev[layer] }))}
-                                style={{ width: 18, height: 18 }}
-                            />
-                            <button
-                                onClick={() => {
-                                    setActiveLayer(layer);
-                                    setActiveBrush(LAYER_BRUSHES[layer][0]?.char ?? ".");
-                                }}
-                                style={{
-                                    flex: 1,
-                                    padding: "8px 12px",
-                                    fontSize: 14,
-                                    background: activeLayer === layer ? getLayerColor(layer) : "#333",
-                                    color: "#fff",
-                                    border: "none",
-                                    borderRadius: 4,
-                                    cursor: "pointer",
-                                    textTransform: "capitalize",
-                                }}
-                            >
-                                {layer}
-                            </button>
-                        </div>
-                    ))}
-                </div>
-
-                {/* Tools */}
-                <div>
-                    <h3 style={{ margin: "0 0 12px", fontSize: 16 }}>Tools</h3>
-                    <div style={{ display: "flex", gap: 8 }}>
-                        {(["paint", "erase"] as Tool[]).map(tool => (
-                            <button
-                                key={tool}
-                                onClick={() => setActiveTool(tool)}
-                                style={{
-                                    flex: 1,
-                                    padding: "10px 16px",
-                                    fontSize: 14,
-                                    background: activeTool === tool ? "#4a9" : "#333",
-                                    color: "#fff",
-                                    border: "none",
-                                    borderRadius: 4,
-                                    cursor: "pointer",
-                                    textTransform: "capitalize",
-                                }}
-                            >
-                                {tool}
-                            </button>
-                        ))}
-                    </div>
-                    <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                        <Tippy content="Undo (Ctrl+Z)" delay={0}>
-                            <button
-                                onClick={undo}
-                                style={{ flex: 1, padding: 8, background: "#333", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", fontSize: 12 }}
-                            >
-                                Undo
-                            </button>
-                        </Tippy>
-                        <Tippy content="Redo (Ctrl+Y)" delay={0}>
-                            <button
-                                onClick={redo}
-                                style={{ flex: 1, padding: 8, background: "#333", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", fontSize: 12 }}
-                            >
-                                Redo
-                            </button>
-                        </Tippy>
-                    </div>
-                    <div style={{ marginTop: 12 }}>
-                        <span style={{ fontSize: 13 }}>Brush Size: {brushSize}x{brushSize}</span>
-                        <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-                            {[1, 2, 3, 5, 8].map(size => (
-                                <button
-                                    key={size}
-                                    onClick={() => setBrushSize(size)}
-                                    style={{
-                                        flex: 1,
-                                        padding: "6px 0",
-                                        fontSize: 12,
-                                        background: brushSize === size ? "#4a9" : "#333",
-                                        color: "#fff",
-                                        border: "none",
-                                        borderRadius: 4,
-                                        cursor: "pointer",
-                                    }}
-                                >
-                                    {size}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Brush */}
-                <div>
-                    <h3 style={{ margin: "0 0 12px", fontSize: 16 }}>Brush ({activeLayer})</h3>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                        {getBrushOptions().map(opt => (
-                            <Tippy key={opt.char} content={opt.label} delay={0}>
-                                <button
-                                    onClick={() => setActiveBrush(opt.char)}
-                                    style={{
-                                        width: 48,
-                                        height: 48,
-                                        background: activeBrush === opt.char ? getCharColor(opt.char, activeLayer) : "#333",
-                                        color: "#fff",
-                                        border: activeBrush === opt.char ? "2px solid #fff" : "1px solid #555",
-                                        borderRadius: 6,
-                                        cursor: "pointer",
-                                        fontSize: 20,
-                                    }}
-                                >
-                                    {opt.char}
-                                </button>
-                            </Tippy>
-                        ))}
-                    </div>
-                </div>
-
-                {isTileLayerEditable && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                        <h3 style={{ margin: 0, fontSize: 16 }}>Tile Layers</h3>
-                        <div style={{ display: "flex", gap: 8 }}>
-                            {Array.from({ length: activeTileLayerCount }, (_, index) => (
-                                <button
-                                    key={`tile-layer-${index}`}
-                                    onClick={() => {
-                                        if (activeLayer === "terrain") setActiveTerrainPaintLayer(index);
-                                        else setActiveFloorPaintLayer(index);
-                                    }}
-                                    style={{
-                                        flex: 1,
-                                        padding: "6px 0",
-                                        fontSize: 12,
-                                        background: activeTileLayerIndex === index ? "#4a9" : "#333",
-                                        color: "#fff",
-                                        border: "none",
-                                        borderRadius: 4,
-                                        cursor: "pointer",
-                                    }}
-                                >
-                                    {index + 1}
-                                </button>
-                            ))}
-                        </div>
-                        <div style={{ display: "flex", gap: 8 }}>
-                            <button
-                                onClick={addActiveTileLayer}
-                                style={{ flex: 1, padding: "6px 0", fontSize: 12, background: "#2f5", color: "#111", border: "none", borderRadius: 4, cursor: "pointer" }}
-                            >
-                                + Layer
-                            </button>
-                            <button
-                                onClick={removeActiveTileLayer}
-                                disabled={activeTileLayerCount <= 1}
-                                style={{
-                                    flex: 1,
-                                    padding: "6px 0",
-                                    fontSize: 12,
-                                    background: activeTileLayerCount <= 1 ? "#555" : "#b44",
-                                    color: "#fff",
-                                    border: "none",
-                                    borderRadius: 4,
-                                    cursor: activeTileLayerCount <= 1 ? "not-allowed" : "pointer",
-                                    opacity: activeTileLayerCount <= 1 ? 0.6 : 1,
-                                }}
-                            >
-                                - Layer
-                            </button>
-                        </div>
-                        <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                            <span style={{ fontSize: 13 }}>Tint: {activeTileTint}%</span>
-                            <input
-                                type="range"
-                                min={-35}
-                                max={35}
-                                step={1}
-                                value={activeTileTint}
-                                onChange={e => setActiveTileTint(clampTileTintPercent(parseInt(e.target.value, 10) || 0))}
-                            />
-                        </label>
-                    </div>
-                )}
-
-                {/* Grid Toggle */}
-                <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
-                    <input type="checkbox" checked={showGrid} onChange={() => setShowGrid(!showGrid)} style={{ width: 18, height: 18 }} />
-                    Show Grid
-                </label>
-
-                {/* Isometric Toggle */}
-                <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
-                    <input type="checkbox" checked={isometric} onChange={() => setIsometric(!isometric)} style={{ width: 18, height: 18 }} />
-                    Isometric View
-                </label>
-
-                {/* Zoom */}
-                <div>
-                    <h3 style={{ margin: "0 0 8px", fontSize: 16 }}>Zoom: {Math.round(zoom * 100)}%</h3>
-                    <div style={{ display: "flex", gap: 8 }}>
-                        <button onClick={() => setZoom(z => Math.max(0.25, z - 0.25))} style={{ flex: 1, padding: 8, background: "#333", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}>-</button>
-                        <button onClick={() => setZoom(1)} style={{ flex: 1, padding: 8, background: "#333", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}>Reset</button>
-                        <button onClick={() => setZoom(z => Math.min(3, z + 0.25))} style={{ flex: 1, padding: 8, background: "#333", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}>+</button>
-                    </div>
-                </div>
-            </div>
-
-            {/* Center - Canvas */}
-            <div style={{ flex: 1, overflow: "auto", padding: 16, background: metadata.background }}>
-                <div style={{
-                    perspective: isometric ? "1000px" : "none",
-                    perspectiveOrigin: "center center",
-                }}>
-                    <canvas
-                        ref={canvasRef}
-                        onMouseDown={handleCanvasMouseDown}
-                        onMouseMove={handleCanvasMouseMove}
-                        onMouseUp={handleCanvasMouseUp}
-                        onMouseLeave={() => { setIsPainting(false); setDoorDrag(null); }}
-                        onContextMenu={handleCanvasContextMenu}
-                        style={{
-                            border: "1px solid #333",
-                            cursor: isometric ? "default" : "crosshair",
-                            transform: isometric ? "rotateX(60deg) rotateZ(45deg)" : "none",
-                            transformOrigin: "center center",
-                            transition: "transform 0.3s ease",
-                        }}
-                    />
-                </div>
-
-                {contextMenu && (
-                    <div
-                        style={{
-                            position: "fixed",
-                            left: contextMenu.screenX,
-                            top: contextMenu.screenY,
-                            minWidth: 188,
-                            padding: 6,
-                            borderRadius: 8,
-                            background: "#1f2330",
-                            border: "1px solid #4a4f61",
-                            boxShadow: "0 8px 24px rgba(0, 0, 0, 0.45)",
-                            zIndex: 2200,
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: 4,
-                        }}
-                        onPointerDown={event => event.stopPropagation()}
-                        onContextMenu={event => event.preventDefault()}
-                    >
-                        <button
-                            onClick={() => {
-                                openPropertiesPopup(contextMenu);
-                                setContextMenu(null);
-                            }}
-                            disabled={!contextMenu.entity && !contextMenu.tree && !contextMenu.decoration && !contextMenu.location}
-                            style={{
-                                textAlign: "left",
-                                padding: "8px 10px",
-                                fontSize: 13,
-                                borderRadius: 6,
-                                border: "1px solid #414655",
-                                background: "#2a3040",
-                                color: "#fff",
-                                cursor: contextMenu.entity || contextMenu.tree || contextMenu.decoration || contextMenu.location ? "pointer" : "not-allowed",
-                                opacity: contextMenu.entity || contextMenu.tree || contextMenu.decoration || contextMenu.location ? 1 : 0.45,
-                            }}
-                        >
-                            Properties
-                        </button>
-                        <button
-                            onClick={() => {
-                                copyFromContextMenu(contextMenu);
-                                setContextMenu(null);
-                            }}
-                            disabled={!contextMenu.entity && !contextMenu.tree && !contextMenu.decoration}
-                            style={{
-                                textAlign: "left",
-                                padding: "8px 10px",
-                                fontSize: 13,
-                                borderRadius: 6,
-                                border: "1px solid #414655",
-                                background: "#2a3040",
-                                color: "#fff",
-                                cursor: contextMenu.entity || contextMenu.tree || contextMenu.decoration ? "pointer" : "not-allowed",
-                                opacity: contextMenu.entity || contextMenu.tree || contextMenu.decoration ? 1 : 0.45,
-                            }}
-                        >
-                            Copy
-                        </button>
-                        <button
-                            onClick={() => {
-                                pasteClipboardAt(contextMenu.tileX, contextMenu.tileZ);
-                                setContextMenu(null);
-                            }}
-                            disabled={!clipboard}
-                            style={{
-                                textAlign: "left",
-                                padding: "8px 10px",
-                                fontSize: 13,
-                                borderRadius: 6,
-                                border: "1px solid #414655",
-                                background: "#2a3040",
-                                color: "#fff",
-                                cursor: clipboard ? "pointer" : "not-allowed",
-                                opacity: clipboard ? 1 : 0.45,
-                            }}
-                        >
-                            Paste (overwrite)
-                        </button>
-                    </div>
-                )}
-
-                {/* Entity Edit Popup */}
-                {editingEntity && (
-                    <EntityEditPopup
-                        entity={editingEntity.entity}
-                        itemRegistryRevision={itemRegistryRevision}
-                        onSave={updateEntity}
-                        onClose={() => setEditingEntity(null)}
-                        onNavigate={(areaId) => {
-                            setEditingEntity(null);
-                            loadArea(areaId);
-                        }}
-                    />
-                )}
-
-                {/* Tree Edit Popup */}
-                {editingTree && (
-                    <TreeEditPopup
-                        tree={editingTree.tree}
-                        onSave={(t) => updateTree(editingTree.index, t)}
-                        onClose={() => setEditingTree(null)}
-                    />
-                )}
-
-                {/* Decoration Edit Popup */}
-                {editingDecoration && (
-                    <DecorationEditPopup
-                        decoration={editingDecoration.decoration}
-                        onSave={(d) => updateDecoration(editingDecoration.index, d)}
-                        onClose={() => setEditingDecoration(null)}
-                    />
-                )}
-
-                {/* Location Edit Popup */}
-                {editingLocation && (
-                    <LocationEditPopup
-                        location={editingLocation.location}
-                        mapWidth={metadata.width}
-                        mapHeight={metadata.height}
-                        onSave={(nextLocation) => {
-                            const didSave = saveDialogLocation(editingLocation.location.id, nextLocation);
-                            if (didSave) {
-                                setEditingLocation(null);
-                            }
-                        }}
-                        onDelete={() => {
-                            removeDialogLocation(editingLocation.location.id);
-                            setEditingLocation(null);
-                        }}
-                        onClose={() => setEditingLocation(null)}
-                    />
-                )}
-            </div>
-
-            {/* Right Panel - Metadata */}
-            <div style={{ width: 500, padding: 20, borderLeft: "1px solid #333", display: "flex", flexDirection: "column", gap: 16, overflowY: "auto" }}>
-                <h3 style={{ margin: 0, fontSize: 18 }}>Map Properties</h3>
-
-                <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <span style={{ fontSize: 13 }}>ID</span>
-                    <input
-                        value={metadata.id}
-                        onChange={e => {
-                            const nextId = normalizeAreaId(e.target.value, "");
-                            if (nextId === metadata.id) return;
-                            setMetadataWithHistory(prev => ({ ...prev, id: nextId }));
-                        }}
-                        onBlur={() => {
-                            const nextId = normalizeAreaId(metadata.id);
-                            if (nextId === metadata.id) return;
-                            setMetadataWithHistory(prev => ({ ...prev, id: nextId }));
-                        }}
-                        style={{ padding: 8, fontSize: 14, background: "#333", border: "1px solid #555", borderRadius: 4, color: "#fff" }}
-                    />
-                </label>
-
-                <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <span style={{ fontSize: 13 }}>Name</span>
-                    <input
-                        value={metadata.name}
-                        onChange={e => setMetadataWithHistory(prev => ({ ...prev, name: e.target.value }))}
-                        style={{ padding: 8, fontSize: 14, background: "#333", border: "1px solid #555", borderRadius: 4, color: "#fff" }}
-                    />
-                </label>
-
-                <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <span style={{ fontSize: 13 }}>Flavor Text</span>
-                    <textarea
-                        value={metadata.flavor}
-                        onChange={e => setMetadataWithHistory(prev => ({ ...prev, flavor: e.target.value }))}
-                        rows={2}
-                        style={{ padding: 8, fontSize: 14, background: "#333", border: "1px solid #555", borderRadius: 4, color: "#fff", resize: "vertical" }}
-                    />
-                </label>
-
-                <div style={{ display: "flex", gap: 12 }}>
-                    <label style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
-                        <span style={{ fontSize: 13 }}>Width</span>
-                        <input
-                            type="number"
-                            value={metadata.width}
-                            onChange={e => setMetadataWithHistory(prev => ({ ...prev, width: Math.max(5, Math.min(100, parseInt(e.target.value) || 5)) }))}
-                            style={{ padding: 8, fontSize: 14, background: "#333", border: "1px solid #555", borderRadius: 4, color: "#fff" }}
-                        />
-                    </label>
-                    <label style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
-                        <span style={{ fontSize: 13 }}>Height</span>
-                        <input
-                            type="number"
-                            value={metadata.height}
-                            onChange={e => setMetadataWithHistory(prev => ({ ...prev, height: Math.max(5, Math.min(100, parseInt(e.target.value) || 5)) }))}
-                            style={{ padding: 8, fontSize: 14, background: "#333", border: "1px solid #555", borderRadius: 4, color: "#fff" }}
-                        />
-                    </label>
-                </div>
-
-                <div style={{ display: "flex", gap: 12 }}>
-                    <label style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
-                        <span style={{ fontSize: 13 }}>Background</span>
-                        <input
-                            type="color"
-                            value={metadata.background}
-                            onChange={e => setMetadataWithHistory(prev => ({ ...prev, background: e.target.value }))}
-                            style={{ padding: 2, height: 40, background: "#333", border: "1px solid #555", borderRadius: 4 }}
-                        />
-                    </label>
-                    <label style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
-                        <span style={{ fontSize: 13 }}>Ground</span>
-                        <input
-                            type="color"
-                            value={metadata.ground}
-                            onChange={e => setMetadataWithHistory(prev => ({ ...prev, ground: e.target.value }))}
-                            style={{ padding: 2, height: 40, background: "#333", border: "1px solid #555", borderRadius: 4 }}
-                        />
-                    </label>
-                </div>
-
-                <div style={{ display: "flex", gap: 12 }}>
-                    <label style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
-                        <span style={{ fontSize: 13 }}>Ambient</span>
-                        <input
-                            type="range"
-                            min="0"
-                            max="1"
-                            step="0.05"
-                            value={metadata.ambient}
-                            onChange={e => setMetadataWithHistory(prev => ({ ...prev, ambient: parseFloat(e.target.value) }))}
-                        />
-                        <span style={{ fontSize: 12, textAlign: "center" }}>{metadata.ambient}</span>
-                    </label>
-                    <label style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
-                        <span style={{ fontSize: 13 }}>Directional</span>
-                        <input
-                            type="range"
-                            min="0"
-                            max="1"
-                            step="0.05"
-                            value={metadata.directional}
-                            onChange={e => setMetadataWithHistory(prev => ({ ...prev, directional: parseFloat(e.target.value) }))}
-                        />
-                        <span style={{ fontSize: 12, textAlign: "center" }}>{metadata.directional}</span>
-                    </label>
-                </div>
-
-                <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14 }}>
-                    <input
-                        type="checkbox"
-                        checked={metadata.fog}
-                        onChange={e => setMetadataWithHistory(prev => ({ ...prev, fog: e.target.checked }))}
-                        style={{ width: 18, height: 18 }}
-                    />
-                    Fog of War
-                </label>
-
-                <div style={{ borderTop: "1px solid #444", paddingTop: 14, marginTop: 2, display: "flex", flexDirection: "column", gap: 8 }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                        <h3 style={{ margin: 0, fontSize: 16 }}>Items</h3>
-                        <button
-                            className="editor-btn editor-btn--small editor-btn--primary"
-                            onClick={() => setItemRegistryEditorOpen(true)}
-                        >
-                            Open Item Registry
-                        </button>
-                    </div>
-                    <div style={{ fontSize: 12, color: "#9fb5dc" }}>
-                        Edit global items (weapons, gear, keys, consumables) used by chests and gameplay.
-                    </div>
-                </div>
-
-                {/* Trigger Studio */}
-                <div className="editor-trigger-studio">
-                    <div className="editor-trigger-studio-header">
-                        <h3 className="editor-trigger-studio-title">Triggers</h3>
-                        <button
-                            onClick={() => {
-                                setDialogTriggersDraft(dialogTriggers.map(cloneDialogTrigger));
-                                setDialogEditorOpen(true);
-                            }}
-                            className="editor-btn editor-btn--primary editor-btn--small"
-                        >
-                            Open Trigger Studio
-                        </button>
-                    </div>
-                    <div className="editor-trigger-studio-summary">
-                        {activeDialogTriggers.length === 0
-                            ? "0 triggers"
-                            : `${activeDialogTriggers.length} trigger${activeDialogTriggers.length === 1 ? "" : "s"} configured.`}
-                    </div>
-                    {dialogs.length > 0 && (
-                        <div className="editor-trigger-studio-dialog-list">
-                            {dialogs.map(dialog => (
-                                <div
-                                    key={`dialog-summary-${dialog.id}`}
-                                    className="editor-trigger-studio-dialog-item"
-                                >
-                                    <span>{dialog.id}</span>
-                                    <span className="editor-trigger-studio-dialog-nodes">{Object.keys(dialog.nodes).length} nodes</span>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                <div style={{ borderTop: "1px solid #444", paddingTop: 12, marginTop: 2, fontSize: 12, color: "#8fa0c5" }}>
-                    {dialogs.length === 0
-                        ? "0 dialog payloads"
-                        : `${dialogs.length} dialog payload${dialogs.length === 1 ? "" : "s"}`}
-                </div>
-
-                {/* Connections Panel */}
-                <div style={{ borderTop: "1px solid #444", paddingTop: 16, marginTop: 2 }}>
-                    <ConnectionsPanel
-                        currentAreaId={metadata.id}
-                        entities={entities}
-                        onEditTransition={(entity, screenX, screenY) => {
-                            setEditingEntity({ entity, screenX, screenY });
-                        }}
-                        onNavigate={loadArea}
-                    />
-                </div>
-            </div>
-
-            {itemRegistryEditorOpen && (
-                <ItemRegistryEditorModal
-                    onClose={() => setItemRegistryEditorOpen(false)}
-                    onApplied={() => {
-                        setItemRegistryRevision(prev => prev + 1);
-                    }}
-                />
-            )}
-
-            {dialogEditorOpen && (
-                <DialogEditorModal
-                    dialogs={dialogs}
-                    dialogLocations={dialogLocations}
-                    dialogTriggers={activeDialogTriggers}
-                    availableDialogIds={availableDialogIds}
-                    availableDialogIdSet={availableDialogIdSet}
-                    enemySpawnOptions={enemySpawnOptions}
-                    mapWidth={metadata.width}
-                    mapHeight={metadata.height}
-                    onAddDialogTrigger={addDialogTrigger}
-                    onRemoveDialogTrigger={removeDialogTrigger}
-                    onUpdateDialogTrigger={updateDialogTrigger}
-                    onUpdateDialogTriggerCondition={updateDialogTriggerCondition}
-                    onAddDialogCondition={addDialogCondition}
-                    onRemoveDialogCondition={removeDialogCondition}
-                    onClose={() => {
-                        setDialogEditorOpen(false);
-                        setDialogTriggersDraft(null);
-                    }}
-                    onSaveDialogs={saveDialogsFromModal}
-                    onSaveTriggers={saveTriggersFromModal}
-                />
-            )}
-        </div>
+        <MapEditorView
+            metadata={metadata}
+            entities={entities}
+            saveStatus={saveStatus}
+            availableAreaIds={availableAreaIds}
+            selectedAreaId={selectedAreaId}
+            layerVisibility={layerVisibility}
+            activeLayer={activeLayer}
+            activeTool={activeTool}
+            brushSize={brushSize}
+            activeBrush={activeBrush}
+            brushOptions={getBrushOptions()}
+            isTileLayerEditable={isTileLayerEditable}
+            activeTileLayerIndex={activeTileLayerIndex}
+            activeTileLayerCount={activeTileLayerCount}
+            activeTileTint={activeTileTint}
+            showGrid={showGrid}
+            isometric={isometric}
+            zoom={zoom}
+            canvasRef={canvasRef}
+            onSaveMap={() => {
+                void saveMap();
+            }}
+            onLoadArea={loadArea}
+            onCreateNewArea={createNewArea}
+            onToggleLayerVisibility={(layer) => setLayerVisibility((prev) => ({ ...prev, [layer]: !prev[layer] }))}
+            onSelectLayer={(layer) => {
+                setActiveLayer(layer);
+                setActiveBrush(LAYER_BRUSHES[layer][0]?.char ?? ".");
+            }}
+            onSelectTool={setActiveTool}
+            onUndo={undo}
+            onRedo={redo}
+            onBrushSizeChange={setBrushSize}
+            onActiveBrushChange={setActiveBrush}
+            onSelectTileLayer={(index) => {
+                if (activeLayer === "terrain") {
+                    setActiveTerrainPaintLayer(index);
+                    return;
+                }
+                setActiveFloorPaintLayer(index);
+            }}
+            onAddActiveTileLayer={addActiveTileLayer}
+            onRemoveActiveTileLayer={removeActiveTileLayer}
+            onActiveTileTintChange={(value) => setActiveTileTint(clampTileTintPercent(value))}
+            onToggleShowGrid={() => setShowGrid((prev) => !prev)}
+            onToggleIsometric={() => setIsometric((prev) => !prev)}
+            onZoomOut={() => setZoom((value) => Math.max(0.25, value - 0.25))}
+            onZoomReset={() => setZoom(1)}
+            onZoomIn={() => setZoom((value) => Math.min(3, value + 0.25))}
+            onCanvasMouseDown={handleCanvasMouseDown}
+            onCanvasMouseMove={handleCanvasMouseMove}
+            onCanvasMouseUp={handleCanvasMouseUp}
+            onCanvasMouseLeave={handleCanvasMouseLeave}
+            onCanvasContextMenu={handleCanvasContextMenu}
+            contextMenu={contextMenu}
+            clipboard={clipboard}
+            onOpenPropertiesFromContextMenu={openPropertiesFromContextMenu}
+            onCopyFromContextMenu={copyContextMenuSelection}
+            onPasteFromContextMenu={pasteClipboardFromContextMenu}
+            editingEntity={editingEntity}
+            editingTree={editingTree}
+            editingDecoration={editingDecoration}
+            editingLocation={editingLocation}
+            itemRegistryRevision={itemRegistryRevision}
+            onSaveEditingEntity={updateEntity}
+            onCloseEditingEntity={() => setEditingEntity(null)}
+            onEditTransition={(entity, screenX, screenY) => setEditingEntity({ entity, screenX, screenY })}
+            onSaveEditingTree={(tree) => {
+                if (!editingTree) return;
+                updateTree(editingTree.index, tree);
+            }}
+            onCloseEditingTree={() => setEditingTree(null)}
+            onSaveEditingDecoration={(decoration) => {
+                if (!editingDecoration) return;
+                updateDecoration(editingDecoration.index, decoration);
+            }}
+            onCloseEditingDecoration={() => setEditingDecoration(null)}
+            onSaveEditingLocation={saveEditingLocation}
+            onDeleteEditingLocation={deleteEditingLocation}
+            onCloseEditingLocation={() => setEditingLocation(null)}
+            onMetadataIdChange={(value) => {
+                const nextId = normalizeAreaId(value, "");
+                if (nextId === metadata.id) return;
+                setMetadataWithHistory((prev) => ({ ...prev, id: nextId }));
+            }}
+            onMetadataIdBlur={() => {
+                const nextId = normalizeAreaId(metadata.id);
+                if (nextId === metadata.id) return;
+                setMetadataWithHistory((prev) => ({ ...prev, id: nextId }));
+            }}
+            onMetadataNameChange={(value) => setMetadataWithHistory((prev) => ({ ...prev, name: value }))}
+            onMetadataFlavorChange={(value) => setMetadataWithHistory((prev) => ({ ...prev, flavor: value }))}
+            onMetadataWidthChange={(value) => setMetadataWithHistory((prev) => ({
+                ...prev,
+                width: Math.max(5, Math.min(100, parseInt(value, 10) || 5)),
+            }))}
+            onMetadataHeightChange={(value) => setMetadataWithHistory((prev) => ({
+                ...prev,
+                height: Math.max(5, Math.min(100, parseInt(value, 10) || 5)),
+            }))}
+            onMetadataBackgroundChange={(value) => setMetadataWithHistory((prev) => ({ ...prev, background: value }))}
+            onMetadataGroundChange={(value) => setMetadataWithHistory((prev) => ({ ...prev, ground: value }))}
+            onMetadataAmbientChange={(value) => setMetadataWithHistory((prev) => ({ ...prev, ambient: parseFloat(value) }))}
+            onMetadataDirectionalChange={(value) => setMetadataWithHistory((prev) => ({ ...prev, directional: parseFloat(value) }))}
+            onMetadataFogChange={(checked) => setMetadataWithHistory((prev) => ({ ...prev, fog: checked }))}
+            onMetadataSceneEffectChange={setMetadataSceneEffect}
+            itemRegistryEditorOpen={itemRegistryEditorOpen}
+            onOpenItemRegistry={() => setItemRegistryEditorOpen(true)}
+            onCloseItemRegistry={() => setItemRegistryEditorOpen(false)}
+            onItemRegistryApplied={() => setItemRegistryRevision((prev) => prev + 1)}
+            dialogs={dialogs}
+            activeDialogTriggers={activeDialogTriggers}
+            dialogEditorOpen={dialogEditorOpen}
+            dialogLocations={dialogLocations}
+            availableDialogIds={availableDialogIds}
+            availableDialogIdSet={availableDialogIdSet}
+            enemySpawnOptions={enemySpawnOptions}
+            onOpenDialogEditor={openDialogEditor}
+            onCloseDialogEditor={closeDialogEditor}
+            onAddDialogTrigger={addDialogTrigger}
+            onRemoveDialogTrigger={removeDialogTrigger}
+            onUpdateDialogTrigger={updateDialogTrigger}
+            onUpdateDialogTriggerCondition={updateDialogTriggerCondition}
+            onAddDialogCondition={addDialogCondition}
+            onRemoveDialogCondition={removeDialogCondition}
+            onSaveDialogs={saveDialogsFromModal}
+            onSaveTriggers={saveTriggersFromModal}
+        />
     );
 }

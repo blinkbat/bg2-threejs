@@ -2,7 +2,7 @@
 // EDITOR TYPES
 // =============================================================================
 
-import type { AreaDialogDefinition, AreaDialogTrigger, AreaId, AreaLocation, TreeType } from "../game/areas/types";
+import type { AreaDialogDefinition, AreaDialogTrigger, AreaId, AreaLocation, AreaSceneEffects, TreeType } from "../game/areas/types";
 import type { EnemyType } from "../core/types";
 
 export type Tool = "paint" | "erase" | "select";
@@ -19,6 +19,7 @@ export interface MapMetadata {
     ambient: number;
     directional: number;
     fog: boolean;
+    sceneEffects?: AreaSceneEffects;
     spawnX: number;
     spawnZ: number;
 }
