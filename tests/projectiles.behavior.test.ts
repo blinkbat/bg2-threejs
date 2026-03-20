@@ -9,7 +9,14 @@ const {
     isInRangeMock,
 } = vi.hoisted(() => ({
     applyDamageToUnitMock: vi.fn(),
-    isInRangeMock: vi.fn(() => true),
+    isInRangeMock: vi.fn((
+        _attackerX: number,
+        _attackerZ: number,
+        _targetX: number,
+        _targetZ: number,
+        _targetRadius: number,
+        _range: number
+    ) => true),
 }));
 
 const unitsById = new Map<number, Unit>();
@@ -153,7 +160,14 @@ vi.mock("../src/game/unitQuery", () => ({
 
 vi.mock("../src/rendering/range", () => ({
     getUnitRadius: vi.fn(() => 0.5),
-    isInRange: (...args: unknown[]) => isInRangeMock(...args),
+    isInRange: (
+        attackerX: number,
+        attackerZ: number,
+        targetX: number,
+        targetZ: number,
+        targetRadius: number,
+        range: number
+    ) => isInRangeMock(attackerX, attackerZ, targetX, targetZ, targetRadius, range),
 }));
 
 import { updateProjectiles } from "../src/gameLoop/projectiles";

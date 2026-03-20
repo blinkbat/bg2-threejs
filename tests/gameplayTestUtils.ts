@@ -72,14 +72,17 @@ export function makeUnit(overrides: Partial<Unit> = {}): Unit {
     };
 }
 
-type UnitGroupOverrides = Partial<Omit<UnitGroup, "position">> & {
+type UnitGroupOverrides = Partial<Omit<UnitGroup, "position" | "scale" | "userData">> & {
     position?: { x: number; y: number; z: number };
+    scale?: { x: number; y: number; z: number };
+    userData?: Partial<UnitGroup["userData"]>;
 };
 
 export function makeUnitGroup(overrides: UnitGroupOverrides = {}): UnitGroup {
     const {
         position: positionOverride,
         scale: scaleOverride,
+        userData: userDataOverride,
         ...restOverrides
     } = overrides;
     const position = {
@@ -104,12 +107,21 @@ export function makeUnitGroup(overrides: UnitGroupOverrides = {}): UnitGroup {
         },
     };
 
+    const userData: UnitGroup["userData"] = {
+        unitId: userDataOverride?.unitId ?? 0,
+        targetX: userDataOverride?.targetX ?? position.x,
+        targetZ: userDataOverride?.targetZ ?? position.z,
+        attackTarget: userDataOverride?.attackTarget ?? null,
+        flyHeight: userDataOverride?.flyHeight ?? position.y,
+        ...userDataOverride,
+    };
+
     return {
         position,
         rotation: overrides.rotation ?? { x: 0, y: 0, z: 0 },
         scale,
         visible: overrides.visible ?? true,
-        userData: overrides.userData ?? {},
+        userData,
         add: overrides.add ?? (() => undefined),
         remove: overrides.remove ?? (() => undefined),
         traverse: overrides.traverse ?? (() => undefined),

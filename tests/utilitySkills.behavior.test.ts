@@ -114,7 +114,6 @@ describe("utility skill behavior", () => {
             duration: 5_000,
             timeSinceTick: 0,
             sourceId: 999,
-            damagePerTick: 2,
         });
         const { ctx } = createSkillContext({
             units: [caster],
