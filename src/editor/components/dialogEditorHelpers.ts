@@ -130,6 +130,7 @@ export function toDialogEndAction(menuId: string): AreaDialogUiAction | undefine
         return {
             type: "event",
             eventId: "spend_the_night",
+            goldCost: 0,
         };
     }
     if (!VALID_MENU_IDS.has(menuId)) return undefined;

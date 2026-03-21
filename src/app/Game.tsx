@@ -172,7 +172,7 @@ export function Game({
     const spendNightPauseForcedRef = useRef(false);
     const lastWaystoneRef = useRef<{ areaId: AreaId; waystoneIndex: number } | null>(initialLastWaystone ?? null);
     const getSaveLockReasonRef = useRef<() => string | null>(() => null);
-    const runSpendNightEventRef = useRef<() => void>(() => {});
+    const runSpendNightEventRef = useRef<(goldCost?: number) => void>(() => {});
     const travelToAreaRef = useRef<(targetArea: AreaId, spawn: { x: number; z: number }, direction?: "north" | "south" | "east" | "west") => void>(() => {});
     const dialogTriggerRuntimeStateRef = useRef<DialogTriggerRuntimeState>({
         stickySatisfiedConditionKeys: new Set(),
@@ -942,7 +942,17 @@ export function Game({
         }
     }, []);
 
-    const runSpendNightEvent = useCallback(() => {
+    const runSpendNightEvent = useCallback((goldCost: number = 0) => {
+        if (goldCost > 0 && gold < goldCost) {
+            addLog(`Not enough gold to stay the night (${gold}/${goldCost}).`, "#ef4444");
+            return;
+        }
+
+        if (goldCost > 0) {
+            setGold(prev => Math.max(0, prev - goldCost));
+            addLog(`The innkeeper takes ${goldCost} gold for the rooms.`, "#f59e0b");
+        }
+
         clearSpendNightTimers();
 
         // Route sleep through the standard pause pipeline so game-clock and cooldown
@@ -1037,7 +1047,7 @@ export function Game({
                 spendNightPauseForcedRef.current = false;
             }, SPEND_NIGHT_BLACK_HOLD_MS);
         }, SPEND_NIGHT_FADE_MS);
-    }, [addLog, clearSpendNightTimers, doProcessQueue, getPauseRuntimeRefs]);
+    }, [addLog, clearSpendNightTimers, doProcessQueue, getPauseRuntimeRefs, gold]);
     runSpendNightEventRef.current = runSpendNightEvent;
 
     useEffect(() => {
@@ -1050,7 +1060,7 @@ export function Game({
         if (!action) return;
         if (action.type === "event") {
             if (action.eventId === "spend_the_night") {
-                runSpendNightEvent();
+                runSpendNightEvent(action.goldCost);
             }
             return;
         }

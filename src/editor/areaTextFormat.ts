@@ -981,9 +981,11 @@ function sanitizeAreaDialogUiAction(raw: unknown): AreaDialogUiAction | undefine
     if (raw.type === "event") {
         if (typeof raw.eventId !== "string") return undefined;
         if (!isAreaDialogEventId(raw.eventId)) return undefined;
+        const goldCost = toOptionalFiniteNumber(raw.goldCost);
         return {
             type: "event",
             eventId: raw.eventId,
+            ...(goldCost !== undefined ? { goldCost: Math.max(0, Math.floor(goldCost)) } : {}),
         };
     }
     return undefined;

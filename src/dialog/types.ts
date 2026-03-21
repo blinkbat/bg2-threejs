@@ -30,6 +30,7 @@ interface DialogOpenMenuAction {
 interface DialogEventAction {
     type: "event";
     eventId: DialogEventId;
+    goldCost?: number;
 }
 
 export type DialogUiAction = DialogOpenMenuAction | DialogEventAction;

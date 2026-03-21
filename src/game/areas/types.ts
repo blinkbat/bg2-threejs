@@ -60,6 +60,7 @@ export interface AreaDialogOpenMenuAction {
 export interface AreaDialogEventAction {
     type: "event";
     eventId: AreaDialogEventId;
+    goldCost?: number;
 }
 
 export type AreaDialogUiAction = AreaDialogOpenMenuAction | AreaDialogEventAction;

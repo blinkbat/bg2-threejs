@@ -14,6 +14,7 @@ function cloneDialogUiAction(action: AreaDialogUiAction | undefined): DialogUiAc
     return {
         type: "event",
         eventId: action.eventId,
+        ...(action.goldCost !== undefined ? { goldCost: action.goldCost } : {}),
     };
 }
 

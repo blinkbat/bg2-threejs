@@ -465,6 +465,29 @@ export function DialogEditorModal({
         }));
     };
 
+    const updateSpendNightGoldCost = (rawValue: string): void => {
+        if (!selectedNode?.isMenuNode) return;
+        const action = selectedNode.onDialogEndAction;
+        if (!action || action.type !== "event" || action.eventId !== "spend_the_night") return;
+
+        const parsed = parseInt(rawValue, 10);
+        const goldCost = Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+
+        updateSelectedNode(node => {
+            const currentAction = node.onDialogEndAction;
+            if (!currentAction || currentAction.type !== "event" || currentAction.eventId !== "spend_the_night") {
+                return node;
+            }
+            return {
+                ...node,
+                onDialogEndAction: {
+                    ...currentAction,
+                    goldCost,
+                },
+            };
+        });
+    };
+
     const duplicateSelectedNode = (): void => {
         if (!selectedDialog || !selectedNode) return;
         const existingNodeIds = new Set(Object.keys(selectedDialog.nodes));
@@ -1307,6 +1330,19 @@ export function DialogEditorModal({
                                     <div style={{ fontSize: 13, color: "#9aa6c5", padding: "4px 2px" }}>
                                         This is a menu/event node. When the dialog reaches this node, it closes and opens the selected menu or fires the event. Link to this node from other nodes or choices via their "Next Node" dropdown.
                                     </div>
+                                    {selectedNode.onDialogEndAction?.type === "event" && selectedNode.onDialogEndAction.eventId === "spend_the_night" && (
+                                        <label style={{ width: 220, display: "flex", flexDirection: "column", gap: 4 }}>
+                                            <span style={{ fontSize: 14, color: "#b8c2d9" }}>Gold Cost</span>
+                                            <input
+                                                type="number"
+                                                min={0}
+                                                step={1}
+                                                value={selectedNode.onDialogEndAction.goldCost ?? 0}
+                                                onChange={event => updateSpendNightGoldCost(event.target.value)}
+                                                style={{ padding: 8, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 14 }}
+                                            />
+                                        </label>
+                                    )}
                                 </>
                             )}
                             {selectedNode && selectedDialog && !selectedNode.isMenuNode && (

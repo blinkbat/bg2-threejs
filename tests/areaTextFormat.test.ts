@@ -277,4 +277,49 @@ describe("areaTextFormat", () => {
             warnSpy.mockRestore();
         }
     });
+
+    it("preserves spend-the-night gold costs in dialog event actions", () => {
+        const area = createArea({
+            dialogs: [
+                {
+                    id: "inn_talk",
+                    startNodeId: "start",
+                    nodes: {
+                        start: {
+                            id: "start",
+                            speakerId: "innkeeper",
+                            text: "Beds are available.",
+                            choices: [
+                                {
+                                    id: "stay",
+                                    label: "Stay the night.",
+                                    nextNodeId: "stay_night",
+                                },
+                            ],
+                        },
+                        stay_night: {
+                            id: "stay_night",
+                            speakerId: "innkeeper",
+                            text: "",
+                            isMenuNode: true,
+                            onDialogEndAction: {
+                                type: "event",
+                                eventId: "spend_the_night",
+                                goldCost: 30,
+                            },
+                        },
+                    },
+                },
+            ],
+        });
+
+        const parsed = textToAreaData(areaDataToText(area));
+        const stayAction = parsed.dialogs?.[0].nodes.stay_night.onDialogEndAction;
+
+        expect(stayAction).toEqual({
+            type: "event",
+            eventId: "spend_the_night",
+            goldCost: 30,
+        });
+    });
 });
