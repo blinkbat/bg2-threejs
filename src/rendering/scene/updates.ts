@@ -324,6 +324,8 @@ export function updateWater(waterMesh: THREE.Object3D | null, time: number, came
 // =============================================================================
 
 const _rainForward = new THREE.Vector3();
+const RAIN_DRIFT_X_SPEED = -0.34;
+const RAIN_FALL_Y_SPEED = 2.15;
 const LIGHTNING_MIN_QUIET_MS = 6500;
 const LIGHTNING_MAX_QUIET_MS = 14500;
 const LIGHTNING_MIN_GAP_MS = 90;
@@ -458,8 +460,8 @@ export function updateRain(
     );
 
     const t = time * 0.001;
-    rainTexture.offset.x = 0;
-    rainTexture.offset.y = ((t * 2.15) % 1 + 1) % 1;
+    rainTexture.offset.x = ((t * RAIN_DRIFT_X_SPEED) % 1 + 1) % 1;
+    rainTexture.offset.y = ((t * RAIN_FALL_Y_SPEED) % 1 + 1) % 1;
 }
 
 // =============================================================================

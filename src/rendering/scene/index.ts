@@ -98,6 +98,7 @@ function createRainTexture(): THREE.CanvasTexture {
     canvas.width = 80;
     canvas.height = 128;
     const ctx = canvas.getContext("2d")!;
+    const rainSlantX = 5.5;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.lineCap = "round";
@@ -109,10 +110,10 @@ function createRainTexture(): THREE.CanvasTexture {
         const alpha = index % 6 === 0 ? 0.56 : 0.42;
 
         ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
-        ctx.lineWidth = index % 5 === 0 ? 0.22 : 0.17;
+        ctx.lineWidth = index % 5 === 0 ? 0.16 : 0.12;
         ctx.beginPath();
         ctx.moveTo(startX, startY);
-        ctx.lineTo(startX, startY + length);
+        ctx.lineTo(startX + rainSlantX, startY + length);
         ctx.stroke();
     }
 
@@ -1556,7 +1557,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
             map: rainTexture,
             color: "#d9e5ec",
             transparent: true,
-            opacity: 0.42,
+            opacity: 0.84,
             depthWrite: false,
             toneMapped: false,
             fog: false
