@@ -6,6 +6,7 @@ import * as THREE from "three";
 import type { Unit, UnitGroup } from "../../core/types";
 import type { ChestMeshData } from "./types";
 import { getGameTime } from "../../core/gameClock";
+import { getEffectiveMaxHp } from "../../game/playerUnits";
 
 interface LiquidTileAnimationData {
     liquidType: "lava";
@@ -525,7 +526,8 @@ export function updateHpBars(
         barGroup.position.set(g.position.x, g.position.y + HP_BAR_Y_OFFSET, g.position.z);
         barGroup.visible = g.visible && u.hp > 0;
 
-        const maxHp = Math.max(1, maxHpById[u.id] ?? 1);
+        const maxHp = Math.max(1, getEffectiveMaxHp(u.id, u));
+        maxHpById[u.id] = maxHp;
         const pct = Math.max(0, Math.min(1, u.hp / maxHp));
 
         fillMesh.scale.x = pct;

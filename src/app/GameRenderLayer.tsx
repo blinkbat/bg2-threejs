@@ -2,14 +2,15 @@ import * as React from "react";
 import type {
     CharacterStats,
     CombatLogEntry,
+    EnemyStats,
     EquipmentSlot,
     SelectionBox,
     Skill,
     Unit,
 } from "../core/types";
 import { AREAS, type AreaId } from "../game/areas";
-import { ENEMY_STATS, getMonsterTypeLabel } from "../game/enemyStats";
-import { isCorePlayerId, UNIT_DATA } from "../game/playerUnits";
+import { ENEMY_STATS, getAmoebaMaxHpForSplitCount, getMonsterTypeLabel } from "../game/enemyStats";
+import { getEffectiveMaxHp, isCorePlayerId, UNIT_DATA } from "../game/playerUnits";
 import type { HotbarAssignments } from "../hooks/hotbarStorage";
 import {
     type LightingTuningSettings,
@@ -142,6 +143,14 @@ function getHealthStatusColor(pct: number): string {
     if (pct > 0.5) return "var(--ui-color-accent-warning)";
     if (pct > 0.25) return "var(--ui-color-accent-warning)";
     return "var(--ui-color-accent-danger)";
+}
+
+function getEnemyDisplayMaxHp(unit: Unit, stats: EnemyStats): number {
+    if (unit.enemyType === "giant_amoeba") {
+        return getAmoebaMaxHpForSplitCount(unit.splitCount ?? 0);
+    }
+
+    return stats.maxHp;
 }
 
 export function GameRenderLayer({
@@ -330,9 +339,10 @@ export function GameRenderLayer({
                 const enemy = hoveredEnemyUnit;
                 if (!enemy?.enemyType || enemy.hp <= 0) return null;
                 const stats = ENEMY_STATS[enemy.enemyType];
+                const maxHp = getEnemyDisplayMaxHp(enemy, stats);
                 const monsterTypeLabel = getMonsterTypeLabel(stats.monsterType);
                 const primaryStatusLabel = getPrimaryStatusLabel(enemy.statusEffects);
-                const pct = enemy.hp / stats.maxHp;
+                const pct = enemy.hp / maxHp;
                 const status = pct >= 1 ? "Unharmed" : pct > 0.75 ? "Scuffed" : pct > 0.5 ? "Injured" : pct > 0.25 ? "Badly wounded" : "Near death";
                 const statusColor = getHealthStatusColor(pct);
                 return (
@@ -350,7 +360,7 @@ export function GameRenderLayer({
                         </div>
                         {debug && (
                             <div className="enemy-tooltip-status" style={{ color: "var(--ui-color-text-dim)" }}>
-                                {enemy.hp}/{stats.maxHp} HP
+                                {enemy.hp}/{maxHp} HP
                             </div>
                         )}
                     </div>
@@ -368,7 +378,7 @@ export function GameRenderLayer({
                 if (!player || player.hp <= 0) return null;
                 const data = UNIT_DATA[player.id];
                 if (!data) return null;
-                const pct = player.hp / data.maxHp;
+                const pct = player.hp / getEffectiveMaxHp(player.id, player);
                 const status = pct >= 1 ? "Unharmed" : pct > 0.75 ? "Scuffed" : pct > 0.5 ? "Injured" : pct > 0.25 ? "Badly wounded" : "Near death";
                 const statusColor = getHealthStatusColor(pct);
                 return (

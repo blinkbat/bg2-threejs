@@ -9,14 +9,10 @@ const {
     isInRangeMock,
 } = vi.hoisted(() => ({
     applyDamageToUnitMock: vi.fn(),
-    isInRangeMock: vi.fn((
-        _attackerX: number,
-        _attackerZ: number,
-        _targetX: number,
-        _targetZ: number,
-        _targetRadius: number,
-        _range: number
-    ) => true),
+    isInRangeMock: vi.fn((...args: number[]) => {
+        void args;
+        return true;
+    }),
 }));
 
 const unitsById = new Map<number, Unit>();
