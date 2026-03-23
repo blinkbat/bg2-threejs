@@ -116,7 +116,7 @@ export const SKILLS: Record<string, Skill> = {
         critChanceOverride: 60,
         onHitEffect: {
             type: "stun",
-            chance: 45,
+            chance: 25,
             duration: 2500
         }
     },
@@ -163,7 +163,7 @@ export const SKILLS: Record<string, Skill> = {
         description: "Let out a mighty shout that forces nearby enemies to attack you.",
         flavor: "When the dust cleared, only Kvel of the North was visible over the slain dead.",
         manaCost: 10,
-        cooldown: 2000,
+        cooldown: 7000,
         type: "taunt",
         targetType: "self",  // centered on caster
         range: 6,  // taunt radius
@@ -236,7 +236,7 @@ export const SKILLS: Record<string, Skill> = {
         name: "Divine Lattice",
         description: "Encase a unit in radiant lattice: impervious to all damage, unable to act, and ignored by enemies.",
         flavor: "\"Step outside the storm. Return when it passes.\"",
-        manaCost: 16,
+        manaCost: 8,
         cooldown: 500,
         type: "buff",
         targetType: "unit",
@@ -314,7 +314,7 @@ export const SKILLS: Record<string, Skill> = {
         damageType: "holy",
         damagePerTick: 3,
         tickInterval: 1000,
-        duration: 12000
+        duration: 6000
     },
     vishasEyes: {
         name: "Visha's Eyes",
@@ -356,14 +356,14 @@ export const SKILLS: Record<string, Skill> = {
         aoeRadius: 3,  // Visual indicator radius
         damageRange: [2, 4],  // damage per missile
         damageType: "chaos",
-        hitCount: 8,  // 8 missiles
+        hitCount: 6,  // 6 missiles
         projectileColor: "#9966ff"  // Purple arcane color
     },
     bodySwap: {
         name: "Body Swap",
         description: "Instantly exchange positions with a chosen unit, ally or enemy.",
         flavor: "\"Two forms, one locus. Switch.\"",
-        manaCost: 10,
+        manaCost: 6,
         cooldown: 500,
         type: "dodge",
         targetType: "unit",
@@ -417,7 +417,7 @@ export const SKILLS: Record<string, Skill> = {
         name: "Restoration",
         description: "Purge doom, poison, burn, and slowing afflictions from an ally, then heal them for 3 HP per second over 10 seconds.",
         flavor: "\"Even death's shadow retreats before the light.\"",
-        manaCost: 10,
+        manaCost: 14,
         cooldown: 8000,
         type: "restoration",
         targetType: "ally",
@@ -431,7 +431,7 @@ export const SKILLS: Record<string, Skill> = {
         description: "Revive a fallen ally to 1 HP, placing them next to the caster.",
         flavor: "\"Rise. Your work is not yet done.\"",
         manaCost: 25,
-        cooldown: 5000,
+        cooldown: 10000,
         type: "revive",
         targetType: "ally",
         range: 999,
@@ -473,7 +473,7 @@ export const SKILLS: Record<string, Skill> = {
         type: "buff",
         targetType: "self",
         range: 3.5,
-        duration: 12000,
+        duration: 8000,
         damageType: "holy",
         damagePerTick: 3,
         tickInterval: 1000,
@@ -506,7 +506,7 @@ export const SKILLS: Record<string, Skill> = {
         damageRange: [THORNS_DAMAGE_MIN, THORNS_DAMAGE_MAX],
         damageType: "physical",
         isCantrip: true,
-        maxUses: 3
+        maxUses: 2
     },
     glacialWhorl: {
         name: "Glacial Whorl",
@@ -517,7 +517,7 @@ export const SKILLS: Record<string, Skill> = {
         type: "damage",
         targetType: "aoe",
         range: 12,
-        damageRange: [2, 5],
+        damageRange: [5, 9],
         damageType: "cold",
         chillChance: 60,
         projectileColor: "#5dade2"
@@ -584,7 +584,7 @@ export const SKILLS: Record<string, Skill> = {
         name: "Teleport Other",
         description: "Wrench a creature through space, relocating it to a point of your choosing.",
         flavor: "\"You were there. Now you are here. Argue with the universe if you disagree.\"",
-        manaCost: 16,
+        manaCost: 8,
         cooldown: 8000,
         type: "displacement",
         targetType: "unit",

@@ -184,26 +184,30 @@ function executeEnemyMeleeAttack(ctx: EnemyAttackContext): void {
         const willStun = canApplyStun && !!attackerStats.stunChance && rollChance(attackerStats.stunChance);
         const poisonDmg = willPoison ? attackerStats.poisonDamage : undefined;
         const lifesteal = attackerStats.lifesteal;
-
-        // Calculate lifesteal heal amount for log message (estimate based on current snapshot)
-        const healAmount = lifesteal && lifesteal > 0 ? Math.floor(dmg * lifesteal) : 0;
-
-        // Custom log for lifesteal attacks
-        const hitText = healAmount > 0
-            ? logLifestealHit(attackerStats.name, targetData.name, dmg, healAmount)
-            : logHit(attackerStats.name, attackName, targetData.name, dmg);
+        const getLifestealHealAmount = (totalHpDamage: number): number => {
+            if (!lifesteal || lifesteal <= 0) return 0;
+            return Math.floor(totalHpDamage * lifesteal);
+        };
 
         const dmgCtx: DamageContext = { scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now, defeatedThisFrame };
-        applyDamageToUnit(dmgCtx, target.id, targetG, dmg, targetData.name, {
+        const damageResult = applyDamageToUnit(dmgCtx, target.id, targetG, dmg, targetData.name, {
             color: COLORS.damageEnemy,
             poison: willPoison ? { sourceId: attacker.id, damagePerTick: poisonDmg } : undefined,
             slow: willSlow ? { sourceId: attacker.id } : undefined,
-            hitMessage: { text: hitText, color: COLORS.damageEnemy },
+            hitMessage: result => {
+                const healAmount = getLifestealHealAmount(result.totalHpDamage);
+                return {
+                    text: healAmount > 0
+                        ? logLifestealHit(attackerStats.name, targetData.name, result.hpDamage, healAmount)
+                        : logHit(attackerStats.name, attackName, targetData.name, result.hpDamage),
+                    color: COLORS.damageEnemy
+                };
+            },
             targetUnit: target,
             isCrit,
             attackerId: attacker.id,
             isMeleeHit: true
-        });
+        }) ?? { hpDamage: 0, totalHpDamage: 0, shieldAbsorbed: 0, shieldDepleted: false, wasDefeated: false };
 
         soundFns.playHit();
         if (willPoison) {
@@ -231,6 +235,7 @@ function executeEnemyMeleeAttack(ctx: EnemyAttackContext): void {
         }
 
         // Apply lifesteal heal using fresh state to avoid race condition
+        const healAmount = getLifestealHealAmount(damageResult.totalHpDamage);
         if (healAmount > 0) {
             applyLifesteal(scene, damageTexts, setUnits, attacker.id, attackerG.position.x, attackerG.position.z, healAmount);
         }

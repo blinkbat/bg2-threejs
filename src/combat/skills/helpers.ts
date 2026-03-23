@@ -112,20 +112,22 @@ export function findAndValidateEnemyTarget(
  * If the caster has shielded effect, cooldowns are doubled (defensive stance penalty).
  * Slowed increases cooldowns by 1.5x, Defiance decreases cooldowns by 0.5x.
  *
- * Note: actionCooldownRef tracks when the UNIT can act again (blocks all actions).
+ * Note: actionCooldownRef tracks when the UNIT can act again (blocks standard actions).
+ * Cantrips use their own per-skill cooldown ref so they can be woven between longer skill lockouts.
  * skillCooldowns tracks per-skill UI animation (only the used skill shows cooldown bar).
  */
 export function consumeSkill(ctx: SkillExecutionContext, casterId: number, skill: Skill): void {
-    const { unitsStateRef, actionCooldownRef, setSkillCooldowns, setUnits, addLog } = ctx;
+    const { unitsStateRef, actionCooldownRef, cantripCooldownRef, setSkillCooldowns, setUnits, addLog } = ctx;
     const now = Date.now();
+    const skillCooldownKey = `${casterId}-${skill.name}`;
 
     if (skill.isCantrip) {
-        // Cantrips: fixed lockout (no status multipliers), decrement uses
+        // Cantrips: fixed per-skill lockout that does not consume the unit-wide action lock.
         const cooldownEnd = now + skill.cooldown;
-        actionCooldownRef.current[casterId] = cooldownEnd;
+        cantripCooldownRef.current[skillCooldownKey] = cooldownEnd;
         setSkillCooldowns(prev => ({
             ...prev,
-            [`${casterId}-${skill.name}`]: { end: cooldownEnd, duration: skill.cooldown }
+            [skillCooldownKey]: { end: cooldownEnd, duration: skill.cooldown }
         }));
         updateUnitWith(setUnits, casterId, u => ({
             mana: Math.max(0, (u.mana ?? 0) - skill.manaCost),
@@ -150,7 +152,7 @@ export function consumeSkill(ctx: SkillExecutionContext, casterId: number, skill
     // Set UI cooldown ONLY for the skill that was used
     setSkillCooldowns(prev => ({
         ...prev,
-        [`${casterId}-${skill.name}`]: { end: cooldownEnd, duration: effectiveCooldown }
+        [skillCooldownKey]: { end: cooldownEnd, duration: effectiveCooldown }
     }));
 
     // Deduct mana (clamped to 0 minimum)

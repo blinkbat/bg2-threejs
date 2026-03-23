@@ -10,6 +10,7 @@ import { setSkillCooldown, rollDamage } from "../../combat/combatMath";
 import { COLORS, LEAP_DURATION, LEAP_ARC_HEIGHT, LEAP_DAMAGE_RADIUS, LEAP_MIN_LANDING_DIST, LEAP_LANDING_OFFSET } from "../../core/constants";
 import { accumulateDelta } from "../../core/gameClock";
 import { applyDamageToUnit, createAnimatedRing, type DamageContext } from "../../combat/damageEffects";
+import { isInRange, getUnitRadius } from "../../rendering/range";
 import type { LeapContext } from "./types";
 
 // =============================================================================
@@ -176,13 +177,8 @@ export function updateLeaps(
             const targetG = unitsRef[leap.targetId];
             const targetUnit = unitsStateRef.current.find(u => u.id === leap.targetId);
             if (targetG && targetUnit && targetUnit.hp > 0 && !defeatedThisFrame.has(leap.targetId)) {
-                const landDist = Math.hypot(
-                    targetG.position.x - leap.endX,
-                    targetG.position.z - leap.endZ
-                );
-
                 // Deal damage if close enough on landing
-                if (landDist < LEAP_DAMAGE_RADIUS) {
+                if (isInRange(leap.endX, leap.endZ, targetG.position.x, targetG.position.z, getUnitRadius(targetUnit), LEAP_DAMAGE_RADIUS)) {
                     const damage = rollDamage(leap.damage[0], leap.damage[1]);
                     const targetData = getUnitStats(targetUnit);
 

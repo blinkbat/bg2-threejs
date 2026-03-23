@@ -16,19 +16,25 @@ import { getGameTime } from "../core/gameClock";
 // DAMAGE TEXT UPDATE
 // =============================================================================
 
+let lastDamageTextTime = 0;
+
 export function updateDamageTexts(
     damageTexts: DamageText[],
     camera: THREE.OrthographicCamera,
     scene: THREE.Scene,
     paused: boolean
 ): DamageText[] {
+    const now = getGameTime();
+    const dt_ms = lastDamageTextTime === 0 ? 16 : Math.min(now - lastDamageTextTime, 100);
+    lastDamageTextTime = now;
+
     let writeIndex = 0;
     for (let i = 0; i < damageTexts.length; i++) {
         const dt = damageTexts[i];
         dt.mesh.quaternion.copy(camera.quaternion);
         if (!paused) {
-            dt.mesh.position.y += 0.02;
-            dt.life -= 16;
+            dt.mesh.position.y += 0.02 * (dt_ms / 16);
+            dt.life -= dt_ms;
             (dt.mesh.material as THREE.MeshBasicMaterial).opacity = dt.life / 1000;
             if (dt.life <= 0) {
                 recycleDamageNumber(scene, dt.mesh);

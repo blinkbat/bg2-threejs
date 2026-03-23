@@ -23,13 +23,14 @@ import { getItem } from "../game/items";
 import { isConsumable } from "../core/types";
 import { updateChestStates } from "../rendering/scene";
 import { soundFns } from "../audio";
+import { pauseGameClock, resumeGameClock } from "../core/gameClock";
 import { updateUnit, updateUnitWith, updateUnitsWhere, createLiveUnitsDispatch } from "../core/stateUtils";
 import { createUnitsForArea as createAreaUnits, type PersistedPlayer } from "../app/gameSetup";
 
 // Extracted modules
 import { executeSkill, type SkillExecutionContext } from "../combat/skills";
 import { applyPoison, applyStatusEffect, getIncapacitatingStatus } from "../combat/combatMath";
-import { setupTargetingMode } from "../input";
+import { getSkillLockoutEnd, setupTargetingMode } from "../input";
 import { createLightningPillar } from "../combat/damageEffects";
 import { spawnLootBag } from "../gameLoop";
 import { togglePause, processActionQueue, handleTargetingOnUnit, stopSelectedUnits, toggleHoldPositionForSelectedUnits, type ActionQueue } from "../input";
@@ -184,6 +185,17 @@ export function Game({
     useEffect(() => { selectedRef.current = selectedIds; }, [selectedIds]);
     useEffect(() => { unitsStateRef.current = units; }, [units]);
     useEffect(() => { pausedRef.current = paused; }, [paused]);
+    useEffect(() => {
+        if (pausedRef.current) {
+            pauseGameClock();
+            if (pauseStartTimeRef.current === null) {
+                pauseStartTimeRef.current = Date.now();
+            }
+            return;
+        }
+
+        resumeGameClock();
+    }, []);
     useEffect(() => { targetingModeRef.current = targetingMode; }, [targetingMode]);
     useEffect(() => { consumableTargetingModeRef.current = consumableTargetingMode; }, [consumableTargetingMode]);
     useEffect(() => { showPanelRef.current = showPanel; }, [showPanel]);
@@ -373,6 +385,7 @@ export function Game({
 
     const actionQueueRef = useRef<ActionQueue>({});
     const actionCooldownRef = useRef<Record<number, number>>({});
+    const cantripCooldownRef = useRef<Record<string, number>>({});
     const keysPressed = useRef<Set<string>>(new Set());
     const isDragging = useRef(false);
     const didPan = useRef(false);
@@ -602,6 +615,7 @@ export function Game({
         unitsStateRef: unitsStateRef as React.RefObject<Unit[]>,
         unitsRef: { current: sceneState.unitGroups },
         actionCooldownRef,
+        cantripCooldownRef,
         projectilesRef: { current: gameRefs.current.projectiles },
         hitFlashRef: { current: gameRefs.current.hitFlash },
         damageTexts: { current: gameRefs.current.damageTexts },
@@ -802,6 +816,7 @@ export function Game({
     const getPauseRuntimeRefs = useCallback(() => ({
         pauseStartTimeRef,
         actionCooldownRef,
+        cantripCooldownRef,
         actionQueueRef,
         moveStartRef: { current: gameRefs.current.moveStart }
     }), [gameRefs]);
@@ -1460,6 +1475,7 @@ export function Game({
     const inputMutableRefs = useMemo(() => ({
         actionQueueRef,
         actionCooldownRef,
+        cantripCooldownRef,
         keysPressed,
         isDragging,
         didPan,
@@ -1791,7 +1807,7 @@ export function Game({
 
         if (skill.targetType === "self") {
             const skillCtx = getSkillContext();
-            const cooldownEnd = actionCooldownRef.current[casterId] || 0;
+            const cooldownEnd = getSkillLockoutEnd(skill, casterId, { actionCooldownRef, cantripCooldownRef });
             if (paused || Date.now() < cooldownEnd) {
                 actionQueueRef.current[casterId] = { type: "skill", skill, targetX: casterG.position.x, targetZ: casterG.position.z };
                 setQueuedActions(prev => [...prev.filter(q => q.unitId !== casterId), { unitId: casterId, skillName: skill.name }]);
@@ -2053,7 +2069,7 @@ export function Game({
         const skillCtx = getSkillContext();
         handleTargetingOnUnit(
             targetUnitId, tm,
-            { actionCooldownRef, actionQueueRef, rangeIndicatorRef: { current: sceneState.rangeIndicator }, aoeIndicatorRef: { current: sceneState.aoeIndicator } },
+            { actionCooldownRef, cantripCooldownRef, actionQueueRef, rangeIndicatorRef: { current: sceneState.rangeIndicator }, aoeIndicatorRef: { current: sceneState.aoeIndicator } },
             { unitsStateRef: unitsStateRef as React.RefObject<Unit[]>, pausedRef },
             { setTargetingMode, setQueuedActions },
             sceneState.unitGroups, skillCtx, addLog

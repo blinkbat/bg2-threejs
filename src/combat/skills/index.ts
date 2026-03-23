@@ -18,6 +18,7 @@ import { executeHealSkill, executeMassHealSkill, executeManaTransferSkill, execu
 import { executeTauntSkill, executeDebuffSkill, executeBloodMarkSkill, executeElorasGraspSkill, executeTrapSkill, executeSanctuarySkill, executeSummonSkill, executeTurnUndeadSkill, executeSmokeBombSkill, executeIntimidateSkill, executeFivePointPalmSkill, executeDimMakSkill } from "./utility";
 import { executeDodgeSkill, executeBodySwapSkill, executeDisplacementSkill } from "./movement";
 import { startAttackBump } from "../../gameLoop/swingAnimations";
+import { getGameTime } from "../../core/gameClock";
 
 // =============================================================================
 // MAIN SKILL ROUTER
@@ -60,7 +61,7 @@ export function executeSkill(
 
     // Attack bump toward target (skip self-targeted skills)
     if (skill.targetType !== "self") {
-        startAttackBump(casterG, targetX, targetZ, Date.now());
+        startAttackBump(casterG, targetX, targetZ, getGameTime());
     }
 
     if (skill.type === "cleave" && skill.targetType === "self") {

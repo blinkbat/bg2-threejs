@@ -170,6 +170,7 @@ function makeCtx(units: Unit[], unitsRef: Record<number, UnitGroup> = {}): Skill
         unitsStateRef: createRef(units),
         unitsRef: createRef(unitsRef),
         actionCooldownRef: createMutableRef<Record<number, number>>({}),
+        cantripCooldownRef: createMutableRef<Record<string, number>>({}),
         projectilesRef: createMutableRef<SkillExecutionContext["projectilesRef"]["current"]>([]),
         hitFlashRef: createMutableRef<Record<number, number>>({}),
         damageTexts: createMutableRef<SkillExecutionContext["damageTexts"]["current"]>([]),
@@ -186,6 +187,21 @@ function makeCtx(units: Unit[], unitsRef: Record<number, UnitGroup> = {}): Skill
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 describe("executeSkill", () => {
+    it("keeps the agreed balance values in sync", () => {
+        expect(SKILLS.warcry.cooldown).toBe(7000);
+        expect(SKILLS.holyCross.duration).toBe(6000);
+        expect(SKILLS.magicWave.hitCount).toBe(6);
+        expect(SKILLS.restoration.manaCost).toBe(14);
+        expect(SKILLS.ankh.cooldown).toBe(10000);
+        expect(SKILLS.vanquishingLight.duration).toBe(8000);
+        expect(SKILLS.targetHead.onHitEffect?.chance).toBe(25);
+        expect(SKILLS.glacialWhorl.damageRange).toEqual([5, 9]);
+        expect(SKILLS.pangolinStance.maxUses).toBe(2);
+        expect(SKILLS.bodySwap.manaCost).toBe(6);
+        expect(SKILLS.divineLattice.manaCost).toBe(8);
+        expect(SKILLS.teleportOther.manaCost).toBe(8);
+    });
+
     it("keeps Visha's Eyes as a zero-cost cantrip", () => {
         expect(SKILLS.vishasEyes.manaCost).toBe(0);
     });

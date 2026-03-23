@@ -1180,29 +1180,33 @@ export function updateProjectiles(
                 const willPoison = !!enemyAttackerData && shouldApplyPoison(enemyAttackerData);
                 const poisonDmg = willPoison ? enemyAttackerData.poisonDamage : undefined;
                 const willBurn = !!proj.skillBurnChance && rollChance(proj.skillBurnChance);
-
-                // Calculate lifesteal heal amount for log message
                 const lifesteal = enemyAttackerData?.lifesteal;
-                const healAmount = lifesteal && lifesteal > 0 ? Math.floor(dmg * lifesteal) : 0;
-
-                // Custom log for lifesteal attacks
-                const hitText = healAmount > 0 && skillName === "Attack"
-                    ? logLifestealHit(attackerData.name, targetData.name, dmg, healAmount)
-                    : logHit(attackerData.name, skillName, targetData.name, dmg);
+                const getLifestealHealAmount = (totalHpDamage: number): number => {
+                    if (!lifesteal || lifesteal <= 0) return 0;
+                    return Math.floor(totalHpDamage * lifesteal);
+                };
                 const damageColor = dmgType === "holy" ? COLORS.dmgHoly : logColor;
 
                 /* use shared dmgCtx */
-                applyDamageToUnit(dmgCtx, targetUnit.id, targetG, dmg, targetData.name, {
+                const damageResult = applyDamageToUnit(dmgCtx, targetUnit.id, targetG, dmg, targetData.name, {
                     color: damageColor,
                     poison: willPoison ? { sourceId: attackerUnit.id, damagePerTick: poisonDmg } : undefined,
                     burn: willBurn ? { sourceId: attackerUnit.id, damagePerTick: proj.skillBurnDamagePerTick, duration: proj.skillBurnDuration } : undefined,
                     attackerName: attackerUnit.team === "player" ? attackerData.name : undefined,
-                    hitMessage: { text: hitText, color: damageColor },
+                    hitMessage: result => {
+                        const healAmount = getLifestealHealAmount(result.totalHpDamage);
+                        return {
+                            text: healAmount > 0 && skillName === "Attack"
+                                ? logLifestealHit(attackerData.name, targetData.name, result.hpDamage, healAmount)
+                                : logHit(attackerData.name, skillName, targetData.name, result.hpDamage),
+                            color: damageColor
+                        };
+                    },
                     targetUnit: targetUnit,
                     attackerPosition: attackerG ? { x: attackerG.position.x, z: attackerG.position.z } : undefined,
                     damageType: dmgType,
                     isCrit
-                });
+                }) ?? { hpDamage: 0, totalHpDamage: 0, shieldAbsorbed: 0, shieldDepleted: false, wasDefeated: false };
                 spawnProjectileImpact(scene, targetG.position.x, targetG.position.z, damageColor, isCrit ? 1.35 : 1.05, 180);
 
                 if (isSkillShot && proj.skillOnHitEffect && rollChance(proj.skillOnHitEffect.chance)) {
@@ -1250,6 +1254,7 @@ export function updateProjectiles(
                 }
 
                 // Apply lifesteal heal using fresh state to avoid race condition
+                const healAmount = getLifestealHealAmount(damageResult.totalHpDamage);
                 if (healAmount > 0 && attackerG) {
                     applyLifesteal(scene, damageTexts, setUnits, attackerUnit.id, attackerG.position.x, attackerG.position.z, healAmount);
                 }

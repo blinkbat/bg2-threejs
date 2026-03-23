@@ -301,12 +301,12 @@ export function executeBodySwapSkill(
     const casterMesh = unitMeshRef.current[casterId];
     if (casterMesh) {
         (casterMesh.material as THREE.MeshStandardMaterial).color.set(COLORS.dmgChaos);
-        hitFlashRef.current[casterId] = Date.now();
+        hitFlashRef.current[casterId] = getGameTime();
     }
     const targetMesh = unitMeshRef.current[target.id];
     if (targetMesh) {
         (targetMesh.material as THREE.MeshStandardMaterial).color.set(COLORS.dmgChaos);
-        hitFlashRef.current[target.id] = Date.now();
+        hitFlashRef.current[target.id] = getGameTime();
     }
 
     const targetData = getUnitStats(target);
@@ -396,13 +396,13 @@ export function executeDisplacementSkill(
     const casterMesh = ctx.unitMeshRef.current[casterId];
     if (casterMesh) {
         (casterMesh.material as THREE.MeshStandardMaterial).color.set(COLORS.dmgChaos);
-        hitFlashRef.current[casterId] = Date.now();
+        hitFlashRef.current[casterId] = getGameTime();
     }
     // Target flash
     const targetMesh = ctx.unitMeshRef.current[target.id];
     if (targetMesh) {
         (targetMesh.material as THREE.MeshStandardMaterial).color.set(COLORS.dmgChaos);
-        hitFlashRef.current[target.id] = Date.now();
+        hitFlashRef.current[target.id] = getGameTime();
     }
 
     const targetData = getUnitStats(target);

@@ -842,7 +842,7 @@ export function useGameLoop({
 
             // Visual updates (run even when paused)
             sectionStart = performance.now();
-            updateHitFlash(refs.hitFlash, unitMeshes, unitOriginalColors, now);
+            updateHitFlash(refs.hitFlash, unitMeshes, unitOriginalColors, gameNow);
             updatePoisonVisuals(currentUnits, unitMeshes, unitOriginalColors, refs.hitFlash);
             visualMs += performance.now() - sectionStart;
 
@@ -948,19 +948,19 @@ export function useGameLoop({
                 unitAiMs = performance.now() - sectionStart;
 
                 // Update swing animations
-                refs.swingAnimations = updateSwingAnimations(refs.swingAnimations, scene, now);
+                refs.swingAnimations = updateSwingAnimations(refs.swingAnimations, scene, gameNow);
 
                 // Sprite facing reads true positions (before bump offsets)
                 updateSpriteFacing(currentUnits, unitGroups);
 
                 // Re-apply bump offsets for rendering
-                applyBumpOffsets(unitGroups, now);
+                applyBumpOffsets(unitGroups, gameNow);
                 aiMs = performance.now() - aiStart;
             }
 
             // Marker animations
             sectionStart = performance.now();
-            updateMarkerAnimations(moveMarker, refs.moveMarkerStart, targetRings, refs.targetRingTimers, now);
+            updateMarkerAnimations(moveMarker, refs.moveMarkerStart, targetRings, refs.targetRingTimers, gameNow);
             updateRangeIndicator(stateRefs.targetingModeRef.current, rangeIndicator, unitGroups);
             updateLightning(scene, renderer, gameNow);
             updateWater(waterMesh, gameNow, camera);

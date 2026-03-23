@@ -40,6 +40,7 @@ import { removeFromInventory, addToInventory } from "../game/equipment";
 import { buildEffectiveFormationOrder } from "../game/formationOrder";
 import type { HotbarAssignments } from "./hotbarStorage";
 import { scheduleEffectAnimation } from "../core/effectScheduler";
+import { getGameTime } from "../core/gameClock";
 
 // =============================================================================
 // TYPES
@@ -88,6 +89,7 @@ interface InputStateRefs {
 interface InputMutableRefs {
     actionQueueRef: React.MutableRefObject<ActionQueue>;
     actionCooldownRef: React.MutableRefObject<Record<number, number>>;
+    cantripCooldownRef: React.MutableRefObject<Record<string, number>>;
     keysPressed: React.MutableRefObject<Set<string>>;
     isDragging: React.MutableRefObject<boolean>;
     didPan: React.MutableRefObject<boolean>;
@@ -799,7 +801,7 @@ export function useInputHandlers({
                         targeting.skill,
                         dragState.startX,
                         dragState.startZ,
-                        { actionCooldownRef: mutableRefs.actionCooldownRef, actionQueueRef: mutableRefs.actionQueueRef, rangeIndicatorRef: { current: rangeIndicator }, aoeIndicatorRef: { current: aoeIndicator } },
+                        { actionCooldownRef: mutableRefs.actionCooldownRef, cantripCooldownRef: mutableRefs.cantripCooldownRef, actionQueueRef: mutableRefs.actionQueueRef, rangeIndicatorRef: { current: rangeIndicator }, aoeIndicatorRef: { current: aoeIndicator } },
                         { pausedRef: stateRefs.pausedRef },
                         { setTargetingMode: setters.setTargetingMode, setQueuedActions: setters.setQueuedActions },
                         skillCtx,
@@ -846,7 +848,7 @@ export function useInputHandlers({
                                 moveMarker.position.set(gx, 0.05, gz);
                                 moveMarker.visible = true;
                                 (moveMarker.material as THREE.MeshBasicMaterial).opacity = 0.8;
-                                gameRefs.current.moveMarkerStart = Date.now();
+                                gameRefs.current.moveMarkerStart = getGameTime();
                             }
                             soundFns.playMove();
                             const isAttackMove = stateRefs.commandModeRef.current === "attackMove";
@@ -959,7 +961,7 @@ export function useInputHandlers({
                     if (handleTargetingClick(
                         hit,
                         stateRefs.targetingModeRef.current,
-                        { actionCooldownRef: mutableRefs.actionCooldownRef, actionQueueRef: mutableRefs.actionQueueRef, rangeIndicatorRef: { current: rangeIndicator }, aoeIndicatorRef: { current: aoeIndicator } },
+                        { actionCooldownRef: mutableRefs.actionCooldownRef, cantripCooldownRef: mutableRefs.cantripCooldownRef, actionQueueRef: mutableRefs.actionQueueRef, rangeIndicatorRef: { current: rangeIndicator }, aoeIndicatorRef: { current: aoeIndicator } },
                         { unitsStateRef: stateRefs.unitsStateRef as React.RefObject<Unit[]>, pausedRef: stateRefs.pausedRef },
                         { setTargetingMode: setters.setTargetingMode, setQueuedActions: setters.setQueuedActions },
                         unitGroups, skillCtx, callbacks.addLog
@@ -1097,6 +1099,7 @@ export function useInputHandlers({
                     {
                         pauseStartTimeRef: stateRefs.pauseStartTimeRef,
                         actionCooldownRef: mutableRefs.actionCooldownRef,
+                        cantripCooldownRef: mutableRefs.cantripCooldownRef,
                         actionQueueRef: mutableRefs.actionQueueRef,
                         moveStartRef: { current: gameRefs.current.moveStart }
                     },
@@ -1556,7 +1559,7 @@ function handleEnemyClick(
     if (targetRing) {
         targetRing.visible = true;
         (targetRing.material as THREE.MeshBasicMaterial).opacity = 1;
-        gameRefs.current.targetRingTimers[targetId] = Date.now();
+        gameRefs.current.targetRingTimers[targetId] = getGameTime();
     }
 
     stateRefs.selectedRef.current.forEach(uid => {
@@ -1568,7 +1571,7 @@ function handleEnemyClick(
                 const basicAttack = getBasicAttackSkill(uid);
                 queueOrExecuteSkill(
                     uid, basicAttack, targetG.position.x, targetG.position.z,
-                    { actionCooldownRef: mutableRefs.actionCooldownRef, actionQueueRef: mutableRefs.actionQueueRef, rangeIndicatorRef: { current: null }, aoeIndicatorRef: { current: null } },
+                    { actionCooldownRef: mutableRefs.actionCooldownRef, cantripCooldownRef: mutableRefs.cantripCooldownRef, actionQueueRef: mutableRefs.actionQueueRef, rangeIndicatorRef: { current: null }, aoeIndicatorRef: { current: null } },
                     { pausedRef: stateRefs.pausedRef },
                     { setTargetingMode: setters.setTargetingMode, setQueuedActions: setters.setQueuedActions },
                     skillCtx, callbacks.addLog, targetId

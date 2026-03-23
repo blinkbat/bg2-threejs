@@ -288,7 +288,7 @@ export function executeHealSkill(
     const mesh = unitMeshRef.current[healTargetId];
     if (targetG && mesh) {
         (mesh.material as THREE.MeshStandardMaterial).color.set("#22ff22");
-        hitFlashRef.current[healTargetId] = Date.now();
+        hitFlashRef.current[healTargetId] = getGameTime();
     }
 
     createAnimatedRing(scene, targetG.position.x, targetG.position.z, COLORS.logHeal, {
@@ -1028,7 +1028,7 @@ export function executeSunStanceSkill(
         const mesh = unitMeshRef.current[casterId];
         if (mesh) {
             (mesh.material as THREE.MeshStandardMaterial).color.set("#ff6b35");
-            hitFlashRef.current[casterId] = Date.now();
+            hitFlashRef.current[casterId] = getGameTime();
         }
     }
 

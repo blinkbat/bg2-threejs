@@ -5,6 +5,7 @@
 import type { Unit, UnitGroup } from "../../core/types";
 import { ENEMY_STATS } from "../../game/enemyStats";
 import { clampToGrid, distance } from "../../game/geometry";
+import { isInRange, getUnitRadius } from "../../rendering/range";
 import { setSkillCooldown } from "../../combat/combatMath";
 import type { PhaseShiftContext } from "./types";
 
@@ -44,9 +45,9 @@ function findNearestPlayerInRange(
         const candidateGroup = unitsRef[candidate.id];
         if (!candidateGroup) continue;
 
-        const dist = distance(x, z, candidateGroup.position.x, candidateGroup.position.z);
-        if (dist > aggroRange) continue;
+        if (!isInRange(x, z, candidateGroup.position.x, candidateGroup.position.z, getUnitRadius(candidate), aggroRange)) continue;
 
+        const dist = distance(x, z, candidateGroup.position.x, candidateGroup.position.z);
         if (!nearest || dist < nearest.dist) {
             nearest = { group: candidateGroup, dist };
         }

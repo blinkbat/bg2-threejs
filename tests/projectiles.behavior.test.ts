@@ -6,9 +6,11 @@ import { createMutableRef, ensureDocumentMock, makeScene, makeUnit, makeUnitGrou
 
 const {
     applyDamageToUnitMock,
+    applyLifestealMock,
     isInRangeMock,
 } = vi.hoisted(() => ({
     applyDamageToUnitMock: vi.fn(),
+    applyLifestealMock: vi.fn(),
     isInRangeMock: vi.fn((...args: number[]) => {
         void args;
         return true;
@@ -27,7 +29,19 @@ vi.mock("../src/game/units", () => ({
         if (unit.team === "enemy") {
             return {
                 name: unit.enemyType === "kobold" ? "Kobold" : "Enemy",
+                damage: [2, 4] as [number, number],
+                accuracy: 100,
                 armor: 0,
+                aggroRange: 8,
+                attackCooldown: 1_500,
+                moveSpeed: 1,
+                size: 1,
+                monsterType: "beast",
+                tier: "enemy",
+                hp: 20,
+                maxHp: 20,
+                expReward: 10,
+                lifesteal: 0.5,
             };
         }
 
@@ -137,7 +151,7 @@ vi.mock("../src/combat/damageEffects", () => ({
         now,
         defeatedThisFrame,
     }),
-    applyLifesteal: vi.fn(),
+    applyLifesteal: (...args: unknown[]) => applyLifestealMock(...args),
     createAnimatedRing: vi.fn(),
 }));
 
@@ -199,6 +213,13 @@ beforeEach(() => {
     vi.clearAllMocks();
     unitsById.clear();
     isInRangeMock.mockReturnValue(true);
+    applyDamageToUnitMock.mockReturnValue({
+        hpDamage: 5,
+        totalHpDamage: 5,
+        shieldAbsorbed: 0,
+        shieldDepleted: false,
+        wasDefeated: false,
+    });
 });
 
 describe("projectile resolution", () => {
@@ -373,5 +394,48 @@ describe("projectile resolution", () => {
                 expect.objectContaining({ type: "stunned", sourceId: 1 }),
             ])
         );
+    });
+
+    it("bases enemy projectile lifesteal on actual HP damage after mitigation", () => {
+        applyDamageToUnitMock.mockReturnValueOnce({
+            hpDamage: 0,
+            totalHpDamage: 2,
+            shieldAbsorbed: 5,
+            shieldDepleted: false,
+            wasDefeated: false,
+        });
+
+        const attacker = makeUnit({ id: 100, team: "enemy", enemyType: "kobold", x: 5, z: 5 });
+        const target = makeUnit({ id: 1, x: 6, z: 5, hp: 30 });
+        const attackerGroup = makeUnitGroup({ position: { x: 5, y: 0, z: 5 } });
+        const targetGroup = makeUnitGroup({ position: { x: 6, y: 0, z: 5 } });
+        const { unitsStateRef, setUnits } = createLiveUnitsState([attacker, target]);
+        const projectileMesh = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 6), new THREE.MeshBasicMaterial());
+        projectileMesh.position.set(5.8, 0.4, 5);
+        const projectiles = [
+            {
+                type: "basic" as const,
+                mesh: projectileMesh,
+                targetId: 1,
+                attackerId: 100,
+                speed: 0.1,
+            },
+        ];
+
+        const result = updateProjectiles(
+            projectiles,
+            { 100: attackerGroup, 1: targetGroup },
+            unitsStateRef.current,
+            makeScene(),
+            [],
+            {},
+            setUnits,
+            vi.fn(),
+            1_000,
+            new Set<number>()
+        );
+
+        expect(result).toHaveLength(0);
+        expect(applyLifestealMock).toHaveBeenCalledWith(expect.anything(), [], setUnits, 100, 5, 5, 1);
     });
 });

@@ -10,6 +10,7 @@ export interface SkillExecutionContext {
     unitsStateRef: React.RefObject<Unit[]>;
     unitsRef: React.RefObject<Record<number, UnitGroup>>;
     actionCooldownRef: React.MutableRefObject<Record<number, number>>;
+    cantripCooldownRef: React.MutableRefObject<Record<string, number>>;
     projectilesRef: React.MutableRefObject<Projectile[]>;
     hitFlashRef: React.MutableRefObject<Record<number, number>>;
     damageTexts: React.MutableRefObject<{ mesh: THREE.Mesh; life: number }[]>;

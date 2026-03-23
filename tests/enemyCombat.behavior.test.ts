@@ -142,6 +142,13 @@ function createLiveSetUnits(ref: ReturnType<typeof createMutableRef<Unit[]>>): D
 beforeEach(() => {
     ensureDocumentMock();
     vi.clearAllMocks();
+    applyDamageToUnitMock.mockReturnValue({
+        hpDamage: 7,
+        totalHpDamage: 7,
+        shieldAbsorbed: 0,
+        shieldDepleted: false,
+        wasDefeated: false,
+    });
     findPathMock.mockReturnValue([
         { x: 5, z: 5 },
         { x: 8, z: 5 },
@@ -305,6 +312,62 @@ describe("enemy combat behavior", () => {
                 expect.objectContaining({ type: "stunned", sourceId: 100 }),
             ])
         );
+    });
+
+    it("bases melee lifesteal on actual HP damage after mitigation", () => {
+        applyDamageToUnitMock.mockReturnValueOnce({
+            hpDamage: 0,
+            totalHpDamage: 2,
+            shieldAbsorbed: 5,
+            shieldDepleted: false,
+            wasDefeated: false,
+        });
+
+        const attacker = makeUnit({ id: 100, team: "enemy", enemyType: "kobold", x: 5, z: 5 });
+        const target = makeUnit({ id: 1, x: 6, z: 5, hp: 30 });
+        const attackerGroup = makeUnitGroup({ position: { x: 5, y: 0, z: 5 } });
+        const targetGroup = makeUnitGroup({ position: { x: 6, y: 0, z: 5 } });
+        const unitsStateRef = createMutableRef([attacker, target]);
+        const setUnits = createLiveSetUnits(unitsStateRef);
+
+        executeEnemyBasicAttack({
+            scene: makeScene(),
+            attacker,
+            attackerG: attackerGroup,
+            target,
+            targetG: targetGroup,
+            attackerStats: {
+                name: "Venom Fang",
+                damage: [4, 4],
+                accuracy: 100,
+                armor: 0,
+                aggroRange: 8,
+                attackCooldown: 1_500,
+                moveSpeed: 1,
+                size: 1,
+                monsterType: "beast",
+                tier: "enemy",
+                hp: 20,
+                maxHp: 20,
+                expReward: 10,
+                poisonDamage: 2,
+                slowChance: 100,
+                stunChance: 100,
+                lifesteal: 0.5,
+            },
+            damageTexts: [],
+            hitFlashRef: {},
+            unitsRef: { 100: attackerGroup, 1: targetGroup },
+            unitsStateRef,
+            setUnits,
+            addLog: vi.fn(),
+            now: 1_000,
+            defeatedThisFrame: new Set<number>(),
+            swingAnimations: [],
+            projectilesRef: [],
+        });
+
+        expect(applyLifestealMock).toHaveBeenCalledWith(expect.anything(), [], setUnits, 100, 5, 5, 1);
     });
 
     it("creates a retreat path and clears targeting when kiting starts", () => {

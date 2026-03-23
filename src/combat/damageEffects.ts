@@ -436,7 +436,7 @@ interface DamageOptions {
     color?: string;
     skipDefeatTracking?: boolean;
     attackerName?: string;  // For bark system - name of the player unit dealing damage
-    hitMessage?: { text: string; color: string };  // Log hit message before defeat message
+    hitMessage?: { text: string; color: string } | ((result: DamageApplicationResult) => { text: string; color: string } | null | undefined);  // Log hit message before defeat message
     targetUnit?: Unit;  // Full unit data for special mechanics (e.g., amoeba split)
     attackerPosition?: { x: number; z: number };  // Position of attacker (for shield facing)
     damageType?: DamageType;  // Type of damage (for energy shield - chaos does 2x)
@@ -444,6 +444,14 @@ interface DamageOptions {
     attackerId?: number;  // Unit ID of the attacker (used for retaliation effects)
     isMeleeHit?: boolean;  // Whether this hit was melee contact (for thorns)
     skipHighlandDefense?: boolean;  // Internal: bypass ally-damage interception checks
+}
+
+export interface DamageApplicationResult {
+    hpDamage: number;
+    totalHpDamage: number;
+    shieldAbsorbed: number;
+    shieldDepleted: boolean;
+    wasDefeated: boolean;
 }
 
 function getUnitDisplayName(unit: Unit): string {
@@ -467,7 +475,7 @@ export function applyDamageToUnit(
     damage: number,
     targetName: string,
     options: DamageOptions = {}
-): void {
+): DamageApplicationResult {
     const { scene, damageTexts, hitFlashRef, unitsRef, unitsStateRef, setUnits, addLog, now, defeatedThisFrame } = ctx;
     const {
         poison,
@@ -488,15 +496,22 @@ export function applyDamageToUnit(
 
     // Floor negative damage to zero so it can never heal the target.
     damage = Math.max(0, damage);
+    let redirectedHpDamage = 0;
 
     // Area-wide invulnerability (testing rooms, etc.)
-    if (getCurrentArea().invulnerable) return;
+    if (getCurrentArea().invulnerable) {
+        return { hpDamage: 0, totalHpDamage: 0, shieldAbsorbed: 0, shieldDepleted: false, wasDefeated: false };
+    }
 
     // Skip already-defeated targets this frame
-    if (defeatedThisFrame?.has(targetId)) return;
+    if (defeatedThisFrame?.has(targetId)) {
+        return { hpDamage: 0, totalHpDamage: 0, shieldAbsorbed: 0, shieldDepleted: false, wasDefeated: false };
+    }
 
     // Untargetable enemy states are invulnerable.
-    if (isEnemyUntargetable(targetId)) return;
+    if (isEnemyUntargetable(targetId)) {
+        return { hpDamage: 0, totalHpDamage: 0, shieldAbsorbed: 0, shieldDepleted: false, wasDefeated: false };
+    }
 
     // Read current state from ref
     const refUnit = unitsStateRef.current?.find(u => u.id === targetId) ?? targetUnit;
@@ -505,12 +520,14 @@ export function applyDamageToUnit(
     // Full damage immunity (e.g. Dodge or Divine Lattice)
     if (refUnit && (hasStatusEffect(refUnit, "invul") || hasStatusEffect(refUnit, "divine_lattice"))) {
         spawnDamageNumber(scene, targetGroup.position.x, targetGroup.position.z, 0, "#ffffff", damageTexts);
-        return;
+        return { hpDamage: 0, totalHpDamage: 0, shieldAbsorbed: 0, shieldDepleted: false, wasDefeated: false };
     }
 
     // Read current HP — bail if already dead
     const currentHp = refUnit?.hp ?? 0;
-    if (currentHp <= 0) return;
+    if (currentHp <= 0) {
+        return { hpDamage: 0, totalHpDamage: 0, shieldAbsorbed: 0, shieldDepleted: false, wasDefeated: false };
+    }
 
     // Check for energy shield absorption
     const energyShield = refUnit?.statusEffects?.find(e => e.type === "energy_shield");
@@ -594,7 +611,7 @@ export function applyDamageToUnit(
                     return { ...u, statusEffects: effects.length > 0 ? effects : undefined };
                 }));
 
-                applyDamageToUnit(ctx, chosenDefender.unit.id, chosenDefender.group, redirectDamage, defenderName, {
+                const redirectResult = applyDamageToUnit(ctx, chosenDefender.unit.id, chosenDefender.group, redirectDamage, defenderName, {
                     color: COLORS.highlandDefenseText,
                     hitMessage: {
                         text: `${defenderName} intercepts ${preventedDamage} damage for ${targetName}!`,
@@ -606,6 +623,7 @@ export function applyDamageToUnit(
                     damageType,
                     skipHighlandDefense: true
                 });
+                redirectedHpDamage += redirectResult.totalHpDamage;
 
                 if (remainingAfter <= 0) {
                     addLog(`${defenderName}'s Highland Defense is exhausted.`, COLORS.highlandDefenseText);
@@ -669,7 +687,7 @@ export function applyDamageToUnit(
         ]);
 
         // Visual feedback
-        hitFlashRef[targetId] = now;
+        hitFlashRef[targetId] = getGameTime();
         spawnDamageNumber(scene, targetGroup.position.x, targetGroup.position.z, damage, color, damageTexts, false, isCrit);
 
         // Play gushing sound for the split
@@ -685,7 +703,13 @@ export function applyDamageToUnit(
         }
         handleUnitDefeat(targetId, targetGroup, unitsRef, addLog, targetName, true);  // Silent defeat
 
-        return;  // Original is now dead
+        return {
+            hpDamage: currentHp,
+            totalHpDamage: currentHp + redirectedHpDamage,
+            shieldAbsorbed,
+            shieldDepleted,
+            wasDefeated: true
+        };  // Original is now dead
     }
 
     // Normal damage handling (non-amoeba or can't split)
@@ -737,6 +761,14 @@ export function applyDamageToUnit(
         return updated;
     });
     const newHp = updatedTarget?.hp ?? 0;
+    const hpDamage = Math.max(0, currentHp - newHp);
+    const damageResult: DamageApplicationResult = {
+        hpDamage,
+        totalHpDamage: hpDamage + redirectedHpDamage,
+        shieldAbsorbed,
+        shieldDepleted,
+        wasDefeated: newHp <= 0
+    };
 
     // Log energy shield effects
     if (shieldAbsorbed > 0) {
@@ -746,7 +778,7 @@ export function applyDamageToUnit(
     }
 
     // Visual effects
-    hitFlashRef[targetId] = now;
+    hitFlashRef[targetId] = getGameTime();
     // Show absorbed damage differently if shield took it
     const displayDamage = shieldAbsorbed > 0 ? damage : effectiveDamage;
     const displayColor = shieldAbsorbed > 0 && effectiveDamage === 0 ? "#66ccff" : color;
@@ -761,8 +793,9 @@ export function applyDamageToUnit(
     }
 
     // Log hit message before defeat message (if provided)
-    if (hitMessage) {
-        addLog(hitMessage.text, hitMessage.color);
+    const resolvedHitMessage = typeof hitMessage === "function" ? hitMessage(damageResult) : hitMessage;
+    if (resolvedHitMessage) {
+        addLog(resolvedHitMessage.text, resolvedHitMessage.color);
     }
 
     // Thorns retaliation: reflect damage to the melee attacker.
@@ -906,6 +939,7 @@ export function applyDamageToUnit(
         trySubmergeKraken({ ...targetState, hp: newHp }, unitsRef, addLog, now);
     }
 
+    return damageResult;
 }
 
 // =============================================================================

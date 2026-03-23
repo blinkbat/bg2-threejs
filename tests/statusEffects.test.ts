@@ -258,6 +258,44 @@ describe("statusEffects - processStatusEffects", () => {
         });
     });
 
+    it("applies Vanquishing Light blind in a follow-up pass after the aura damage resolves", () => {
+        const paladin = makeUnit({
+            id: 2,
+            team: "player",
+            enemyType: undefined,
+            mana: 20,
+            statusEffects: [
+                makeStatusEffect("vanquishing_light", {
+                    damagePerTick: 3,
+                    tickInterval: 1000,
+                    timeSinceTick: 999,
+                    lastUpdateTime: 1900,
+                    duration: 5000,
+                    auraRadius: 4,
+                    blindChance: 100,
+                    blindDuration: 3000,
+                    auraDamageType: "holy",
+                    sourceId: 2,
+                }),
+            ],
+        });
+        const enemy = makeUnit({
+            id: 101,
+            hp: 30,
+            enemyType: "ogre",
+        });
+
+        const { updatedUnits, addLog } = runProcessStatusEffects([paladin, enemy], 2000);
+        const updatedEnemy = updatedUnits.find(unit => unit.id === 101);
+
+        expect(updatedEnemy?.statusEffects).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ type: "blind", duration: 3000, sourceId: 2 }),
+            ])
+        );
+        expect(addLog).toHaveBeenCalledWith(expect.stringContaining("blinded"), expect.any(String));
+    });
+
     describe("doom", () => {
         it("kills unit when doom expires", () => {
             const unit = makeUnit({

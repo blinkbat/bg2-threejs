@@ -260,13 +260,7 @@ function getMothersSightTarget(
         const playerG = unitsRef[player.id];
         if (!playerG) continue;
 
-        // Distance from MOTHER to player
-        const motherToPlayer = Math.hypot(
-            motherG.position.x - playerG.position.x,
-            motherG.position.z - playerG.position.z
-        );
-
-        if (motherToPlayer <= motherStats.aggroRange) {
+        if (isInRange(motherG.position.x, motherG.position.z, playerG.position.x, playerG.position.z, getUnitRadius(player), motherStats.aggroRange)) {
             motherCanSeeAnyPlayer = true;
             break;
         }
@@ -582,12 +576,7 @@ function findRecentDamageSource(ctx: TargetingContext): number | null {
         );
 
         // And also in aggro range from the enemy (extended for flankers)
-        const distToEnemy = Math.hypot(
-            pg.position.x - g.position.x,
-            pg.position.z - g.position.z
-        );
-
-        if (distToSource < closestDist && distToEnemy <= aggroRange * 2) {
+        if (distToSource < closestDist && isInRange(g.position.x, g.position.z, pg.position.x, pg.position.z, getUnitRadius(player), aggroRange * 2)) {
             closestDist = distToSource;
             closestId = player.id;
         }

@@ -180,6 +180,7 @@ export function createSkillContext(options: SkillContextOptions): StatefulSkillC
         unitsStateRef,
         unitsRef,
         actionCooldownRef,
+        cantripCooldownRef: createMutableRef<Record<string, number>>({}),
         projectilesRef,
         hitFlashRef,
         damageTexts,

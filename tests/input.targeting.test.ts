@@ -152,6 +152,7 @@ describe("input targeting helpers", () => {
             9,
             {
                 actionCooldownRef: ctx.actionCooldownRef,
+                cantripCooldownRef: ctx.cantripCooldownRef,
                 actionQueueRef: queuedActionsRef,
                 rangeIndicatorRef,
                 aoeIndicatorRef,
@@ -199,6 +200,7 @@ describe("input targeting helpers", () => {
             { casterId: 1, skill },
             {
                 actionCooldownRef: ctx.actionCooldownRef,
+                cantripCooldownRef: ctx.cantripCooldownRef,
                 actionQueueRef,
                 rangeIndicatorRef,
                 aoeIndicatorRef,
@@ -253,6 +255,7 @@ describe("input targeting helpers", () => {
             { casterId: 1, skill },
             {
                 actionCooldownRef: ctx.actionCooldownRef,
+                cantripCooldownRef: ctx.cantripCooldownRef,
                 actionQueueRef,
                 rangeIndicatorRef,
                 aoeIndicatorRef,

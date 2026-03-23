@@ -176,7 +176,10 @@ export function processStatusEffects(
                                     damagePerTick: 0,
                                     sourceId
                                 };
-                                pendingBlinds.set(targetId, { effect: blindEffect, targetName });
+                                const existingBlind = pendingBlinds.get(targetId);
+                                if (!existingBlind || blindDuration > existingBlind.effect.duration) {
+                                    pendingBlinds.set(targetId, { effect: blindEffect, targetName });
+                                }
                             });
                         }
                     }
@@ -288,9 +291,21 @@ export function processStatusEffects(
 
     for (const fn of sideEffects) fn();
 
-    if (pendingBlinds.size > 0) {
-        for (const pending of pendingBlinds.values()) {
-            addLog(`${pending.targetName} is blinded!`, COLORS.blindText);
-        }
+    if (pendingBlinds.size === 0) return;
+
+    const blindedNames: string[] = [];
+    setUnits(prev => prev.map(u => {
+        const pendingBlind = pendingBlinds.get(u.id);
+        if (!pendingBlind || u.hp <= 0 || hasStatusEffect(u, "blind")) return u;
+
+        blindedNames.push(pendingBlind.targetName);
+        return {
+            ...u,
+            statusEffects: applyStatusEffect(u.statusEffects, pendingBlind.effect)
+        };
+    }));
+
+    for (const name of blindedNames) {
+        addLog(`${name} is blinded!`, COLORS.blindText);
     }
 }

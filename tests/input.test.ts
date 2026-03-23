@@ -97,7 +97,7 @@ vi.mock("../src/rendering/range", () => ({
     isInRange: vi.fn(() => true),
 }));
 
-import { processActionQueue, togglePause, type ActionQueue } from "../src/input";
+import { getSkillLockoutEnd, processActionQueue, queueOrExecuteSkill, togglePause, type ActionQueue } from "../src/input";
 
 function createRef<T>(current: T): RefObject<T> {
     return { current };
@@ -155,6 +155,7 @@ function makeSkillContext(units: Unit[]): SkillExecutionContext {
         unitsStateRef: createRef(units),
         unitsRef: createRef<Record<number, UnitGroup>>({}),
         actionCooldownRef: createMutableRef<Record<number, number>>({}),
+        cantripCooldownRef: createMutableRef<Record<string, number>>({}),
         projectilesRef: createMutableRef<SkillExecutionContext["projectilesRef"]["current"]>([]),
         hitFlashRef: createMutableRef<Record<number, number>>({}),
         damageTexts: createMutableRef<SkillExecutionContext["damageTexts"]["current"]>([]),
@@ -173,6 +174,67 @@ beforeEach(() => {
 });
 
 describe("input action handling", () => {
+    it("uses a separate cantrip lockout from the unit action cooldown", () => {
+        vi.spyOn(Date, "now").mockReturnValue(1_000);
+
+        const skillCtx = makeSkillContext([makeUnit()]);
+        const refs = {
+            actionCooldownRef: createMutableRef<Record<number, number>>({ 1: 1_500 }),
+            cantripCooldownRef: createMutableRef<Record<string, number>>({}),
+            actionQueueRef: createMutableRef<ActionQueue>({}),
+            rangeIndicatorRef: createRef<THREE.Mesh | null>(null),
+            aoeIndicatorRef: createRef<THREE.Mesh | null>(null),
+        };
+        const pausedRef = createMutableRef(false);
+        const setTargetingMode: Dispatch<SetStateAction<{ casterId: number; skill: Skill; displacementTargetId?: number } | null>> = vi.fn();
+        const setQueuedActions: Dispatch<SetStateAction<{ unitId: number; skillName: string }[]>> = vi.fn();
+        const addLog = vi.fn();
+        const cantrip = makeSkill({ name: "Highland Defense", isCantrip: true, maxUses: 1 });
+
+        const executed = queueOrExecuteSkill(
+            1,
+            cantrip,
+            5,
+            5,
+            refs,
+            { pausedRef },
+            { setTargetingMode, setQueuedActions },
+            skillCtx,
+            addLog
+        );
+
+        expect(executed).toBe(true);
+        expect(executeSkillMock).toHaveBeenCalledWith(skillCtx, 1, cantrip, 5, 5, undefined, undefined);
+        expect(refs.actionQueueRef.current[1]).toBeUndefined();
+
+        refs.cantripCooldownRef.current["1-Highland Defense"] = 1_400;
+        executeSkillMock.mockClear();
+
+        const queued = queueOrExecuteSkill(
+            1,
+            cantrip,
+            5,
+            5,
+            refs,
+            { pausedRef },
+            { setTargetingMode, setQueuedActions },
+            skillCtx,
+            addLog
+        );
+
+        expect(queued).toBe(true);
+        expect(executeSkillMock).not.toHaveBeenCalled();
+        expect(refs.actionQueueRef.current[1]).toEqual({
+            type: "skill",
+            skill: cantrip,
+            targetX: 5,
+            targetZ: 5,
+            targetId: undefined,
+            dragLinePositions: undefined,
+        });
+        expect(getSkillLockoutEnd(cantrip, 1, refs)).toBe(1_400);
+    });
+
     it("keeps queued actions while a unit is asleep", () => {
         const sleeper = makeUnit({
             statusEffects: [makeStatusEffect("sleep")],
@@ -214,6 +276,7 @@ describe("input action handling", () => {
         });
         const pauseStartTimeRef = createMutableRef<number | null>(1000);
         const pausedRef = createMutableRef(true);
+        const cantripCooldownRef = createMutableRef<Record<string, number>>({ "1-Warcry": 900 });
         let skillCooldownState: Record<string, { end: number; duration: number }> = {
             "1-Warcry": { end: 500, duration: 250 },
         };
@@ -227,7 +290,7 @@ describe("input action handling", () => {
         vi.spyOn(Date, "now").mockReturnValue(1600);
 
         togglePause(
-            { pauseStartTimeRef, actionCooldownRef, actionQueueRef, moveStartRef },
+            { pauseStartTimeRef, actionCooldownRef, cantripCooldownRef, actionQueueRef, moveStartRef },
             { pausedRef },
             { setPaused, setSkillCooldowns },
             processActionQueueMock
@@ -235,6 +298,7 @@ describe("input action handling", () => {
 
         expect(resumeGameClockMock).toHaveBeenCalledTimes(1);
         expect(actionCooldownRef.current[1]).toBe(700);
+        expect(cantripCooldownRef.current["1-Warcry"]).toBe(1500);
         expect(moveStartRef.current[1].time).toBe(900);
         expect(actionQueueRef.current[1]).toEqual({ type: "move", targetX: 8, targetZ: 9, notBefore: 800 });
         expect(actionQueueRef.current[2]).toEqual({ type: "skill", skill: makeSkill(), targetX: 5, targetZ: 5 });

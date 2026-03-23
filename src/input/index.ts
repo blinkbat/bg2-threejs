@@ -35,6 +35,7 @@ interface InputRefs {
     rangeIndicatorRef: React.RefObject<THREE.Mesh | null>;
     aoeIndicatorRef: React.RefObject<THREE.Mesh | null>;
     actionCooldownRef: React.MutableRefObject<Record<number, number>>;
+    cantripCooldownRef: React.MutableRefObject<Record<string, number>>;
     actionQueueRef: React.MutableRefObject<ActionQueue>;
     pathsRef: React.MutableRefObject<Record<number, { x: number; z: number }[]>>;
     moveStartRef: React.MutableRefObject<Record<number, { time: number; x: number; z: number }>>;
@@ -73,7 +74,7 @@ export type ActionQueue = Record<number, QueuedAction>;
 // =============================================================================
 
 export function togglePause(
-    refs: Pick<InputRefs, "pauseStartTimeRef" | "actionCooldownRef" | "actionQueueRef" | "moveStartRef">,
+    refs: Pick<InputRefs, "pauseStartTimeRef" | "actionCooldownRef" | "cantripCooldownRef" | "actionQueueRef" | "moveStartRef">,
     state: Pick<InputState, "pausedRef">,
     setters: Pick<InputSetters, "setPaused" | "setSkillCooldowns">,
     processActionQueue: (defeatedThisFrame: Set<number>) => void
@@ -87,7 +88,7 @@ export function togglePause(
         resumeGameClock();
         if (refs.pauseStartTimeRef.current !== null) {
             const pausedDuration = Date.now() - refs.pauseStartTimeRef.current;
-            adjustTimersForPause(refs.actionCooldownRef, refs.actionQueueRef, refs.moveStartRef, setters.setSkillCooldowns, pausedDuration);
+            adjustTimersForPause(refs.actionCooldownRef, refs.cantripCooldownRef, refs.actionQueueRef, refs.moveStartRef, setters.setSkillCooldowns, pausedDuration);
         }
         refs.pauseStartTimeRef.current = null;
         // Create new defeatedThisFrame for unpause processing (not part of main game loop)
@@ -101,6 +102,7 @@ export function togglePause(
 
 function adjustTimersForPause(
     actionCooldownRef: React.MutableRefObject<Record<number, number>>,
+    cantripCooldownRef: React.MutableRefObject<Record<string, number>>,
     actionQueueRef: React.MutableRefObject<ActionQueue>,
     moveStartRef: React.MutableRefObject<Record<number, { time: number; x: number; z: number }>>,
     setSkillCooldowns: React.Dispatch<React.SetStateAction<Record<string, { end: number; duration: number }>>>,
@@ -109,6 +111,9 @@ function adjustTimersForPause(
     // Adjust ref cooldowns
     Object.keys(actionCooldownRef.current).forEach(key => {
         actionCooldownRef.current[Number(key)] += pausedDuration;
+    });
+    Object.keys(cantripCooldownRef.current).forEach(key => {
+        cantripCooldownRef.current[key] += pausedDuration;
     });
     Object.values(moveStartRef.current).forEach(moveStart => {
         moveStart.time += pausedDuration;
@@ -126,6 +131,22 @@ function adjustTimersForPause(
         });
         return adjusted;
     });
+}
+
+function getCantripCooldownKey(casterId: number, skill: Skill): string {
+    return `${casterId}-${skill.name}`;
+}
+
+export function getSkillLockoutEnd(
+    skill: Skill,
+    casterId: number,
+    refs: Pick<InputRefs, "actionCooldownRef" | "cantripCooldownRef">
+): number {
+    if (skill.isCantrip) {
+        return refs.cantripCooldownRef.current[getCantripCooldownKey(casterId, skill)] ?? 0;
+    }
+
+    return refs.actionCooldownRef.current[casterId] ?? 0;
 }
 
 // =============================================================================
@@ -383,10 +404,12 @@ export function processActionQueue(
                 executedUnits.push(unitId);
                 continue;
             }
-            // Keep in queue if on cooldown - will be processed next frame
-            // Cantrips bypass action cooldown (they use charges instead)
-            const cooldownEnd = actionCooldownRef.current[unitId] || 0;
-            if (!action.skill.isCantrip && now < cooldownEnd) {
+            // Keep in queue if the relevant lockout is still active.
+            const cooldownEnd = getSkillLockoutEnd(action.skill, unitId, {
+                actionCooldownRef,
+                cantripCooldownRef: skillCtx.cantripCooldownRef,
+            });
+            if (now < cooldownEnd) {
                 continue; // Don't remove, will try again next frame
             }
 
@@ -587,7 +610,7 @@ export function queueOrExecuteSkill(
     skill: Skill,
     targetX: number,
     targetZ: number,
-    refs: Pick<InputRefs, "actionCooldownRef" | "actionQueueRef" | "rangeIndicatorRef" | "aoeIndicatorRef">,
+    refs: Pick<InputRefs, "actionCooldownRef" | "cantripCooldownRef" | "actionQueueRef" | "rangeIndicatorRef" | "aoeIndicatorRef">,
     state: Pick<InputState, "pausedRef">,
     setters: Pick<InputSetters, "setTargetingMode" | "setQueuedActions">,
     skillCtx: SkillExecutionContext,
@@ -595,10 +618,9 @@ export function queueOrExecuteSkill(
     targetId?: number,
     dragLinePositions?: { x: number; z: number }[]
 ): boolean {
-    // Check cooldown (cantrips bypass action cooldown — they use charges instead)
     const now = Date.now();
-    const cooldownEnd = refs.actionCooldownRef.current[casterId] || 0;
-    const onCooldown = !skill.isCantrip && now < cooldownEnd;
+    const cooldownEnd = getSkillLockoutEnd(skill, casterId, refs);
+    const onCooldown = now < cooldownEnd;
 
     // Queue when paused OR on cooldown - execute immediately otherwise
     if (state.pausedRef.current || onCooldown) {
@@ -679,7 +701,7 @@ export function computeDragLineTiles(
 export function handleTargetingClick(
     hit: THREE.Intersection,
     targetingMode: { casterId: number; skill: Skill; displacementTargetId?: number },
-    refs: Pick<InputRefs, "actionCooldownRef" | "actionQueueRef" | "rangeIndicatorRef" | "aoeIndicatorRef">,
+    refs: Pick<InputRefs, "actionCooldownRef" | "cantripCooldownRef" | "actionQueueRef" | "rangeIndicatorRef" | "aoeIndicatorRef">,
     state: Pick<InputState, "unitsStateRef" | "pausedRef">,
     setters: Pick<InputSetters, "setTargetingMode" | "setQueuedActions">,
     unitsRef: Record<number, UnitGroup>,
@@ -776,7 +798,7 @@ export function handleTargetingClick(
 export function handleTargetingOnUnit(
     targetUnitId: number,
     targetingMode: { casterId: number; skill: Skill; displacementTargetId?: number },
-    refs: Pick<InputRefs, "actionCooldownRef" | "actionQueueRef" | "rangeIndicatorRef" | "aoeIndicatorRef">,
+    refs: Pick<InputRefs, "actionCooldownRef" | "cantripCooldownRef" | "actionQueueRef" | "rangeIndicatorRef" | "aoeIndicatorRef">,
     state: Pick<InputState, "unitsStateRef" | "pausedRef">,
     setters: Pick<InputSetters, "setTargetingMode" | "setQueuedActions">,
     unitsRef: Record<number, UnitGroup>,
