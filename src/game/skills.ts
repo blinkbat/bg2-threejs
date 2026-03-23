@@ -706,8 +706,8 @@ export const SKILLS: Record<string, Skill> = {
         cooldown: 1200,     
         type: "dodge",
         targetType: "aoe", // Ground-targeted
-        range: 4,          // Max dash distance
-        duration: 1200,    // Invul window in ms
+        range: 5,          // Max dash distance
+        duration: 1500,    // Invul window in ms
         damageType: "physical",
         isCantrip: true,
         maxUses: 2
