@@ -213,7 +213,7 @@ export function executeDebuffSkill(
             const mesh = ctx.unitMeshRef.current[targetId];
             if (targetG && mesh) {
                 (mesh.material as THREE.MeshStandardMaterial).color.set("#9b59b6");
-                hitFlashRef.current[targetId] = now;
+                hitFlashRef.current[targetId] = getGameTime();
             }
         } else {
             soundFns.playHit();
@@ -323,7 +323,7 @@ export function executeBloodMarkSkill(
     const mesh = unitMeshRef.current[targetId];
     if (mesh) {
         (mesh.material as THREE.MeshStandardMaterial).color.set(COLORS.bloodMarkedText);
-        hitFlashRef.current[targetId] = now;
+        hitFlashRef.current[targetId] = getGameTime();
     }
 
     return true;
@@ -1118,7 +1118,7 @@ export function executeFivePointPalmSkill(
     const targetId = targetEnemy.id;
 
     // Swing animation
-    spawnSwingIndicator(scene, casterG, targetG, true, swingAnimationsRef.current, now);
+    spawnSwingIndicator(scene, casterG, targetG, true, swingAnimationsRef.current, getGameTime());
     createAnimatedRing(scene, casterG.position.x, casterG.position.z, COLORS.weakenedText, {
         innerRadius: 0.14, outerRadius: 0.28, maxScale: 1.0, duration: 180
     });
@@ -1191,7 +1191,7 @@ export function executeFivePointPalmSkill(
             const mesh = ctx.unitMeshRef.current[targetId];
             if (mesh) {
                 (mesh.material as THREE.MeshStandardMaterial).color.set(COLORS.weakenedText);
-                hitFlashRef.current[targetId] = now;
+                hitFlashRef.current[targetId] = getGameTime();
             }
         }
     } else {
@@ -1263,7 +1263,7 @@ export function executeDimMakSkill(
     const targetId = targetEnemy.id;
 
     // Swing animation
-    spawnSwingIndicator(scene, casterG, targetG, true, swingAnimationsRef.current, now);
+    spawnSwingIndicator(scene, casterG, targetG, true, swingAnimationsRef.current, getGameTime());
     createAnimatedRing(scene, casterG.position.x, casterG.position.z, COLORS.doomText, {
         innerRadius: 0.14, outerRadius: 0.28, maxScale: 1.0, duration: 180
     });
@@ -1333,7 +1333,7 @@ export function executeDimMakSkill(
             const mesh = ctx.unitMeshRef.current[targetId];
             if (mesh) {
                 (mesh.material as THREE.MeshStandardMaterial).color.set(COLORS.doomText);
-                hitFlashRef.current[targetId] = now;
+                hitFlashRef.current[targetId] = getGameTime();
             }
         } else if (!defeatedThisFrame.has(targetId)) {
             addLog(`${casterData.name}'s ${skill.name} strikes ${targetData.name}, but fails to inflict Doom.`, skillLogColor);

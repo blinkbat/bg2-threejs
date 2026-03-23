@@ -12,6 +12,7 @@ import { startAttackBump } from "./swingAnimations";
 import { CRIT_MULTIPLIER } from "../game/statBonuses";
 import { soundFns } from "../audio";
 import { spawnSwingIndicator } from "./swingAnimations";
+import { getGameTime } from "../core/gameClock";
 
 // =============================================================================
 // FIREBALL CONSTANTS
@@ -155,7 +156,7 @@ function executeEnemyMeleeAttack(ctx: EnemyAttackContext): void {
     } = ctx;
 
     const targetData = getUnitStats(target);
-    spawnSwingIndicator(scene, attackerG, targetG, false, swingAnimations, now);
+    spawnSwingIndicator(scene, attackerG, targetG, false, swingAnimations, getGameTime());
 
     if (rollHit(attackerStats.accuracy, attacker)) {
         // Check for bite attack (random chance to bite instead of claw)
@@ -253,9 +254,9 @@ function executeEnemyMeleeAttack(ctx: EnemyAttackContext): void {
  * Execute an enemy basic attack (ranged or melee based on stats).
  */
 export function executeEnemyBasicAttack(ctx: EnemyAttackContext): void {
-    const { attackerStats, attackerG, targetG, now } = ctx;
+    const { attackerStats, attackerG, targetG } = ctx;
 
-    startAttackBump(attackerG, targetG.position.x, targetG.position.z, now);
+    startAttackBump(attackerG, targetG.position.x, targetG.position.z, getGameTime());
 
     if (attackerStats.fireballAttack) {
         executeEnemyFireballAttack(ctx);

@@ -235,7 +235,7 @@ function executeTargetedDamageSkill(
 
     // Melee: swing animation
     if (delivery.mode === "melee") {
-        spawnSwingIndicator(scene, casterG, targetG, true, swingAnimationsRef.current, now);
+        spawnSwingIndicator(scene, casterG, targetG, true, swingAnimationsRef.current, getGameTime());
         if (skill.name !== "Attack") {
             createAnimatedRing(scene, casterG.position.x, casterG.position.z, COLORS.damagePlayer, {
                 innerRadius: 0.14,
@@ -654,7 +654,7 @@ export function executeCleaveSkill(
 
     // Swing animation toward first enemy
     if (enemiesInArc.length > 0) {
-        spawnSwingIndicator(scene, casterG, enemiesInArc[0].group, true, swingAnimationsRef.current, now);
+        spawnSwingIndicator(scene, casterG, enemiesInArc[0].group, true, swingAnimationsRef.current, getGameTime());
     }
 
     for (const { unit: enemy, group: enemyG } of enemiesInArc) {
@@ -757,7 +757,7 @@ export function executeSmiteStrikeSkill(
     const targetId = targetEnemy.id;
 
     // Swing animation
-    spawnSwingIndicator(scene, casterG, targetG, true, swingAnimationsRef.current, now);
+    spawnSwingIndicator(scene, casterG, targetG, true, swingAnimationsRef.current, getGameTime());
     createAnimatedRing(scene, casterG.position.x, casterG.position.z, COLORS.dmgHoly, {
         innerRadius: 0.14,
         outerRadius: 0.3,
@@ -945,7 +945,7 @@ export function executeLeapStrikeSkill(
     });
 
     // Swing animation
-    spawnSwingIndicator(scene, casterG, targetG, true, swingAnimationsRef.current, now);
+    spawnSwingIndicator(scene, casterG, targetG, true, swingAnimationsRef.current, getGameTime());
 
     // Hit resolution
     if (rollSkillHit(skill, casterData.accuracy, casterUnit)) {

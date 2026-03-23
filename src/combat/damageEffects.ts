@@ -1053,9 +1053,9 @@ export function showDamageVisual(
     damageTexts: DamageText[],
     addLog: (text: string, color?: string) => void,
     logMessage: string,
-    now: number
+    _now?: number
 ): void {
-    hitFlashRef[unitId] = now;
+    hitFlashRef[unitId] = getGameTime();
     spawnDamageNumber(scene, unitX, unitZ, damage, color, damageTexts);
     addLog(logMessage, color);
 }

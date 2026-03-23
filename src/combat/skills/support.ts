@@ -186,7 +186,6 @@ export function executeMassHealSkill(
     consumeSkill(ctx, casterId, skill);
 
     const healAmount = rollDamage(healRange[0], healRange[1]) + faithBonus;
-    const now = Date.now();
 
     // Apply heal to all allies in range
     const healTargetIds = new Set(alliesInRange.map(a => a.unit.id));
@@ -218,7 +217,7 @@ export function executeMassHealSkill(
         const mesh = unitMeshRef.current[ally.id];
         if (mesh) {
             (mesh.material as THREE.MeshStandardMaterial).color.set("#22ff22");
-            hitFlashRef.current[ally.id] = now;
+            hitFlashRef.current[ally.id] = getGameTime();
         }
         createAnimatedRing(scene, allyG.position.x, allyG.position.z, COLORS.logHeal, {
             innerRadius: 0.15,
@@ -409,13 +408,13 @@ export function executeManaTransferSkill(
     const mesh = unitMeshRef.current[healTargetId];
     if (targetG && mesh) {
         (mesh.material as THREE.MeshStandardMaterial).color.set("#3498db");
-        hitFlashRef.current[healTargetId] = now;
+        hitFlashRef.current[healTargetId] = getGameTime();
     }
 
     const casterMesh = unitMeshRef.current[casterId];
     if (casterMesh) {
         (casterMesh.material as THREE.MeshStandardMaterial).color.set("#e74c3c");
-        hitFlashRef.current[casterId] = now;
+        hitFlashRef.current[casterId] = getGameTime();
     }
 
     createAnimatedRing(scene, casterG.position.x, casterG.position.z, "#e74c3c", {
@@ -702,7 +701,7 @@ export function executeDivineLatticeSkill(
     const mesh = unitMeshRef.current[target.id];
     if (mesh) {
         (mesh.material as THREE.MeshStandardMaterial).color.set("#ffffff");
-        hitFlashRef.current[target.id] = now;
+        hitFlashRef.current[target.id] = getGameTime();
     }
 
     addLog(`${UNIT_DATA[casterId].name} seals ${targetName} in Divine Lattice.`, getSkillTextColor(skill.type, skill.damageType));
@@ -788,7 +787,7 @@ export function executeCleanseSkill(
     const mesh = unitMeshRef.current[targetId];
     if (targetG && mesh) {
         (mesh.material as THREE.MeshStandardMaterial).color.set("#ffffff");
-        hitFlashRef.current[targetId] = now;
+        hitFlashRef.current[targetId] = getGameTime();
     }
 
     return true;
@@ -902,7 +901,7 @@ export function executeRestorationSkill(
     const meshRef = unitMeshRef.current[targetId];
     if (targetG && meshRef) {
         (meshRef.material as THREE.MeshStandardMaterial).color.set("#ffd700");
-        hitFlashRef.current[targetId] = now;
+        hitFlashRef.current[targetId] = getGameTime();
     }
 
     return true;
@@ -942,7 +941,6 @@ export function executeReviveSkill(
     const casterData = UNIT_DATA[casterId];
     const targetData = UNIT_DATA[deadAlly.id];
     const reviveId = deadAlly.id;
-    const now = Date.now();
 
     // Place revived unit next to caster
     const reviveAngle = Math.random() * Math.PI * 2;
@@ -989,7 +987,7 @@ export function executeReviveSkill(
     const meshRef = unitMeshRef.current[reviveId];
     if (meshRef) {
         (meshRef.material as THREE.MeshStandardMaterial).color.set("#ffd700");
-        hitFlashRef.current[reviveId] = now;
+        hitFlashRef.current[reviveId] = getGameTime();
     }
 
     return true;
