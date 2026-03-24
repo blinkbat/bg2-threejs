@@ -259,6 +259,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     const LAVA_BUBBLE_SCALE_CURVE = 1.9;
     const TERRAIN_WATER_COLOR_SHALLOW = "#32718a";
     const TERRAIN_WATER_COLOR_DEEP = "#295f75";
+    const TERRAIN_WATER_Y_OFFSET = -0.12;
     // Keep floor layers visually flat so they remain below prop/shadow layers.
     const FLOOR_LAYER_HEIGHT_STEP = 0.00004;
     const TERRAIN_LAYER_HEIGHT_STEP = 0.00005;
@@ -607,7 +608,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                         waterMat.depthWrite = false;
                     }
 
-                    const tileY = TERRAIN_BASE_Y + layerIndex * TERRAIN_LAYER_HEIGHT_STEP;
+                    const tileY = TERRAIN_BASE_Y + layerIndex * TERRAIN_LAYER_HEIGHT_STEP + TERRAIN_WATER_Y_OFFSET;
                     if (!hasRounding) {
                         queueBatchedTile(waterMat, x, tileY, z);
                     } else {
@@ -633,7 +634,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                     bubbleGroup.raycast = skipRaycast;
                     bubbleGroup.position.set(
                         x + 0.5,
-                        TERRAIN_BASE_Y + layerIndex * TERRAIN_LAYER_HEIGHT_STEP + WATER_BUBBLE_GROUP_Y_OFFSET,
+                        TERRAIN_BASE_Y + layerIndex * TERRAIN_LAYER_HEIGHT_STEP + TERRAIN_WATER_Y_OFFSET + WATER_BUBBLE_GROUP_Y_OFFSET,
                         z + 0.5
                     );
                     bubbleGroup.userData.liquid = {
