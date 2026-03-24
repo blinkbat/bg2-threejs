@@ -75,7 +75,9 @@ export function updateUnitAI(
     actionQueueRef?: ActionQueue,
     setQueuedActions?: React.Dispatch<React.SetStateAction<{ unitId: number; skillName: string }[]>>,
     // For acid slug enemies
-    acidTilesRef?: Map<string, import("../core/types").AcidTile>
+    acidTilesRef?: Map<string, import("../core/types").AcidTile>,
+    // Frame-rate-independent delta (1.0 = 60fps baseline)
+    deltaTime: number = 1.0
 ): void {
     if (unit.team === "neutral") return;
 
@@ -122,7 +124,7 @@ export function updateUnitAI(
         if (fleeDist > 0.001) {
             const fleeTargetX = g.position.x + (fleeX / fleeDist) * 5;
             const fleeTargetZ = g.position.z + (fleeZ / fleeDist) * 5;
-            const movementCtx: MovementContext = { unit, g, unitsRef, unitsState, targetX: fleeTargetX, targetZ: fleeTargetZ, speedMultiplier: getEffectiveSpeedMultiplier(unit, data) };
+            const movementCtx: MovementContext = { unit, g, unitsRef, unitsState, targetX: fleeTargetX, targetZ: fleeTargetZ, speedMultiplier: getEffectiveSpeedMultiplier(unit, data), deltaTime };
             runMovementPhase(movementCtx);
         }
         return;
@@ -169,7 +171,7 @@ export function updateUnitAI(
             // Still kiting - just do path following and movement
             const pathCtx: PathContext = { unit, g, pathsRef, moveStartRef, now, isPlayer };
             const pathResult = runPathFollowingPhase(pathCtx);
-            const movementCtx: MovementContext = { unit, g, unitsRef, unitsState, targetX: pathResult.targetX, targetZ: pathResult.targetZ, speedMultiplier: getEffectiveSpeedMultiplier(unit, data) };
+            const movementCtx: MovementContext = { unit, g, unitsRef, unitsState, targetX: pathResult.targetX, targetZ: pathResult.targetZ, speedMultiplier: getEffectiveSpeedMultiplier(unit, data), deltaTime };
             runMovementPhase(movementCtx);
             return;
         }
@@ -195,7 +197,7 @@ export function updateUnitAI(
             // Jump directly to path following and movement
             const pathCtx: PathContext = { unit, g, pathsRef, moveStartRef, now, isPlayer };
             const pathResult = runPathFollowingPhase(pathCtx);
-            const movementCtx: MovementContext = { unit, g, unitsRef, unitsState, targetX: pathResult.targetX, targetZ: pathResult.targetZ, speedMultiplier: getEffectiveSpeedMultiplier(unit, enemyData) };
+            const movementCtx: MovementContext = { unit, g, unitsRef, unitsState, targetX: pathResult.targetX, targetZ: pathResult.targetZ, speedMultiplier: getEffectiveSpeedMultiplier(unit, enemyData), deltaTime };
             runMovementPhase(movementCtx);
             return;
         }
@@ -205,7 +207,7 @@ export function updateUnitAI(
     if (!isPlayer && !hasDivineLattice && unit.enemyType === "acid_slug" && acidTilesRef) {
         if (tryAcidSlugPatrol({
             unit, g, slugData: enemyData!, unitsState, unitsRef, pathsRef, moveStartRef,
-            scene, skillCooldowns, setSkillCooldowns, acidTilesRef, now
+            scene, skillCooldowns, setSkillCooldowns, acidTilesRef, now, deltaTime
         })) {
             return;
         }
@@ -496,7 +498,7 @@ export function updateUnitAI(
             }
         }
     }
-    const movementCtx: MovementContext = { unit, g, unitsRef, unitsState, targetX, targetZ, speedMultiplier: speedMult };
+    const movementCtx: MovementContext = { unit, g, unitsRef, unitsState, targetX, targetZ, speedMultiplier: speedMult, deltaTime };
     runMovementPhase(movementCtx);
 
     // Phase 5: Acid slug - create acid trail when moving, aura when stationary

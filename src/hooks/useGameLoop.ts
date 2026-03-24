@@ -88,6 +88,7 @@ interface GameLoopCallbacks {
     setSkillCooldowns: React.Dispatch<React.SetStateAction<Record<string, { end: number; duration: number }>>>;
     setQueuedActions: React.Dispatch<React.SetStateAction<{ unitId: number; skillName: string }[]>>;
     addLog: (text: string, color?: string) => void;
+    processPendingIntents: () => void;
     processActionQueue: (defeatedThisFrame: Set<number>) => void;
     onPerfSample?: (sample: PerfFrameSample) => void;
 }
@@ -583,16 +584,15 @@ export function useGameLoop({
         fpsFrameCount.current = 0;
         fpsLastTime.current = null;
 
-        const MAX_FRAME_RATE = 60;
-        const MIN_FRAME_MS = 1000 / MAX_FRAME_RATE;
         let lastFrameTime = 0;
 
         const animate = (rafNow: number) => {
             animId = requestAnimationFrame(animate);
 
-            const elapsed = rafNow - lastFrameTime;
-            if (elapsed < MIN_FRAME_MS) return;
-            lastFrameTime = rafNow - (elapsed % MIN_FRAME_MS);
+            const deltaMs = lastFrameTime === 0 ? 16.667 : rafNow - lastFrameTime;
+            lastFrameTime = rafNow;
+            // Clamp delta to avoid huge jumps after tab-switch or debugger pause
+            const deltaTime = Math.min(deltaMs, 50) / 16.667;
 
             const frameStart = performance.now();
             const now = Date.now();
@@ -676,7 +676,8 @@ export function useGameLoop({
                     setUnitsLive,
                     callbacks.addLog,
                     now,
-                    defeatedThisFrame
+                    defeatedThisFrame,
+                    deltaTime
                 );
                 projectilesMs = performance.now() - sectionStart;
                 pruneStaleVolleys(now);
@@ -897,6 +898,7 @@ export function useGameLoop({
             // Unit AI & movement (only when not paused)
             if (!isPaused) {
                 const aiStart = performance.now();
+                callbacks.processPendingIntents();
                 callbacks.processActionQueue(defeatedThisFrame);
 
                 // Check for newly spawned units
@@ -951,7 +953,8 @@ export function useGameLoop({
                         defeatedThisFrame,
                         stateRefs.skillCooldownsRef.current, callbacks.setSkillCooldowns,
                         stateRefs.actionQueueRef.current, callbacks.setQueuedActions,
-                        refs.acidTiles
+                        refs.acidTiles,
+                        deltaTime
                     );
                 }
                 unitAiMs = performance.now() - sectionStart;

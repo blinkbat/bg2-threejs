@@ -37,6 +37,7 @@ interface InputRefs {
     actionCooldownRef: React.MutableRefObject<Record<number, number>>;
     cantripCooldownRef: React.MutableRefObject<Record<string, number>>;
     actionQueueRef: React.MutableRefObject<ActionQueue>;
+    pendingIntentsRef: React.MutableRefObject<PendingIntentMap>;
     pathsRef: React.MutableRefObject<Record<number, { x: number; z: number }[]>>;
     moveStartRef: React.MutableRefObject<Record<number, { time: number; x: number; z: number }>>;
     pauseStartTimeRef: React.MutableRefObject<number | null>;
@@ -68,6 +69,31 @@ type QueuedAction =
 
 // Map from unitId to their queued action
 export type ActionQueue = Record<number, QueuedAction>;
+
+// Pending intent: "walk toward target, then perform action when in range"
+export type PendingSkillIntent = {
+    type: "skill";
+    skill: Skill;
+    targetId?: number;
+    targetX: number;
+    targetZ: number;
+};
+
+export type PendingInteractIntent = {
+    type: "interact";
+    interactable: "door" | "waystone" | "chest" | "secretDoor" | "lootBag";
+    targetX: number;
+    targetZ: number;
+    range: number;
+    requireAllPlayers: boolean;
+    intentKey: string;  // shared key so we can check if all players share the same intent
+    callback: () => void;
+};
+
+export type PendingIntent = PendingSkillIntent | PendingInteractIntent;
+
+// Map from unitId to their pending intent
+export type PendingIntentMap = Record<number, PendingIntent>;
 
 // =============================================================================
 // PAUSE HANDLING
@@ -202,6 +228,7 @@ interface SharedCommandContext {
     unitGroups: Record<number, UnitGroup>;
     pathsRef: Record<number, { x: number; z: number }[]>;
     actionQueueRef: ActionQueue;
+    pendingIntentsRef: PendingIntentMap;
     setQueuedActions: React.Dispatch<React.SetStateAction<{ unitId: number; skillName: string }[]>>;
     setUnits: React.Dispatch<React.SetStateAction<Unit[]>>;
 }
@@ -223,7 +250,7 @@ export function stopSelectedUnits(
     ctx: SharedCommandContext,
     clearHoldPosition: boolean = false
 ): void {
-    const { selectedIds, unitGroups, pathsRef, actionQueueRef, setQueuedActions, setUnits } = ctx;
+    const { selectedIds, unitGroups, pathsRef, actionQueueRef, pendingIntentsRef, setQueuedActions, setUnits } = ctx;
     if (selectedIds.length === 0) return;
 
     const selectedSet = new Set(selectedIds);
@@ -231,6 +258,7 @@ export function stopSelectedUnits(
         pathsRef[unitId] = [];
         clearUnitCommandState(unitGroups[unitId]);
         delete actionQueueRef[unitId];
+        delete pendingIntentsRef[unitId];
     }
 
     setQueuedActions(prev => prev.filter(q => !selectedSet.has(q.unitId)));
@@ -248,7 +276,7 @@ export function stopSelectedUnits(
  * Units toggling hold ON are stopped immediately and their queued actions are removed.
  */
 export function toggleHoldPositionForSelectedUnits(ctx: SharedCommandContext, units: Unit[]): void {
-    const { selectedIds, unitGroups, pathsRef, actionQueueRef, setQueuedActions, setUnits } = ctx;
+    const { selectedIds, unitGroups, pathsRef, actionQueueRef, pendingIntentsRef, setQueuedActions, setUnits } = ctx;
     if (selectedIds.length === 0) return;
 
     const selectedSet = new Set(selectedIds);
@@ -263,6 +291,7 @@ export function toggleHoldPositionForSelectedUnits(ctx: SharedCommandContext, un
         pathsRef[unitId] = [];
         clearUnitCommandState(unitGroups[unitId]);
         delete actionQueueRef[unitId];
+        delete pendingIntentsRef[unitId];
     }
 
     if (turningOnSet.size > 0) {
@@ -382,7 +411,8 @@ export function processActionQueue(
     skillCtx: SkillExecutionContext,
     setUnits: React.Dispatch<React.SetStateAction<Unit[]>>,
     setQueuedActions: React.Dispatch<React.SetStateAction<{ unitId: number; skillName: string }[]>>,
-    onConsumeItem?: (unitId: number, itemId: string, targetId?: number) => boolean
+    onConsumeItem?: (unitId: number, itemId: string, targetId?: number) => boolean,
+    pendingIntentsRef?: React.MutableRefObject<PendingIntentMap>
 ): void {
     if (pausedRef.current) return;
 
@@ -447,6 +477,13 @@ export function processActionQueue(
                     targetRadius,
                     rangeWithBuffer
                 )) {
+                    // Convert to pending intent — walk toward target then cast
+                    if (pendingIntentsRef) {
+                        pendingIntentsRef.current[unitId] = {
+                            type: "skill", skill: action.skill, targetId: action.targetId, targetX, targetZ
+                        };
+                        assignPath(unitsRef, pathsRef, moveStartRef, unitId, targetX, targetZ);
+                    }
                     executedUnits.push(unitId);
                     continue;
                 }
@@ -492,6 +529,141 @@ export function processActionQueue(
     if (executedUnits.length > 0) {
         const executedSet = new Set(executedUnits);
         setQueuedActions(prev => prev.filter(q => !executedSet.has(q.unitId)));
+    }
+}
+
+// =============================================================================
+// PENDING INTENT PROCESSING
+// =============================================================================
+
+/**
+ * Process pending intents each frame. Units with pending intents are walking
+ * toward a target; when they arrive in range, the intent is fulfilled and cleared.
+ */
+export function processPendingIntents(
+    pendingIntentsRef: React.MutableRefObject<PendingIntentMap>,
+    unitsRef: Record<number, UnitGroup>,
+    pathsRef: Record<number, { x: number; z: number }[]>,
+    moveStartRef: Record<number, { time: number; x: number; z: number }>,
+    unitsStateRef: React.MutableRefObject<Unit[]>,
+    pausedRef: React.MutableRefObject<boolean>,
+    skillCtx: SkillExecutionContext,
+    refs: Pick<InputRefs, "actionCooldownRef" | "cantripCooldownRef" | "actionQueueRef">,
+    setters: Pick<InputSetters, "setTargetingMode" | "setQueuedActions" | "setUnits">,
+    addLog: (text: string, color?: string) => void
+): void {
+    if (pausedRef.current) return;
+
+    const intents = pendingIntentsRef.current;
+    const units = unitsStateRef.current;
+
+    for (const [unitIdStr, intent] of Object.entries(intents)) {
+        const unitId = Number(unitIdStr);
+        const unit = units.find(u => u.id === unitId);
+        const unitG = unitsRef[unitId];
+
+        // Clear if unit is dead or missing
+        if (!unit || unit.hp <= 0 || !unitG) {
+            delete intents[unitId];
+            continue;
+        }
+
+        if (intent.type === "skill") {
+            // Update target position from live scene group (for moving targets)
+            let targetX = intent.targetX;
+            let targetZ = intent.targetZ;
+            let targetRadius = 0;
+
+            if (intent.targetId !== undefined) {
+                const target = units.find(u => u.id === intent.targetId);
+                const targetG = unitsRef[intent.targetId];
+
+                // Clear if target is dead or invalid
+                if (!target || !targetG || target.hp <= 0) {
+                    delete intents[unitId];
+                    pathsRef[unitId] = [];
+                    continue;
+                }
+
+                targetX = targetG.position.x;
+                targetZ = targetG.position.z;
+                targetRadius = getUnitRadius(target);
+            }
+
+            // Check if we've arrived in range
+            if (isInRange(unitG.position.x, unitG.position.z, targetX, targetZ, targetRadius, intent.skill.range)) {
+                delete intents[unitId];
+                // Stop movement
+                pathsRef[unitId] = [];
+                delete unitG.userData.moveTarget;
+                // Queue or execute the skill through normal path
+                queueOrExecuteSkill(
+                    unitId, intent.skill, targetX, targetZ,
+                    {
+                        actionCooldownRef: refs.actionCooldownRef,
+                        cantripCooldownRef: refs.cantripCooldownRef,
+                        actionQueueRef: refs.actionQueueRef,
+                        rangeIndicatorRef: { current: null },
+                        aoeIndicatorRef: { current: null }
+                    },
+                    { pausedRef },
+                    { setTargetingMode: setters.setTargetingMode, setQueuedActions: setters.setQueuedActions },
+                    skillCtx, addLog, intent.targetId
+                );
+                continue;
+            }
+
+            // Not in range yet — update path toward target if it moved significantly
+            const currentMoveTarget = unitG.userData.moveTarget;
+            const distToOldTarget = currentMoveTarget
+                ? Math.hypot(targetX - currentMoveTarget.x, targetZ - currentMoveTarget.z)
+                : Infinity;
+            if (distToOldTarget > 1.5) {
+                assignPath(unitsRef, pathsRef, moveStartRef, unitId, targetX, targetZ);
+            }
+        } else if (intent.type === "interact") {
+            const { targetX, targetZ, range, requireAllPlayers, intentKey, callback } = intent;
+
+            // Check if this unit has arrived
+            const thisUnitInRange = isInRange(
+                targetX, targetZ,
+                unitG.position.x, unitG.position.z,
+                getUnitRadius(unit), range
+            );
+
+            if (requireAllPlayers) {
+                // All alive players must share this intent and be in range
+                const alivePlayers = units.filter(u => u.team === "player" && u.hp > 0);
+                const allArrived = alivePlayers.every(p => {
+                    const pG = unitsRef[p.id];
+                    if (!pG) return false;
+                    return isInRange(targetX, targetZ, pG.position.x, pG.position.z, getUnitRadius(p), range);
+                });
+
+                if (allArrived) {
+                    // Clear all intents with this key
+                    for (const [idStr, pi] of Object.entries(intents)) {
+                        if (pi.type === "interact" && pi.intentKey === intentKey) {
+                            delete intents[Number(idStr)];
+                        }
+                    }
+                    callback();
+                    return; // callback may trigger area transition, stop processing
+                }
+            } else {
+                // Any single player arriving triggers the interaction
+                if (thisUnitInRange) {
+                    // Clear all intents with this key
+                    for (const [idStr, pi] of Object.entries(intents)) {
+                        if (pi.type === "interact" && pi.intentKey === intentKey) {
+                            delete intents[Number(idStr)];
+                        }
+                    }
+                    callback();
+                    return;
+                }
+            }
+        }
     }
 }
 
@@ -701,7 +873,7 @@ export function computeDragLineTiles(
 export function handleTargetingClick(
     hit: THREE.Intersection,
     targetingMode: { casterId: number; skill: Skill; displacementTargetId?: number },
-    refs: Pick<InputRefs, "actionCooldownRef" | "cantripCooldownRef" | "actionQueueRef" | "rangeIndicatorRef" | "aoeIndicatorRef">,
+    refs: Pick<InputRefs, "actionCooldownRef" | "cantripCooldownRef" | "actionQueueRef" | "pendingIntentsRef" | "rangeIndicatorRef" | "aoeIndicatorRef" | "pathsRef" | "moveStartRef">,
     state: Pick<InputState, "unitsStateRef" | "pausedRef">,
     setters: Pick<InputSetters, "setTargetingMode" | "setQueuedActions">,
     unitsRef: Record<number, UnitGroup>,
@@ -749,7 +921,12 @@ export function handleTargetingClick(
                 // Range check using unit's hitbox - if any part is in range, it's valid
                 const targetRadius = getUnitRadius(targetUnit);
                 if (!isInRange(casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, targetRadius, skill.range)) {
-                    addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, "#888");
+                    // Out of range — create pending intent to walk then cast
+                    refs.pendingIntentsRef.current[casterId] = {
+                        type: "skill", skill, targetId, targetX: targetG.position.x, targetZ: targetG.position.z
+                    };
+                    assignPath(unitsRef, refs.pathsRef.current, refs.moveStartRef.current, casterId, targetG.position.x, targetG.position.z);
+                    clearTargetingMode(setters.setTargetingMode, refs.rangeIndicatorRef, refs.aoeIndicatorRef);
                     return true;
                 }
 
@@ -784,7 +961,12 @@ export function handleTargetingClick(
     const dist = distanceToPoint(casterG.position, targetX, targetZ);
 
     if (dist > skill.range) {
-        addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, "#888");
+        // Out of range — create pending intent to walk then cast (ground-targeted)
+        refs.pendingIntentsRef.current[casterId] = {
+            type: "skill", skill, targetX, targetZ
+        };
+        assignPath(unitsRef, refs.pathsRef.current, refs.moveStartRef.current, casterId, targetX, targetZ);
+        clearTargetingMode(setters.setTargetingMode, refs.rangeIndicatorRef, refs.aoeIndicatorRef);
         return true;
     }
 
@@ -798,7 +980,7 @@ export function handleTargetingClick(
 export function handleTargetingOnUnit(
     targetUnitId: number,
     targetingMode: { casterId: number; skill: Skill; displacementTargetId?: number },
-    refs: Pick<InputRefs, "actionCooldownRef" | "cantripCooldownRef" | "actionQueueRef" | "rangeIndicatorRef" | "aoeIndicatorRef">,
+    refs: Pick<InputRefs, "actionCooldownRef" | "cantripCooldownRef" | "actionQueueRef" | "pendingIntentsRef" | "rangeIndicatorRef" | "aoeIndicatorRef" | "pathsRef" | "moveStartRef">,
     state: Pick<InputState, "unitsStateRef" | "pausedRef">,
     setters: Pick<InputSetters, "setTargetingMode" | "setQueuedActions">,
     unitsRef: Record<number, UnitGroup>,
@@ -836,7 +1018,11 @@ export function handleTargetingOnUnit(
     // Range check: if any part of target's hitbox is in range, allow targeting
     const targetRadius = getUnitRadius(targetUnit);
     if (!isInRange(casterG.position.x, casterG.position.z, targetX, targetZ, targetRadius, skill.range)) {
-        addLog(`${UNIT_DATA[casterId].name}: Target out of range!`, "#888");
+        // Out of range — create pending intent to walk then cast
+        refs.pendingIntentsRef.current[casterId] = {
+            type: "skill", skill, targetId: targetUnitId, targetX, targetZ
+        };
+        assignPath(unitsRef, refs.pathsRef.current, refs.moveStartRef.current, casterId, targetX, targetZ);
         clearTargetingMode(setters.setTargetingMode, refs.rangeIndicatorRef, refs.aoeIndicatorRef);
         return true;
     }

@@ -912,6 +912,7 @@ export interface MovementContext {
     targetZ: number;
     speedMultiplier?: number;  // Optional movement speed multiplier (default 1.0)
     avoidanceScale?: number;  // Optional avoidance multiplier (default 1.0)
+    deltaTime?: number;  // Frame-rate-independent delta (1.0 = 60fps baseline)
 }
 
 interface AvoidanceBucketEntry {
@@ -1202,7 +1203,7 @@ function applyWallSliding(
  * Run the movement phase - move towards target with avoidance and wall sliding.
  */
 export function runMovementPhase(ctx: MovementContext): void {
-    const { unit, g, targetX, targetZ, speedMultiplier = 1.0 } = ctx;
+    const { unit, g, targetX, targetZ, speedMultiplier = 1.0, deltaTime = 1.0 } = ctx;
     const { isFlying, canTraverseWaterTerrain } = getMovementFlags(unit);
 
     // Keep units out of wall overlap even when idle or waiting on target updates.
@@ -1236,7 +1237,7 @@ export function runMovementPhase(ctx: MovementContext): void {
 
     if (moveMag > effectiveMinMag) {
         // Normalize and apply speed (with optional multiplier for faster/slower enemies)
-        const speed = MOVE_SPEED * speedMultiplier * getDebugSpeedMultiplier();
+        const speed = MOVE_SPEED * speedMultiplier * getDebugSpeedMultiplier() * deltaTime;
         moveX = (moveX / moveMag) * speed;
         moveZ = (moveZ / moveMag) * speed;
 

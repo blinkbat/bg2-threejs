@@ -451,7 +451,8 @@ export function updateProjectiles(
     setUnits: React.Dispatch<React.SetStateAction<Unit[]>>,
     addLog: (text: string, color?: string) => void,
     now: number,
-    defeatedThisFrame: Set<number>
+    defeatedThisFrame: Set<number>,
+    deltaTime: number = 1.0
 ): Projectile[] {
     // Shared DamageContext for all projectile hit processing
     const dmgCtx = buildDamageContext(scene, damageTexts, hitFlashRef, unitsRef, unitsState, setUnits, addLog, now, defeatedThisFrame);
@@ -549,8 +550,8 @@ export function updateProjectiles(
             }
 
             // Move projectile (dx/dz already normalized by getDirectionAndDistance)
-            const nextX = proj.mesh.position.x + dx * proj.speed;
-            const nextZ = proj.mesh.position.z + dz * proj.speed;
+            const nextX = proj.mesh.position.x + dx * proj.speed * deltaTime;
+            const nextZ = proj.mesh.position.z + dz * proj.speed * deltaTime;
             const nextCellX = Math.floor(nextX);
             const nextCellZ = Math.floor(nextZ);
             if (isBlocked(nextCellX, nextCellZ) || isTreeBlocked(nextCellX, nextCellZ)) {
@@ -591,8 +592,8 @@ export function updateProjectiles(
             const waveTime = now * 0.007 + mmProj.zigzagPhase * Math.PI;
             const waveOffset = Math.sin(waveTime * 3.4 + mmProj.missileIndex * 0.4) * (0.2 + Math.abs(mmProj.fanAngle) * 0.08);
 
-            proj.mesh.position.x += mmProj.waveDirX * mmProj.speed + laneCorrectionX + mmProj.wavePerpX * waveOffset * 0.16;
-            proj.mesh.position.z += mmProj.waveDirZ * mmProj.speed + laneCorrectionZ + mmProj.wavePerpZ * waveOffset * 0.16;
+            proj.mesh.position.x += (mmProj.waveDirX * mmProj.speed + laneCorrectionX + mmProj.wavePerpX * waveOffset * 0.16) * deltaTime;
+            proj.mesh.position.z += (mmProj.waveDirZ * mmProj.speed + laneCorrectionZ + mmProj.wavePerpZ * waveOffset * 0.16) * deltaTime;
 
             const travelDistAfter = Math.hypot(
                 proj.mesh.position.x - mmProj.startX,
@@ -857,8 +858,8 @@ export function updateProjectiles(
             const piercingHitRadius = getPiercingHitRadius(pProj);
 
             // Move in straight line
-            proj.mesh.position.x += pProj.directionX * pProj.speed;
-            proj.mesh.position.z += pProj.directionZ * pProj.speed;
+            proj.mesh.position.x += pProj.directionX * pProj.speed * deltaTime;
+            proj.mesh.position.z += pProj.directionZ * pProj.speed * deltaTime;
             updatePiercingVisualEffects(scene, pProj, now);
 
             // Wall collision — ice burst + dispose
@@ -979,8 +980,8 @@ export function updateProjectiles(
             updateFireballVisual(proj.mesh);
 
             // Move fireball in straight line
-            proj.mesh.position.x += fbProj.directionX * fbProj.speed;
-            proj.mesh.position.z += fbProj.directionZ * fbProj.speed;
+            proj.mesh.position.x += fbProj.directionX * fbProj.speed * deltaTime;
+            proj.mesh.position.z += fbProj.directionZ * fbProj.speed * deltaTime;
 
             // Check wall collision
             const cellX = Math.floor(proj.mesh.position.x);
@@ -1269,8 +1270,8 @@ export function updateProjectiles(
         }
 
         // Move projectile (dx/dz already normalized)
-        proj.mesh.position.x += dx * proj.speed;
-        proj.mesh.position.z += dz * proj.speed;
+        proj.mesh.position.x += dx * proj.speed * deltaTime;
+        proj.mesh.position.z += dz * proj.speed * deltaTime;
         return true;
     };
 

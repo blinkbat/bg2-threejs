@@ -29,6 +29,7 @@ interface AcidSlugContext {
     setSkillCooldowns: React.Dispatch<React.SetStateAction<Record<string, { end: number; duration: number }>>>;
     acidTilesRef: Map<string, AcidTile>;
     now: number;
+    deltaTime?: number;
 }
 
 interface ClosestPlayerTarget {
@@ -232,7 +233,7 @@ function tryAssignAcidSlugPatrolDestination(
  * @returns true if the slug is patrolling (skip normal attack behavior)
  */
 export function tryAcidSlugPatrol(ctx: AcidSlugContext): boolean {
-    const { unit, g, slugData, unitsState, unitsRef, pathsRef, moveStartRef, scene, skillCooldowns, setSkillCooldowns, acidTilesRef, now } = ctx;
+    const { unit, g, slugData, unitsState, unitsRef, pathsRef, moveStartRef, scene, skillCooldowns, setSkillCooldowns, acidTilesRef, now, deltaTime } = ctx;
 
     // Find closest player
     let closestPlayer: ClosestPlayerTarget | null = null;
@@ -284,7 +285,8 @@ export function tryAcidSlugPatrol(ctx: AcidSlugContext): boolean {
             targetX: orbitTarget.x,
             targetZ: orbitTarget.z,
             speedMultiplier: getEffectiveSpeedMultiplier(unit, slugData),
-            avoidanceScale: ACID_SLUG_PATROL_AVOIDANCE_SCALE
+            avoidanceScale: ACID_SLUG_PATROL_AVOIDANCE_SCALE,
+            deltaTime
         };
         runMovementPhase(movementCtx);
 
@@ -329,7 +331,8 @@ export function tryAcidSlugPatrol(ctx: AcidSlugContext): boolean {
         targetX: pathResult.targetX,
         targetZ: pathResult.targetZ,
         speedMultiplier: getEffectiveSpeedMultiplier(unit, slugData),
-        avoidanceScale: ACID_SLUG_PATROL_AVOIDANCE_SCALE
+        avoidanceScale: ACID_SLUG_PATROL_AVOIDANCE_SCALE,
+        deltaTime
     };
     runMovementPhase(movementCtx);
 

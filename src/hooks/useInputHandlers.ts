@@ -30,7 +30,8 @@ import {
     stopSelectedUnits,
     toggleHoldPositionForSelectedUnits,
     computeDragLineTiles,
-    type ActionQueue
+    type ActionQueue,
+    type PendingIntentMap
 } from "../input";
 import { clearTargetingMode, type SkillExecutionContext } from "../combat/skills";
 import { disposeBasicMesh } from "../rendering/disposal";
@@ -88,6 +89,7 @@ interface InputStateRefs {
 
 interface InputMutableRefs {
     actionQueueRef: React.MutableRefObject<ActionQueue>;
+    pendingIntentsRef: React.MutableRefObject<PendingIntentMap>;
     actionCooldownRef: React.MutableRefObject<Record<number, number>>;
     cantripCooldownRef: React.MutableRefObject<Record<string, number>>;
     keysPressed: React.MutableRefObject<Set<string>>;
@@ -863,6 +865,7 @@ export function useInputHandlers({
                                 const unitG = unitGroups[t.id];
                                 const directMove = unitG ? canUseDirectMove(unitG, t.x, t.z) : false;
                                 const notBefore = t.delay > 0 ? queueNow + t.delay : undefined;
+                                delete mutableRefs.pendingIntentsRef.current[t.id];
                                 mutableRefs.actionQueueRef.current[t.id] = {
                                     type: "move",
                                     targetX: t.x,
@@ -961,7 +964,7 @@ export function useInputHandlers({
                     if (handleTargetingClick(
                         hit,
                         stateRefs.targetingModeRef.current,
-                        { actionCooldownRef: mutableRefs.actionCooldownRef, cantripCooldownRef: mutableRefs.cantripCooldownRef, actionQueueRef: mutableRefs.actionQueueRef, rangeIndicatorRef: { current: rangeIndicator }, aoeIndicatorRef: { current: aoeIndicator } },
+                        { actionCooldownRef: mutableRefs.actionCooldownRef, cantripCooldownRef: mutableRefs.cantripCooldownRef, actionQueueRef: mutableRefs.actionQueueRef, pendingIntentsRef: mutableRefs.pendingIntentsRef, pathsRef: { current: gameRefs.current.paths } as React.MutableRefObject<Record<number, { x: number; z: number }[]>>, moveStartRef: { current: gameRefs.current.moveStart } as React.MutableRefObject<Record<number, { time: number; x: number; z: number }>>, rangeIndicatorRef: { current: rangeIndicator }, aoeIndicatorRef: { current: aoeIndicator } },
                         { unitsStateRef: stateRefs.unitsStateRef as React.RefObject<Unit[]>, pausedRef: stateRefs.pausedRef },
                         { setTargetingMode: setters.setTargetingMode, setQueuedActions: setters.setQueuedActions },
                         unitGroups, skillCtx, callbacks.addLog
@@ -988,7 +991,18 @@ export function useInputHandlers({
                         if (allPlayersInRange) {
                             callbacks.handleAreaTransition(transition);
                         } else {
-                            callbacks.addLog("You must gather your party before venturing forth.", "#f59e0b");
+                            // Walk all alive players toward the door
+                            const intentKey = `door-${doorCenterX}-${doorCenterZ}`;
+                            const aliveIds = alivePlayers.map(u => u.id);
+                            const moveTargets = buildMoveTargets(aliveIds, stateRefs.unitsStateRef.current, unitGroups, doorCenterX, doorCenterZ, stateRefs.formationOrderRef.current);
+                            for (const t of moveTargets) {
+                                mutableRefs.pendingIntentsRef.current[t.id] = {
+                                    type: "interact", interactable: "door", targetX: doorCenterX, targetZ: doorCenterZ,
+                                    range: doorRange, requireAllPlayers: true, intentKey,
+                                    callback: () => callbacks.handleAreaTransition(transition)
+                                };
+                                mutableRefs.actionQueueRef.current[t.id] = { type: "move", targetX: t.x, targetZ: t.z };
+                            }
                         }
                         return;
                     }
@@ -1008,7 +1022,18 @@ export function useInputHandlers({
                         if (allPlayersInRange) {
                             callbacks.handleWaystoneInteract(waystone, waystoneIndex);
                         } else {
-                            callbacks.addLog("You must gather your party before using the waystone.", "#f59e0b");
+                            // Walk all alive players toward the waystone
+                            const intentKey = `waystone-${waystone.x}-${waystone.z}`;
+                            const aliveIds = alivePlayers.map(u => u.id);
+                            const moveTargets = buildMoveTargets(aliveIds, stateRefs.unitsStateRef.current, unitGroups, waystone.x, waystone.z, stateRefs.formationOrderRef.current);
+                            for (const t of moveTargets) {
+                                mutableRefs.pendingIntentsRef.current[t.id] = {
+                                    type: "interact", interactable: "waystone", targetX: waystone.x, targetZ: waystone.z,
+                                    range: waystoneRange, requireAllPlayers: true, intentKey,
+                                    callback: () => callbacks.handleWaystoneInteract(waystone, waystoneIndex)
+                                };
+                                mutableRefs.actionQueueRef.current[t.id] = { type: "move", targetX: t.x, targetZ: t.z };
+                            }
                         }
                         return;
                     }
@@ -1020,21 +1045,81 @@ export function useInputHandlers({
                     if (chestData.chestDecorOnly) {
                         continue;
                     }
-                    handleChestClick(chestData, stateRefs, unitGroups, setters, callbacks);
+                    const chestRange = 3.5;
+                    if (isAnyAlivePlayerWithinRange(stateRefs.unitsStateRef, unitGroups, chestData.chestX, chestData.chestZ, chestRange)) {
+                        handleChestClick(chestData, stateRefs, unitGroups, setters, callbacks);
+                    } else {
+                        const intentKey = `chest-${chestData.chestX}-${chestData.chestZ}`;
+                        const selectedIds = stateRefs.selectedRef.current;
+                        const aliveSelected = selectedIds.filter(id => {
+                            const u = stateRefs.unitsStateRef.current.find(u => u.id === id);
+                            return u && u.team === "player" && u.hp > 0;
+                        });
+                        const moveTargets = buildMoveTargets(aliveSelected, stateRefs.unitsStateRef.current, unitGroups, chestData.chestX, chestData.chestZ, stateRefs.formationOrderRef.current);
+                        for (const t of moveTargets) {
+                            mutableRefs.pendingIntentsRef.current[t.id] = {
+                                type: "interact", interactable: "chest", targetX: chestData.chestX, targetZ: chestData.chestZ,
+                                range: chestRange, requireAllPlayers: false, intentKey,
+                                callback: () => handleChestClick(chestData, stateRefs, unitGroups, setters, callbacks)
+                            };
+                            mutableRefs.actionQueueRef.current[t.id] = { type: "move", targetX: t.x, targetZ: t.z };
+                        }
+                    }
                     return;
                 }
 
                 // Loot bag click
                 if (h.object.name === "lootBag" && h.object.userData?.lootBagId !== undefined) {
                     const lootBagData = h.object.userData as { lootBagId: number; lootBagX: number; lootBagZ: number };
-                    handleLootBagClick(lootBagData, scene, stateRefs, unitGroups, setters, callbacks, gameRefs);
+                    const lootRange = 3.5;
+                    if (isAnyAlivePlayerWithinRange(stateRefs.unitsStateRef, unitGroups, lootBagData.lootBagX, lootBagData.lootBagZ, lootRange)) {
+                        handleLootBagClick(lootBagData, scene, stateRefs, unitGroups, setters, callbacks, gameRefs);
+                    } else {
+                        const intentKey = `loot-${lootBagData.lootBagId}`;
+                        const selectedIds = stateRefs.selectedRef.current;
+                        const aliveSelected = selectedIds.filter(id => {
+                            const u = stateRefs.unitsStateRef.current.find(u => u.id === id);
+                            return u && u.team === "player" && u.hp > 0;
+                        });
+                        const moveTargets = buildMoveTargets(aliveSelected, stateRefs.unitsStateRef.current, unitGroups, lootBagData.lootBagX, lootBagData.lootBagZ, stateRefs.formationOrderRef.current);
+                        for (const t of moveTargets) {
+                            mutableRefs.pendingIntentsRef.current[t.id] = {
+                                type: "interact", interactable: "lootBag", targetX: lootBagData.lootBagX, targetZ: lootBagData.lootBagZ,
+                                range: lootRange, requireAllPlayers: false, intentKey,
+                                callback: () => handleLootBagClick(lootBagData, scene, stateRefs, unitGroups, setters, callbacks, gameRefs)
+                            };
+                            mutableRefs.actionQueueRef.current[t.id] = { type: "move", targetX: t.x, targetZ: t.z };
+                        }
+                    }
                     return;
                 }
 
                 // Secret door click
                 if (h.object.name === "secretDoor" && h.object.userData?.secretDoorIndex !== undefined) {
                     const secretDoorData = h.object.userData as { secretDoor: { hint?: string; blockingWall: { x: number; z: number; w: number; h: number }; x: number; z: number }; secretDoorIndex: number };
-                    handleSecretDoorClick(secretDoorData, scene, secretDoorMeshes, stateRefs, unitGroups, setters, callbacks);
+                    const secretDoorRange = 3.5;
+                    const sd = secretDoorData.secretDoor;
+                    const crackCenterX = sd.x;
+                    const crackCenterZ = sd.z;
+                    if (isAnyAlivePlayerWithinRange(stateRefs.unitsStateRef, unitGroups, crackCenterX, crackCenterZ, secretDoorRange)) {
+                        handleSecretDoorClick(secretDoorData, scene, secretDoorMeshes, stateRefs, unitGroups, setters, callbacks);
+                    } else {
+                        const intentKey = `secret-${secretDoorData.secretDoorIndex}`;
+                        const selectedIds = stateRefs.selectedRef.current;
+                        const aliveSelected = selectedIds.filter(id => {
+                            const u = stateRefs.unitsStateRef.current.find(u => u.id === id);
+                            return u && u.team === "player" && u.hp > 0;
+                        });
+                        const moveTargets = buildMoveTargets(aliveSelected, stateRefs.unitsStateRef.current, unitGroups, crackCenterX, crackCenterZ, stateRefs.formationOrderRef.current);
+                        for (const t of moveTargets) {
+                            mutableRefs.pendingIntentsRef.current[t.id] = {
+                                type: "interact", interactable: "secretDoor", targetX: crackCenterX, targetZ: crackCenterZ,
+                                range: secretDoorRange, requireAllPlayers: false, intentKey,
+                                callback: () => handleSecretDoorClick(secretDoorData, scene, secretDoorMeshes, stateRefs, unitGroups, setters, callbacks)
+                            };
+                            mutableRefs.actionQueueRef.current[t.id] = { type: "move", targetX: t.x, targetZ: t.z };
+                        }
+                    }
                     return;
                 }
             }
@@ -1162,6 +1247,7 @@ export function useInputHandlers({
                     unitGroups,
                     pathsRef: gameRefs.current.paths,
                     actionQueueRef: mutableRefs.actionQueueRef.current,
+                    pendingIntentsRef: mutableRefs.pendingIntentsRef.current,
                     setQueuedActions: setters.setQueuedActions,
                     setUnits: setters.setUnits
                 });
@@ -1173,6 +1259,7 @@ export function useInputHandlers({
                         unitGroups,
                         pathsRef: gameRefs.current.paths,
                         actionQueueRef: mutableRefs.actionQueueRef.current,
+                        pendingIntentsRef: mutableRefs.pendingIntentsRef.current,
                         setQueuedActions: setters.setQueuedActions,
                         setUnits: setters.setUnits
                     },
@@ -1565,6 +1652,7 @@ function handleEnemyClick(
     stateRefs.selectedRef.current.forEach(uid => {
         const casterG = unitGroups[uid];
         if (casterG) {
+            delete mutableRefs.pendingIntentsRef.current[uid];
             casterG.userData.attackTarget = targetId;
             gameRefs.current.paths[uid] = [];
             if (targetG) {
