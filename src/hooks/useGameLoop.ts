@@ -583,9 +583,18 @@ export function useGameLoop({
         fpsFrameCount.current = 0;
         fpsLastTime.current = null;
 
+        const MAX_FRAME_RATE = 60;
+        const MIN_FRAME_MS = 1000 / MAX_FRAME_RATE;
+        let lastFrameTime = 0;
+
         const animate = (rafNow: number) => {
-            const frameStart = performance.now();
             animId = requestAnimationFrame(animate);
+
+            const elapsed = rafNow - lastFrameTime;
+            if (elapsed < MIN_FRAME_MS) return;
+            lastFrameTime = rafNow - (elapsed % MIN_FRAME_MS);
+
+            const frameStart = performance.now();
             const now = Date.now();
             updateGameClock();
             const gameNow = getGameTime();
