@@ -107,10 +107,10 @@ function createRainTexture(): THREE.CanvasTexture {
         const startX = ((index * 17) % (canvas.width + 16)) - 8;
         const startY = ((index * 23) % (canvas.height + 32)) - 16;
         const length = 13 + (index % 4) * 3;
-        const alpha = index % 6 === 0 ? 0.56 : 0.42;
+        const alpha = index % 6 === 0 ? 0.3 : 0.2;
 
         ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
-        ctx.lineWidth = index % 5 === 0 ? 0.16 : 0.12;
+        ctx.lineWidth = index % 5 === 0 ? 0.5 : 0.4;
         ctx.beginPath();
         ctx.moveTo(startX, startY);
         ctx.lineTo(startX + rainSlantX, startY + length);
@@ -1026,14 +1026,16 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         let trunkBottomRadius: number;
         let foliageRadius: number;
         let foliageHeight: number;
-        let trunkPosX = tree.x;
+        const centerX = tree.x + 0.5;
+        const centerZ = tree.z + 0.5;
+        let trunkPosX = centerX;
         let trunkPosY: number;
-        let trunkPosZ = tree.z;
+        let trunkPosZ = centerZ;
         let trunkRotX = 0;
         let trunkRotZ = 0;
-        let palmTopX = tree.x;
+        let palmTopX = centerX;
         let palmTopY: number;
-        let palmTopZ = tree.z;
+        let palmTopZ = centerZ;
 
         if (treeType === "palm") {
             // Palm: taller trunk with wider per-tree variation.
@@ -1057,13 +1059,13 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
             const trunkCenterOffset = new THREE.Vector3(0, trunkHeight / 2, 0).applyQuaternion(leanQuat);
             const trunkTopOffset = new THREE.Vector3(0, trunkHeight, 0).applyQuaternion(leanQuat);
 
-            trunkPosX = tree.x + trunkCenterOffset.x;
+            trunkPosX = centerX + trunkCenterOffset.x;
             trunkPosY = trunkCenterOffset.y;
-            trunkPosZ = tree.z + trunkCenterOffset.z;
+            trunkPosZ = centerZ + trunkCenterOffset.z;
 
-            palmTopX = tree.x + trunkTopOffset.x;
+            palmTopX = centerX + trunkTopOffset.x;
             palmTopY = trunkTopOffset.y;
-            palmTopZ = tree.z + trunkTopOffset.z;
+            palmTopZ = centerZ + trunkTopOffset.z;
         } else if (treeType === "oak") {
             // Oak: shorter thick trunk, wide round bushy foliage
             trunkHeight = 0.8 * scale;
@@ -1173,7 +1175,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
             const fullFoliageY = treeType === "oak"
                 ? trunkHeight + foliageRadius * 0.7 // Sphere engulfs top of trunk
                 : trunkHeight + foliageHeight / 2;  // Cone base at trunk top
-            foliage.position.set(tree.x, fullFoliageY, tree.z);
+            foliage.position.set(centerX, fullFoliageY, centerZ);
             registerFoliageMesh(foliage, tree.x, tree.z, fullFoliageY, foliageHeight, foliageRadius, trunkHeight, treePartMeshes);
         }
 
@@ -1207,7 +1209,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         );
         treeShadow.renderOrder = 10;
         treeShadow.rotation.x = -Math.PI / 2;
-        treeShadow.position.set(tree.x, 0.005, tree.z);
+        treeShadow.position.set(centerX, 0.005, centerZ);
         treeShadow.name = "tree";
         treeShadow.userData.treeX = tree.x;
         treeShadow.userData.treeZ = tree.z;
@@ -1557,7 +1559,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
             map: rainTexture,
             color: "#d9e5ec",
             transparent: true,
-            opacity: 0.84,
+            opacity: 1,
             depthWrite: false,
             toneMapped: false,
             fog: false

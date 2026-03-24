@@ -48,14 +48,14 @@ export const CommandBar = memo(function CommandBar({
             <button
                 className="cmd-btn"
                 onClick={onSelectAll}
-                title="Select All"
+                title="Select All (G)"
             >
                 <UsersRound size={16} />
             </button>
             <button
                 className="cmd-btn"
                 onClick={onDeselectAll}
-                title="Deselect All"
+                title="Deselect All (D)"
             >
                 <X size={16} />
             </button>

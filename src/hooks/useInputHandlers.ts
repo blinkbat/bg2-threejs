@@ -1274,6 +1274,19 @@ export function useInputHandlers({
             if (e.code === "KeyM" && !stateRefs.targetingModeRef.current) {
                 setters.setCommandMode(null);
             }
+            if (e.code === "KeyD" && !stateRefs.targetingModeRef.current) {
+                setters.setSelectedIds([]);
+                setters.setCommandMode(null);
+            }
+            if (e.code === "KeyG" && !stateRefs.targetingModeRef.current) {
+                const controllableIds = stateRefs.unitsStateRef.current
+                    .filter(u => u.team === "player" && u.hp > 0)
+                    .map(u => u.id);
+                setters.setSelectedIds(controllableIds);
+                if (controllableIds.length === 0) {
+                    setters.setCommandMode(null);
+                }
+            }
             if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) {
                 mutableRefs.keysPressed.current.add(e.code);
             }

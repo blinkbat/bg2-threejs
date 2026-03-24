@@ -69,6 +69,8 @@ export function ControlsModal({ onClose, onConfirm }: ControlsModalProps) {
                                     <Item keys="M" desc="Return to normal move mode" />
                                     <Item keys="S" desc="Stop selected units" />
                                     <Item keys="H" desc="Toggle hold position" />
+                                    <Item keys="G" desc="Select all units" />
+                                    <Item keys="D" desc="Deselect all units" />
                                 </Section>
                             </div>
                         </div>
