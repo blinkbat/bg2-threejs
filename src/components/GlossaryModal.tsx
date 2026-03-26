@@ -40,9 +40,9 @@ const CORE_GLOSSARY: ReadonlyArray<GlossaryEntry> = [
         body: "Attack-move sends selected units toward a point but lets them stop and engage enemies they notice along the way."
     },
     {
-        term: "Auto-Battle",
+        term: "Auto-Attack",
         category: "Core System",
-        body: "Auto-battle lets the party handle combat behavior automatically. You can still pause, retarget, and issue manual orders whenever you need tighter control."
+        body: "Auto-attack lets the party handle combat behavior automatically. You can still pause, retarget, and issue manual orders whenever you need tighter control."
     },
     {
         term: "Basic Attack",

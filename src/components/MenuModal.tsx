@@ -5,12 +5,16 @@ import {
     RotateCcw,
     Keyboard,
     BookOpen,
+    Eye,
+    HeartPulse,
+    Skull,
     Volume2,
     VolumeX,
     HelpCircle,
     X
 } from "lucide-react";
 import { toggleMute, isMuted } from "../audio";
+import type { AutoPauseSettings } from "../hooks/localStorage";
 import { ModalShell } from "./ModalShell";
 
 interface MenuModalProps {
@@ -21,6 +25,10 @@ interface MenuModalProps {
     onRestart: () => void;
     onSaveClick: () => void;
     onLoadClick: () => void;
+    autoPauseSettings: AutoPauseSettings;
+    onToggleAutoPauseEnemySighted: () => void;
+    onToggleAutoPauseAllyNearDeath: () => void;
+    onToggleAutoPauseAllyKilled: () => void;
 }
 
 export function MenuModal({
@@ -30,7 +38,11 @@ export function MenuModal({
     onShowGlossary,
     onRestart,
     onSaveClick,
-    onLoadClick
+    onLoadClick,
+    autoPauseSettings,
+    onToggleAutoPauseEnemySighted,
+    onToggleAutoPauseAllyNearDeath,
+    onToggleAutoPauseAllyKilled
 }: MenuModalProps) {
     const [muted, setMuted] = useState(isMuted());
 
@@ -123,6 +135,36 @@ export function MenuModal({
                         <button className="menu-btn" onClick={handleControls}>
                             <Keyboard size={18} />
                             <span>Controls</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div className="menu-section">
+                    <div className="menu-section-title">Auto-Pause</div>
+                    <div className="menu-buttons">
+                        <button
+                            className={`menu-btn ${autoPauseSettings.enemySighted ? "active" : ""}`}
+                            onClick={onToggleAutoPauseEnemySighted}
+                            aria-pressed={autoPauseSettings.enemySighted}
+                        >
+                            <Eye size={18} />
+                            <span>Enemy Sighted</span>
+                        </button>
+                        <button
+                            className={`menu-btn ${autoPauseSettings.allyNearDeath ? "active" : ""}`}
+                            onClick={onToggleAutoPauseAllyNearDeath}
+                            aria-pressed={autoPauseSettings.allyNearDeath}
+                        >
+                            <HeartPulse size={18} />
+                            <span>Ally Near Death</span>
+                        </button>
+                        <button
+                            className={`menu-btn ${autoPauseSettings.allyKilled ? "active" : ""}`}
+                            onClick={onToggleAutoPauseAllyKilled}
+                            aria-pressed={autoPauseSettings.allyKilled}
+                        >
+                            <Skull size={18} />
+                            <span>Ally Killed</span>
                         </button>
                     </div>
                 </div>

@@ -12,6 +12,7 @@ import { AREAS, type AreaId } from "../game/areas";
 import { ENEMY_STATS, getAmoebaMaxHpForSplitCount, getMonsterTypeLabel } from "../game/enemyStats";
 import { getEffectiveMaxHp, isCorePlayerId, UNIT_DATA } from "../game/playerUnits";
 import type { HotbarAssignments } from "../hooks/hotbarStorage";
+import type { AutoPauseSettings } from "../hooks/localStorage";
 import {
     type LightingTuningSettings,
     getPrimaryStatusLabel,
@@ -35,6 +36,7 @@ type DialogChoiceOption = React.ComponentProps<typeof DialogModal>["choices"][nu
 
 interface GameRenderLayerProps {
     actionQueue: ActionQueue;
+    autoPauseSettings: AutoPauseSettings;
     combatLog: CombatLogEntry[];
     commandMode: "attackMove" | null;
     consumableTargetingMode: { userId: number; itemId: string } | null;
@@ -111,7 +113,10 @@ interface GameRenderLayerProps {
     handleToggleDebug: () => void;
     handleToggleDebugFogOfWar: () => void;
     handleToggleFastMove: () => void;
-    handleTogglePartyAutoBattle: () => void;
+    handleToggleAutoPauseAllyKilled: () => void;
+    handleToggleAutoPauseAllyNearDeath: () => void;
+    handleToggleAutoPauseEnemySighted: () => void;
+    handleTogglePartyAutoAttack: () => void;
     handleTogglePause: () => void;
     handleTogglePlaytestSkipDialogs: () => void;
     handleTogglePlaytestUnlockAllSkills: () => void;
@@ -155,6 +160,7 @@ function getEnemyDisplayMaxHp(unit: Unit, stats: EnemyStats): number {
 
 export function GameRenderLayer({
     actionQueue,
+    autoPauseSettings,
     canContinueWithoutChoices,
     closeDialog,
     closeWaystoneTravelModal,
@@ -204,7 +210,10 @@ export function GameRenderLayer({
     handleToggleDebug,
     handleToggleDebugFogOfWar,
     handleToggleFastMove,
-    handleTogglePartyAutoBattle,
+    handleToggleAutoPauseAllyKilled,
+    handleToggleAutoPauseAllyNearDeath,
+    handleToggleAutoPauseEnemySighted,
+    handleTogglePartyAutoAttack,
     handleTogglePause,
     handleTogglePlaytestSkipDialogs,
     handleTogglePlaytestUnlockAllSkills,
@@ -276,7 +285,7 @@ export function GameRenderLayer({
         () => units.some(unit => selectedIdSet.has(unit.id) && unit.holdPosition),
         [selectedIdSet, units]
     );
-    const partyAutoBattleActive = React.useMemo(
+    const partyAutoAttackActive = React.useMemo(
         () => playerUnits.length > 0 && playerUnits.every(unit => unit.aiEnabled),
         [playerUnits]
     );
@@ -483,6 +492,7 @@ export function GameRenderLayer({
                 onWarpToArea={handleWarpToArea}
                 onAddXp={handleAddXp}
                 onStatBoost={handleStatBoost}
+                autoPauseSettings={autoPauseSettings}
                 onTogglePlaytestUnlockAllSkills={handleTogglePlaytestUnlockAllSkills}
                 playtestUnlockAllSkillsEnabled={playtestSettings.unlockAllSkills}
                 onTogglePlaytestSkipDialogs={handleTogglePlaytestSkipDialogs}
@@ -491,6 +501,9 @@ export function GameRenderLayer({
                 fastMoveEnabled={fastMove}
                 onToggleDebugFogOfWar={handleToggleDebugFogOfWar}
                 debugFogOfWarDisabled={debugFogOfWarDisabled}
+                onToggleAutoPauseEnemySighted={handleToggleAutoPauseEnemySighted}
+                onToggleAutoPauseAllyNearDeath={handleToggleAutoPauseAllyNearDeath}
+                onToggleAutoPauseAllyKilled={handleToggleAutoPauseAllyKilled}
                 lightingTuning={lightingTuning}
                 onUpdateLightingTuning={handleUpdateLightingTuning}
                 onResetLightingTuning={handleResetLightingTuning}
@@ -514,10 +527,10 @@ export function GameRenderLayer({
                     onAttackMove={handleAttackMove}
                     onSelectAll={handleSelectAllPlayers}
                     onDeselectAll={handleDeselectAllPlayers}
-                    onToggleAutoBattle={handleTogglePartyAutoBattle}
+                    onToggleAutoAttack={handleTogglePartyAutoAttack}
                     hasSelection={selectedIds.length > 0}
                     holdActive={holdActive}
-                    partyAutoBattleActive={partyAutoBattleActive}
+                    partyAutoAttackActive={partyAutoAttackActive}
                 />
                 <PartyBar
                     units={playerUnits}

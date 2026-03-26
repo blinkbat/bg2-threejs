@@ -403,7 +403,7 @@ function StatusTab({ unit, effectiveData, onToggleAI, unitId, onIncrementStat, d
                 className={`toggle-row ${unit.aiEnabled ? "active" : ""}`}
                 onClick={() => onToggleAI(unitId)}
             >
-                <span style={{ color: unit.aiEnabled ? "var(--ui-color-accent-success-bright)" : "var(--ui-color-text-dim)" }}>Auto-Battle</span>
+                <span style={{ color: unit.aiEnabled ? "var(--ui-color-accent-success-bright)" : "var(--ui-color-text-dim)" }}>Auto-Attack</span>
                 <span className={`toggle-track ${unit.aiEnabled ? "active" : ""}`}>
                     <span className={`toggle-thumb ${unit.aiEnabled ? "active" : ""}`} />
                 </span>

@@ -18,7 +18,7 @@ import { updateEffectAnimations } from "../core/effectScheduler";
 import { getCurrentArea } from "../game/areas";
 import type { Unit, UnitGroup } from "../core/types";
 import { ENEMY_STATS } from "../game/enemyStats";
-import { getEffectiveMaxHp } from "../game/playerUnits";
+import { getEffectiveMaxHp, isCorePlayerId } from "../game/playerUnits";
 import { getEffectivePlayerHpRegen } from "../game/equipmentState";
 import { createLiveUnitsDispatch } from "../core/stateUtils";
 import { updateCamera, updateLightning, updateWater, updateRain, updateWallTransparency, updateTreeFogVisibility, updateFogOccluderVisibility, revealAllTreeMeshes, revealAllFogOccluderMeshes, updateLightLOD, addUnitToScene, updateBillboards, updateHpBarBillboards, updateHpBars } from "../rendering/scene";
@@ -61,6 +61,7 @@ import {
 } from "../gameLoop";
 import { createAnimatedRing, handleUnitDefeat, spawnDamageNumber } from "../combat/damageEffects";
 import type { ActionQueue } from "../input";
+import type { AutoPauseSettings } from "./localStorage";
 import type { ThreeSceneState, GameRefs } from "./useThreeScene";
 
 // =============================================================================
@@ -74,9 +75,12 @@ export type InitializedSceneState = ThreeSceneState & {
     renderer: THREE.WebGLRenderer;
 };
 
+type AutoPauseReason = "ally_killed" | "ally_near_death" | "enemy_sighted";
+
 interface GameLoopStateRefs {
     unitsStateRef: React.MutableRefObject<Unit[]>;
     pausedRef: React.MutableRefObject<boolean>;
+    autoPauseSettingsRef: React.MutableRefObject<AutoPauseSettings>;
     targetingModeRef: React.MutableRefObject<{ casterId: number; skill: import("../core/types").Skill } | null>;
     skillCooldownsRef: React.MutableRefObject<Record<string, { end: number; duration: number }>>;
     actionQueueRef: React.MutableRefObject<ActionQueue>;
@@ -90,6 +94,7 @@ interface GameLoopCallbacks {
     addLog: (text: string, color?: string) => void;
     processPendingIntents: () => void;
     processActionQueue: (defeatedThisFrame: Set<number>) => void;
+    requestAutoPause: (reason: AutoPauseReason) => boolean;
     onPerfSample?: (sample: PerfFrameSample) => void;
 }
 
@@ -143,6 +148,7 @@ export interface PerfFrameSample {
 const PERF_SAMPLE_FPS_THRESHOLD = 45;
 const PERF_CAPTURE_WINDOW_MS = 5000;
 const FPS_UI_SAMPLE_WINDOW_MS = 500;
+const AUTO_PAUSE_NEAR_DEATH_THRESHOLD = 0.25;
 
 function getProgramCount(info: THREE.WebGLInfo): number | null {
     const programs = Reflect.get(info, "programs");
@@ -160,6 +166,97 @@ function getJsHeapUsedMb(): number | null {
     if (typeof usedBytes !== "number" || !Number.isFinite(usedBytes)) return null;
 
     return usedBytes / (1024 * 1024);
+}
+
+function collectVisibleEnemyIds(
+    units: Unit[],
+    unitGroups: Record<number, UnitGroup>,
+    visibility: number[][],
+    useFogVisibility: boolean
+): Set<string> {
+    const visibleEnemyIds = new Set<string>();
+    const areaId = getCurrentArea().id;
+
+    for (const unit of units) {
+        if (unit.team !== "enemy" || unit.hp <= 0) continue;
+
+        const group = unitGroups[unit.id];
+        if (!group) continue;
+
+        const enemyKey = `${areaId}:${unit.id}`;
+
+        if (!useFogVisibility) {
+            visibleEnemyIds.add(enemyKey);
+            continue;
+        }
+
+        const cx = Math.floor(group.position.x);
+        const cz = Math.floor(group.position.z);
+        if ((visibility[cx]?.[cz] ?? 0) === 2) {
+            visibleEnemyIds.add(enemyKey);
+        }
+    }
+
+    return visibleEnemyIds;
+}
+
+function hasNewVisibleEnemy(
+    sightedEnemyIds: Set<string>,
+    currentVisibleEnemyIds: Set<string>
+): boolean {
+    for (const enemyId of currentVisibleEnemyIds) {
+        if (!sightedEnemyIds.has(enemyId)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function getCorePartyAutoPauseReason(
+    units: Unit[],
+    previousHpById: Map<number, number>,
+    autoPauseSettings: AutoPauseSettings
+): AutoPauseReason | null {
+    let nearDeathDetected = false;
+
+    for (const unit of units) {
+        if (unit.team !== "player" || !isCorePlayerId(unit.id)) continue;
+
+        const previousHp = previousHpById.get(unit.id);
+        if (previousHp === undefined || previousHp <= 0) continue;
+
+        if (unit.hp <= 0) {
+            if (autoPauseSettings.allyKilled) {
+                return "ally_killed";
+            }
+            continue;
+        }
+
+        if (!autoPauseSettings.allyNearDeath) {
+            continue;
+        }
+
+        const maxHp = getEffectiveMaxHp(unit.id, unit);
+        const nearDeathThreshold = maxHp * AUTO_PAUSE_NEAR_DEATH_THRESHOLD;
+        if (previousHp > nearDeathThreshold && unit.hp <= nearDeathThreshold) {
+            nearDeathDetected = true;
+        }
+    }
+
+    return nearDeathDetected ? "ally_near_death" : null;
+}
+
+function buildCorePartyHpById(units: Unit[]): Map<number, number> {
+    const hpById = new Map<number, number>();
+
+    for (const unit of units) {
+        if (unit.team === "player" && isCorePlayerId(unit.id)) {
+            hpById.set(unit.id, unit.hp);
+        }
+    }
+
+    return hpById;
 }
 
 function updateVisualEffects(
@@ -553,6 +650,8 @@ export function useGameLoop({
     const fpsLastTime = useRef<number | null>(null);
     const perfCaptureUntilRef = useRef(0);
     const previousHpByIdRef = useRef<Map<number, number>>(new Map());
+    const previousCorePartyHpByIdRef = useRef<Map<number, number>>(new Map());
+    const sightedEnemyIdsRef = useRef<Set<string>>(new Set());
 
     const updateCam = useCallback(() => {
         if (sceneState?.camera) {
@@ -579,6 +678,8 @@ export function useGameLoop({
         const spatialTargetingEntriesBuffer: UnitSpatialEntry[] = [];
         let fogVisualTransitionsActive = true;
         previousHpByIdRef.current = new Map(stateRefs.unitsStateRef.current.map(unit => [unit.id, unit.hp]));
+        previousCorePartyHpByIdRef.current = buildCorePartyHpById(stateRefs.unitsStateRef.current);
+        sightedEnemyIdsRef.current = new Set();
         const setUnitsLive = createLiveUnitsDispatch(callbacks.setUnits, stateRefs.unitsStateRef);
 
         fpsFrameCount.current = 0;
@@ -599,7 +700,7 @@ export function useGameLoop({
             updateGameClock();
             const gameNow = getGameTime();
             const refs = gameRefs.current;
-            const isPaused = stateRefs.pausedRef.current;
+            let isPaused = stateRefs.pausedRef.current;
 
             // Snapshot units and populate O(1) lookup caches for all systems this frame
             let currentUnits = stateRefs.unitsStateRef.current;
@@ -866,31 +967,67 @@ export function useGameLoop({
             }
             const playerUnits = playerUnitsBuffer;
             let fogVisibilityChanged = false;
-                if (fogTexture && fogMesh) {
-                    fogVisibilityChanged = updateFogOfWar(
-                        refs.visibility,
-                        playerUnits,
-                        unitGroups,
-                        fogTexture,
-                        currentUnits,
-                        fogMesh,
-                        debugFogOfWarDisabled
-                    );
-                }
+            if (fogTexture && fogMesh) {
+                fogVisibilityChanged = updateFogOfWar(
+                    refs.visibility,
+                    playerUnits,
+                    unitGroups,
+                    fogTexture,
+                    currentUnits,
+                    fogMesh,
+                    debugFogOfWarDisabled
+                );
+            }
 
-                if (getCurrentArea().hasFogOfWar && !debugFogOfWarDisabled) {
-                    // Update tree and tall obstacle visibility only when visibility changes
-                    // or while previous transitions are still animating.
-                    if (fogVisibilityChanged || fogVisualTransitionsActive) {
-                        const treeTransitionsActive = updateTreeFogVisibility(treeMeshes, refs.visibility);
-                        const occluderTransitionsActive = updateFogOccluderVisibility(fogOccluderMeshes, refs.visibility);
-                        fogVisualTransitionsActive = treeTransitionsActive || occluderTransitionsActive;
-                    }
-                } else {
-                    revealAllTreeMeshes(treeMeshes);
-                    revealAllFogOccluderMeshes(fogOccluderMeshes);
-                    fogVisualTransitionsActive = false;
+            const useFogVisibility = getCurrentArea().hasFogOfWar && !debugFogOfWarDisabled;
+            if (useFogVisibility) {
+                // Update tree and tall obstacle visibility only when visibility changes
+                // or while previous transitions are still animating.
+                if (fogVisibilityChanged || fogVisualTransitionsActive) {
+                    const treeTransitionsActive = updateTreeFogVisibility(treeMeshes, refs.visibility);
+                    const occluderTransitionsActive = updateFogOccluderVisibility(fogOccluderMeshes, refs.visibility);
+                    fogVisualTransitionsActive = treeTransitionsActive || occluderTransitionsActive;
                 }
+            } else {
+                revealAllTreeMeshes(treeMeshes);
+                revealAllFogOccluderMeshes(fogOccluderMeshes);
+                fogVisualTransitionsActive = false;
+            }
+
+            const autoPauseSettings = stateRefs.autoPauseSettingsRef.current;
+            let autoPauseReason = getCorePartyAutoPauseReason(
+                currentUnits,
+                previousCorePartyHpByIdRef.current,
+                autoPauseSettings
+            );
+            previousCorePartyHpByIdRef.current = buildCorePartyHpById(currentUnits);
+            const visibleEnemyIds = collectVisibleEnemyIds(
+                currentUnits,
+                unitGroups,
+                refs.visibility,
+                useFogVisibility
+            );
+            const enemySightedThisFrame = hasNewVisibleEnemy(
+                sightedEnemyIdsRef.current,
+                visibleEnemyIds
+            );
+            for (const enemyId of visibleEnemyIds) {
+                sightedEnemyIdsRef.current.add(enemyId);
+            }
+
+            if (
+                autoPauseReason === null
+                && autoPauseSettings.enemySighted
+                && enemySightedThisFrame
+            ) {
+                autoPauseReason = "enemy_sighted";
+            }
+
+            if (!isPaused && autoPauseReason !== null) {
+                callbacks.requestAutoPause(autoPauseReason);
+                isPaused = stateRefs.pausedRef.current;
+            }
+
             const fogMs = performance.now() - sectionStart;
             let aiMs = 0;
             let unitAiMs = 0;

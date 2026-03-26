@@ -435,21 +435,6 @@
     border-color: var(--ui-color-accent-danger);
 }
 
-.menu-subsection {
-    margin-top: 12px;
-    padding-top: 12px;
-    border-top: 1px solid var(--ui-color-surface-muted);
-}
-
-.menu-subsection-title {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    color: var(--ui-color-text-faint);
-    margin-bottom: 8px;
-}
-
 .menu-buttons-small {
     gap: 6px;
 }

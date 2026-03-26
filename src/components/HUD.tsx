@@ -4,6 +4,7 @@ import { MenuModal } from "./MenuModal";
 import { JukeboxModal } from "./JukeboxModal";
 import { UIColorAdjuster } from "./UIColorAdjuster";
 import { AREAS, type AreaId } from "../game/areas";
+import type { AutoPauseSettings } from "../hooks/localStorage";
 
 interface LightingTuningSettings {
     shadowsEnabled: boolean;
@@ -33,6 +34,7 @@ interface HUDProps {
     onLoadClick: () => void;
     debug: boolean;
     onToggleDebug: () => void;
+    autoPauseSettings: AutoPauseSettings;
     onWarpToArea?: (areaId: AreaId) => void;
     onAddXp?: (amount: number) => void;
     onStatBoost?: () => void;
@@ -44,6 +46,9 @@ interface HUDProps {
     fastMoveEnabled?: boolean;
     onToggleDebugFogOfWar?: () => void;
     debugFogOfWarDisabled?: boolean;
+    onToggleAutoPauseEnemySighted: () => void;
+    onToggleAutoPauseAllyNearDeath: () => void;
+    onToggleAutoPauseAllyKilled: () => void;
     lightingTuning?: LightingTuningSettings;
     onUpdateLightingTuning?: (patch: Partial<LightingTuningSettings>) => void;
     onResetLightingTuning?: () => void;
@@ -72,6 +77,7 @@ export const HUD = memo(function HUD({
     onLoadClick,
     debug,
     onToggleDebug,
+    autoPauseSettings,
     onWarpToArea,
     onAddXp,
     onStatBoost,
@@ -83,6 +89,9 @@ export const HUD = memo(function HUD({
     fastMoveEnabled,
     onToggleDebugFogOfWar,
     debugFogOfWarDisabled,
+    onToggleAutoPauseEnemySighted,
+    onToggleAutoPauseAllyNearDeath,
+    onToggleAutoPauseAllyKilled,
     lightingTuning,
     onUpdateLightingTuning,
     onResetLightingTuning,
@@ -467,6 +476,10 @@ export const HUD = memo(function HUD({
                     onRestart={onRestart}
                     onSaveClick={onSaveClick}
                     onLoadClick={onLoadClick}
+                    autoPauseSettings={autoPauseSettings}
+                    onToggleAutoPauseEnemySighted={onToggleAutoPauseEnemySighted}
+                    onToggleAutoPauseAllyNearDeath={onToggleAutoPauseAllyNearDeath}
+                    onToggleAutoPauseAllyKilled={onToggleAutoPauseAllyKilled}
                 />
             )}
 

@@ -11,6 +11,7 @@ export type HotbarAssignments = Record<number, (string | null)[]>;
 const HOTBAR_STORAGE_KEY = "skillHotbarAssignments";
 const HOTBAR_SLOT_COUNT = 5;
 const FORMATION_STORAGE_KEY = "formationOrder";
+const AUTO_PAUSE_SETTINGS_STORAGE_KEY = "autoPauseSettings";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -87,6 +88,58 @@ export function loadFormationOrder(): number[] {
 export function saveFormationOrder(order: number[]): void {
     try {
         localStorage.setItem(FORMATION_STORAGE_KEY, JSON.stringify(order));
+    } catch { /* ignore */ }
+}
+
+// -----------------------------------------------------------------------------
+// Auto-Pause Settings
+// -----------------------------------------------------------------------------
+
+export interface AutoPauseSettings {
+    enemySighted: boolean;
+    allyNearDeath: boolean;
+    allyKilled: boolean;
+}
+
+const DEFAULT_AUTO_PAUSE_SETTINGS: AutoPauseSettings = {
+    enemySighted: false,
+    allyNearDeath: false,
+    allyKilled: false,
+};
+
+function sanitizeAutoPauseSettings(raw: unknown): AutoPauseSettings | null {
+    if (!isRecord(raw)) return null;
+
+    return {
+        enemySighted: typeof raw.enemySighted === "boolean"
+            ? raw.enemySighted
+            : DEFAULT_AUTO_PAUSE_SETTINGS.enemySighted,
+        allyNearDeath: typeof raw.allyNearDeath === "boolean"
+            ? raw.allyNearDeath
+            : DEFAULT_AUTO_PAUSE_SETTINGS.allyNearDeath,
+        allyKilled: typeof raw.allyKilled === "boolean"
+            ? raw.allyKilled
+            : DEFAULT_AUTO_PAUSE_SETTINGS.allyKilled,
+    };
+}
+
+export function loadAutoPauseSettings(): AutoPauseSettings {
+    try {
+        const stored = localStorage.getItem(AUTO_PAUSE_SETTINGS_STORAGE_KEY);
+        if (stored !== null) {
+            const parsed = sanitizeAutoPauseSettings(JSON.parse(stored));
+            if (parsed) {
+                return parsed;
+            }
+        }
+    } catch { /* ignore */ }
+
+    return { ...DEFAULT_AUTO_PAUSE_SETTINGS };
+}
+
+export function saveAutoPauseSettings(settings: AutoPauseSettings): void {
+    try {
+        localStorage.setItem(AUTO_PAUSE_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
     } catch { /* ignore */ }
 }
 

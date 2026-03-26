@@ -8,16 +8,16 @@ interface CommandBarProps {
     onAttackMove: () => void;
     onSelectAll: () => void;
     onDeselectAll: () => void;
-    onToggleAutoBattle: () => void;
+    onToggleAutoAttack: () => void;
     hasSelection: boolean;
     holdActive: boolean;
-    partyAutoBattleActive: boolean;
+    partyAutoAttackActive: boolean;
 }
 
 export const CommandBar = memo(function CommandBar({
     commandMode, onStop, onHold, onAttackMove,
-    onSelectAll, onDeselectAll, onToggleAutoBattle,
-    hasSelection, holdActive, partyAutoBattleActive
+    onSelectAll, onDeselectAll, onToggleAutoAttack,
+    hasSelection, holdActive, partyAutoAttackActive
 }: CommandBarProps) {
     return (
         <div className="command-bar glass-panel">
@@ -60,9 +60,9 @@ export const CommandBar = memo(function CommandBar({
                 <X size={16} />
             </button>
             <button
-                className={`cmd-btn${partyAutoBattleActive ? " cmd-active" : ""}`}
-                onClick={onToggleAutoBattle}
-                title="Toggle Party Auto-Battle"
+                className={`cmd-btn${partyAutoAttackActive ? " cmd-active" : ""}`}
+                onClick={onToggleAutoAttack}
+                title="Toggle Party Auto-Attack"
             >
                 <Brain size={16} />
             </button>

@@ -41,7 +41,13 @@ import { useThreeScene, useGameLoop, useInputHandlers, type InitializedSceneStat
 // UI Components
 import type { HotbarAssignments } from "../hooks/hotbarStorage";
 import { loadHotbarAssignments, saveHotbarAssignments } from "../hooks/hotbarStorage";
-import { loadPlaytestSettings, type PlaytestSettings } from "../hooks/localStorage";
+import {
+    loadAutoPauseSettings,
+    loadPlaytestSettings,
+    saveAutoPauseSettings,
+    type AutoPauseSettings,
+    type PlaytestSettings
+} from "../hooks/localStorage";
 import { loadFormationOrder, saveFormationOrder } from "../hooks/formationStorage";
 import type { WaystoneDestination } from "../components/WaystoneTravelModal";
 import { captureFogVisibilityMemory } from "../game/fogMemory";
@@ -59,6 +65,8 @@ import { useGameDebugControls } from "./useGameDebugControls";
 // GAME COMPONENT
 // =============================================================================
 
+type AutoPauseReason = "ally_killed" | "ally_near_death" | "enemy_sighted";
+
 export function Game({
     onRestart, onAreaTransition, onShowControls, onShowHelp, onShowGlossary, onCloseInfoModal, infoModalOpen, saveLoadOpen,
     menuOpen, jukeboxOpen,
@@ -72,6 +80,7 @@ export function Game({
 
     // Initial camera offset
     const initialCamOffset = useMemo(() => spawnPoint ?? getCurrentArea().defaultSpawn, [spawnPoint]);
+    const [autoPauseSettings, setAutoPauseSettings] = useState<AutoPauseSettings>(loadAutoPauseSettings);
     const [playtestSettings, setPlaytestSettings] = useState<PlaytestSettings>(loadPlaytestSettings);
     const playtestUnlockAllSkills = playtestSettings.unlockAllSkills;
     const playtestSkipDialogs = playtestSettings.skipDialogs;
@@ -143,6 +152,7 @@ export function Game({
     const selectedRef = useRef(selectedIds);
     const unitsStateRef = useRef(units);
     const pausedRef = useRef(paused);
+    const autoPauseSettingsRef = useRef(autoPauseSettings);
     const pauseToggleLockedRef = useRef(false);
     const targetingModeRef = useRef(targetingMode);
     const consumableTargetingModeRef = useRef(consumableTargetingMode);
@@ -185,6 +195,7 @@ export function Game({
     useEffect(() => { selectedRef.current = selectedIds; }, [selectedIds]);
     useEffect(() => { unitsStateRef.current = units; }, [units]);
     useEffect(() => { pausedRef.current = paused; }, [paused]);
+    useEffect(() => { autoPauseSettingsRef.current = autoPauseSettings; }, [autoPauseSettings]);
     useEffect(() => {
         if (pausedRef.current) {
             pauseGameClock();
@@ -834,6 +845,38 @@ export function Game({
         actionQueueRef,
         moveStartRef: { current: gameRefs.current.moveStart }
     }), [gameRefs]);
+
+    const updateAutoPauseSettings = useCallback((patch: Partial<AutoPauseSettings>) => {
+        setAutoPauseSettings(prev => {
+            const next = { ...prev, ...patch };
+            autoPauseSettingsRef.current = next;
+            saveAutoPauseSettings(next);
+            return next;
+        });
+    }, []);
+
+    const requestAutoPause = useCallback((reason: AutoPauseReason): boolean => {
+        if (pausedRef.current) {
+            return false;
+        }
+
+        togglePause(
+            getPauseRuntimeRefs(),
+            { pausedRef },
+            { setPaused, setSkillCooldowns },
+            doProcessQueue
+        );
+
+        if (reason === "ally_killed") {
+            addLog("Auto-pause: Ally killed.", "#ef4444");
+        } else if (reason === "ally_near_death") {
+            addLog("Auto-pause: Ally near death.", "#f59e0b");
+        } else {
+            addLog("Auto-pause: Enemy sighted.", "#facc15");
+        }
+
+        return true;
+    }, [addLog, doProcessQueue, getPauseRuntimeRefs]);
 
     useEffect(() => {
         if (!anyMenuOpen || pausedRef.current) return;
@@ -1567,6 +1610,7 @@ export function Game({
     const gameLoopStateRefs = useMemo(() => ({
         unitsStateRef,
         pausedRef,
+        autoPauseSettingsRef,
         targetingModeRef,
         skillCooldownsRef,
         actionQueueRef
@@ -1580,8 +1624,9 @@ export function Game({
         addLog,
         processPendingIntents: doProcessPendingIntents,
         processActionQueue: doProcessQueue,
+        requestAutoPause,
         onPerfSample
-    }), [addLog, doProcessPendingIntents, doProcessQueue, onPerfSample]);
+    }), [addLog, doProcessPendingIntents, doProcessQueue, onPerfSample, requestAutoPause]);
 
     useGameLoop({
         sceneState: gameLoopSceneState,
@@ -1897,15 +1942,15 @@ export function Game({
         setCommandMode(null);
     }, []);
 
-    const handleTogglePartyAutoBattle = useCallback(() => {
+    const handleTogglePartyAutoAttack = useCallback(() => {
         const players = unitsStateRef.current.filter(u => u.team === "player");
         if (players.length === 0) return;
 
-        const enableAutoBattle = players.some(u => !u.aiEnabled);
-        updateUnitsWhere(setUnits, u => u.team === "player", { aiEnabled: enableAutoBattle });
+        const enableAutoAttack = players.some(u => !u.aiEnabled);
+        updateUnitsWhere(setUnits, u => u.team === "player", { aiEnabled: enableAutoAttack });
         addLog(
-            `Auto-battle ${enableAutoBattle ? "enabled" : "disabled"} for party and summons.`,
-            enableAutoBattle ? "#22c55e" : "#f59e0b"
+            `Auto-attack ${enableAutoAttack ? "enabled" : "disabled"} for party and summons.`,
+            enableAutoAttack ? "#22c55e" : "#f59e0b"
         );
     }, [addLog]);
 
@@ -1920,6 +1965,18 @@ export function Game({
             doProcessQueue
         );
     }, [doProcessQueue, getPauseRuntimeRefs]);
+
+    const handleToggleAutoPauseEnemySighted = useCallback(() => {
+        updateAutoPauseSettings({ enemySighted: !autoPauseSettingsRef.current.enemySighted });
+    }, [updateAutoPauseSettings]);
+
+    const handleToggleAutoPauseAllyNearDeath = useCallback(() => {
+        updateAutoPauseSettings({ allyNearDeath: !autoPauseSettingsRef.current.allyNearDeath });
+    }, [updateAutoPauseSettings]);
+
+    const handleToggleAutoPauseAllyKilled = useCallback(() => {
+        updateAutoPauseSettings({ allyKilled: !autoPauseSettingsRef.current.allyKilled });
+    }, [updateAutoPauseSettings]);
 
     const clampUnitToEffectiveCaps = useCallback((unitId: number) => {
         updateUnitWith(setUnits, unitId, u => ({
@@ -2201,10 +2258,14 @@ export function Game({
             handleToggleDebug={handleToggleDebug}
             handleToggleDebugFogOfWar={handleToggleDebugFogOfWar}
             handleToggleFastMove={handleToggleFastMove}
-            handleTogglePartyAutoBattle={handleTogglePartyAutoBattle}
+            handleToggleAutoPauseAllyKilled={handleToggleAutoPauseAllyKilled}
+            handleToggleAutoPauseAllyNearDeath={handleToggleAutoPauseAllyNearDeath}
+            handleToggleAutoPauseEnemySighted={handleToggleAutoPauseEnemySighted}
+            handleTogglePartyAutoAttack={handleTogglePartyAutoAttack}
             handleTogglePause={handleTogglePause}
             handleTogglePlaytestSkipDialogs={handleTogglePlaytestSkipDialogs}
             handleTogglePlaytestUnlockAllSkills={handleTogglePlaytestUnlockAllSkills}
+            autoPauseSettings={autoPauseSettings}
             handleUnequipItem={handleUnequipItem}
             handleUpdateLightingTuning={handleUpdateLightingTuning}
             handleUseConsumable={handleUseConsumable}
