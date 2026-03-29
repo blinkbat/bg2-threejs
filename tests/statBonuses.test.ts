@@ -7,6 +7,7 @@ vi.mock("../src/game/equipmentState", () => ({
         damage: [1, 4] as [number, number],
         armor: 0,
         bonusMaxHp: 0,
+        bonusMaxMana: 0,
         range: undefined,
         projectileColor: undefined,
         attackCooldown: undefined,

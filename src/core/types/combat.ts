@@ -6,6 +6,7 @@ import * as THREE from "three";
 
 // Damage types - armor only reduces physical damage
 export type DamageType = "physical" | "fire" | "cold" | "lightning" | "chaos" | "holy";
+export type SkillKind = "spell" | "ability";
 type SkillDeliveryMode = "melee" | "ranged";
 type SkillOnHitEffectType = "stun" | "attack_down" | "move_slow";
 
@@ -17,6 +18,7 @@ export interface SkillOnHitEffect {
 
 export interface Skill {
     name: string;
+    kind: SkillKind;
     description?: string;  // Short description for tooltip
     flavor?: string;       // Flavor text for tooltip
     manaCost: number;

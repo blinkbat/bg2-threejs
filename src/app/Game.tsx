@@ -1859,6 +1859,10 @@ export function Game({
     const handleCastSkill = useCallback((casterId: number, skill: Skill) => {
         const caster = units.find(u => u.id === casterId);
         if (!caster || caster.hp <= 0 || (caster.mana ?? 0) < skill.manaCost) return;
+        if (skill.kind === "spell" && (caster.statusEffects?.some(effect => effect.type === "silenced") ?? false)) {
+            addLog(`${UNIT_DATA[casterId]?.name ?? "Unknown"} is silenced and cannot cast ${skill.name}.`, COLORS.silencedText);
+            return;
+        }
         if (skill.isCantrip && (caster.cantripUses?.[skill.name] ?? 0) <= 0) {
             addLog(`${UNIT_DATA[casterId]?.name ?? "Unknown"}: No uses remaining!`, getSkillTextColor(skill.type, skill.damageType));
             return;
@@ -2149,7 +2153,7 @@ export function Game({
             { setTargetingMode, setQueuedActions },
             sceneState.unitGroups, skillCtx, addLog
         );
-    }, [handleConsumableTarget, sceneState, getSkillContext, addLog]);
+    }, [handleConsumableTarget, sceneState, getSkillContext, addLog, gameRefs]);
 
     const handleAssignSkill = useCallback((unitId: number, slotIndex: number, skillName: string | null) => {
         setHotbarAssignments(prev => {

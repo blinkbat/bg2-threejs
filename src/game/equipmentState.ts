@@ -187,6 +187,21 @@ export function getEffectivePlayerMoveSpeedMultiplier(unitId: number): number {
     return getEffectivePlayerEquipmentStats(unitId).moveSpeedMultiplier;
 }
 
+/** Get bonus crit chance from equipment */
+export function getEffectivePlayerBonusCritChance(unitId: number): number {
+    return getEffectivePlayerEquipmentStats(unitId).bonusCritChance;
+}
+
+/** Get lifesteal from equipment (0-1) */
+export function getEffectivePlayerLifesteal(unitId: number): number {
+    return getEffectivePlayerEquipmentStats(unitId).lifesteal;
+}
+
+/** Get bonus max mana from equipment */
+export function getEffectivePlayerBonusMaxMana(unitId: number): number {
+    return getEffectivePlayerEquipmentStats(unitId).bonusMaxMana;
+}
+
 // =============================================================================
 // TRANSACTIONAL EQUIP/UNEQUIP API
 // =============================================================================

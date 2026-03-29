@@ -30,6 +30,7 @@ import { LEVEL_UP_HP, LEVEL_UP_MANA, LEVEL_UP_STAT_POINTS, LEVEL_UP_SKILL_POINTS
 import { trySubmergeKraken } from "../gameLoop/enemyBehaviors/submerge";
 import { isEnemyUntargetable } from "../gameLoop/enemyBehaviors/untargetable";
 import { getCurrentArea } from "../game/areas";
+import { getEffectivePlayerLifesteal } from "../game/equipmentState";
 
 // =============================================================================
 // PROJECTILE CREATION
@@ -831,6 +832,19 @@ export function applyDamageToUnit(
         }
     }
 
+    // Equipment lifesteal: player units heal for a fraction of damage dealt.
+    if (attackerId !== undefined && effectiveDamage > 0) {
+        const attackerUnit = unitsStateRef.current.find(u => u.id === attackerId && u.team === "player" && u.hp > 0);
+        const attackerGroup = unitsRef[attackerId];
+        if (attackerUnit && attackerGroup) {
+            const equipLifesteal = getEffectivePlayerLifesteal(attackerId);
+            if (equipLifesteal > 0) {
+                const healAmount = Math.max(1, Math.floor(effectiveDamage * equipLifesteal));
+                applyLifesteal(scene, damageTexts, setUnits, attackerId, attackerGroup.position.x, attackerGroup.position.z, healAmount);
+            }
+        }
+    }
+
     // Defeat handling
     if (newHp <= 0) {
         if (defeatedThisFrame && !skipDefeatTracking) {
@@ -1053,9 +1067,9 @@ export function showDamageVisual(
     damageTexts: DamageText[],
     addLog: (text: string, color?: string) => void,
     logMessage: string,
-    _now?: number
+    now?: number
 ): void {
-    hitFlashRef[unitId] = getGameTime();
+    hitFlashRef[unitId] = now ?? getGameTime();
     spawnDamageNumber(scene, unitX, unitZ, damage, color, damageTexts);
     addLog(logMessage, color);
 }

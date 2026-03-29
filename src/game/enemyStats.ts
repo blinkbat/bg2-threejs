@@ -43,6 +43,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         aggressiveTargeting: true,  // Immediately retargets to damage sources
         expReward: 250,
         chargeAttack: {
+            kind: "ability",
             name: "Cataclysm",
             cooldown: 18000,   // 18 seconds between charges
             chargeTime: 5000,  // 5 seconds to charge
@@ -85,6 +86,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         moveSpeed: 0.2,        // VERY slow
         expReward: 300,
         tentacleSkill: {
+            kind: "ability",
             cooldown: 4000,        // Spawn tentacle every 4 seconds
             maxTentacles: 3,       // Up to 3 active tentacles
             spawnRange: 6,         // Tentacles spawn up to 6 tiles away toward targets
@@ -111,6 +113,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         biteDamage: [14, 22],
         biteCrit: 40,
         glareSkill: {
+            kind: "ability",
             name: "Stunning Glare",
             cooldown: 8000,
             range: 7,
@@ -173,6 +176,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         moveSpeed: 0.5,  // 50% slower than normal - lumbering
         expReward: 36,
         spawnSkill: {
+            kind: "ability",
             name: "spawn",
             spawnType: "broodling",
             cooldown: 4000,  // Spawn every 4 seconds when in combat
@@ -235,6 +239,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         kiteCooldown: 5000,
         // Vines skill - immobilizes and damages target
         vinesSkill: {
+            kind: "spell",
             cooldown: 12000,   // 12 seconds between casts
             range: 6,          // Cast range
             duration: 5000,    // 5 seconds immobilized
@@ -277,6 +282,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         expReward: 16,
         baseCrit: 20,      // 20% crit chance
         leapSkill: {
+            kind: "ability",
             cooldown: 7000,    // Can leap every 7 seconds
             minRange: 3,       // Only leap if target is at least 3 tiles away
             maxRange: 5,       // Maximum leap distance
@@ -366,6 +372,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         moveSpeed: DEFAULT_MOVE_SPEED,
         expReward: 15,
         healSkill: {
+            kind: "spell",
             name: "Dark Mending",
             cooldown: 8000,  // 8 seconds
             heal: [6, 12],
@@ -435,6 +442,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         kiteCooldown: 4000,
         // Raise dead - batch spawns skeleton minions, re-raises when all die
         raiseSkill: {
+            kind: "spell",
             spawnType: "skeleton_minion",
             cooldown: 8000,        // 8 seconds after all die before re-raising
             spawnCount: 3,         // Raises 3 at once
@@ -442,6 +450,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         },
         // Area curse - delayed AoE at player position
         curseSkill: {
+            kind: "spell",
             name: "Dark Curse",
             cooldown: 15000,       // 15 seconds between casts
             range: 8,              // Cast range
@@ -471,6 +480,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         kiteDistance: 3,
         kiteCooldown: 4000,
         sleepSkill: {
+            kind: "spell",
             name: "Dream Veil",
             cooldown: 12000,
             range: 8,
@@ -478,6 +488,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
             accuracy: 65
         },
         dreamEaterSkill: {
+            kind: "spell",
             name: "Dream Eater",
             cooldown: 6000,
             range: 8,
@@ -500,6 +511,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         moveSpeed: 0.35,
         expReward: 72,
         breathSkill: {
+            kind: "ability",
             name: "Fire Breath",
             cooldown: 4000,
             range: 4,
@@ -541,6 +553,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         size: 2.0,
         expReward: 82,
         skill: {
+            kind: "ability",
             name: "Swipe",
             cooldown: 10000,  // 10 seconds
             damage: [9, 16],
@@ -633,6 +646,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         flying: true,
         expReward: 52,
         phaseShiftSkill: {
+            kind: "spell",
             name: "Umbral Drift",
             cooldown: 7000,
             invisibleDuration: 1200,

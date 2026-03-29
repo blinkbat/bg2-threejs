@@ -136,6 +136,7 @@ function makeUnit(overrides: Partial<Unit> = {}): Unit {
 function makeSkill(overrides: Partial<Skill> = {}): Skill {
     return {
         name: "Warcry",
+        kind: "ability",
         manaCost: 5,
         cooldown: 1000,
         type: "buff",

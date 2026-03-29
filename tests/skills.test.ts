@@ -97,11 +97,13 @@ vi.mock("../src/game/equipmentState", () => ({
         damage: [1, 4] as [number, number],
         armor: 0,
         bonusMaxHp: 0,
+        bonusMaxMana: 0,
         range: undefined,
         projectileColor: undefined,
         attackCooldown: undefined,
         damageType: undefined,
     }),
+    getEffectivePlayerBonusCritChance: () => 0,
     getEffectivePlayerBonusMagicDamage: () => 0,
     getEffectivePlayerMoveSpeedMultiplier: () => 1,
 }));
@@ -206,19 +208,26 @@ describe("executeSkill", () => {
         expect(SKILLS.vishasEyes.manaCost).toBe(0);
     });
 
+    it("labels player skills as spells or abilities", () => {
+        expect(SKILLS.fireball.kind).toBe("spell");
+        expect(SKILLS.bodySwap.kind).toBe("spell");
+        expect(SKILLS.warcry.kind).toBe("ability");
+        expect(SKILLS.fivePointPalm.kind).toBe("ability");
+    });
+
     describe("precondition checks", () => {
         it("returns false when caster is dead", () => {
             const caster = makeUnit({ id: 1, hp: 0, mana: 50 });
             const casterG = makeUnitGroup();
             const ctx = makeCtx([caster], { 1: casterG });
-            const skill: Skill = { name: "Fireball", manaCost: 15, cooldown: 5000, type: "damage", targetType: "aoe", range: 10, damageRange: [8, 14], damageType: "fire" };
+            const skill: Skill = { name: "Fireball", kind: "spell", manaCost: 15, cooldown: 5000, type: "damage", targetType: "aoe", range: 10, damageRange: [8, 14], damageType: "fire" };
 
             expect(executeSkill(ctx, 1, skill, 10, 10)).toBe(false);
         });
 
         it("returns false when caster is not found in units", () => {
             const ctx = makeCtx([], {});
-            const skill: Skill = { name: "Fireball", manaCost: 15, cooldown: 5000, type: "damage", targetType: "aoe", range: 10, damageRange: [8, 14], damageType: "fire" };
+            const skill: Skill = { name: "Fireball", kind: "spell", manaCost: 15, cooldown: 5000, type: "damage", targetType: "aoe", range: 10, damageRange: [8, 14], damageType: "fire" };
 
             expect(executeSkill(ctx, 1, skill, 10, 10)).toBe(false);
         });
@@ -227,7 +236,7 @@ describe("executeSkill", () => {
             const caster = makeUnit({ id: 1, hp: 30, mana: 50 });
             const ctx = makeCtx([caster], {}); // no group for id 1
 
-            const skill: Skill = { name: "Fireball", manaCost: 15, cooldown: 5000, type: "damage", targetType: "aoe", range: 10, damageRange: [8, 14], damageType: "fire" };
+            const skill: Skill = { name: "Fireball", kind: "spell", manaCost: 15, cooldown: 5000, type: "damage", targetType: "aoe", range: 10, damageRange: [8, 14], damageType: "fire" };
 
             expect(executeSkill(ctx, 1, skill, 10, 10)).toBe(false);
         });
@@ -249,7 +258,7 @@ describe("executeSkill", () => {
             });
             const casterG = makeUnitGroup();
             const ctx = makeCtx([caster], { 1: casterG });
-            const skill: Skill = { name: "Fireball", manaCost: 15, cooldown: 5000, type: "damage", targetType: "aoe", range: 10, damageRange: [8, 14], damageType: "fire" };
+            const skill: Skill = { name: "Fireball", kind: "spell", manaCost: 15, cooldown: 5000, type: "damage", targetType: "aoe", range: 10, damageRange: [8, 14], damageType: "fire" };
 
             const result = executeSkill(ctx, 1, skill, 10, 10);
 
@@ -277,7 +286,7 @@ describe("executeSkill", () => {
             });
             const casterG = makeUnitGroup();
             const ctx = makeCtx([caster], { 1: casterG });
-            const skill: Skill = { name: "Fireball", manaCost: 15, cooldown: 5000, type: "damage", targetType: "aoe", range: 10, damageRange: [8, 14], damageType: "fire" };
+            const skill: Skill = { name: "Fireball", kind: "spell", manaCost: 15, cooldown: 5000, type: "damage", targetType: "aoe", range: 10, damageRange: [8, 14], damageType: "fire" };
 
             const result = executeSkill(ctx, 1, skill, 10, 10);
 
@@ -305,7 +314,7 @@ describe("executeSkill", () => {
             });
             const casterG = makeUnitGroup();
             const ctx = makeCtx([caster], { 1: casterG });
-            const skill: Skill = { name: "Fireball", manaCost: 15, cooldown: 5000, type: "damage", targetType: "aoe", range: 10, damageRange: [8, 14], damageType: "fire" };
+            const skill: Skill = { name: "Fireball", kind: "spell", manaCost: 15, cooldown: 5000, type: "damage", targetType: "aoe", range: 10, damageRange: [8, 14], damageType: "fire" };
 
             const result = executeSkill(ctx, 1, skill, 10, 10);
 
@@ -320,13 +329,40 @@ describe("executeSkill", () => {
             const caster = makeUnit({ id: 1, hp: 30, mana: 5 });
             const casterG = makeUnitGroup();
             const ctx = makeCtx([caster], { 1: casterG });
-            const skill: Skill = { name: "Fireball", manaCost: 15, cooldown: 5000, type: "damage", targetType: "aoe", range: 10, damageRange: [8, 14], damageType: "fire" };
+            const skill: Skill = { name: "Fireball", kind: "spell", manaCost: 15, cooldown: 5000, type: "damage", targetType: "aoe", range: 10, damageRange: [8, 14], damageType: "fire" };
 
             const result = executeSkill(ctx, 1, skill, 10, 10);
 
             expect(result).toBe(false);
             expect(ctx.addLog).toHaveBeenCalledWith(
                 expect.stringContaining("Not enough mana"),
+                expect.any(String)
+            );
+        });
+
+        it("returns false and logs when caster is silenced and tries to cast a spell", () => {
+            const caster = makeUnit({
+                id: 1,
+                hp: 30,
+                mana: 50,
+                statusEffects: [{
+                    type: "silenced",
+                    duration: 5000,
+                    tickInterval: 100,
+                    timeSinceTick: 0,
+                    lastUpdateTime: 0,
+                    damagePerTick: 0,
+                    sourceId: 1,
+                }],
+            });
+            const casterG = makeUnitGroup();
+            const ctx = makeCtx([caster], { 1: casterG });
+
+            const result = executeSkill(ctx, 1, SKILLS.fireball, 10, 10);
+
+            expect(result).toBe(false);
+            expect(ctx.addLog).toHaveBeenCalledWith(
+                expect.stringContaining("is silenced"),
                 expect.any(String)
             );
         });
@@ -337,7 +373,7 @@ describe("executeSkill", () => {
             const caster = makeUnit({ id: 1, hp: 30, mana: 50 });
             const casterG = makeUnitGroup();
             const ctx = makeCtx([caster], { 1: casterG });
-            const skill: Skill = { name: "Fireball", manaCost: 15, cooldown: 5000, type: "damage", targetType: "aoe", range: 10, aoeRadius: 2.5, damageRange: [8, 14], damageType: "fire", projectileColor: "#ff4400" };
+            const skill: Skill = { name: "Fireball", kind: "spell", manaCost: 15, cooldown: 5000, type: "damage", targetType: "aoe", range: 10, aoeRadius: 2.5, damageRange: [8, 14], damageType: "fire", projectileColor: "#ff4400" };
 
             // Fireball always returns true (fires projectile)
             const result = executeSkill(ctx, 1, skill, 10, 10);
@@ -361,6 +397,7 @@ describe("executeSkill", () => {
             const ctx = makeCtx([caster], { 4: casterG });
             const skill: Skill = {
                 name: "Magic Wave",
+                kind: "spell",
                 manaCost: 20,
                 cooldown: 6000,
                 type: "damage",
@@ -410,6 +447,7 @@ describe("executeSkill", () => {
             );
             const skill: Skill = {
                 name: "Chain Lightning",
+                kind: "spell",
                 manaCost: 20,
                 cooldown: 8500,
                 type: "smite",
@@ -435,7 +473,7 @@ describe("executeSkill", () => {
             const enemy = makeUnit({ id: 100, hp: 20, team: "enemy" });
             const enemyG = makeUnitGroup();
             const ctx = makeCtx([caster, enemy], { 1: casterG, 100: enemyG });
-            const skill: Skill = { name: "Warcry", manaCost: 10, cooldown: 8000, type: "taunt", targetType: "self", range: 5, aoeRadius: 5, damageType: "physical" };
+            const skill: Skill = { name: "Warcry", kind: "ability", manaCost: 10, cooldown: 8000, type: "taunt", targetType: "self", range: 5, aoeRadius: 5, damageType: "physical" };
 
             const result = executeSkill(ctx, 1, skill, 5, 5);
 
@@ -447,7 +485,7 @@ describe("executeSkill", () => {
             const caster = makeUnit({ id: 1, hp: 30, mana: 50 });
             const casterG = makeUnitGroup();
             const ctx = makeCtx([caster], { 1: casterG });
-            const skill: Skill = { name: "Dodge", manaCost: 5, cooldown: 3000, type: "dodge", targetType: "self", range: 5, damageType: "physical" };
+            const skill: Skill = { name: "Dodge", kind: "ability", manaCost: 5, cooldown: 3000, type: "dodge", targetType: "self", range: 5, damageType: "physical" };
 
             const result = executeSkill(ctx, 1, skill, 10, 10);
 
@@ -472,9 +510,32 @@ describe("executeSkill", () => {
             const caster = makeUnit({ id: 1, hp: 30, mana: 50 });
             const casterG = makeUnitGroup();
             const ctx = makeCtx([caster], { 1: casterG });
-            const skill: Skill = { name: "Defiance", manaCost: 10, cooldown: 15000, type: "buff", targetType: "self", range: 0, duration: 8000, damageType: "physical" };
+            const skill: Skill = { name: "Defiance", kind: "ability", manaCost: 10, cooldown: 15000, type: "buff", targetType: "self", range: 0, duration: 8000, damageType: "physical" };
 
             const result = executeSkill(ctx, 1, skill, 5, 5);
+            expect(result).toBe(true);
+        });
+
+        it("still allows abilities while silenced", () => {
+            const caster = makeUnit({
+                id: 1,
+                hp: 30,
+                mana: 50,
+                statusEffects: [{
+                    type: "silenced",
+                    duration: 5000,
+                    tickInterval: 100,
+                    timeSinceTick: 0,
+                    lastUpdateTime: 0,
+                    damagePerTick: 0,
+                    sourceId: 1,
+                }],
+            });
+            const casterG = makeUnitGroup();
+            const ctx = makeCtx([caster], { 1: casterG });
+
+            const result = executeSkill(ctx, 1, SKILLS.raiseShield, 5, 5);
+
             expect(result).toBe(true);
         });
 
@@ -482,7 +543,7 @@ describe("executeSkill", () => {
             const caster = makeUnit({ id: 4, hp: 17, mana: 50 });
             const casterG = makeUnitGroup();
             const ctx = makeCtx([caster], { 4: casterG });
-            const skill: Skill = { name: "Energy Shield", manaCost: 18, cooldown: 2500, type: "energy_shield", targetType: "self", range: 0, shieldAmount: 30, duration: 20000, damageType: "chaos" };
+            const skill: Skill = { name: "Energy Shield", kind: "spell", manaCost: 18, cooldown: 2500, type: "energy_shield", targetType: "self", range: 0, shieldAmount: 30, duration: 20000, damageType: "chaos" };
 
             const result = executeSkill(ctx, 4, skill, 5, 5);
             expect(result).toBe(true);

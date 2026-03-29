@@ -11,7 +11,7 @@ import { calculateDamageWithCrit, rollHit, getEffectiveArmor, isUnitAlive, setSk
 import { applyDamageToUnit, buildDamageContext } from "../combat/damageEffects";
 import { soundFns } from "../audio";
 import { disposeBasicMesh } from "../rendering/disposal";
-import { isPointInCone } from "../game/geometry";
+import { distance, isPointInCone } from "../game/geometry";
 import { getUnitById } from "../game/unitQuery";
 
 // =============================================================================
@@ -173,7 +173,7 @@ export function processFireBreaths(
                 if (u.team !== "player" || !isUnitAlive(u, defeatedThisFrame)) continue;
                 const ug = unitsRef[u.id];
                 if (!ug) continue;
-                const d = Math.hypot(ug.position.x - casterG.position.x, ug.position.z - casterG.position.z);
+                const d = distance(casterG.position.x, casterG.position.z, ug.position.x, ug.position.z);
                 if (d < bestDist) {
                     bestDist = d;
                     breath.targetId = u.id;

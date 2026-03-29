@@ -4,6 +4,7 @@
 
 import * as THREE from "three";
 import type { Unit, UnitGroup, EnemyStats, DamageText } from "../../core/types";
+import { isSkillBlockedBySilence } from "../../combat/combatMath";
 import { trySpawnMinion } from "./broodMother";
 import { tryRaiseDead } from "./necromancer";
 import { trySpawnTentacle } from "./tentacle";
@@ -54,36 +55,36 @@ export function runPreAttackBehaviors(ctx: PreAttackContext): void {
     const { unit, g, enemyStats, unitsState, unitsRef, scene, setUnits, skillCooldowns, setSkillCooldowns, addLog, now, damageTexts, hitFlashRef, unitsStateRef, defeatedThisFrame } = ctx;
     const base = { unit, g, enemyStats, skillCooldowns, setSkillCooldowns, addLog, now };
 
-    if (enemyStats.spawnSkill) {
+    if (enemyStats.spawnSkill && !isSkillBlockedBySilence(unit, enemyStats.spawnSkill.kind)) {
         trySpawnMinion({ ...base, spawnSkill: enemyStats.spawnSkill, unitsState, unitsRef, scene, setUnits });
     }
 
-    if (enemyStats.raiseSkill) {
+    if (enemyStats.raiseSkill && !isSkillBlockedBySilence(unit, enemyStats.raiseSkill.kind)) {
         tryRaiseDead({ ...base, raiseSkill: enemyStats.raiseSkill, unitsState, unitsRef, scene, setUnits });
     }
 
-    if (enemyStats.tentacleSkill) {
+    if (enemyStats.tentacleSkill && !isSkillBlockedBySilence(unit, enemyStats.tentacleSkill.kind)) {
         trySpawnTentacle({ ...base, tentacleSkill: enemyStats.tentacleSkill, unitsState, unitsRef, scene, setUnits });
     }
 
-    if (enemyStats.curseSkill) {
+    if (enemyStats.curseSkill && !isSkillBlockedBySilence(unit, enemyStats.curseSkill.kind)) {
         tryCurse({ ...base, curseSkill: enemyStats.curseSkill, unitsState, unitsRef, scene });
     }
 
-    if (enemyStats.glareSkill) {
+    if (enemyStats.glareSkill && !isSkillBlockedBySilence(unit, enemyStats.glareSkill.kind)) {
         tryBasiliskGlare({ ...base, glareSkill: enemyStats.glareSkill, unitsState, unitsRef, scene });
     }
 
     // Dream Eater before Sleep — prioritize nuking sleeping targets over casting more sleep
-    if (enemyStats.dreamEaterSkill) {
+    if (enemyStats.dreamEaterSkill && !isSkillBlockedBySilence(unit, enemyStats.dreamEaterSkill.kind)) {
         tryDreamEater({ ...base, dreamEaterSkill: enemyStats.dreamEaterSkill, unitsState, unitsRef, scene, setUnits, damageTexts, hitFlashRef, unitsStateRef, defeatedThisFrame });
     }
 
-    if (enemyStats.sleepSkill) {
+    if (enemyStats.sleepSkill && !isSkillBlockedBySilence(unit, enemyStats.sleepSkill.kind)) {
         trySleep({ ...base, sleepSkill: enemyStats.sleepSkill, unitsState, unitsRef, scene, setUnits, defeatedThisFrame });
     }
 
-    if (enemyStats.phaseShiftSkill) {
+    if (enemyStats.phaseShiftSkill && !isSkillBlockedBySilence(unit, enemyStats.phaseShiftSkill.kind)) {
         tryShadePhase({ ...base, phaseShiftSkill: enemyStats.phaseShiftSkill, unitsState, unitsRef, setUnits });
     }
 }

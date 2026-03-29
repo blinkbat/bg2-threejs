@@ -5,6 +5,7 @@
 import type {
     Item,
     ItemCategory,
+    EquipmentPassives,
     WeaponItem,
     ShieldItem,
     ArmorItem,
@@ -149,6 +150,43 @@ export const WEAPONS: Record<string, WeaponItem> = {
         damageType: "physical",
         attackCooldown: 1200,
     },
+    vampiricBlade: {
+        id: "vampiricBlade",
+        name: "Vampiric Blade",
+        description: "The edge weeps red even when clean. Wounds it inflicts mend wounds it has made.",
+        category: "weapon",
+        grip: "oneHand",
+        damage: [4, 7],
+        damageType: "physical",
+        lifesteal: 0.15,
+    },
+    windcutterBow: {
+        id: "windcutterBow",
+        name: "Windcutter Bow",
+        description: "Strung with sinew from something that flew. Arrows find their mark with unsettling enthusiasm.",
+        category: "weapon",
+        grip: "twoHand",
+        damage: [3, 6],
+        damageType: "physical",
+        range: 10,
+        projectileColor: "#88bbaa",
+        bonusCritChance: 8,
+        bonusMoveSpeed: 0.05,
+    },
+    emberStaff: {
+        id: "emberStaff",
+        name: "Ember Staff",
+        description: "It smolders at the tip and warms the hand. The previous owner let go only reluctantly — and posthumously.",
+        category: "weapon",
+        grip: "twoHand",
+        damage: [2, 5],
+        damageType: "fire",
+        range: 7,
+        projectileColor: "#ff6622",
+        bonusMagicDamage: 2,
+        hpRegen: 1,
+        hpRegenInterval: 8000,
+    },
 };
 
 // =============================================================================
@@ -184,6 +222,23 @@ const SHIELDS: Record<string, ShieldItem> = {
         category: "shield",
         armor: 4,
     },
+    spikedPavise: {
+        id: "spikedPavise",
+        name: "Spiked Pavise",
+        description: "Originally a siege barricade. Someone added a handle and a prayer.",
+        category: "shield",
+        armor: 3,
+        bonusMaxHp: 5,
+    },
+    arcaneCrest: {
+        id: "arcaneCrest",
+        name: "Arcane Crest",
+        description: "The sigils etched into its face pulse in time with the wielder's spellcraft.",
+        category: "shield",
+        armor: 1,
+        bonusMaxMana: 3,
+        bonusMagicDamage: 1,
+    },
 };
 
 // =============================================================================
@@ -218,6 +273,32 @@ const ARMORS: Record<string, ArmorItem> = {
         description: "The enchantment faded long ago, but the silk still turns a blade — barely.",
         category: "armor",
         armor: 1,
+    },
+    ironbarkPlate: {
+        id: "ironbarkPlate",
+        name: "Ironbark Plate",
+        description: "Grown, not forged. The heartwood of an ancient ironbark tree, shaped by druids who never came back for it.",
+        category: "armor",
+        armor: 5,
+        bonusMaxHp: 8,
+    },
+    emberwovenRobe: {
+        id: "emberwovenRobe",
+        name: "Emberwoven Robe",
+        description: "Threaded with cinders that never cool. It smells faintly of campfire and ambition.",
+        category: "armor",
+        armor: 1,
+        bonusMaxMana: 5,
+        bonusMagicDamage: 1,
+    },
+    stalkersLeathers: {
+        id: "stalkersLeathers",
+        name: "Stalker's Leathers",
+        description: "Oiled and silent. The previous owner was never seen — which was rather the point.",
+        category: "armor",
+        armor: 3,
+        bonusCritChance: 5,
+        bonusMoveSpeed: 0.08,
     },
 };
 
@@ -275,6 +356,20 @@ const ACCESSORIES: Record<string, AccessoryItem> = {
         description: "A silver ring etched with fox motifs. The wearer moves with uncanny swiftness.",
         category: "accessory",
         bonusMoveSpeed: 0.1,  // +10% move speed
+    },
+    blooddrinkersLoop: {
+        id: "blooddrinkersLoop",
+        name: "Blooddrinker's Loop",
+        description: "It tightens when you bleed and loosens when your enemy does. The ring has preferences.",
+        category: "accessory",
+        lifesteal: 0.1,
+    },
+    sharpshootersBand: {
+        id: "sharpshootersBand",
+        name: "Sharpshooter's Band",
+        description: "A thin copper band that makes the world seem slower and targets seem larger.",
+        category: "accessory",
+        bonusCritChance: 6,
     },
 };
 
@@ -550,6 +645,63 @@ function getItemCandidateLabel(value: unknown, index: number): string {
         : `Item ${index + 1}`;
 }
 
+const PASSIVE_FIELD_NAMES: (keyof EquipmentPassives)[] = [
+    "bonusMaxHp", "bonusMaxMana", "bonusMagicDamage", "bonusArmor",
+    "bonusCritChance", "bonusMoveSpeed", "lifesteal",
+    "hpRegen", "hpRegenInterval", "aggroReduction",
+];
+
+/** Extract passive fields from a raw record, returning null if any field has a bad type. */
+function parsePassiveFields(raw: Record<string, unknown>): Partial<EquipmentPassives> | null {
+    const result: Partial<EquipmentPassives> = {};
+    for (const key of PASSIVE_FIELD_NAMES) {
+        const val = raw[key];
+        if (val === undefined) continue;
+        if (typeof val !== "number") return null;
+        (result as Record<string, number>)[key] = val;
+    }
+    return result;
+}
+
+/** Validate passive fields on an equipment item. */
+function validatePassiveFields(item: EquipmentPassives, label: string): string[] {
+    const errors: string[] = [];
+    if (item.bonusMaxHp !== undefined && !isNonNegativeNumber(item.bonusMaxHp)) {
+        errors.push(`${label} bonus max HP must be a non-negative number.`);
+    }
+    if (item.bonusMaxMana !== undefined && !isNonNegativeNumber(item.bonusMaxMana)) {
+        errors.push(`${label} bonus max mana must be a non-negative number.`);
+    }
+    if (item.bonusMagicDamage !== undefined && !isNonNegativeNumber(item.bonusMagicDamage)) {
+        errors.push(`${label} bonus magic damage must be a non-negative number.`);
+    }
+    if (item.bonusArmor !== undefined && !isNonNegativeNumber(item.bonusArmor)) {
+        errors.push(`${label} bonus armor must be a non-negative number.`);
+    }
+    if (item.bonusCritChance !== undefined && !isNonNegativeNumber(item.bonusCritChance)) {
+        errors.push(`${label} bonus crit chance must be a non-negative number.`);
+    }
+    if (item.bonusMoveSpeed !== undefined && (!isNonNegativeNumber(item.bonusMoveSpeed) || item.bonusMoveSpeed > 1)) {
+        errors.push(`${label} move speed bonus must be between 0 and 1.`);
+    }
+    if (item.lifesteal !== undefined && (!isNonNegativeNumber(item.lifesteal) || item.lifesteal > 1)) {
+        errors.push(`${label} lifesteal must be between 0 and 1.`);
+    }
+    if (item.hpRegen !== undefined && !isPositiveNumber(item.hpRegen)) {
+        errors.push(`${label} HP regen must be a positive number when provided.`);
+    }
+    if (item.hpRegenInterval !== undefined && !isPositiveNumber(item.hpRegenInterval)) {
+        errors.push(`${label} HP regen interval must be a positive number when provided.`);
+    }
+    if ((item.hpRegen !== undefined) !== (item.hpRegenInterval !== undefined)) {
+        errors.push(`${label} HP regen amount and interval must both be set together.`);
+    }
+    if (item.aggroReduction !== undefined && (!isNonNegativeNumber(item.aggroReduction) || item.aggroReduction > 1)) {
+        errors.push(`${label} aggro reduction must be between 0 and 1.`);
+    }
+    return errors;
+}
+
 function parseItemCandidate(value: unknown): Item | null {
     if (!isRecord(value)) return null;
 
@@ -566,6 +718,8 @@ function parseItemCandidate(value: unknown): Item | null {
         if (range !== undefined && typeof range !== "number") return null;
         if (projectileColor !== undefined && typeof projectileColor !== "string") return null;
         if (attackCooldown !== undefined && typeof attackCooldown !== "number") return null;
+        const passives = parsePassiveFields(value);
+        if (!passives) return null;
         const item: WeaponItem = {
             id,
             name,
@@ -577,6 +731,7 @@ function parseItemCandidate(value: unknown): Item | null {
             ...(range !== undefined ? { range } : {}),
             ...(projectileColor !== undefined ? { projectileColor } : {}),
             ...(attackCooldown !== undefined ? { attackCooldown } : {}),
+            ...passives,
         };
         return item;
     }
@@ -584,43 +739,25 @@ function parseItemCandidate(value: unknown): Item | null {
     if (category === "shield" || category === "armor") {
         const { armor } = value;
         if (typeof armor !== "number") return null;
+        const passives = parsePassiveFields(value);
+        if (!passives) return null;
         if (category === "shield") {
-            const item: ShieldItem = { id, name, description, category, armor };
+            const item: ShieldItem = { id, name, description, category, armor, ...passives };
             return item;
         }
-        const item: ArmorItem = { id, name, description, category, armor };
+        const item: ArmorItem = { id, name, description, category, armor, ...passives };
         return item;
     }
 
     if (category === "accessory") {
-        const {
-            bonusMaxHp,
-            bonusMagicDamage,
-            bonusArmor,
-            hpRegen,
-            hpRegenInterval,
-            aggroReduction,
-            bonusMoveSpeed,
-        } = value;
-        if (bonusMaxHp !== undefined && typeof bonusMaxHp !== "number") return null;
-        if (bonusMagicDamage !== undefined && typeof bonusMagicDamage !== "number") return null;
-        if (bonusArmor !== undefined && typeof bonusArmor !== "number") return null;
-        if (hpRegen !== undefined && typeof hpRegen !== "number") return null;
-        if (hpRegenInterval !== undefined && typeof hpRegenInterval !== "number") return null;
-        if (aggroReduction !== undefined && typeof aggroReduction !== "number") return null;
-        if (bonusMoveSpeed !== undefined && typeof bonusMoveSpeed !== "number") return null;
+        const passives = parsePassiveFields(value);
+        if (!passives) return null;
         const item: AccessoryItem = {
             id,
             name,
             description,
             category,
-            ...(bonusMaxHp !== undefined ? { bonusMaxHp } : {}),
-            ...(bonusMagicDamage !== undefined ? { bonusMagicDamage } : {}),
-            ...(bonusArmor !== undefined ? { bonusArmor } : {}),
-            ...(hpRegen !== undefined ? { hpRegen } : {}),
-            ...(hpRegenInterval !== undefined ? { hpRegenInterval } : {}),
-            ...(aggroReduction !== undefined ? { aggroReduction } : {}),
-            ...(bonusMoveSpeed !== undefined ? { bonusMoveSpeed } : {}),
+            ...passives,
         };
         return item;
     }
@@ -792,35 +929,15 @@ export function validateItemDefinition(item: Item): string[] {
         if (item.attackCooldown !== undefined && !isNonNegativeNumber(item.attackCooldown)) {
             errors.push("Weapon attack cooldown must be a non-negative number when provided.");
         }
+        errors.push(...validatePassiveFields(item, "Weapon"));
     } else if (item.category === "shield" || item.category === "armor") {
         if (!isNonNegativeNumber(item.armor)) {
             errors.push(`${item.category === "shield" ? "Shield" : "Armor"} value must be a non-negative number.`);
         }
+        const label = item.category === "shield" ? "Shield" : "Armor";
+        errors.push(...validatePassiveFields(item, label));
     } else if (item.category === "accessory") {
-        if (item.bonusMaxHp !== undefined && !isNonNegativeNumber(item.bonusMaxHp)) {
-            errors.push("Accessory bonus max HP must be a non-negative number.");
-        }
-        if (item.bonusMagicDamage !== undefined && !isNonNegativeNumber(item.bonusMagicDamage)) {
-            errors.push("Accessory bonus magic damage must be a non-negative number.");
-        }
-        if (item.bonusArmor !== undefined && !isNonNegativeNumber(item.bonusArmor)) {
-            errors.push("Accessory bonus armor must be a non-negative number.");
-        }
-        if (item.hpRegen !== undefined && !isPositiveNumber(item.hpRegen)) {
-            errors.push("Accessory HP regen must be a positive number when provided.");
-        }
-        if (item.hpRegenInterval !== undefined && !isPositiveNumber(item.hpRegenInterval)) {
-            errors.push("Accessory HP regen interval must be a positive number when provided.");
-        }
-        if ((item.hpRegen !== undefined) !== (item.hpRegenInterval !== undefined)) {
-            errors.push("Accessory HP regen amount and interval must both be set together.");
-        }
-        if (item.aggroReduction !== undefined && (!isNonNegativeNumber(item.aggroReduction) || item.aggroReduction > 1)) {
-            errors.push("Accessory aggro reduction must be between 0 and 1.");
-        }
-        if (item.bonusMoveSpeed !== undefined && (!isNonNegativeNumber(item.bonusMoveSpeed) || item.bonusMoveSpeed > 1)) {
-            errors.push("Accessory move speed bonus must be between 0 and 1.");
-        }
+        errors.push(...validatePassiveFields(item, "Accessory"));
     } else if (item.category === "key") {
         if (typeof item.keyId !== "string" || item.keyId.trim().length === 0) {
             errors.push("Key item must have a non-empty keyId.");

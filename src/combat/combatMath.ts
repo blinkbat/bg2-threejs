@@ -2,11 +2,11 @@
 // COMBAT MATH - Unified damage calculation and combat utilities
 // =============================================================================
 
-import type { Unit, UnitData, EnemyStats, StatusEffect, StatusEffectType, DamageType } from "../core/types";
+import type { Unit, UnitData, EnemyStats, StatusEffect, StatusEffectType, DamageType, SkillKind } from "../core/types";
 import { isEnemyData } from "../game/units";
-import { POISON_DURATION, POISON_TICK_INTERVAL, POISON_DAMAGE_PER_TICK, BURN_DURATION, BURN_TICK_INTERVAL, BURN_DAMAGE_PER_TICK, SLOW_DURATION, BUFF_TICK_INTERVAL, COLORS, SLOW_COOLDOWN_MULT, SLOW_MOVE_MULT, DEFIANCE_COOLDOWN_MULT, SLEEP_MIN_DURATION, SLEEP_MAX_DURATION, CHILLED_DURATION, CHILLED_COOLDOWN_MULT, CHILLED_MOVE_MULT, WEAKENED_COOLDOWN_MULT, HAMSTRUNG_MOVE_MULT, BLIND_ACCURACY_MULT } from "../core/constants";
+import { POISON_DURATION, POISON_TICK_INTERVAL, POISON_DAMAGE_PER_TICK, BURN_DURATION, BURN_TICK_INTERVAL, BURN_DAMAGE_PER_TICK, SLOW_DURATION, BUFF_TICK_INTERVAL, COLORS, SLOW_COOLDOWN_MULT, SLOW_MOVE_MULT, DEFIANCE_COOLDOWN_MULT, SLEEP_MIN_DURATION, SLEEP_MAX_DURATION, CHILLED_DURATION, CHILLED_COOLDOWN_MULT, CHILLED_MOVE_MULT, CONSTRICTED_COOLDOWN_MULT, HAMSTRUNG_MOVE_MULT, BLIND_ACCURACY_MULT } from "../core/constants";
 import { getStrengthDamageBonus, getIntelligenceMagicDamageBonus, getFaithHolyDamageBonus, getDexterityCritChance, CRIT_MULTIPLIER } from "../game/statBonuses";
-import { getEffectivePlayerBonusMagicDamage, getEffectivePlayerMoveSpeedMultiplier } from "../game/equipmentState";
+import { getEffectivePlayerBonusMagicDamage, getEffectivePlayerMoveSpeedMultiplier, getEffectivePlayerBonusCritChance } from "../game/equipmentState";
 import { normalizeAngle } from "../game/geometry";
 
 // =============================================================================
@@ -99,13 +99,21 @@ export function rollSkillHit(skill: SkillHitProfile | undefined, attackerAccurac
 }
 
 /**
- * Check if an attack is a critical hit based on unit's dexterity.
+ * Get total crit chance for a unit (dexterity + equipment bonuses).
+ */
+export function getTotalCritChance(unit: Unit): number {
+    const baseCrit = getDexterityCritChance(unit);
+    const equipmentCrit = unit.team === "player" ? getEffectivePlayerBonusCritChance(unit.id) : 0;
+    return baseCrit + equipmentCrit;
+}
+
+/**
+ * Check if an attack is a critical hit based on unit's dexterity and equipment.
  * @returns true if crit occurs
  */
 function rollCrit(attacker: Unit | undefined): boolean {
     if (!attacker) return false;
-    const critChance = getDexterityCritChance(attacker);
-    return rollChance(critChance);
+    return rollChance(getTotalCritChance(attacker));
 }
 
 /**
@@ -351,6 +359,14 @@ export function getIncapacitatingStatus(unit: Unit): IncapacitatingStatus | null
     return null;
 }
 
+export function isSilenced(unit: Unit): boolean {
+    return hasStatusEffect(unit, "silenced");
+}
+
+export function isSkillBlockedBySilence(unit: Unit, skillKind: SkillKind): boolean {
+    return skillKind === "spell" && isSilenced(unit);
+}
+
 /**
  * Apply the slowed debuff to a unit (1.5x cooldowns, 0.5x move speed for 10s).
  */
@@ -488,7 +504,7 @@ export function getCooldownMultiplier(unit: Unit): number {
     let mult = 1;
     if (hasStatusEffect(unit, "slowed")) mult *= SLOW_COOLDOWN_MULT;
     if (hasStatusEffect(unit, "chilled")) mult *= CHILLED_COOLDOWN_MULT;
-    if (hasStatusEffect(unit, "weakened")) mult *= WEAKENED_COOLDOWN_MULT;
+    if (hasStatusEffect(unit, "constricted")) mult *= CONSTRICTED_COOLDOWN_MULT;
     if (hasStatusEffect(unit, "defiance")) mult *= DEFIANCE_COOLDOWN_MULT;
     return mult;
 }
@@ -527,7 +543,7 @@ export function isCooldownReady(
 }
 
 /**
- * Get effective damage range for a unit, accounting for amoeba split weakening
+ * Get effective damage range for a unit, accounting for amoeba split penalties
  * and enrage multiplier. Each split reduces damage by 15%.
  */
 export function getEffectiveDamage(unit: Unit, baseDamage: [number, number], damageMultiplier: number = 1): [number, number] {
@@ -627,9 +643,9 @@ export function logSlowed(targetName: string): string {
     return `${targetName} is slowed!`;
 }
 
-/** "{target}'s attacks are weakened!" */
-export function logWeakened(targetName: string): string {
-    return `${targetName}'s attacks are weakened!`;
+/** "{target} is constricted!" */
+export function logConstricted(targetName: string): string {
+    return `${targetName} is constricted!`;
 }
 
 /** "{target} is hamstrung!" */

@@ -102,7 +102,7 @@ vi.mock("../src/combat/combatMath", () => ({
         ],
     }),
     logStunned: vi.fn(() => "stunned"),
-    logWeakened: vi.fn(() => "weakened"),
+    logConstricted: vi.fn(() => "constricted"),
     logHamstrung: vi.fn(() => "hamstrung"),
 }));
 

@@ -4,6 +4,7 @@
 
 import type {
     CharacterEquipment,
+    EquipmentPassives,
     PartyInventory,
     Item,
     WeaponItem,
@@ -101,17 +102,50 @@ export function isOffHandDisabled(equipment: CharacterEquipment): boolean {
     return mainHand.grip === "twoHand";
 }
 
-/** Get total armor from equipment (armor slot + shield) */
+// =============================================================================
+// PASSIVE AGGREGATION - Scan all equipment slots for passive bonus fields
+// =============================================================================
+
+const ALL_EQUIPMENT_SLOTS: (keyof CharacterEquipment)[] = [
+    "armor", "leftHand", "rightHand", "accessory1", "accessory2",
+];
+
+/** Get the EquipmentPassives from an item regardless of category. */
+function getPassives(item: Item): EquipmentPassives | null {
+    if (isWeapon(item) || isShield(item) || isArmor(item) || isAccessory(item)) {
+        return item;
+    }
+    return null;
+}
+
+/** Iterate passive fields across all equipped items. */
+function forEachEquippedPassive(
+    equipment: CharacterEquipment,
+    fn: (passives: EquipmentPassives) => void
+): void {
+    for (const slot of ALL_EQUIPMENT_SLOTS) {
+        // Skip off-hand if disabled by 2h weapon
+        if (slot === "rightHand" && isOffHandDisabled(equipment)) continue;
+        const itemId = equipment[slot];
+        if (!itemId) continue;
+        const item = getItem(itemId);
+        if (!item) continue;
+        const passives = getPassives(item);
+        if (passives) fn(passives);
+    }
+}
+
+/** Get total armor from equipment (base armor from armor/shield slots + bonusArmor from all slots) */
 export function getEquipmentArmor(equipment: CharacterEquipment): number {
     let total = 0;
 
-    // Armor slot
+    // Base armor from armor slot
     const armorItem = equipment.armor ? getItem(equipment.armor) : null;
     if (armorItem && isArmor(armorItem)) {
         total += armorItem.armor;
     }
 
-    // Shield in off-hand (only if not disabled by 2h)
+    // Base armor from shield in off-hand (only if not disabled by 2h)
     if (!isOffHandDisabled(equipment)) {
         const rightHandItem = equipment.rightHand ? getItem(equipment.rightHand) : null;
         if (rightHandItem && isShield(rightHandItem)) {
@@ -119,106 +153,85 @@ export function getEquipmentArmor(equipment: CharacterEquipment): number {
         }
     }
 
-    // Accessory armor bonuses
-    const slots: (keyof CharacterEquipment)[] = ["accessory1", "accessory2"];
-    for (const slot of slots) {
-        const itemId = equipment[slot];
-        if (!itemId) continue;
-        const item = getItem(itemId);
-        if (item && isAccessory(item) && item.bonusArmor) {
-            total += item.bonusArmor;
-        }
-    }
+    // Bonus armor from passives on all slots
+    forEachEquippedPassive(equipment, p => {
+        if (p.bonusArmor) total += p.bonusArmor;
+    });
 
     return total;
 }
 
-/** Get bonus max HP from accessories */
+/** Get bonus max HP from all equipment */
 function getEquipmentBonusMaxHp(equipment: CharacterEquipment): number {
     let total = 0;
-    const slots: (keyof CharacterEquipment)[] = ["accessory1", "accessory2"];
-
-    for (const slot of slots) {
-        const itemId = equipment[slot];
-        if (itemId) {
-            const item = getItem(itemId);
-            if (item && isAccessory(item) && item.bonusMaxHp) {
-                total += item.bonusMaxHp;
-            }
-        }
-    }
-
+    forEachEquippedPassive(equipment, p => {
+        if (p.bonusMaxHp) total += p.bonusMaxHp;
+    });
     return total;
 }
 
-/** Get HP regen info from accessories (returns first regen item found) */
-function getEquipmentHpRegen(equipment: CharacterEquipment): { amount: number; interval: number } | null {
-    const slots: (keyof CharacterEquipment)[] = ["accessory1", "accessory2"];
-
-    for (const slot of slots) {
-        const itemId = equipment[slot];
-        if (itemId) {
-            const item = getItem(itemId);
-            if (item && isAccessory(item) && item.hpRegen && item.hpRegenInterval) {
-                return { amount: item.hpRegen, interval: item.hpRegenInterval };
-            }
-        }
-    }
-
-    return null;
+/** Get bonus max mana from all equipment */
+function getEquipmentBonusMaxMana(equipment: CharacterEquipment): number {
+    let total = 0;
+    forEachEquippedPassive(equipment, p => {
+        if (p.bonusMaxMana) total += p.bonusMaxMana;
+    });
+    return total;
 }
 
-/** Get aggro reduction multiplier from accessories (stacks multiplicatively) */
+/** Get HP regen info from equipment (returns first regen item found) */
+function getEquipmentHpRegen(equipment: CharacterEquipment): { amount: number; interval: number } | null {
+    let result: { amount: number; interval: number } | null = null;
+    forEachEquippedPassive(equipment, p => {
+        if (!result && p.hpRegen && p.hpRegenInterval) {
+            result = { amount: p.hpRegen, interval: p.hpRegenInterval };
+        }
+    });
+    return result;
+}
+
+/** Get aggro reduction multiplier from all equipment (stacks multiplicatively) */
 function getEquipmentAggroReduction(equipment: CharacterEquipment): number {
     let multiplier = 1;
-    const slots: (keyof CharacterEquipment)[] = ["accessory1", "accessory2"];
-
-    for (const slot of slots) {
-        const itemId = equipment[slot];
-        if (itemId) {
-            const item = getItem(itemId);
-            if (item && isAccessory(item) && item.aggroReduction) {
-                multiplier *= (1 - item.aggroReduction);
-            }
-        }
-    }
-
+    forEachEquippedPassive(equipment, p => {
+        if (p.aggroReduction) multiplier *= (1 - p.aggroReduction);
+    });
     return multiplier;
 }
 
-/** Get move speed multiplier from accessories (stacks multiplicatively) */
+/** Get move speed multiplier from all equipment (stacks multiplicatively) */
 function getEquipmentMoveSpeedMultiplier(equipment: CharacterEquipment): number {
     let multiplier = 1;
-    const slots: (keyof CharacterEquipment)[] = ["accessory1", "accessory2"];
-
-    for (const slot of slots) {
-        const itemId = equipment[slot];
-        if (itemId) {
-            const item = getItem(itemId);
-            if (item && isAccessory(item) && item.bonusMoveSpeed) {
-                multiplier *= (1 + item.bonusMoveSpeed);
-            }
-        }
-    }
-
+    forEachEquippedPassive(equipment, p => {
+        if (p.bonusMoveSpeed) multiplier *= (1 + p.bonusMoveSpeed);
+    });
     return multiplier;
 }
 
-/** Get bonus magic damage from accessories */
+/** Get bonus magic damage from all equipment */
 function getEquipmentBonusMagicDamage(equipment: CharacterEquipment): number {
     let total = 0;
-    const slots: (keyof CharacterEquipment)[] = ["accessory1", "accessory2"];
+    forEachEquippedPassive(equipment, p => {
+        if (p.bonusMagicDamage) total += p.bonusMagicDamage;
+    });
+    return total;
+}
 
-    for (const slot of slots) {
-        const itemId = equipment[slot];
-        if (itemId) {
-            const item = getItem(itemId);
-            if (item && isAccessory(item) && item.bonusMagicDamage) {
-                total += item.bonusMagicDamage;
-            }
-        }
-    }
+/** Get bonus crit chance from all equipment */
+function getEquipmentBonusCritChance(equipment: CharacterEquipment): number {
+    let total = 0;
+    forEachEquippedPassive(equipment, p => {
+        if (p.bonusCritChance) total += p.bonusCritChance;
+    });
+    return total;
+}
 
+/** Get lifesteal from all equipment (additive stacking) */
+function getEquipmentLifesteal(equipment: CharacterEquipment): number {
+    let total = 0;
+    forEachEquippedPassive(equipment, p => {
+        if (p.lifesteal) total += p.lifesteal;
+    });
     return total;
 }
 
@@ -234,7 +247,10 @@ export interface EffectivePlayerEquipmentStats {
     projectileColor: string | undefined;
     attackCooldown: number | undefined;  // Only if weapon overrides it
     bonusMaxHp: number;
+    bonusMaxMana: number;
     bonusMagicDamage: number;
+    bonusCritChance: number;
+    lifesteal: number;
     hpRegen: { amount: number; interval: number } | null;
     aggroMultiplier: number;
     moveSpeedMultiplier: number;
@@ -252,7 +268,10 @@ export function getComputedStats(equipment: CharacterEquipment): EffectivePlayer
         projectileColor: weapon.projectileColor,
         attackCooldown: weapon.attackCooldown,
         bonusMaxHp: getEquipmentBonusMaxHp(equipment),
+        bonusMaxMana: getEquipmentBonusMaxMana(equipment),
         bonusMagicDamage: getEquipmentBonusMagicDamage(equipment),
+        bonusCritChance: getEquipmentBonusCritChance(equipment),
+        lifesteal: getEquipmentLifesteal(equipment),
         hpRegen: getEquipmentHpRegen(equipment),
         aggroMultiplier: getEquipmentAggroReduction(equipment),
         moveSpeedMultiplier: getEquipmentMoveSpeedMultiplier(equipment),

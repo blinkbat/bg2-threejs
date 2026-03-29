@@ -63,7 +63,8 @@ function HotbarSlot({
     const isEmpty = !skill;
     const isCantrip = skill?.isCantrip ?? false;
     const noUsesLeft = isCantrip && usesLeft !== undefined && usesLeft <= 0;
-    const canClick = skill && !locked && hasManaForSkill && !noUsesLeft && unit.hp > 0;
+    const silenceBlocksSkill = !!skill && skill.kind === "spell" && (unit.statusEffects?.some(effect => effect.type === "silenced") ?? false);
+    const canClick = skill && !locked && hasManaForSkill && !noUsesLeft && !silenceBlocksSkill && unit.hp > 0;
     const onCooldown = !locked && cooldownPct > 0;
 
     const [dropHover, setDropHover] = useState(false);
@@ -108,7 +109,13 @@ function HotbarSlot({
     };
 
     const skillColor = skill ? getSkillTextColor(skill.type, skill.damageType) : undefined;
-    const abilityLabel = skill?.isCantrip ? "Cantrip" : "Skill";
+    const abilityLabel = skill
+        ? (skill.name === "Attack"
+            ? "Basic Attack"
+            : skill.isCantrip
+                ? `${skill.kind === "spell" ? "Spell" : "Ability"} Cantrip`
+                : (skill.kind === "spell" ? "Spell" : "Ability"))
+        : "Skill";
 
     const slotClass = [
         "hotbar-slot",
@@ -127,7 +134,7 @@ function HotbarSlot({
                     <div className="hotbar-tooltip-name" style={{ color: getSkillTextColor(skill.type, skill.damageType) }}>{skill.name}</div>
                     <div className="hotbar-tooltip-hint">{abilityLabel}</div>
                     <div className="hotbar-tooltip-hint" style={{ color: "var(--ui-color-accent-warning)" }}>Not yet learned</div>
-                    <div className="hotbar-tooltip-hint">Drag abilities here to assign</div>
+                    <div className="hotbar-tooltip-hint">Drag skills here to assign</div>
                 </div>
             ) : skill ? (
                 <div className="hotbar-tooltip">
@@ -137,12 +144,13 @@ function HotbarSlot({
                     {isCantrip && usesLeft !== undefined && (
                         <div className="hotbar-tooltip-cost">{usesLeft} cantrip uses remaining</div>
                     )}
+                    {silenceBlocksSkill && <div className="hotbar-tooltip-cost" style={{ color: "var(--ui-color-accent-danger)" }}>Blocked by Silence</div>}
                     <div className="hotbar-tooltip-hint">Press {slotIndex + 1} to use</div>
                     <div className="hotbar-tooltip-hint">Drag to rearrange · drag off to clear</div>
                 </div>
             ) : (
                 <div className="hotbar-tooltip">
-                    <div className="hotbar-tooltip-hint">Drag abilities here to assign</div>
+                    <div className="hotbar-tooltip-hint">Drag skills here to assign</div>
                     <div className="hotbar-tooltip-hint">Press {slotIndex + 1} to use</div>
                 </div>
             )}

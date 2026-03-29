@@ -8,6 +8,7 @@
 - No placeholder or TODO code, and no speculative utilities.
 - Search for existing patterns before adding new code.
 - Inspect usages before changing types, signatures, or data contracts.
+- Save compatibility is not required by default; it is okay to break existing saves unless the user explicitly asks to preserve them.
 - Ask before substantial refactors; ask only when ambiguity blocks a safe implementation.
 
 ## Hard Guardrails

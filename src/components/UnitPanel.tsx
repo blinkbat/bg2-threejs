@@ -5,7 +5,7 @@ import { isConsumable } from "../core/types";
 import { UNIT_DATA, getAllSkills, getAvailableSkills, getEffectiveUnitData, getEffectiveMaxHp, getEffectiveMaxMana, getXpForLevel } from "../game/playerUnits";
 import { getPlayerUnitColor } from "../game/unitColors";
 import { getHpPercentage, getHpColor, getMana, hasStatusEffect, getEffectiveArmor } from "../combat/combatMath";
-import { getDexterityCritChance } from "../game/statBonuses";
+import { getTotalCritChance } from "../combat/combatMath";
 import { COLORS, getDamageTypeColor, getSkillTextColor, getSkillBorderColor } from "../core/constants";
 import { getPartyInventory } from "../game/equipmentState";
 import { getItem } from "../game/items";
@@ -213,11 +213,12 @@ const EFFECT_INFO: Record<string, { icon: string; color: string; description: st
     doom: { icon: "💀", color: COLORS.doomText, description: "Death in 10s — cure with Restoration" },
     regen: { icon: "💚", color: COLORS.hpHigh, description: "Healing over time" },
     invul: { icon: "✦", color: "var(--ui-color-accent-arcane)", description: "Immune to all damage" },
+    silenced: { icon: "S", color: COLORS.silencedText, description: "Cannot use spell skills" },
     sun_stance: { icon: "☀", color: COLORS.sunStanceText, description: "Attacks deal bonus fire damage" },
     thorns: { icon: "✹", color: COLORS.thornsText, description: "Reflects melee damage to attackers" },
     highland_defense: { icon: "⛰", color: COLORS.highlandDefenseText, description: "Redirects nearby ally damage to the barbarian" },
     divine_lattice: { icon: "◈", color: COLORS.divineLatticeText, description: "Impervious to damage; cannot act; ignored by enemies" },
-    weakened: { icon: "A", color: COLORS.weakenedText, description: "Attack speed reduced" },
+    constricted: { icon: "C", color: COLORS.constrictedText, description: "Attack and skill cooldowns lengthened" },
     hamstrung: { icon: "L", color: COLORS.hamstrungText, description: "Move speed reduced" },
     blind: { icon: "B", color: COLORS.blindText, description: "Hit chance heavily reduced" },
     vanquishing_light: { icon: "⊕", color: COLORS.dmgHoly, description: "Holy aura damages nearby foes and may blind" },
@@ -337,7 +338,7 @@ function StatusTab({ unit, effectiveData, onToggleAI, unitId, onIncrementStat, d
                 </div>
                 <div className="card">
                     <span className="text-muted">Crit</span>
-                    <span className="float-right">{getDexterityCritChance(unit)}%</span>
+                    <span className="float-right">{getTotalCritChance(unit)}%</span>
                 </div>
                 <div className="card">
                     <span className="text-muted">Armor</span>
@@ -425,15 +426,20 @@ function getDamageTypeInfo(type: DamageType | undefined): { color: string; name:
     }
 }
 
-function SkillTooltip({ skill, isShielded, cantripUses }: { skill: Skill; isShielded: boolean; cantripUses?: number }) {
+function getSkillUsageLabel(skill: Skill): string {
+    if (skill.name === "Attack") {
+        return "Basic Attack";
+    }
+
+    const kindLabel = skill.kind === "spell" ? "Spell" : "Ability";
+    return skill.isCantrip ? `${kindLabel} Cantrip` : kindLabel;
+}
+
+function SkillTooltip({ skill, isShielded, cantripUses, silenceBlocksSkill }: { skill: Skill; isShielded: boolean; cantripUses?: number; silenceBlocksSkill?: boolean }) {
     const isRanged = skill.range > 2;
     const baseCooldown = skill.cooldown / 1000;
     const effectiveCooldown = isShielded ? baseCooldown * 2 : baseCooldown;
-    const abilityLabel = skill.name === "Attack"
-        ? "Basic Attack"
-        : skill.isCantrip
-            ? "Cantrip"
-            : "Skill";
+    const abilityLabel = getSkillUsageLabel(skill);
 
     // Build tooltip lines
     const lines: { label: string; value: string; color?: string }[] = [];
@@ -506,8 +512,8 @@ function SkillTooltip({ skill, isShielded, cantripUses }: { skill: Skill; isShie
         if (skill.name === "Five-Point Palm") {
             const dmgInfo = getDamageTypeInfo(skill.damageType);
             lines.push({ label: "Damage", value: `${skill.damageRange![0]}-${skill.damageRange![1]}`, color: dmgInfo.color });
-            lines.push({ label: "Weakened", value: `${durationSec}s`, color: COLORS.weakenedText });
-            lines.push({ label: "Effect", value: "+35% attack cooldowns", color: COLORS.weakenedText });
+            lines.push({ label: "Constricted", value: `${durationSec}s`, color: COLORS.constrictedText });
+            lines.push({ label: "Effect", value: "+35% attack/skill cooldowns", color: COLORS.constrictedText });
         } else if (skill.name === "Dim Mak") {
             lines.push({ label: "Doom chance", value: "80%", color: COLORS.doomText });
             lines.push({ label: "Doom timer", value: `${durationSec}s until death`, color: COLORS.doomText });
@@ -658,8 +664,8 @@ function SkillTooltip({ skill, isShielded, cantripUses }: { skill: Skill; isShie
             lines.push({ label: "On hit", value: `Stun (${skill.onHitEffect.chance}%)`, color: COLORS.stunnedText });
             lines.push({ label: "Stun duration", value: `${effectDurationSec}s`, color: COLORS.stunnedText });
         } else if (skill.onHitEffect.type === "attack_down") {
-            lines.push({ label: "On hit", value: `Weaken (${skill.onHitEffect.chance}%)`, color: COLORS.weakenedText });
-            lines.push({ label: "Debuff duration", value: `${effectDurationSec}s`, color: COLORS.weakenedText });
+            lines.push({ label: "On hit", value: `Constrict (${skill.onHitEffect.chance}%)`, color: COLORS.constrictedText });
+            lines.push({ label: "Debuff duration", value: `${effectDurationSec}s`, color: COLORS.constrictedText });
         } else if (skill.onHitEffect.type === "move_slow") {
             lines.push({ label: "On hit", value: `Hamstring (${skill.onHitEffect.chance}%)`, color: COLORS.hamstrungText });
             lines.push({ label: "Debuff duration", value: `${effectDurationSec}s`, color: COLORS.hamstrungText });
@@ -683,6 +689,10 @@ function SkillTooltip({ skill, isShielded, cantripUses }: { skill: Skill; isShie
     // Cantrip uses
     if (cantripUses !== undefined) {
         lines.push({ label: "Cantrip uses", value: `${cantripUses} remaining`, color: "var(--ui-color-accent-arcane)" });
+    }
+
+    if (silenceBlocksSkill) {
+        lines.push({ label: "Blocked", value: "Silenced", color: COLORS.silencedText });
     }
 
     return (
@@ -734,9 +744,10 @@ function SkillCard({
     const hasManaForSkill = (unit.mana ?? 0) >= skill.manaCost;
     const isBasicAttack = skill.name === "Attack";
     const isRanged = skill.range > 2;
+    const silenceBlocksSkill = hasStatusEffect(unit, "silenced") && skill.kind === "spell";
     const cantripUses = skill.isCantrip ? (unit.cantripUses?.[skill.name] ?? 0) : undefined;
     const noUsesLeft = skill.isCantrip && cantripUses !== undefined && cantripUses <= 0;
-    const canCast = !unlearned && hasManaForSkill && !noUsesLeft && unit.hp > 0;
+    const canCast = !unlearned && hasManaForSkill && !noUsesLeft && !silenceBlocksSkill && unit.hp > 0;
 
     const skillTextColor = getSkillTextColor(skill.type, skill.damageType);
     const skillBorderColor = getSkillBorderColor(skill.type, skill.damageType);
@@ -751,7 +762,7 @@ function SkillCard({
 
     return (
         <Tippy
-            content={<SkillTooltip skill={skill} isShielded={isShielded} cantripUses={cantripUses} />}
+            content={<SkillTooltip skill={skill} isShielded={isShielded} cantripUses={cantripUses} silenceBlocksSkill={silenceBlocksSkill} />}
             placement="left"
             delay={[200, 0]}
             arrow={true}
@@ -789,6 +800,7 @@ function SkillCard({
                     >
                         {skill.name}
                         {skill.isCantrip && <span className="skill-tag">CANTRIP</span>}
+                        {!isBasicAttack && <span className="skill-tag">{skill.kind.toUpperCase()}</span>}
                         {isBasicAttack && isRanged && <span className="skill-tag">RANGED</span>}
                         {isBasicAttack && !isRanged && <span className="skill-tag">MELEE</span>}
                         {isQueued && <span className="skill-tag skill-tag-queued">QUEUED</span>}

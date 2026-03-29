@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import Tippy from "@tippyjs/react";
 import { ChevronLeft, ChevronRight, Circle, Shield, Square, Swords, X } from "lucide-react";
-import type { EquipmentSlot, Item, ItemCategory } from "../core/types";
+import type { EquipmentSlot, EquipmentPassives, Item, ItemCategory } from "../core/types";
 import { isAccessory, isArmor, isShield, isWeapon } from "../core/types";
 import { COLORS, getDamageTypeColor } from "../core/constants";
 import { CORE_PLAYER_IDS, UNIT_DATA } from "../game/playerUnits";
@@ -63,6 +63,18 @@ function getItemIcon(category: ItemCategory) {
 
 interface TooltipLine { label: string; value: string; color?: string }
 
+function pushPassiveLines(lines: TooltipLine[], p: EquipmentPassives): void {
+    if (p.bonusMaxHp) lines.push({ label: "Max HP", value: `+${p.bonusMaxHp}`, color: COLORS.hpHigh });
+    if (p.bonusMaxMana) lines.push({ label: "Max Mana", value: `+${p.bonusMaxMana}`, color: COLORS.mana });
+    if (p.bonusMagicDamage) lines.push({ label: "Magic Dmg", value: `+${p.bonusMagicDamage}`, color: "var(--ui-color-accent-arcane)" });
+    if (p.bonusArmor) lines.push({ label: "Armor", value: `+${p.bonusArmor}`, color: COLORS.shieldedText });
+    if (p.bonusCritChance) lines.push({ label: "Crit", value: `+${p.bonusCritChance}%`, color: COLORS.damageCrit });
+    if (p.lifesteal) lines.push({ label: "Lifesteal", value: `${Math.round(p.lifesteal * 100)}%`, color: COLORS.logHeal });
+    if (p.hpRegen && p.hpRegenInterval) lines.push({ label: "Regen", value: `+${p.hpRegen} / ${p.hpRegenInterval / 1000}s`, color: COLORS.hpHigh });
+    if (p.bonusMoveSpeed) lines.push({ label: "Speed", value: `+${Math.round(p.bonusMoveSpeed * 100)}%`, color: "var(--ui-color-accent-primary-bright)" });
+    if (p.aggroReduction) lines.push({ label: "Aggro", value: `-${Math.round(p.aggroReduction * 100)}%`, color: "var(--ui-color-accent-warning)" });
+}
+
 function getItemTooltipLines(item: Item): TooltipLine[] {
     const lines: TooltipLine[] = [];
     if (isWeapon(item)) {
@@ -72,17 +84,14 @@ function getItemTooltipLines(item: Item): TooltipLine[] {
         if (item.grip === "twoHand") lines.push({ label: "Grip", value: "Two-handed" });
         if (item.range) lines.push({ label: "Range", value: `${item.range}` });
         if (item.attackCooldown) lines.push({ label: "Cooldown", value: `${(item.attackCooldown / 1000).toFixed(1)}s` });
+        pushPassiveLines(lines, item);
     }
     if (isShield(item) || isArmor(item)) {
         lines.push({ label: "Armor", value: `+${item.armor}`, color: COLORS.shieldedText });
+        pushPassiveLines(lines, item);
     }
     if (isAccessory(item)) {
-        if (item.bonusMaxHp) lines.push({ label: "Max HP", value: `+${item.bonusMaxHp}`, color: COLORS.hpHigh });
-        if (item.bonusMagicDamage) lines.push({ label: "Magic Dmg", value: `+${item.bonusMagicDamage}`, color: "var(--ui-color-accent-arcane)" });
-        if (item.bonusArmor) lines.push({ label: "Armor", value: `+${item.bonusArmor}`, color: COLORS.shieldedText });
-        if (item.hpRegen && item.hpRegenInterval) lines.push({ label: "Regen", value: `+${item.hpRegen} / ${item.hpRegenInterval / 1000}s`, color: COLORS.hpHigh });
-        if (item.aggroReduction) lines.push({ label: "Aggro", value: `-${Math.round(item.aggroReduction * 100)}%`, color: "var(--ui-color-accent-warning)" });
-        if (item.bonusMoveSpeed) lines.push({ label: "Speed", value: `+${Math.round(item.bonusMoveSpeed * 100)}%`, color: "var(--ui-color-accent-primary-bright)" });
+        pushPassiveLines(lines, item);
     }
     return lines;
 }

@@ -17,7 +17,7 @@ import { getUnitById } from "../game/unitQuery";
 import { createPathToTarget, clearJitterTracking } from "../ai/movement";
 import { getBasicAttackSkill } from "../game/playerUnits";
 import type { ActionQueue } from "../input";
-import { hasStatusEffect, isUnitAlive, getCooldownMultiplier, setSkillCooldown, isCooldownReady, getEffectiveSpeedMultiplier, applyStatusEffect } from "../combat/combatMath";
+import { hasStatusEffect, isUnitAlive, getCooldownMultiplier, setSkillCooldown, isCooldownReady, getEffectiveSpeedMultiplier, applyStatusEffect, isSkillBlockedBySilence } from "../combat/combatMath";
 import { getAliveUnitsInRange } from "../combat/damageEffects";
 import { isEnemyKiting, clearEnemyKiting } from "../game/enemyState";
 import { ACID_AURA_SKILL_NAME } from "./acidTiles";
@@ -214,7 +214,7 @@ export function updateUnitAI(
     }
 
     // Phase 1.6: Enemy heal check - healer enemies try to heal injured allies
-    if (!isPlayer && !hasDivineLattice && 'healSkill' in data && data.healSkill) {
+    if (!isPlayer && !hasDivineLattice && 'healSkill' in data && data.healSkill && !isSkillBlockedBySilence(unit, data.healSkill.kind)) {
         const healSkill = data.healSkill;
         if (isCooldownReady(skillCooldowns, unit.id, healSkill.name, now)) {
             const executed = executeEnemyHeal(
@@ -264,7 +264,7 @@ export function updateUnitAI(
             targetZ = targetG.position.z;
 
             // Check if we can cast vines to immobilize target (checked before attack range)
-            if (!isPlayer && 'vinesSkill' in data && data.vinesSkill) {
+            if (!isPlayer && 'vinesSkill' in data && data.vinesSkill && !isSkillBlockedBySilence(unit, data.vinesSkill.kind)) {
                 const unitsStateRef = { current: unitsState } as React.RefObject<Unit[]>;
                 tryVinesSkill({
                     unit, g, enemyStats: enemyData!, vinesSkill: data.vinesSkill,
@@ -314,7 +314,7 @@ export function updateUnitAI(
 
                 if (now >= cooldownEnd && !skipAttackForAcidAura) {
                     // Check if enemy has a breath skill and it's ready (cone-only attacker)
-                    if (!isPlayer && 'breathSkill' in data && data.breathSkill) {
+                    if (!isPlayer && 'breathSkill' in data && data.breathSkill && !isSkillBlockedBySilence(unit, data.breathSkill.kind)) {
                         const breathSkill = data.breathSkill;
                         if (isCooldownReady(skillCooldowns, unit.id, breathSkill.name, now)) {
                             startFireBreath(scene, unit, g, breathSkill, targetU.id, targetG, now, setSkillCooldowns, addLog);
@@ -323,7 +323,7 @@ export function updateUnitAI(
                     }
 
                     // Check if enemy has a charge attack and it's ready
-                    if (!isPlayer && 'chargeAttack' in data && data.chargeAttack) {
+                    if (!isPlayer && 'chargeAttack' in data && data.chargeAttack && !isSkillBlockedBySilence(unit, data.chargeAttack.kind)) {
                         if (tryStartChargeAttack({
                             unit, g, enemyStats: enemyData!, chargeAttack: data.chargeAttack, scene,
                             skillCooldowns, setSkillCooldowns, addLog, now
@@ -333,7 +333,7 @@ export function updateUnitAI(
                     }
 
                     // Check if enemy has a skill and it's ready
-                    if (!isPlayer && 'skill' in data && data.skill) {
+                    if (!isPlayer && 'skill' in data && data.skill && !isSkillBlockedBySilence(unit, data.skill.kind)) {
                         const skill = data.skill;
                         const enemySkillKey = `${unit.id}-${skill.name}`;
                         const skillCooldownEnd = skillCooldowns[enemySkillKey]?.end || 0;
@@ -410,7 +410,7 @@ export function updateUnitAI(
                 }
 
                 // Not in attack range - check if we can leap to close distance
-                if (!isPlayer && 'leapSkill' in data && data.leapSkill && !isUnitLeaping(unit.id)) {
+                if (!isPlayer && 'leapSkill' in data && data.leapSkill && !isSkillBlockedBySilence(unit, data.leapSkill.kind) && !isUnitLeaping(unit.id)) {
                     const leapSkill = data.leapSkill;
                     if (tryLeapToTarget({
                         unit, g, enemyStats: enemyData!, leapSkill,

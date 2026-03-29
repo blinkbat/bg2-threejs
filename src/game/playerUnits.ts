@@ -107,6 +107,7 @@ export function getBasicAttackSkill(unitId: number): Skill {
 
     return {
         name: "Attack",
+        kind: "ability",
         manaCost: 0,
         cooldown: attackCooldown,
         type: "damage",
@@ -135,7 +136,8 @@ export function getEffectiveMaxManaForStats(unitId: number, stats?: CharacterSta
     const data = UNIT_DATA[unitId];
     const resolvedStats = resolveStats(unitId, stats);
     const intelligenceBonus = resolvedStats.intelligence * MP_PER_INTELLIGENCE;
-    return (data.maxMana ?? 0) + intelligenceBonus;
+    const bonusMaxMana = usesEquipmentForUnit(unitId) ? getEffectivePlayerEquipmentStats(unitId).bonusMaxMana : 0;
+    return (data.maxMana ?? 0) + bonusMaxMana + intelligenceBonus;
 }
 
 /** Get effective max mana for a player (base + intelligence bonus) */
@@ -170,6 +172,7 @@ export function getEffectiveUnitData(unitId: number, unit?: Unit): UnitData {
     const projectileColor = equipmentStats?.projectileColor ?? data.projectileColor;
     const armor = equipmentStats?.armor ?? data.armor;
     const bonusMaxHp = equipmentStats?.bonusMaxHp ?? 0;
+    const bonusMaxMana = equipmentStats?.bonusMaxMana ?? 0;
     const attackCooldown = equipmentStats?.attackCooldown ?? data.attackCooldown;
 
     // Apply stat bonuses
@@ -187,7 +190,7 @@ export function getEffectiveUnitData(unitId: number, unit?: Unit): UnitData {
         armor,
         accuracy: data.accuracy + dexterityBonus,
         maxHp: data.maxHp + bonusMaxHp + vitalityBonus,
-        maxMana: (data.maxMana ?? 0) + intelligenceBonus,
+        maxMana: (data.maxMana ?? 0) + bonusMaxMana + intelligenceBonus,
         range,
         projectileColor,
         attackCooldown,

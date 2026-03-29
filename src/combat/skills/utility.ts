@@ -1068,11 +1068,11 @@ export function executeIntimidateSkill(
 }
 
 // =============================================================================
-// FIVE-POINT PALM SKILL (melee debuff: weakened + damage)
+// FIVE-POINT PALM SKILL (melee debuff: constricted + damage)
 // =============================================================================
 
 /**
- * Execute Five-Point Palm — melee strike that deals damage and applies weakened.
+ * Execute Five-Point Palm — melee strike that deals damage and applies constricted.
  */
 export function executeFivePointPalmSkill(
     ctx: SkillExecutionContext,
@@ -1119,7 +1119,7 @@ export function executeFivePointPalmSkill(
 
     // Swing animation
     spawnSwingIndicator(scene, casterG, targetG, true, swingAnimationsRef.current, getGameTime());
-    createAnimatedRing(scene, casterG.position.x, casterG.position.z, COLORS.weakenedText, {
+    createAnimatedRing(scene, casterG.position.x, casterG.position.z, COLORS.constrictedText, {
         innerRadius: 0.14, outerRadius: 0.28, maxScale: 1.0, duration: 180
     });
 
@@ -1166,10 +1166,10 @@ export function executeFivePointPalmSkill(
         soundFns.playHit();
         addLog(`${casterData.name}'s ${skill.name} strikes ${targetData.name} for ${dmg}!${isCrit ? " Critical hit!" : ""}`, skillLogColor);
 
-        // Apply weakened if not already weakened and target survived
-        if (!defeatedThisFrame.has(targetId) && !hasStatusEffect(targetEnemy, "weakened")) {
-            const weakenedEffect: StatusEffect = {
-                type: "weakened",
+        // Apply constricted if not already constricted and target survived
+        if (!defeatedThisFrame.has(targetId) && !hasStatusEffect(targetEnemy, "constricted")) {
+            const constrictedEffect: StatusEffect = {
+                type: "constricted",
                 duration,
                 tickInterval: BUFF_TICK_INTERVAL,
                 timeSinceTick: 0,
@@ -1178,19 +1178,19 @@ export function executeFivePointPalmSkill(
                 sourceId: casterId
             };
             setUnits(prev => prev.map(u =>
-                u.id === targetId ? { ...u, statusEffects: applyStatusEffect(u.statusEffects, weakenedEffect) } : u
+                u.id === targetId ? { ...u, statusEffects: applyStatusEffect(u.statusEffects, constrictedEffect) } : u
             ));
 
-            addLog(`${targetData.name}'s attacks are weakened!`, COLORS.weakenedText);
+            addLog(`${targetData.name} is constricted!`, COLORS.constrictedText);
 
             // Visual: brown ring on target
-            createAnimatedRing(scene, targetG.position.x, targetG.position.z, COLORS.weakenedText, {
+            createAnimatedRing(scene, targetG.position.x, targetG.position.z, COLORS.constrictedText, {
                 innerRadius: 0.2, outerRadius: 0.45, maxScale: 1.4, duration: 320
             });
 
             const mesh = ctx.unitMeshRef.current[targetId];
             if (mesh) {
-                (mesh.material as THREE.MeshStandardMaterial).color.set(COLORS.weakenedText);
+                (mesh.material as THREE.MeshStandardMaterial).color.set(COLORS.constrictedText);
                 hitFlashRef.current[targetId] = getGameTime();
             }
         }

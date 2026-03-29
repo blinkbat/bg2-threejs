@@ -832,12 +832,12 @@ export function executeRestorationSkill(
     const hasBurn = hasStatusEffect(targetAlly, "burn");
     const hasSlow = hasStatusEffect(targetAlly, "slowed");
     const hasHamstrung = hasStatusEffect(targetAlly, "hamstrung");
-    const hasWeakened = hasStatusEffect(targetAlly, "weakened");
+    const hasConstricted = hasStatusEffect(targetAlly, "constricted");
     const hasSleep = hasStatusEffect(targetAlly, "sleep");
     const targetMaxHp = getEffectiveMaxHp(targetAlly.id, targetAlly);
     const needsHealing = targetAlly.hp < targetMaxHp;
 
-    if (!hasDoom && !hasPoison && !hasBurn && !hasSlow && !hasHamstrung && !hasWeakened && !hasSleep && !needsHealing) {
+    if (!hasDoom && !hasPoison && !hasBurn && !hasSlow && !hasHamstrung && !hasConstricted && !hasSleep && !needsHealing) {
         addLog(`${UNIT_DATA[casterId].name}: ${targetData.name} doesn't need restoration!`, COLORS.logNeutral);
         return false;
     }
@@ -870,7 +870,7 @@ export function executeRestorationSkill(
                 && e.type !== "burn"
                 && e.type !== "slowed"
                 && e.type !== "hamstrung"
-                && e.type !== "weakened"
+                && e.type !== "constricted"
                 && e.type !== "sleep"
         );
         return { ...u, statusEffects: applyStatusEffect(cleansedEffects, regenEffect) };
@@ -883,7 +883,7 @@ export function executeRestorationSkill(
     if (hasBurn) removedEffects.push("Burn");
     if (hasSlow) removedEffects.push("Slow");
     if (hasHamstrung) removedEffects.push("Hamstrung");
-    if (hasWeakened) removedEffects.push("Weakened");
+    if (hasConstricted) removedEffects.push("Constricted");
     if (hasSleep) removedEffects.push("Sleep");
 
     soundFns.playHeal();

@@ -7,6 +7,7 @@ const EXPECTED_STATUS_TERMS = [
     "Burn",
     "Chilled",
     "Cleansed",
+    "Constricted",
     "Defiance",
     "Divine Lattice",
     "Doom",
@@ -21,13 +22,13 @@ const EXPECTED_STATUS_TERMS = [
     "Qi Drain",
     "Regeneration",
     "Shielded",
+    "Silenced",
     "Sleep",
     "Slowed",
     "Stunned",
     "Sun Stance",
     "Thorns",
     "Vanquishing Light",
-    "Weakened",
 ];
 
 const EXPECTED_STAT_TERMS = [

@@ -82,6 +82,7 @@ import type { AcidTile, SmokeTile, SanctuaryTile } from "../src/core/types";
 function makeSkill(overrides: Partial<Skill>): Skill {
     return {
         name: "Utility Skill",
+        kind: "ability",
         manaCost: 0,
         cooldown: 1_000,
         type: "buff",
@@ -163,7 +164,7 @@ describe("utility skill behavior", () => {
         expect(smokeTiles.get("7,6")).toMatchObject({ x: 7, z: 6, sourceId: 1 });
     });
 
-    it("applies weakened when Five-Point Palm lands", () => {
+    it("applies constricted when Five-Point Palm lands", () => {
         const caster = makeUnit({ id: 1, x: 5, z: 5 });
         const enemy = makeUnit({ id: 100, x: 6, z: 5, hp: 20, team: "enemy", enemyType: "kobold" });
         const casterGroup = makeUnitGroup({ position: { x: 5, y: 0, z: 5 } });
@@ -190,7 +191,7 @@ describe("utility skill behavior", () => {
         expect(updatedEnemy?.hp).toBeLessThan(20);
         expect(updatedEnemy?.statusEffects).toEqual(
             expect.arrayContaining([
-                expect.objectContaining({ type: "weakened", duration: 5_000 }),
+                expect.objectContaining({ type: "constricted", duration: 5_000 }),
             ])
         );
     });

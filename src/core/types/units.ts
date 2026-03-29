@@ -8,7 +8,7 @@ export type MonsterType = "beast" | "construct" | "demon" | "humanoid" | "undead
 export type EnemyTier = "enemy" | "miniboss" | "boss" | "npc";
 
 // Status effect types
-export type StatusEffectType = "poison" | "burn" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed" | "chilled" | "qi_drain" | "energy_shield" | "defiance" | "doom" | "invul" | "sleep" | "sun_stance" | "thorns" | "highland_defense" | "divine_lattice" | "weakened" | "hamstrung" | "blind" | "vanquishing_light" | "enraged" | "feared" | "blood_marked";
+export type StatusEffectType = "poison" | "burn" | "regen" | "shielded" | "stunned" | "cleansed" | "pinned" | "slowed" | "chilled" | "qi_drain" | "energy_shield" | "defiance" | "doom" | "invul" | "sleep" | "silenced" | "sun_stance" | "thorns" | "highland_defense" | "divine_lattice" | "constricted" | "hamstrung" | "blind" | "vanquishing_light" | "enraged" | "feared" | "blood_marked";
 
 export interface StatusEffect {
     type: StatusEffectType;
@@ -75,7 +75,7 @@ export interface Unit {
     flyHeight?: number;  // Optional vertical offset for floating units
 }
 
-import type { Skill, DamageType } from "./combat";
+import type { Skill, DamageType, SkillKind } from "./combat";
 
 export interface UnitData {
     name: string;
@@ -102,7 +102,11 @@ export interface UnitData {
 // ENEMY DATA
 // =============================================================================
 
-export interface EnemySkill {
+interface EnemySkillConfig {
+    kind: SkillKind;
+}
+
+export interface EnemySkill extends EnemySkillConfig {
     name: string;
     cooldown: number;      // ms
     damage: [number, number];
@@ -111,14 +115,14 @@ export interface EnemySkill {
     damageType: DamageType;  // Type of damage - armor only reduces physical
 }
 
-export interface EnemyHealSkill {
+export interface EnemyHealSkill extends EnemySkillConfig {
     name: string;
     cooldown: number;      // ms
     heal: [number, number];
     range: number;         // range to find hurt allies
 }
 
-export interface EnemySpawnSkill {
+export interface EnemySpawnSkill extends EnemySkillConfig {
     name: string;            // Cooldown key name (e.g. "spawn")
     spawnType: EnemyType;    // What enemy type to spawn
     cooldown: number;        // ms between spawns
@@ -126,7 +130,7 @@ export interface EnemySpawnSkill {
     spawnRange: number;      // How far from the spawner to place the spawn
 }
 
-export interface EnemyChargeAttack {
+export interface EnemyChargeAttack extends EnemySkillConfig {
     name: string;
     cooldown: number;        // ms between charge attacks
     chargeTime: number;      // ms to charge before attack fires
@@ -136,21 +140,21 @@ export interface EnemyChargeAttack {
     damageType: DamageType;  // Type of damage - armor only reduces physical
 }
 
-export interface EnemyLeapSkill {
+export interface EnemyLeapSkill extends EnemySkillConfig {
     cooldown: number;        // ms between leaps
     minRange: number;        // Minimum distance to target to trigger leap
     maxRange: number;        // Maximum leap distance
     damage: [number, number];  // Bonus damage on landing
 }
 
-export interface EnemyVinesSkill {
+export interface EnemyVinesSkill extends EnemySkillConfig {
     cooldown: number;        // ms between casts
     range: number;           // Cast range
     duration: number;        // How long target is immobilized (ms)
     damage: [number, number];  // Damage dealt when vines grab
 }
 
-export interface EnemyTentacleSkill {
+export interface EnemyTentacleSkill extends EnemySkillConfig {
     cooldown: number;        // ms between tentacle spawns
     maxTentacles: number;    // Maximum active tentacles at once
     spawnRange: number;      // How far from the kraken to spawn tentacles (toward targets)
@@ -158,14 +162,14 @@ export interface EnemyTentacleSkill {
     damageToParent: number;  // Damage dealt to kraken when tentacle is killed
 }
 
-export interface EnemyRaiseSkill {
+export interface EnemyRaiseSkill extends EnemySkillConfig {
     spawnType: EnemyType;    // What enemy type to raise
     cooldown: number;        // ms after all minions die before re-raising
     spawnCount: number;      // How many to raise at once
     spawnRange: number;      // Placement radius around the raiser
 }
 
-export interface EnemyCurseSkill {
+export interface EnemyCurseSkill extends EnemySkillConfig {
     name: string;
     cooldown: number;        // ms between casts
     range: number;           // Targeting range
@@ -175,7 +179,7 @@ export interface EnemyCurseSkill {
     damageType: DamageType;
 }
 
-export interface EnemyGlareSkill {
+export interface EnemyGlareSkill extends EnemySkillConfig {
     name: string;
     cooldown: number;        // ms between casts
     range: number;           // max distance to target to trigger
@@ -187,7 +191,7 @@ export interface EnemyGlareSkill {
     stunDuration: number;    // ms stun applied on hit
 }
 
-export interface EnemySleepSkill {
+export interface EnemySleepSkill extends EnemySkillConfig {
     name: string;
     cooldown: number;        // ms between casts
     range: number;           // Targeting range (how far caster can target)
@@ -195,7 +199,7 @@ export interface EnemySleepSkill {
     accuracy: number;        // Hit chance per target (0-100)
 }
 
-export interface EnemyDreamEaterSkill {
+export interface EnemyDreamEaterSkill extends EnemySkillConfig {
     name: string;
     cooldown: number;        // ms between casts
     range: number;           // Targeting range
@@ -203,7 +207,7 @@ export interface EnemyDreamEaterSkill {
     damageType: DamageType;
 }
 
-export interface EnemyBreathSkill {
+export interface EnemyBreathSkill extends EnemySkillConfig {
     name: string;
     cooldown: number;        // ms between casts (starts after channel ends)
     range: number;           // Max range to start breathing
@@ -215,7 +219,7 @@ export interface EnemyBreathSkill {
     duration: number;        // ms channel duration
 }
 
-export interface EnemyPhaseShiftSkill {
+export interface EnemyPhaseShiftSkill extends EnemySkillConfig {
     name: string;
     cooldown: number;          // ms between phase shifts
     invisibleDuration: number; // ms spent invisible between shifts

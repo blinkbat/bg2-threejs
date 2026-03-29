@@ -1,4 +1,4 @@
-import type { Skill } from "../core/types";
+import type { Skill, SkillKind } from "../core/types";
 import {
     THORNS_DURATION,
     THORNS_DAMAGE_MIN,
@@ -18,7 +18,46 @@ import {
 // PLAYER SKILLS
 // =============================================================================
 
-export const SKILLS: Record<string, Skill> = {
+type BaseSkill = Omit<Skill, "kind">;
+
+const PLAYER_SPELL_SKILL_KEYS: ReadonlySet<string> = new Set([
+    "ankh",
+    "bodySwap",
+    "chainLightning",
+    "cleanse",
+    "divineLattice",
+    "elorasGrasp",
+    "energyShield",
+    "fireBolt",
+    "fireball",
+    "glacialWhorl",
+    "heal",
+    "holyCross",
+    "holyStrike",
+    "magicWave",
+    "massHeal",
+    "restoration",
+    "sanctuary",
+    "summonAncestor",
+    "teleportOther",
+    "thunder",
+    "turnUndead",
+    "vanquishingLight",
+    "vishasEyes",
+    "wallOfFire",
+    "wellOfGravity",
+]);
+
+function withSkillKinds(skills: Record<string, BaseSkill>): Record<string, Skill> {
+    const resolved: Record<string, Skill> = {};
+    for (const [key, skill] of Object.entries(skills)) {
+        const kind: SkillKind = PLAYER_SPELL_SKILL_KEYS.has(key) ? "spell" : "ability";
+        resolved[key] = { ...skill, kind };
+    }
+    return resolved;
+}
+
+export const SKILLS: Record<string, Skill> = withSkillKinds({
     fireBolt: {
         name: "Fire Bolt",
         description: "Loose a quick bolt of flame that may set the target ablaze.",
@@ -672,7 +711,7 @@ export const SKILLS: Record<string, Skill> = {
     },
     fivePointPalm: {
         name: "Five-Point Palm",
-        description: "Strike a pressure point, weakening the target's combat ability for 15 seconds.",
+        description: "Strike a pressure point, leaving the target constricted for 15 seconds.",
         flavor: "\"Five fingers, five meridians, five seconds to regret everything.\" - Master Shen",
         manaCost: 8,
         cooldown: 5000,
@@ -712,4 +751,4 @@ export const SKILLS: Record<string, Skill> = {
         isCantrip: true,
         maxUses: 2
     }
-};
+});

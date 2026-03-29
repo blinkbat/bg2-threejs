@@ -6,7 +6,7 @@ import * as THREE from "three";
 import type { Skill } from "../../core/types";
 import { COLORS } from "../../core/constants";
 import { UNIT_DATA, getEffectiveUnitData } from "../../game/playerUnits";
-import { getIncapacitatingStatus, hasStatusEffect } from "../combatMath";
+import { getIncapacitatingStatus, hasStatusEffect, isSkillBlockedBySilence } from "../combatMath";
 
 // Re-export types
 export type { SkillExecutionContext } from "./types";
@@ -48,6 +48,10 @@ export function executeSkill(
     }
     if (incapacitatingStatus === "sleep") {
         ctx.addLog(`${UNIT_DATA[casterId].name} cannot act while asleep.`, COLORS.sleepText);
+        return false;
+    }
+    if (isSkillBlockedBySilence(caster, skill.kind)) {
+        ctx.addLog(`${UNIT_DATA[casterId].name} is silenced and cannot cast ${skill.name}.`, COLORS.silencedText);
         return false;
     }
     if (hasStatusEffect(caster, "divine_lattice")) {

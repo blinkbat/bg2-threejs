@@ -62,6 +62,7 @@ function makeStatusEffect(type: StatusEffect["type"], overrides: Partial<StatusE
 function makeSkill(overrides: Partial<Skill>): Skill {
     return {
         name: "Support Skill",
+        kind: "ability",
         manaCost: 0,
         cooldown: 1_000,
         type: "buff",
@@ -159,7 +160,7 @@ describe("support skill behavior", () => {
                 makeStatusEffect("burn"),
                 makeStatusEffect("slowed"),
                 makeStatusEffect("hamstrung"),
-                makeStatusEffect("weakened"),
+                makeStatusEffect("constricted"),
                 makeStatusEffect("sleep"),
             ],
         });

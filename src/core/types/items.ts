@@ -21,8 +21,22 @@ interface ItemBase {
     category: ItemCategory;
 }
 
+// Passive bonus fields shared across all equipment types
+export interface EquipmentPassives {
+    bonusMaxHp?: number;            // Flat bonus to max HP
+    bonusMaxMana?: number;          // Flat bonus to max mana
+    bonusMagicDamage?: number;      // Flat bonus to non-physical damage
+    bonusArmor?: number;            // Flat bonus to armor
+    bonusCritChance?: number;       // Flat % added to crit chance
+    bonusMoveSpeed?: number;        // 0-1, percentage bonus to move speed (0.1 = +10%)
+    lifesteal?: number;             // 0-1, fraction of damage dealt healed back
+    hpRegen?: number;               // HP regenerated per tick (in combat)
+    hpRegenInterval?: number;       // Interval in ms for regen tick
+    aggroReduction?: number;        // 0-1, reduces enemy targeting priority
+}
+
 // Weapon item
-export interface WeaponItem extends ItemBase {
+export interface WeaponItem extends ItemBase, EquipmentPassives {
     category: "weapon";
     grip: WeaponGrip;
     damage: [number, number];
@@ -33,27 +47,20 @@ export interface WeaponItem extends ItemBase {
 }
 
 // Shield item
-export interface ShieldItem extends ItemBase {
+export interface ShieldItem extends ItemBase, EquipmentPassives {
     category: "shield";
     armor: number;
 }
 
 // Armor item
-export interface ArmorItem extends ItemBase {
+export interface ArmorItem extends ItemBase, EquipmentPassives {
     category: "armor";
     armor: number;
 }
 
-// Accessory item - can have various stat bonuses
-export interface AccessoryItem extends ItemBase {
+// Accessory item
+export interface AccessoryItem extends ItemBase, EquipmentPassives {
     category: "accessory";
-    bonusMaxHp?: number;
-    bonusMagicDamage?: number;      // Flat bonus to non-physical damage
-    bonusArmor?: number;
-    hpRegen?: number;               // HP regenerated per tick (in combat)
-    hpRegenInterval?: number;       // Interval in ms for regen tick
-    aggroReduction?: number;        // 0-1, reduces enemy targeting priority
-    bonusMoveSpeed?: number;        // 0-1, percentage bonus to move speed (0.1 = +10%)
 }
 
 // Key item - used to unlock chests or doors

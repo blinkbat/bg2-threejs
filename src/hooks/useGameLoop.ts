@@ -679,7 +679,6 @@ export function useGameLoop({
         let fogVisualTransitionsActive = true;
         previousHpByIdRef.current = new Map(stateRefs.unitsStateRef.current.map(unit => [unit.id, unit.hp]));
         previousCorePartyHpByIdRef.current = buildCorePartyHpById(stateRefs.unitsStateRef.current);
-        sightedEnemyIdsRef.current = new Set();
         const setUnitsLive = createLiveUnitsDispatch(callbacks.setUnits, stateRefs.unitsStateRef);
 
         fpsFrameCount.current = 0;
@@ -1007,6 +1006,12 @@ export function useGameLoop({
                 refs.visibility,
                 useFogVisibility
             );
+            // Remove enemies that left FoW so re-entering triggers a new sighting
+            for (const prevId of sightedEnemyIdsRef.current) {
+                if (!visibleEnemyIds.has(prevId)) {
+                    sightedEnemyIdsRef.current.delete(prevId);
+                }
+            }
             const enemySightedThisFrame = hasNewVisibleEnemy(
                 sightedEnemyIdsRef.current,
                 visibleEnemyIds

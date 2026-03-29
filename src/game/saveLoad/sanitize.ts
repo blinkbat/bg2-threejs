@@ -40,11 +40,12 @@ const STATUS_EFFECT_TYPES: ReadonlySet<StatusEffectType> = new Set([
     "doom",
     "invul",
     "sleep",
+    "silenced",
     "sun_stance",
     "thorns",
     "highland_defense",
     "divine_lattice",
-    "weakened",
+    "constricted",
     "hamstrung",
     "blind",
     "vanquishing_light",
@@ -191,12 +192,12 @@ function sanitizeStatusEffect(raw: unknown): StatusEffect | null {
         return null;
     }
 
-    const duration = readFiniteNumber(raw, "duration") ?? 0;
+    const duration = Math.max(0, readFiniteNumber(raw, "duration") ?? 0);
     const tickIntervalRaw = readFiniteNumber(raw, "tickInterval");
     const tickInterval = tickIntervalRaw !== undefined && tickIntervalRaw > 0 ? tickIntervalRaw : 1000;
-    const timeSinceTick = readFiniteNumber(raw, "timeSinceTick") ?? 0;
+    const timeSinceTick = Math.max(0, readFiniteNumber(raw, "timeSinceTick") ?? 0);
     const lastUpdateTime = readFiniteNumber(raw, "lastUpdateTime") ?? Date.now();
-    const damagePerTick = readFiniteNumber(raw, "damagePerTick") ?? 0;
+    const damagePerTick = Math.max(0, readFiniteNumber(raw, "damagePerTick") ?? 0);
     const sourceIdRaw = readFiniteNumber(raw, "sourceId");
     const sourceId = sourceIdRaw !== undefined ? Math.floor(sourceIdRaw) : -1;
 
@@ -211,25 +212,25 @@ function sanitizeStatusEffect(raw: unknown): StatusEffect | null {
     };
 
     const shieldAmount = readFiniteNumber(raw, "shieldAmount");
-    if (shieldAmount !== undefined) effect.shieldAmount = shieldAmount;
+    if (shieldAmount !== undefined) effect.shieldAmount = Math.max(0, shieldAmount);
 
     const thornsDamage = readFiniteNumber(raw, "thornsDamage");
-    if (thornsDamage !== undefined) effect.thornsDamage = thornsDamage;
+    if (thornsDamage !== undefined) effect.thornsDamage = Math.max(0, thornsDamage);
 
     const interceptRemaining = readFiniteNumber(raw, "interceptRemaining");
-    if (interceptRemaining !== undefined) effect.interceptRemaining = interceptRemaining;
+    if (interceptRemaining !== undefined) effect.interceptRemaining = Math.max(0, interceptRemaining);
 
     const interceptCooldownEnd = readFiniteNumber(raw, "interceptCooldownEnd");
     if (interceptCooldownEnd !== undefined) effect.interceptCooldownEnd = interceptCooldownEnd;
 
     const auraRadius = readFiniteNumber(raw, "auraRadius");
-    if (auraRadius !== undefined) effect.auraRadius = auraRadius;
+    if (auraRadius !== undefined) effect.auraRadius = Math.max(0, auraRadius);
 
     const blindChance = readFiniteNumber(raw, "blindChance");
-    if (blindChance !== undefined) effect.blindChance = blindChance;
+    if (blindChance !== undefined) effect.blindChance = Math.max(0, Math.min(100, blindChance));
 
     const blindDuration = readFiniteNumber(raw, "blindDuration");
-    if (blindDuration !== undefined) effect.blindDuration = blindDuration;
+    if (blindDuration !== undefined) effect.blindDuration = Math.max(0, blindDuration);
 
     const auraDamageTypeRaw = readString(raw, "auraDamageType");
     if (auraDamageTypeRaw && isDamageType(auraDamageTypeRaw)) {
@@ -243,7 +244,7 @@ function sanitizeStatusEffect(raw: unknown): StatusEffect | null {
     if (fearSourceZ !== undefined) effect.fearSourceZ = fearSourceZ;
 
     const lifestealPercent = readFiniteNumber(raw, "lifestealPercent");
-    if (lifestealPercent !== undefined) effect.lifestealPercent = lifestealPercent;
+    if (lifestealPercent !== undefined) effect.lifestealPercent = Math.max(0, lifestealPercent);
 
     return effect;
 }

@@ -77,7 +77,7 @@ const CORE_GLOSSARY: ReadonlyArray<GlossaryEntry> = [
     {
         term: "Debuff",
         category: "Core System",
-        body: "A debuff is a harmful timed effect that weakens, disables, damages, or displaces a target."
+        body: "A debuff is a harmful timed effect that hinders, disables, damages, or displaces a target."
     },
     {
         term: "Fog of War",
@@ -318,6 +318,11 @@ const STATUS_GLOSSARY: Record<StatusEffectType, GlossaryEntry> = {
         category: "Status",
         body: "Shielded doubles armor but also slows action tempo by stretching cooldowns. It is a durable stance rather than a true damage shield."
     },
+    silenced: {
+        term: "Silenced",
+        category: "Status",
+        body: "Silenced units can still move, attack, and use abilities, but they cannot use spell skills."
+    },
     sleep: {
         term: "Sleep",
         category: "Status",
@@ -348,10 +353,10 @@ const STATUS_GLOSSARY: Record<StatusEffectType, GlossaryEntry> = {
         category: "Status",
         body: "Vanquishing Light surrounds the caster with a holy aura that repeatedly damages nearby enemies and may blind them."
     },
-    weakened: {
-        term: "Weakened",
+    constricted: {
+        term: "Constricted",
         category: "Status",
-        body: "Weakened lengthens attack and skill cooldowns, leaving the target less effective in sustained combat."
+        body: "Constricted lengthens attack and skill cooldowns, leaving the target less effective in sustained combat."
     }
 };
 

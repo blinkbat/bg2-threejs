@@ -6,7 +6,7 @@ import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, Projectile, EnemyStats, MagicMissileProjectile, TrapProjectile, FireballProjectile, PiercingProjectile, StatusEffect, DamageType, UnitData, SkillOnHitEffect } from "../core/types";
 import { HIT_DETECTION_RADIUS, COLORS, BUFF_TICK_INTERVAL, SUN_STANCE_BONUS_DAMAGE, GLACIAL_WHORL_HIT_RADIUS } from "../core/constants";
 import { getUnitStats, isEnemyData } from "../game/units";
-import { calculateDamageWithCrit, calculateDamageWithOptionalCritChance, getDirectionAndDistance, rollSkillHit, rollDamage, shouldApplyPoison, getEffectiveArmor, logHit, logLifestealHit, logMiss, logPoisoned, logBurning, logAoeHit, logAoeMiss, getDamageColor, logTrapTriggered, calculateStatBonus, applyStatusEffect, checkEnemyDefenses, hasStatusEffect, rollChance, applyChilled, logStunned, logWeakened, logHamstrung } from "../combat/combatMath";
+import { calculateDamageWithCrit, calculateDamageWithOptionalCritChance, getDirectionAndDistance, rollSkillHit, rollDamage, shouldApplyPoison, getEffectiveArmor, logHit, logLifestealHit, logMiss, logPoisoned, logBurning, logAoeHit, logAoeMiss, getDamageColor, logTrapTriggered, calculateStatBonus, applyStatusEffect, checkEnemyDefenses, hasStatusEffect, rollChance, applyChilled, logStunned, logConstricted, logHamstrung } from "../combat/combatMath";
 import { accumulateDelta } from "../core/gameClock";
 import { isBlocked } from "../ai/pathfinding";
 import { isTreeBlocked } from "../game/areas";
@@ -405,12 +405,12 @@ function applySkillProjectileOnHitEffect(
     const statusType = effect.type === "stun"
         ? "stunned"
         : effect.type === "attack_down"
-            ? "weakened"
+            ? "constricted"
             : "hamstrung";
     const effectVisual = effect.type === "stun"
         ? { logText: logStunned(targetName), color: COLORS.stunnedText, maxScale: 1.25, duration: 240 }
         : effect.type === "attack_down"
-            ? { logText: logWeakened(targetName), color: COLORS.weakenedText, maxScale: 1.2, duration: 220 }
+            ? { logText: logConstricted(targetName), color: COLORS.constrictedText, maxScale: 1.2, duration: 220 }
             : { logText: logHamstrung(targetName), color: COLORS.hamstrungText, maxScale: 1.2, duration: 220 };
 
     const statusEffect: StatusEffect = {

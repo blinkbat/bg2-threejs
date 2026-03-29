@@ -151,7 +151,7 @@ describe("combatMath", () => {
             statusEffects: [
                 makeStatusEffect("slowed"),
                 makeStatusEffect("chilled"),
-                makeStatusEffect("weakened"),
+                makeStatusEffect("constricted"),
                 makeStatusEffect("defiance"),
             ],
         });

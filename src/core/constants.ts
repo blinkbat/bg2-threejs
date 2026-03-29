@@ -47,7 +47,7 @@ export const BLIND_DURATION = 5000;         // 5 seconds
 export const BLIND_ACCURACY_MULT = 0.45;    // 55% hit chance reduction while blinded
 
 // Status Effects - Targeted shot debuffs
-export const WEAKENED_COOLDOWN_MULT = 1.35; // 35% longer attack/skill cooldowns
+export const CONSTRICTED_COOLDOWN_MULT = 1.35; // 35% longer attack/skill cooldowns
 export const HAMSTRUNG_MOVE_MULT = 0.6;     // 40% move speed reduction
 
 // Status Effects - Defiance
@@ -264,6 +264,9 @@ export const COLORS = {
     sleep: "#4a0080",
     sleepText: "#9b59b6",
     sleepBg: "#1a0033",
+    silenced: "#51466d",
+    silencedText: "#b9abd9",
+    silencedBg: "#1d1828",
     sunStance: "#ff6b35",
     sunStanceText: "#ff8c5a",
     sunStanceBg: "#2a1508",
@@ -276,9 +279,9 @@ export const COLORS = {
     divineLattice: "#d8e6ff",
     divineLatticeText: "#ffffff",
     divineLatticeBg: "#1a2333",
-    weakened: "#7f5f4a",
-    weakenedText: "#d9ad84",
-    weakenedBg: "#2a1f18",
+    constricted: "#7f5f4a",
+    constrictedText: "#d9ad84",
+    constrictedBg: "#2a1f18",
     hamstrung: "#355c7d",
     hamstrungText: "#7fb3d5",
     hamstrungBg: "#132230",
