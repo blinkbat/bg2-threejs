@@ -3,10 +3,10 @@ import {
     ITEM_REGISTRY_STORAGE_KEY,
     clearStoredItemRegistry,
     getAllItemDefinitions,
+    getDefaultItemDefinitions,
     getItem,
     loadItemRegistryFromStorage,
     replaceItemRegistry,
-    resetItemRegistryToDefaults,
 } from "../src/game/items";
 
 class LocalStorageMock {
@@ -41,7 +41,7 @@ beforeAll(() => {
 
 beforeEach(() => {
     localStorageMock.clear();
-    resetItemRegistryToDefaults();
+    replaceItemRegistry(getDefaultItemDefinitions());
 });
 
 describe("item registry storage", () => {

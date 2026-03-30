@@ -139,12 +139,6 @@ export function getPartyInventory(): PartyInventory {
 // SETTERS
 // =============================================================================
 
-/** Set equipment for a character */
-export function setCharacterEquipment(unitId: number, equipment: CharacterEquipment): void {
-    ensureInitialized();
-    equipmentState[unitId] = cloneEquipment(equipment);
-}
-
 /** Set all character equipment (for loading saved state) */
 export function setAllEquipment(equipment: Record<number, CharacterEquipment>): void {
     equipmentState = cloneAllEquipment(equipment);
@@ -195,11 +189,6 @@ export function getEffectivePlayerBonusCritChance(unitId: number): number {
 /** Get lifesteal from equipment (0-1) */
 export function getEffectivePlayerLifesteal(unitId: number): number {
     return getEffectivePlayerEquipmentStats(unitId).lifesteal;
-}
-
-/** Get bonus max mana from equipment */
-export function getEffectivePlayerBonusMaxMana(unitId: number): number {
-    return getEffectivePlayerEquipmentStats(unitId).bonusMaxMana;
 }
 
 // =============================================================================

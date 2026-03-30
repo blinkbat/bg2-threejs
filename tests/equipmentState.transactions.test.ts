@@ -6,7 +6,7 @@ import {
     getPartyInventory,
     initializeEquipmentState,
     moveEquippedItemForCharacter,
-    setCharacterEquipment,
+    setAllEquipment,
     setPartyInventory,
     unequipItemForCharacter
 } from "../src/game/equipmentState";
@@ -31,7 +31,7 @@ function getQuantity(itemId: string): number {
 describe("equipment transactions", () => {
     beforeEach(() => {
         initializeEquipmentState();
-        setCharacterEquipment(1, { ...EMPTY_EQUIPMENT });
+        setAllEquipment({ 1: { ...EMPTY_EQUIPMENT } });
         setPartyInventory({ items: [] });
     });
 
@@ -46,7 +46,7 @@ describe("equipment transactions", () => {
     });
 
     it("unequips to inventory and clears the slot", () => {
-        setCharacterEquipment(1, { ...EMPTY_EQUIPMENT, accessory1: "mudwormsRing" });
+        setAllEquipment({ 1: { ...EMPTY_EQUIPMENT, accessory1: "mudwormsRing" } });
 
         const transaction = unequipItemForCharacter(1, "accessory1");
 
@@ -56,7 +56,7 @@ describe("equipment transactions", () => {
     });
 
     it("moves equipped item between valid slots without touching inventory", () => {
-        setCharacterEquipment(1, { ...EMPTY_EQUIPMENT, accessory1: "mudwormsRing" });
+        setAllEquipment({ 1: { ...EMPTY_EQUIPMENT, accessory1: "mudwormsRing" } });
         setPartyInventory(inventoryWith("loafOfBread", 2));
         const inventoryBefore = getPartyInventory();
 
@@ -72,7 +72,7 @@ describe("equipment transactions", () => {
     it("does not mutate equipment/inventory when move destination is invalid", () => {
         const initialEquipment: CharacterEquipment = { ...EMPTY_EQUIPMENT, accessory1: "mudwormsRing" };
         const initialInventory: PartyInventory = inventoryWith("loafOfBread", 2);
-        setCharacterEquipment(1, initialEquipment);
+        setAllEquipment({ 1: initialEquipment });
         setPartyInventory(initialInventory);
 
         const transaction = moveEquippedItemForCharacter(1, "accessory1", "leftHand");

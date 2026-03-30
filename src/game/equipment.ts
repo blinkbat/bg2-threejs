@@ -324,12 +324,6 @@ export function hasInInventory(inventory: PartyInventory, itemId: string, quanti
     return entry !== undefined && entry.quantity >= quantity;
 }
 
-/** Get the current quantity of an item in inventory */
-export function getInventoryQuantity(inventory: PartyInventory, itemId: string): number {
-    const entry = inventory.items.find(e => e.itemId === itemId);
-    return entry?.quantity ?? 0;
-}
-
 // =============================================================================
 // EQUIPMENT VALIDATION
 // =============================================================================

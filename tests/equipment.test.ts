@@ -6,11 +6,15 @@ import {
     equipItem,
     getComputedStats,
     getEquipmentArmor,
-    getInventoryQuantity,
     hasInInventory,
     removeFromInventory,
 } from "../src/game/equipment";
 import { getItem } from "../src/game/items";
+
+function getInventoryQuantity(inventory: PartyInventory, itemId: string): number {
+    const entry = inventory.items.find(e => e.itemId === itemId);
+    return entry?.quantity ?? 0;
+}
 
 function createEquipment(overrides: Partial<CharacterEquipment> = {}): CharacterEquipment {
     return {

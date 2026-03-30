@@ -1013,46 +1013,6 @@ export function getItemCategoryGroups(): ItemCategoryGroup[] {
     });
 }
 
-export function upsertItemDefinition(item: Item): string[] {
-    const errors = validateItemDefinition(item);
-    if (errors.length > 0) return errors;
-
-    const cloned = cloneItemDefinition(item);
-
-    // Remove old entry from every category to support category changes safely.
-    clearItemDefinition(item.id, false);
-
-    const targetRegistry = getCategoryRegistry(cloned.category);
-    targetRegistry[cloned.id] = cloned;
-    rebuildItemIndex();
-    writeStoredRegistry(Object.values(ITEMS));
-    return [];
-}
-
-function clearItemDefinition(itemId: string, rebuild: boolean): void {
-    delete WEAPONS[itemId];
-    delete SHIELDS[itemId];
-    delete ARMORS[itemId];
-    delete ACCESSORIES[itemId];
-    delete KEYS[itemId];
-    delete CONSUMABLES[itemId];
-    if (rebuild) {
-        rebuildItemIndex();
-    }
-}
-
-export function removeItemDefinition(itemId: string): string[] {
-    if (itemId === "fist") {
-        return ["Cannot remove fallback item 'fist'."];
-    }
-    if (!ITEMS[itemId]) {
-        return [`Item '${itemId}' does not exist.`];
-    }
-    clearItemDefinition(itemId, true);
-    writeStoredRegistry(Object.values(ITEMS));
-    return [];
-}
-
 export function validateItemRegistry(items: Item[]): string[] {
     const errors: string[] = [];
     const seenIds = new Set<string>();
@@ -1125,14 +1085,6 @@ export function loadItemRegistryFromStorage(): string[] {
         return errors;
     }
     return [];
-}
-
-export function resetItemRegistryToDefaults(): void {
-    const errors = replaceItemRegistryInternal(DEFAULT_ITEMS, false);
-    if (errors.length > 0) {
-        return;
-    }
-    clearStoredItemRegistry();
 }
 
 const storedRegistryErrors = loadItemRegistryFromStorage();
