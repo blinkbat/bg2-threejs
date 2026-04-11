@@ -40,7 +40,7 @@ import { useThreeScene, useGameLoop, useInputHandlers, type InitializedSceneStat
 
 // UI Components
 import type { HotbarAssignments } from "../hooks/hotbarStorage";
-import { loadHotbarAssignments, saveHotbarAssignments } from "../hooks/hotbarStorage";
+import { loadHotbarAssignments, normalizeHotbarSlots, saveHotbarAssignments } from "../hooks/hotbarStorage";
 import {
     loadAutoPauseSettings,
     loadPlaytestSettings,
@@ -142,6 +142,8 @@ export function Game({
     const [sleepFadeOpacity, setSleepFadeOpacity] = useState(0);
     // hudMenuModalOpen replaced by menuOpen/jukeboxOpen props from App
     const [equipmentModalUnitId, setEquipmentModalUnitId] = useState<number | null>(null);
+    const [skillTreeModalUnitId, setSkillTreeModalUnitId] = useState<number | null>(null);
+    const [itemsModalUnitId, setItemsModalUnitId] = useState<number | null>(null);
     const [lootPickupModalState, setLootPickupModalState] = useState<LootPickupModalState | null>(null);
     const [waystoneTravelDestinations, setWaystoneTravelDestinations] = useState<WaystoneDestination[] | null>(null);
 
@@ -220,14 +222,6 @@ export function Game({
     useEffect(() => {
         dialogTriggerProgressByAreaRef.current = cloneDialogTriggerProgressForRuntime(initialDialogTriggerProgress);
     }, [initialDialogTriggerProgress]);
-    useEffect(() => {
-        if (showPanel && selectedIds.length === 1 && isCorePlayerId(selectedIds[0])) {
-            setEquipmentModalUnitId(prev => prev !== null ? selectedIds[0] : null);
-            return;
-        }
-        setEquipmentModalUnitId(null);
-    }, [showPanel, selectedIds]);
-
     const currentAreaId = getCurrentAreaId();
 
     const currentDialogNode = useMemo<DialogNode | null>(() => {
@@ -311,14 +305,89 @@ export function Game({
     const isLootPickupModalOpen = lootPickupModalState !== null;
     const isWaystoneTravelModalOpen = waystoneTravelDestinations !== null;
     const equipmentModalOpen = equipmentModalUnitId !== null;
+    const skillTreeModalOpen = skillTreeModalUnitId !== null;
+    const itemsModalOpen = itemsModalUnitId !== null;
+    const activeCharacterModal = equipmentModalOpen
+        ? "equipment"
+        : skillTreeModalOpen
+            ? "skills"
+            : itemsModalOpen
+                ? "items"
+                : null;
     const isDialogTyping = currentDialogNode !== null && dialogTypedChars < currentDialogNode.text.length;
     const dialogVisibleText = currentDialogNode ? currentDialogNode.text.slice(0, dialogTypedChars) : "";
     const canContinueWithoutChoices = !isDialogTyping && dialogChoiceOptions.length === 0 && currentDialogNode !== null;
-    const anyMenuOpen = isDialogOpen || isLootPickupModalOpen || isWaystoneTravelModalOpen || infoModalOpen || saveLoadOpen || menuOpen || jukeboxOpen || equipmentModalOpen;
+    const anyMenuOpen = isDialogOpen || isLootPickupModalOpen || isWaystoneTravelModalOpen || infoModalOpen || saveLoadOpen || menuOpen || jukeboxOpen || equipmentModalOpen || skillTreeModalOpen || itemsModalOpen;
 
     useEffect(() => {
         pauseToggleLockedRef.current = anyMenuOpen || sleepFadeOpacity > 0;
     }, [anyMenuOpen, sleepFadeOpacity]);
+
+    useEffect(() => {
+        if (activeCharacterModal === null) return;
+
+        if (selectedIds.length !== 1 || !isCorePlayerId(selectedIds[0])) {
+            setEquipmentModalUnitId(null);
+            setSkillTreeModalUnitId(null);
+            setItemsModalUnitId(null);
+            return;
+        }
+
+        const selectedUnitId = selectedIds[0];
+        if (activeCharacterModal === "equipment") {
+            if (skillTreeModalUnitId !== null) setSkillTreeModalUnitId(null);
+            if (itemsModalUnitId !== null) setItemsModalUnitId(null);
+            if (equipmentModalUnitId !== selectedUnitId) {
+                setEquipmentModalUnitId(selectedUnitId);
+            }
+            return;
+        }
+        if (activeCharacterModal === "skills") {
+            if (equipmentModalUnitId !== null) setEquipmentModalUnitId(null);
+            if (itemsModalUnitId !== null) setItemsModalUnitId(null);
+            if (skillTreeModalUnitId !== selectedUnitId) {
+                setSkillTreeModalUnitId(selectedUnitId);
+            }
+            return;
+        }
+        if (equipmentModalUnitId !== null) setEquipmentModalUnitId(null);
+        if (skillTreeModalUnitId !== null) setSkillTreeModalUnitId(null);
+        if (itemsModalUnitId !== selectedUnitId) {
+            setItemsModalUnitId(selectedUnitId);
+        }
+    }, [activeCharacterModal, equipmentModalUnitId, itemsModalUnitId, selectedIds, skillTreeModalUnitId]);
+
+    // K / E / I hotkeys for character modal panels
+    useEffect(() => {
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.defaultPrevented) return;
+            if (e.repeat) return;
+            // Block when non-character modals are open
+            const blocked = isDialogOpen || isLootPickupModalOpen || isWaystoneTravelModalOpen || infoModalOpen || saveLoadOpen || menuOpen || jukeboxOpen || sleepFadeOpacity > 0;
+            if (blocked) return;
+
+            const selected = selectedIds;
+            const unitId = selected.length === 1 && isCorePlayerId(selected[0]) ? selected[0] : null;
+
+            if (e.code === "KeyK") {
+                if (!unitId) return;
+                if (skillTreeModalUnitId !== null) setSkillTreeModalUnitId(null);
+                else { setEquipmentModalUnitId(null); setSkillTreeModalUnitId(unitId); setItemsModalUnitId(null); }
+            }
+            if (e.code === "KeyE") {
+                if (!unitId) return;
+                if (equipmentModalUnitId !== null) { setEquipmentModalUnitId(null); onCloseEquipment(); }
+                else { setEquipmentModalUnitId(unitId); setSkillTreeModalUnitId(null); setItemsModalUnitId(null); }
+            }
+            if (e.code === "KeyI") {
+                if (!unitId) return;
+                if (itemsModalUnitId !== null) setItemsModalUnitId(null);
+                else { setEquipmentModalUnitId(null); setSkillTreeModalUnitId(null); setItemsModalUnitId(unitId); }
+            }
+        };
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+    }, [selectedIds, isDialogOpen, isLootPickupModalOpen, isWaystoneTravelModalOpen, infoModalOpen, saveLoadOpen, menuOpen, jukeboxOpen, sleepFadeOpacity, equipmentModalUnitId, skillTreeModalUnitId, itemsModalUnitId, onCloseEquipment]);
 
     useEffect(() => {
         dialogTriggerAreaLoadedAtRef.current = Date.now();
@@ -2133,6 +2202,21 @@ export function Game({
     const handleToggleFastMove = useCallback(() => setFastMove(f => !f), []);
     const handleAttackMove = useCallback(() => setCommandMode("attackMove"), []);
     const handleClosePanel = useCallback(() => setShowPanel(false), []);
+    const handleOpenEquipmentModal = useCallback((unitId: number) => {
+        setEquipmentModalUnitId(unitId);
+        setSkillTreeModalUnitId(null);
+        setItemsModalUnitId(null);
+    }, []);
+    const handleOpenSkillTreeModal = useCallback((unitId: number) => {
+        setEquipmentModalUnitId(null);
+        setSkillTreeModalUnitId(unitId);
+        setItemsModalUnitId(null);
+    }, []);
+    const handleOpenItemsModal = useCallback((unitId: number) => {
+        setEquipmentModalUnitId(null);
+        setSkillTreeModalUnitId(null);
+        setItemsModalUnitId(unitId);
+    }, []);
     const handleCloseEquipmentModal = useCallback(() => {
         setEquipmentModalUnitId(null);
         onCloseEquipment();
@@ -2157,7 +2241,7 @@ export function Game({
 
     const handleAssignSkill = useCallback((unitId: number, slotIndex: number, skillName: string | null) => {
         setHotbarAssignments(prev => {
-            const unitSlots = prev[unitId] || [null, null, null, null, null];
+            const unitSlots = normalizeHotbarSlots(prev[unitId]);
             const newSlots = [...unitSlots];
             newSlots[slotIndex] = skillName;
             const newAssignments = { ...prev, [unitId]: newSlots };
@@ -2206,10 +2290,34 @@ export function Game({
 
     const handleChangeEquipmentUnit = useCallback((id: number) => {
         setEquipmentModalUnitId(id);
+        setSkillTreeModalUnitId(null);
+        setItemsModalUnitId(null);
         setSelectedIds([id]);
     }, []);
 
-    const otherModalOpen = infoModalOpen || saveLoadOpen || isDialogOpen || isLootPickupModalOpen || isWaystoneTravelModalOpen || menuOpen || jukeboxOpen || equipmentModalOpen || sleepFadeOpacity > 0;
+    const handleCloseSkillTreeModal = useCallback(() => {
+        setSkillTreeModalUnitId(null);
+    }, []);
+
+    const handleChangeSkillTreeUnit = useCallback((id: number) => {
+        setEquipmentModalUnitId(null);
+        setSkillTreeModalUnitId(id);
+        setItemsModalUnitId(null);
+        setSelectedIds([id]);
+    }, []);
+
+    const handleCloseItemsModal = useCallback(() => {
+        setItemsModalUnitId(null);
+    }, []);
+
+    const handleChangeItemsUnit = useCallback((id: number) => {
+        setEquipmentModalUnitId(null);
+        setSkillTreeModalUnitId(null);
+        setItemsModalUnitId(id);
+        setSelectedIds([id]);
+    }, []);
+
+    const otherModalOpen = infoModalOpen || saveLoadOpen || isDialogOpen || isLootPickupModalOpen || isWaystoneTravelModalOpen || menuOpen || jukeboxOpen || equipmentModalOpen || skillTreeModalOpen || itemsModalOpen || sleepFadeOpacity > 0;
     return (
         <GameRenderLayer
             actionQueue={actionQueueRef.current}
@@ -2244,8 +2352,15 @@ export function Game({
             handleCancelQueuedSkill={handleCancelQueuedSkill}
             handleCastSkill={handleCastSkill}
             handleChangeEquipmentUnit={handleChangeEquipmentUnit}
+            handleChangeSkillTreeUnit={handleChangeSkillTreeUnit}
+            handleChangeItemsUnit={handleChangeItemsUnit}
             handleCloseEquipmentModal={handleCloseEquipmentModal}
+            handleCloseSkillTreeModal={handleCloseSkillTreeModal}
+            handleCloseItemsModal={handleCloseItemsModal}
             handleClosePanel={handleClosePanel}
+            handleOpenEquipmentModal={handleOpenEquipmentModal}
+            handleOpenSkillTreeModal={handleOpenSkillTreeModal}
+            handleOpenItemsModal={handleOpenItemsModal}
             handleDeselectAllPlayers={handleDeselectAllPlayers}
             handleEquipItem={handleEquipItem}
             handleHold={handleHold}
@@ -2307,7 +2422,10 @@ export function Game({
             selBox={selBox}
             selectedConsumableCooldownEnd={selectedConsumableCooldownEnd}
             selectedIds={selectedIds}
-            setEquipmentModalUnitId={setEquipmentModalUnitId}
+            skillTreeModalOpen={skillTreeModalOpen}
+            skillTreeModalUnitId={skillTreeModalUnitId}
+            itemsModalOpen={itemsModalOpen}
+            itemsModalUnitId={itemsModalUnitId}
             setSelectedIds={setSelectedIds}
             showPanel={showPanel}
             skillCooldowns={skillCooldowns}

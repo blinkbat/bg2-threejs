@@ -62,6 +62,7 @@ interface PartyBarProps {
     onAssignSkill?: (unitId: number, slotIndex: number, skillName: string | null) => void;
     onCastSkill?: (unitId: number, skill: Skill) => void;
     skillCooldowns?: Record<string, { end: number; duration: number }>;
+    queuedSkillName?: string | null;
     paused?: boolean;
     // Formation reorder
     formationOrder?: number[];
@@ -80,6 +81,7 @@ function PartyBarComponent({
     onAssignSkill,
     onCastSkill,
     skillCooldowns = {},
+    queuedSkillName = null,
     paused = false,
     formationOrder = [],
     onReorderFormation,
@@ -343,6 +345,7 @@ function PartyBarComponent({
                             onAssignSkill={onAssignSkill}
                             onCastSkill={onCastSkill}
                             skillCooldowns={skillCooldowns}
+                            queuedSkillName={queuedSkillName}
                             paused={paused}
                         />
                     </div>
@@ -505,6 +508,7 @@ function arePartyBarPropsEqual(prev: PartyBarProps, next: PartyBarProps): boolea
         && prev.onAssignSkill === next.onAssignSkill
         && prev.onCastSkill === next.onCastSkill
         && prev.skillCooldowns === next.skillCooldowns
+        && prev.queuedSkillName === next.queuedSkillName
         && prev.paused === next.paused
         && areNumberArraysEqual(prev.formationOrder ?? [], next.formationOrder ?? [])
         && prev.onReorderFormation === next.onReorderFormation

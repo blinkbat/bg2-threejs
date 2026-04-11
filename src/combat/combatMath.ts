@@ -262,12 +262,18 @@ export function applyPoison(unit: Unit, sourceId: number, now: number, customDam
     const damage = customDamage ?? POISON_DAMAGE_PER_TICK;
 
     if (existingPoison) {
-        // Refresh existing poison (keep the stronger damage if re-poisoned with weaker)
+        // Refresh duration while preserving elapsed tick progress.
         return {
             ...unit,
             statusEffects: existingEffects.map(e =>
                 e.type === "poison"
-                    ? { ...e, duration: POISON_DURATION, timeSinceTick: 0, lastUpdateTime: now, damagePerTick: Math.max(e.damagePerTick, damage) }
+                    ? {
+                        ...e,
+                        duration: POISON_DURATION,
+                        timeSinceTick: e.timeSinceTick + Math.max(0, now - e.lastUpdateTime),
+                        lastUpdateTime: now,
+                        damagePerTick: Math.max(e.damagePerTick, damage),
+                    }
                     : e
             )
         };
@@ -590,6 +596,7 @@ export function getEffectiveSpeedMultiplier(unit: Unit, data: EnemyStats | UnitD
  * Get HP percentage for a unit.
  */
 export function getHpPercentage(hp: number, maxHp: number): number {
+    if (maxHp <= 0) return 0;
     return (hp / maxHp) * 100;
 }
 

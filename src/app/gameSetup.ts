@@ -134,6 +134,9 @@ export function createUnitsForArea(options: CreateUnitsForAreaOptions): Unit[] {
     summonPersisted.forEach((persisted) => {
         const data = UNIT_DATA[persisted.id];
         if (!data) return;
+        const summonStats = persisted.stats;
+        const effectiveMaxHp = getEffectiveMaxHpForStats(persisted.id, summonStats);
+        const effectiveMaxMana = getEffectiveMaxManaForStats(persisted.id, summonStats);
 
         let pos: { x: number; z: number };
         if (persisted.x !== undefined && persisted.z !== undefined) {
@@ -160,11 +163,11 @@ export function createUnitsForArea(options: CreateUnitsForAreaOptions): Unit[] {
             id: persisted.id,
             x: pos.x,
             z: pos.z,
-            hp: persisted.hp,
-            mana: persisted.mana ?? data.mana,
+            hp: Math.max(0, Math.min(persisted.hp, effectiveMaxHp)),
+            mana: Math.max(0, Math.min(persisted.mana ?? data.mana ?? 0, effectiveMaxMana)),
             level: persisted.level ?? 1,
             exp: persisted.exp ?? 0,
-            stats: persisted.stats,
+            stats: summonStats,
             statPoints: persisted.statPoints ?? 0,
             skillPoints: persisted.skillPoints ?? 0,
             learnedSkills: persisted.learnedSkills ?? [],

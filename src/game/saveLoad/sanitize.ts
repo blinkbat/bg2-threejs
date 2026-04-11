@@ -8,12 +8,10 @@
     StatusEffectType,
     SummonType,
 } from "../../core/types";
-import type { HotbarAssignments } from "../../hooks/localStorage";
+import { normalizeHotbarSlots, type HotbarAssignments } from "../../hooks/localStorage";
 import { MAX_SLOTS, SAVE_VERSION } from "./constants";
 import type { DialogTriggerProgress, EnemyPositionMap, SaveSlotData, SavedPlayer } from "./types";
 import type { FogVisibilityByArea } from "../fogMemory";
-
-const HOTBAR_SLOT_COUNT = 5;
 
 const DAMAGE_TYPES: ReadonlySet<DamageType> = new Set([
     "physical",
@@ -418,18 +416,7 @@ function sanitizeHotbarAssignments(raw: unknown): HotbarAssignments {
         if (!Number.isFinite(unitId) || unitId <= 0) continue;
         if (!Array.isArray(slotsRaw)) continue;
 
-        const slots: (string | null)[] = [];
-        for (let i = 0; i < HOTBAR_SLOT_COUNT; i++) {
-            const value = slotsRaw[i];
-            if (typeof value === "string") {
-                const trimmed = value.trim();
-                slots.push(trimmed.length > 0 ? trimmed : null);
-                continue;
-            }
-            slots.push(null);
-        }
-
-        sanitized[Math.floor(unitId)] = slots;
+        sanitized[Math.floor(unitId)] = normalizeHotbarSlots(slotsRaw);
     }
 
     return sanitized;

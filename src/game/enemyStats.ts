@@ -413,7 +413,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         size: 1.0,             // Medium size
         moveSpeed: 0.5,        // Very slow flyer
         flying: true,          // Floats above ground (ignores lava)
-        fireballAttack: true,  // Uses slow fireball that hurts everything
+        fireballAttack: true,  // Uses a slow fireball projectile against players
         expReward: 30,
         // Kiting behavior - retreat when players get close
         kiteTrigger: 4,        // Start kiting when player within this range

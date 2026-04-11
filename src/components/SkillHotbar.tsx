@@ -3,7 +3,7 @@ import Tippy from "@tippyjs/react";
 import type { Unit, Skill } from "../core/types";
 import { getAllSkills, getAvailableSkills } from "../game/playerUnits";
 import { getSkillTextColor } from "../core/constants";
-import type { HotbarAssignments } from "../hooks/hotbarStorage";
+import { normalizeHotbarSlots, type HotbarAssignments } from "../hooks/hotbarStorage";
 import { useDisplayTime } from "../hooks/useDisplayTime";
 
 /** Drag data type used for skill-to-hotbar and hotbar-to-hotbar transfers */
@@ -17,6 +17,7 @@ interface SkillHotbarProps {
     onAssignSkill: (unitId: number, slotIndex: number, skillName: string | null) => void;
     onCastSkill?: (unitId: number, skill: Skill) => void;
     skillCooldowns?: Record<string, { end: number; duration: number }>;
+    queuedSkillName?: string | null;
     paused?: boolean;
 }
 
@@ -26,8 +27,6 @@ interface HotbarDragContext {
     dropHandled: boolean;
     sourceSlot: number | null;
 }
-
-const EMPTY_HOTBAR_SLOTS: (string | null)[] = [null, null, null, null, null];
 
 // =============================================================================
 // HOTBAR SLOT
@@ -44,6 +43,7 @@ interface HotbarSlotProps {
     cooldownRemaining: number;
     hasManaForSkill: boolean;
     usesLeft?: number;
+    queued?: boolean;
     locked?: boolean;
 }
 
@@ -58,6 +58,7 @@ function HotbarSlot({
     cooldownRemaining,
     hasManaForSkill,
     usesLeft,
+    queued = false,
     locked
 }: HotbarSlotProps) {
     const isEmpty = !skill;
@@ -66,6 +67,7 @@ function HotbarSlot({
     const silenceBlocksSkill = !!skill && skill.kind === "spell" && (unit.statusEffects?.some(effect => effect.type === "silenced") ?? false);
     const canClick = skill && !locked && hasManaForSkill && !noUsesLeft && !silenceBlocksSkill && unit.hp > 0;
     const onCooldown = !locked && cooldownPct > 0;
+    const isQueued = !!skill && !locked && queued;
 
     const [dropHover, setDropHover] = useState(false);
 
@@ -122,6 +124,7 @@ function HotbarSlot({
         isEmpty ? "empty" : "",
         !canClick && !isEmpty ? "disabled" : "",
         onCooldown ? "on-cooldown" : "",
+        isQueued ? "queued" : "",
         dropHover ? "drop-hover" : ""
     ].filter(Boolean).join(" ");
 
@@ -143,6 +146,10 @@ function HotbarSlot({
                     {skill.manaCost > 0 && <div className="hotbar-tooltip-cost">{skill.manaCost} MP</div>}
                     {isCantrip && usesLeft !== undefined && (
                         <div className="hotbar-tooltip-cost">{usesLeft} cantrip uses remaining</div>
+                    )}
+                    {isQueued && <div className="hotbar-tooltip-queued">Queued</div>}
+                    {onCooldown && cooldownRemaining > 0 && (
+                        <div className="hotbar-tooltip-cd">{cooldownRemaining}s cooldown remaining</div>
                     )}
                     {silenceBlocksSkill && <div className="hotbar-tooltip-cost" style={{ color: "var(--ui-color-accent-danger)" }}>Blocked by Silence</div>}
                     <div className="hotbar-tooltip-hint">Press {slotIndex + 1} to use</div>
@@ -173,6 +180,7 @@ function HotbarSlot({
                     />
                 )}
                 <span className="hotbar-slot-key">{slotIndex + 1}</span>
+                {isQueued && <span className="hotbar-slot-state">Q</span>}
                 {skill && !onCooldown && (
                     <span className="hotbar-slot-abbrev" style={{ color: skillColor }}>{abbrev}</span>
                 )}
@@ -197,13 +205,14 @@ export function SkillHotbar({
     onAssignSkill,
     onCastSkill,
     skillCooldowns = {},
+    queuedSkillName = null,
     paused = false
 }: SkillHotbarProps) {
     const displayTime = useDisplayTime(paused, 50);
     const allSkills = getAllSkills(unit.id, unit);
     const availableSkills = getAvailableSkills(unit.id);
 
-    const slots = hotbarAssignments[unit.id] ?? EMPTY_HOTBAR_SLOTS;
+    const slots = normalizeHotbarSlots(hotbarAssignments[unit.id]);
     const dragStateRef = useRef<HotbarDragContext>({ dropHandled: false, sourceSlot: null });
 
     const handleHotbarDragStart = useCallback((sourceSlot: number) => {
@@ -257,6 +266,7 @@ export function SkillHotbar({
                 const cooldownPct = onCooldown ? ((skillCooldownEnd - displayTime) / cooldownDuration) * 100 : 0;
                 const hasManaForSkill = skill && !isLocked ? (unit.mana ?? 0) >= skill.manaCost : false;
                 const usesLeft = skill?.isCantrip ? (unit.cantripUses?.[skill.name] ?? 0) : undefined;
+                const isQueued = !!skill && queuedSkillName === skill.name;
 
                 return (
                     <HotbarSlot
@@ -271,6 +281,7 @@ export function SkillHotbar({
                         cooldownRemaining={cooldownRemaining}
                         hasManaForSkill={hasManaForSkill}
                         usesLeft={usesLeft}
+                        queued={isQueued}
                         locked={isLocked}
                     />
                 );

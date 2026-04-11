@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CharacterEquipment, PartyInventory } from "../src/core/types";
 import { getGameTime } from "../src/core/gameClock";
+import { HOTBAR_SLOT_COUNT } from "../src/hooks/localStorage";
 import type { SaveSlotData } from "../src/game/saveLoad";
 import {
     buildSaveSlotData,
@@ -27,6 +28,14 @@ function createInventory(): PartyInventory {
     };
 }
 
+function createExpectedHotbarSlots(...values: Array<string | null>): (string | null)[] {
+    const slots = Array.from({ length: HOTBAR_SLOT_COUNT }, () => null as string | null);
+    for (let i = 0; i < values.length && i < HOTBAR_SLOT_COUNT; i++) {
+        slots[i] = values[i];
+    }
+    return slots;
+}
+
 function createState(): SaveSnapshotState {
     return {
         players: [{ id: 1, hp: 12, level: 2, exp: 40 }],
@@ -36,7 +45,7 @@ function createState(): SaveSnapshotState {
         activatedWaystones: new Set(["coast-waystone-0"]),
         killedEnemies: new Set(["coast-2"]),
         gold: 25,
-        hotbarAssignments: { 1: ["Attack", null, null, null, null] },
+        hotbarAssignments: { 1: createExpectedHotbarSlots("Attack") },
         formationOrder: [1, 2, 3],
         dialogTriggerProgress: { coast: ["intro_1", "intro_1"] },
         enemyPositions: {},
@@ -166,7 +175,7 @@ describe("saveLoad runtime", () => {
             gold: 9,
             equipment: createEquipmentMap(),
             inventory: createInventory(),
-            hotbarAssignments: { 1: ["Attack", null, null, null, null] },
+            hotbarAssignments: { 1: createExpectedHotbarSlots("Attack") },
             formationOrder: [1, 2],
             dialogTriggerProgress: { coast: ["intro_1", "intro_1"] },
             fogVisibilityByArea: {

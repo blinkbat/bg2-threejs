@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { HOTBAR_SLOT_COUNT } from "../src/hooks/localStorage";
 import { MAX_SLOTS } from "../src/game/saveLoad/constants";
 import { normalizeSlots, parseSaveSlotData } from "../src/game/saveLoad/sanitize";
 
@@ -17,6 +18,14 @@ function createMinimalValidRawSave(overrides: Record<string, unknown> = {}): Rec
         inventory: { items: [] },
         ...overrides,
     };
+}
+
+function createExpectedHotbarSlots(...values: Array<string | null>): (string | null)[] {
+    const slots = Array.from({ length: HOTBAR_SLOT_COUNT }, () => null as string | null);
+    for (let i = 0; i < values.length && i < HOTBAR_SLOT_COUNT; i++) {
+        slots[i] = values[i];
+    }
+    return slots;
 }
 
 describe("saveLoad sanitize", () => {
@@ -145,7 +154,7 @@ describe("saveLoad sanitize", () => {
             },
         });
         expect(data.inventory.items).toEqual([{ itemId: "loafOfBread", quantity: 3 }]);
-        expect(data.hotbarAssignments?.[1]).toEqual(["Attack", null, null, "Skill", null]);
+        expect(data.hotbarAssignments?.[1]).toEqual(createExpectedHotbarSlots("Attack", null, null, "Skill"));
         expect(data.formationOrder).toEqual([1, 2]);
         expect(data.dialogTriggerProgress).toEqual({ coast: ["intro_1"] });
         expect(data.fogVisibilityByArea).toEqual({

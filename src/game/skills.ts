@@ -78,7 +78,7 @@ export const SKILLS: Record<string, Skill> = withSkillKinds({
     },
     fireball: {
         name: "Fireball",
-        description: "Hurl a ball of fire that explodes on impact, damaging all units in the area.",
+        description: "Hurl a ball of fire that explodes on impact, damaging enemies in the area.",
         flavor: "No foe heard the final incantation, for all that was left were cinders.",
         manaCost: 15,
         cooldown: 5000,

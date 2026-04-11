@@ -298,14 +298,10 @@ export function EquipmentModal({
             contentClassName="equipment-modal"
             closeOnEscape
         >
-                <div className="equipment-modal-header">
-                    <div className="equipment-modal-header-left">
+                <div className="char-modal-header">
+                    <div className="char-modal-nav-row">
                         {onChangeUnit && prevUnitId !== undefined && (
-                            <button
-                                type="button"
-                                className="equipment-modal-nav"
-                                onClick={() => onChangeUnit(prevUnitId)}
-                            >
+                            <button type="button" className="equipment-modal-nav" onClick={() => onChangeUnit(prevUnitId)}>
                                 <ChevronLeft size={18} />
                             </button>
                         )}
@@ -316,22 +312,21 @@ export function EquipmentModal({
                             />
                         )}
                         {onChangeUnit && nextUnitId !== undefined && (
-                            <button
-                                type="button"
-                                className="equipment-modal-nav"
-                                onClick={() => onChangeUnit(nextUnitId)}
-                            >
+                            <button type="button" className="equipment-modal-nav" onClick={() => onChangeUnit(nextUnitId)}>
                                 <ChevronRight size={18} />
                             </button>
                         )}
-                        <div>
-                            <h2 className="help-title equipment-modal-title">Equipment</h2>
-                            <div className="equipment-modal-subtitle">{unitName}</div>
-                        </div>
                     </div>
-                    <button type="button" className="equipment-modal-close" onClick={onClose}>
-                        <X size={18} />
-                    </button>
+                    <div className="char-modal-title-block">
+                        <h2 className="char-modal-title">Equipment <span className="char-modal-hotkey">E</span></h2>
+                        <div className="char-modal-subtitle">{unitName}</div>
+                        <div className="char-modal-desc">Equip weapons, armor, and accessories.</div>
+                    </div>
+                    <div className="char-modal-right">
+                        <button type="button" className="equipment-modal-close" onClick={onClose}>
+                            <X size={18} />
+                        </button>
+                    </div>
                 </div>
 
                 <div className="equipment-modal-body">

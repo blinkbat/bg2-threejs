@@ -97,7 +97,7 @@ const CORE_GLOSSARY: ReadonlyArray<GlossaryEntry> = [
     {
         term: "Hotbar",
         category: "Core System",
-        body: "The hotbar is the five-slot shortcut row for quick ability access. Assigned skills and cantrips can be fired with the number keys when one party member is selected."
+        body: "The hotbar is the seven-slot shortcut row for quick ability access. Assigned skills and cantrips can be fired with the 1-7 keys when one party member is selected."
     },
     {
         term: "Level",

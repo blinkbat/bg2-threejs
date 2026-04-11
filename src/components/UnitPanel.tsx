@@ -1,17 +1,12 @@
-import { useState } from "react";
 import Tippy from "@tippyjs/react";
-import type { Unit, Skill, StatusEffect, DamageType, CharacterStats } from "../core/types";
-import { isConsumable } from "../core/types";
-import { UNIT_DATA, getAllSkills, getAvailableSkills, getEffectiveUnitData, getEffectiveMaxHp, getEffectiveMaxMana, getXpForLevel } from "../game/playerUnits";
+import type { Unit, StatusEffect, CharacterStats } from "../core/types";
+import { UNIT_DATA, getEffectiveUnitData, getEffectiveMaxHp, getEffectiveMaxMana, getXpForLevel } from "../game/playerUnits";
 import { getPlayerUnitColor } from "../game/unitColors";
 import { getHpPercentage, getHpColor, getMana, hasStatusEffect, getEffectiveArmor } from "../combat/combatMath";
 import { getTotalCritChance } from "../combat/combatMath";
-import { COLORS, getDamageTypeColor, getSkillTextColor, getSkillBorderColor } from "../core/constants";
-import { getPartyInventory } from "../game/equipmentState";
-import { getItem } from "../game/items";
+import { COLORS } from "../core/constants";
 import { useDisplayTime } from "../hooks/useDisplayTime";
 import { getPortrait } from "./portraitRegistry";
-import { SKILL_DRAG_TYPE } from "./SkillHotbar";
 
 const PORTRAIT_POS: Record<string, string> = {
     Cleric: "35% bottom",
@@ -22,27 +17,19 @@ const PORTRAIT_POS: Record<string, string> = {
     Ancestor: "center 78%",
 };
 
-type PanelQueuedAction =
-    | { type: "skill"; skillName: string }
-    | { type: "consumable"; itemId: string };
-
 interface UnitPanelProps {
     unitId: number;
     units: Unit[];
     onClose: () => void;
     onToggleAI: (unitId: number) => void;
-    onCastSkill?: (unitId: number, skill: Skill) => void;
-    onCancelQueuedSkill?: (unitId: number, skill: Skill) => void;
-    skillCooldowns?: Record<string, { end: number; duration: number }>;
     paused?: boolean;
-    queuedAction?: PanelQueuedAction | null;
-    onUseConsumable?: (itemId: string, targetUnitId: number) => void;
-    onCancelQueuedConsumable?: (itemId: string, targetUnitId: number) => void;
-    consumableCooldownEnd?: number;
     onOpenEquipment?: (unitId: number) => void;
+    onOpenSkillTree?: (unitId: number) => void;
+    onOpenItems?: (unitId: number) => void;
+    equipmentModalOpen?: boolean;
+    skillTreeModalOpen?: boolean;
+    itemsModalOpen?: boolean;
     onIncrementStat?: (unitId: number, stat: keyof CharacterStats) => void;
-    onLearnSkill?: (unitId: number, skillName: string) => void;
-    gold?: number;
 }
 
 export function UnitPanel({
@@ -50,21 +37,16 @@ export function UnitPanel({
     units,
     onClose,
     onToggleAI,
-    onCastSkill,
-    onCancelQueuedSkill,
-    skillCooldowns = {},
     paused = false,
-    queuedAction = null,
-    onUseConsumable,
-    onCancelQueuedConsumable,
-    consumableCooldownEnd = 0,
     onOpenEquipment,
+    onOpenSkillTree,
+    onOpenItems,
+    equipmentModalOpen = false,
+    skillTreeModalOpen = false,
+    itemsModalOpen = false,
     onIncrementStat,
-    onLearnSkill,
-    gold = 0
 }: UnitPanelProps) {
     const displayTime = useDisplayTime(paused, 50);
-    const [tab, setTab] = useState("status");
     const data = UNIT_DATA[unitId];
     const unit = units.find((u: Unit) => u.id === unitId);
     if (!data || !unit) return null;
@@ -102,55 +84,38 @@ export function UnitPanel({
                 )}
             </div>
 
-            <div className="tab-container">
-                {["status", "skills", "equipment", "inventory"].map(t => {
-                    const showDot = (t === "status" && (unit.statPoints ?? 0) > 0)
-                        || (t === "skills" && (unit.skillPoints ?? 0) > 0);
-                    return (
-                        <div
-                            key={t}
-                            className={`tab ${tab === t ? "active" : ""}`}
-                            onClick={() => {
-                                if (t === "equipment") {
-                                    onOpenEquipment?.(unitId);
-                                    return;
-                                }
-                                setTab(t);
-                            }}
-                        >
-                            {t}{showDot && <span className="tab-dot" />}
-                        </div>
-                    );
-                })}
+            <div className="panel-toggle-bar">
+                <Tippy content="K" placement="top" delay={[400, 0]}>
+                    <button
+                        type="button"
+                        className={`panel-toggle-btn ${skillTreeModalOpen ? "active" : ""}`}
+                        onClick={() => onOpenSkillTree?.(unitId)}
+                    >
+                        skills{(unit.skillPoints ?? 0) > 0 && <span className="tab-dot" />}
+                    </button>
+                </Tippy>
+                <Tippy content="E" placement="top" delay={[400, 0]}>
+                    <button
+                        type="button"
+                        className={`panel-toggle-btn ${equipmentModalOpen ? "active" : ""}`}
+                        onClick={() => onOpenEquipment?.(unitId)}
+                    >
+                        equipment
+                    </button>
+                </Tippy>
+                <Tippy content="I" placement="top" delay={[400, 0]}>
+                    <button
+                        type="button"
+                        className={`panel-toggle-btn ${itemsModalOpen ? "active" : ""}`}
+                        onClick={() => onOpenItems?.(unitId)}
+                    >
+                        items
+                    </button>
+                </Tippy>
             </div>
 
-            <div className={`unit-content ${tab === "skills" ? "unit-content-skills" : ""}`}>
-                {tab === "status" && <StatusTab unit={unit} effectiveData={effectiveData} onToggleAI={onToggleAI} unitId={unitId} onIncrementStat={onIncrementStat} displayTime={displayTime} />}
-                {tab === "skills" && (
-                    <SkillsTab
-                        unitId={unitId}
-                        unit={unit}
-                        skillCooldowns={skillCooldowns}
-                        displayTime={displayTime}
-                        paused={paused}
-                        queuedAction={queuedAction}
-                        onCastSkill={onCastSkill}
-                        onCancelQueuedSkill={onCancelQueuedSkill}
-                        onLearnSkill={onLearnSkill}
-                    />
-                )}
-                {tab === "inventory" && (
-                    <InventoryTab
-                        unit={unit}
-                        units={units}
-                        displayTime={displayTime}
-                        consumableCooldownEnd={consumableCooldownEnd}
-                        onUseConsumable={onUseConsumable}
-                        onCancelQueuedConsumable={onCancelQueuedConsumable}
-                        queuedAction={queuedAction}
-                        gold={gold}
-                    />
-                )}
+            <div className="unit-content">
+                <StatusTab unit={unit} effectiveData={effectiveData} onToggleAI={onToggleAI} unitId={unitId} onIncrementStat={onIncrementStat} displayTime={displayTime} />
             </div>
         </div>
     );
@@ -225,6 +190,10 @@ const EFFECT_INFO: Record<string, { icon: string; color: string; description: st
     sleep: { icon: "💤", color: COLORS.sleepText, description: "Cannot act — wakes on damage" },
     chilled: { icon: "❄", color: COLORS.chilledText, description: "Move speed halved, cooldowns doubled" },
     enraged: { icon: "💢", color: COLORS.enragedText, description: "Increased speed and damage" },
+    feared: { icon: "😱", color: COLORS.fearedText, description: "Fleeing in terror" },
+    blood_marked: { icon: "🩸", color: COLORS.bloodMarkedText, description: "Melee hits against this target heal the attacker" },
+    channeling: { icon: "◎", color: COLORS.channelingText, description: "Channeling arcane energy — nearby allies cast faster" },
+    channeled: { icon: "◉", color: COLORS.channeledText, description: "Benefiting from arcane channeling" },
 };
 
 /** Renders active status effects as inline icons with tooltips */
@@ -409,694 +378,6 @@ function StatusTab({ unit, effectiveData, onToggleAI, unitId, onIncrementStat, d
                     <span className={`toggle-thumb ${unit.aiEnabled ? "active" : ""}`} />
                 </span>
             </div>
-        </div>
-    );
-}
-
-/** Get color and display name for a damage type */
-function getDamageTypeInfo(type: DamageType | undefined): { color: string; name: string } {
-    switch (type) {
-        case "fire": return { color: getDamageTypeColor("fire"), name: "Fire" };
-        case "cold": return { color: getDamageTypeColor("cold"), name: "Cold" };
-        case "lightning": return { color: getDamageTypeColor("lightning"), name: "Lightning" };
-        case "chaos": return { color: getDamageTypeColor("chaos"), name: "Chaos" };
-        case "holy": return { color: getDamageTypeColor("holy"), name: "Holy" };
-        case "physical":
-        default: return { color: getDamageTypeColor("physical"), name: "Physical" };
-    }
-}
-
-function getSkillUsageLabel(skill: Skill): string {
-    if (skill.name === "Attack") {
-        return "Basic Attack";
-    }
-
-    const kindLabel = skill.kind === "spell" ? "Spell" : "Ability";
-    return skill.isCantrip ? `${kindLabel} Cantrip` : kindLabel;
-}
-
-function SkillTooltip({ skill, isShielded, cantripUses, silenceBlocksSkill }: { skill: Skill; isShielded: boolean; cantripUses?: number; silenceBlocksSkill?: boolean }) {
-    const isRanged = skill.range > 2;
-    const baseCooldown = skill.cooldown / 1000;
-    const effectiveCooldown = isShielded ? baseCooldown * 2 : baseCooldown;
-    const abilityLabel = getSkillUsageLabel(skill);
-
-    // Build tooltip lines
-    const lines: { label: string; value: string; color?: string }[] = [];
-    lines.push({ label: "Type", value: abilityLabel, color: skill.isCantrip ? "var(--ui-color-accent-arcane)" : undefined });
-
-    // Damage/heal/effect value
-    if (skill.type === "damage") {
-        const dmgInfo = getDamageTypeInfo(skill.damageType);
-        // Magic Missile shows damage per missile and missile count
-        if (skill.hitCount) {
-            lines.push({ label: "Damage", value: `${skill.damageRange![0]}-${skill.damageRange![1]} × ${skill.hitCount}`, color: dmgInfo.color });
-            lines.push({ label: "Type", value: dmgInfo.name, color: dmgInfo.color });
-            lines.push({ label: "Missiles", value: `${skill.hitCount} (up to ${skill.hitCount} targets)`, color: "var(--ui-color-accent-arcane)" });
-        } else {
-            lines.push({ label: "Damage", value: `${skill.damageRange![0]}-${skill.damageRange![1]}`, color: dmgInfo.color });
-            lines.push({ label: "Type", value: dmgInfo.name, color: dmgInfo.color });
-        }
-        if (skill.name === "Smite") {
-            lines.push({ label: "Bonus", value: "×1.5 vs undead & demons", color: COLORS.dmgHoly });
-        }
-    } else if (skill.type === "heal") {
-        lines.push({ label: "Heal", value: `${skill.healRange![0]}-${skill.healRange![1]}`, color: COLORS.hpHigh });
-    } else if (skill.type === "taunt") {
-        lines.push({ label: "Taunt chance", value: `${skill.tauntChance}%` });
-        lines.push({ label: "Radius", value: `${skill.range}`, color: "var(--ui-color-accent-warning)" });
-    } else if (skill.type === "buff") {
-        const durationSec = Math.round(skill.duration! / 1000);
-        // Different buff types have different effects
-        if (skill.name === "Raise Shield") {
-            lines.push({ label: "Duration", value: `${durationSec}s`, color: COLORS.shieldedText });
-            lines.push({ label: "Effect", value: "×2 armor, ×2 cooldowns", color: COLORS.shieldedText });
-        } else if (skill.name === "Divine Lattice") {
-            lines.push({ label: "Duration", value: `${durationSec}s`, color: COLORS.divineLatticeText });
-            lines.push({ label: "Effect", value: "Impervious to all damage", color: COLORS.divineLatticeText });
-            lines.push({ label: "Lockout", value: "Cannot use skills or attack", color: COLORS.divineLatticeText });
-            lines.push({ label: "Enemy AI", value: "Ignored while active", color: COLORS.divineLatticeText });
-            lines.push({ label: "Target", value: "Any unit", color: COLORS.divineLatticeText });
-        } else if (skill.name === "Pangolin Stance") {
-            lines.push({ label: "Duration", value: `${durationSec}s`, color: COLORS.thornsText });
-            const minThorns = skill.damageRange?.[0] ?? 2;
-            const maxThorns = skill.damageRange?.[1] ?? 4;
-            lines.push({ label: "Thorns", value: `${minThorns}-${maxThorns} melee reflect`, color: COLORS.thornsText });
-        } else if (skill.name === "Highland Defense") {
-            lines.push({ label: "Duration", value: "Until 50 absorbed", color: COLORS.highlandDefenseText });
-            lines.push({ label: "Effect", value: "Nearby ally damage is redirected", color: COLORS.highlandDefenseText });
-            lines.push({ label: "Redirect", value: "50% damage to barbarian", color: COLORS.highlandDefenseText });
-            lines.push({ label: "Trigger", value: "Once every 5s", color: COLORS.highlandDefenseText });
-            lines.push({ label: "Range", value: "4.5", color: COLORS.highlandDefenseText });
-        } else if (skill.name === "Vanquishing Light") {
-            lines.push({ label: "Duration", value: `${durationSec}s`, color: COLORS.dmgHoly });
-            lines.push({ label: "Aura radius", value: `${skill.range}`, color: COLORS.dmgHoly });
-            lines.push({ label: "Holy/tick", value: `${skill.damagePerTick ?? 0}`, color: COLORS.dmgHoly });
-            lines.push({ label: "Blind chance", value: `${skill.blindChance ?? 0}%`, color: COLORS.blindText });
-        } else if (skill.name === "Cleanse") {
-            lines.push({ label: "Duration", value: `${durationSec}s`, color: COLORS.cleansedText });
-            lines.push({ label: "Effect", value: "Removes poison", color: COLORS.poisonText });
-            lines.push({ label: "Bonus", value: "Poison immune", color: COLORS.cleansedText });
-        } else {
-            // Generic buff fallback
-            lines.push({ label: "Duration", value: `${durationSec}s`, color: COLORS.shieldedText });
-        }
-    } else if (skill.type === "flurry") {
-        const dmgInfo = getDamageTypeInfo(skill.damageType);
-        lines.push({ label: "Damage", value: `${skill.damageRange![0]}-${skill.damageRange![1]} × ${skill.hitCount ?? 5}`, color: dmgInfo.color });
-        lines.push({ label: "Type", value: dmgInfo.name, color: dmgInfo.color });
-        lines.push({ label: "Targets", value: `Up to ${skill.hitCount ?? 5} nearby` });
-        lines.push({ label: "Radius", value: `${skill.range}`, color: "var(--ui-color-accent-warning)" });
-    } else if (skill.type === "debuff") {
-        const durationSec = Math.round(skill.duration! / 1000);
-        if (skill.name === "Five-Point Palm") {
-            const dmgInfo = getDamageTypeInfo(skill.damageType);
-            lines.push({ label: "Damage", value: `${skill.damageRange![0]}-${skill.damageRange![1]}`, color: dmgInfo.color });
-            lines.push({ label: "Constricted", value: `${durationSec}s`, color: COLORS.constrictedText });
-            lines.push({ label: "Effect", value: "+35% attack/skill cooldowns", color: COLORS.constrictedText });
-        } else if (skill.name === "Dim Mak") {
-            lines.push({ label: "Doom chance", value: "80%", color: COLORS.doomText });
-            lines.push({ label: "Doom timer", value: `${durationSec}s until death`, color: COLORS.doomText });
-            lines.push({ label: "Immune", value: "Minibosses & bosses", color: COLORS.logNeutral });
-        } else {
-            lines.push({ label: "Duration", value: `${durationSec}s`, color: COLORS.stunnedText });
-            if (skill.stunChance) {
-                lines.push({ label: "Stun chance", value: `${skill.stunChance}%`, color: COLORS.stunnedText });
-            }
-        }
-    } else if (skill.type === "trap") {
-        const durationSec = Math.round(skill.duration! / 1000);
-        lines.push({ label: "Pin duration", value: `${durationSec}s`, color: "var(--ui-color-accent-danger)" });
-    } else if (skill.type === "sanctuary") {
-        lines.push({ label: "Heal/tick", value: `${skill.healPerTick}`, color: COLORS.hpHigh });
-        lines.push({ label: "Effect", value: "Dispels acid", color: "var(--ui-color-accent-success)" });
-    } else if (skill.type === "mana_transfer") {
-        lines.push({ label: "Mana given", value: `${skill.manaRange![0]}-${skill.manaRange![1]}`, color: COLORS.mana });
-        if (skill.selfDamage) {
-            lines.push({ label: "HP cost", value: `${skill.selfDamage[0]}-${skill.selfDamage[1]} over time`, color: COLORS.damageEnemy });
-        }
-    } else if (skill.type === "smite") {
-        // Instant-hit single-target damage (e.g., Thunder)
-        const dmgInfo = getDamageTypeInfo(skill.damageType);
-        lines.push({ label: "Damage", value: `${skill.damageRange![0]}-${skill.damageRange![1]}`, color: dmgInfo.color });
-        lines.push({ label: "Type", value: dmgInfo.name, color: dmgInfo.color });
-        if (skill.name === "Chain Lightning") {
-            lines.push({ label: "Chains", value: "3 bounces", color: COLORS.dmgLightning });
-            lines.push({ label: "Bounce dmg", value: "Each bounce deals 50% of prior hit", color: COLORS.dmgLightning });
-        }
-    } else if (skill.type === "aoe_buff") {
-        // AOE ally buff (e.g., Defiance)
-        const durationSec = Math.round(skill.duration! / 1000);
-        const armorBonus = skill.armorBonus;
-        lines.push({ label: "Duration", value: `${durationSec}s`, color: COLORS.defianceText });
-        lines.push({ label: "Armor bonus", value: `+${armorBonus}`, color: COLORS.defianceText });
-        lines.push({ label: "Cooldown buff", value: "×0.5", color: COLORS.defianceText });
-        lines.push({ label: "Radius", value: `${skill.range}`, color: "var(--ui-color-accent-warning)" });
-    } else if (skill.type === "energy_shield") {
-        // Self-buff that absorbs damage
-        const durationSec = Math.round(skill.duration! / 1000);
-        lines.push({ label: "Shield HP", value: `${skill.shieldAmount}`, color: "var(--ui-color-accent-arcane)" });
-        lines.push({ label: "Duration", value: `${durationSec}s`, color: "var(--ui-color-accent-arcane)" });
-        lines.push({ label: "Weakness", value: "Chaos ×2 penetration", color: COLORS.dmgChaos });
-    } else if (skill.type === "dodge") {
-        if (skill.name === "Body Swap") {
-            lines.push({ label: "Effect", value: "Swap places with ally or enemy", color: "var(--ui-color-accent-arcane)" });
-            lines.push({ label: "Swap range", value: `${skill.range}`, color: "var(--ui-color-accent-arcane)" });
-            lines.push({ label: "Target", value: "Any living unit", color: "var(--ui-color-accent-arcane)" });
-        } else {
-            const durationSec = Math.round(skill.duration! / 1000 * 10) / 10;
-            lines.push({ label: "Invul", value: `${durationSec}s`, color: "var(--ui-color-accent-arcane)" });
-            lines.push({ label: "Dash range", value: `${skill.range}`, color: "var(--ui-color-accent-arcane)" });
-        }
-    } else if (skill.type === "summon") {
-        if (skill.name === "Visha's Eyes") {
-            const durationSec = Math.round((skill.duration ?? 0) / 1000);
-            lines.push({ label: "Effect", value: "Summons 3 floating holy orbs", color: COLORS.dmgHoly });
-            lines.push({ label: "Duration", value: `${durationSec}s`, color: COLORS.dmgHoly });
-            if (skill.aoeRadius) {
-                lines.push({ label: "Death burst", value: `Heals allies in ${skill.aoeRadius} range`, color: COLORS.logHeal });
-            }
-        } else {
-            lines.push({ label: "Effect", value: "Summons Ancestor warrior", color: "var(--ui-color-text-secondary)" });
-            lines.push({ label: "Limit", value: "1 active summon", color: "var(--ui-color-text-secondary)" });
-        }
-    } else if (skill.type === "cleave") {
-        const dmgInfo = getDamageTypeInfo(skill.damageType);
-        lines.push({ label: "Damage", value: `${skill.damageRange![0]}-${skill.damageRange![1]}`, color: dmgInfo.color });
-        lines.push({ label: "Type", value: dmgInfo.name, color: dmgInfo.color });
-        lines.push({ label: "Radius", value: `${skill.range}`, color: "var(--ui-color-accent-warning)" });
-        lines.push({ label: "Area", value: "Frontal arc", color: "var(--ui-color-accent-warning)" });
-    } else if (skill.type === "intimidate") {
-        const durationSec = Math.round(skill.duration! / 1000);
-        lines.push({ label: "Fear duration", value: `${durationSec}s`, color: COLORS.fearedText });
-        lines.push({ label: "Radius", value: `${skill.range}`, color: "var(--ui-color-accent-warning)" });
-    } else if (skill.type === "leap_strike") {
-        const dmgInfo = getDamageTypeInfo(skill.damageType);
-        lines.push({ label: "Damage", value: `${skill.damageRange![0]}-${skill.damageRange![1]}`, color: dmgInfo.color });
-        lines.push({ label: "Type", value: dmgInfo.name, color: dmgInfo.color });
-        lines.push({ label: "Leap range", value: `${skill.range}`, color: "var(--ui-color-accent-warning)" });
-    } else if (skill.type === "wall_of_fire") {
-        const dmgInfo = getDamageTypeInfo(skill.damageType);
-        lines.push({ label: "Damage/tick", value: `${skill.damagePerTick ?? 0}`, color: dmgInfo.color });
-        lines.push({ label: "Type", value: dmgInfo.name, color: dmgInfo.color });
-        const durationSec = Math.round((skill.duration ?? 0) / 1000);
-        lines.push({ label: "Duration", value: `${durationSec}s`, color: COLORS.logNeutral });
-        lines.push({ label: "Max tiles", value: `${skill.maxTiles ?? 5}`, color: "var(--ui-color-accent-warning)" });
-    }
-
-    // Range (skip for self-targeted AOE skills that use range as radius, and dodge which shows it inline)
-    const skipRange = skill.type === "dodge" || skill.type === "leap_strike" || (skill.targetType === "self" && (skill.type === "taunt" || skill.type === "flurry" || skill.type === "aoe_buff" || skill.type === "cleave" || skill.type === "intimidate"));
-    if (skill.range > 0 && !skipRange) {
-        lines.push({ label: isRanged ? "Range" : "Melee", value: `${skill.range}` });
-    }
-
-    // AOE
-    if (skill.aoeRadius) {
-        lines.push({ label: "AOE radius", value: `${skill.aoeRadius}`, color: "var(--ui-color-accent-warning)" });
-        // Fireball damages all units including allies
-        if (skill.name === "Fireball") {
-            lines.push({ label: "Warning", value: "Friendly fire!", color: "var(--ui-color-accent-danger)" });
-        }
-    }
-
-    // Poison chance
-    if (skill.poisonChance) {
-        lines.push({ label: "Poison chance", value: `${skill.poisonChance}%`, color: COLORS.poisonText });
-    }
-    if (skill.burnChance) {
-        lines.push({ label: "Burn chance", value: `${skill.burnChance}%`, color: COLORS.burnText });
-    }
-    if (skill.burnDamagePerTick) {
-        lines.push({ label: "Burn/tick", value: `${skill.burnDamagePerTick}`, color: COLORS.burnText });
-    }
-    if (skill.burnDuration) {
-        const burnSeconds = Math.round((skill.burnDuration / 1000) * 10) / 10;
-        lines.push({ label: "Burn duration", value: `${burnSeconds}s`, color: COLORS.burnText });
-    }
-    if (skill.knockbackDistance) {
-        lines.push({ label: "Knockback", value: `${skill.knockbackDistance}`, color: "var(--ui-color-accent-success-bright)" });
-    }
-    if (skill.stunChance && skill.type !== "debuff") {
-        lines.push({ label: "Stun chance", value: `${skill.stunChance}%`, color: COLORS.stunnedText });
-    }
-    if (skill.damagePerTick && skill.type !== "sanctuary" && skill.type !== "wall_of_fire") {
-        lines.push({ label: "Damage/tick", value: `${skill.damagePerTick}`, color: COLORS.dmgHoly });
-    }
-    if (skill.tickInterval && skill.tickInterval > 0) {
-        const tickSeconds = Math.round((skill.tickInterval / 1000) * 10) / 10;
-        lines.push({ label: "Tick", value: `${tickSeconds}s`, color: COLORS.logNeutral });
-    }
-    if (skill.blindChance) {
-        lines.push({ label: "Blind chance", value: `${skill.blindChance}%`, color: COLORS.blindText });
-    }
-    if (skill.blindDuration) {
-        const blindSeconds = Math.round((skill.blindDuration / 1000) * 10) / 10;
-        lines.push({ label: "Blind duration", value: `${blindSeconds}s`, color: COLORS.blindText });
-    }
-
-    if (skill.critChanceOverride !== undefined) {
-        lines.push({ label: "Crit chance", value: `${skill.critChanceOverride}%`, color: COLORS.damageCrit });
-    }
-
-    if (skill.onHitEffect) {
-        const effectDurationSec = Math.round((skill.onHitEffect.duration / 1000) * 10) / 10;
-        if (skill.onHitEffect.type === "stun") {
-            lines.push({ label: "On hit", value: `Stun (${skill.onHitEffect.chance}%)`, color: COLORS.stunnedText });
-            lines.push({ label: "Stun duration", value: `${effectDurationSec}s`, color: COLORS.stunnedText });
-        } else if (skill.onHitEffect.type === "attack_down") {
-            lines.push({ label: "On hit", value: `Constrict (${skill.onHitEffect.chance}%)`, color: COLORS.constrictedText });
-            lines.push({ label: "Debuff duration", value: `${effectDurationSec}s`, color: COLORS.constrictedText });
-        } else if (skill.onHitEffect.type === "move_slow") {
-            lines.push({ label: "On hit", value: `Hamstring (${skill.onHitEffect.chance}%)`, color: COLORS.hamstrungText });
-            lines.push({ label: "Debuff duration", value: `${effectDurationSec}s`, color: COLORS.hamstrungText });
-        }
-    }
-
-    // Mana cost
-    if (skill.manaCost > 0) {
-        lines.push({ label: "Mana", value: `${skill.manaCost}`, color: COLORS.mana });
-    }
-
-    // Cooldown (skip for cantrips — they use charges)
-    if (!skill.isCantrip) {
-        lines.push({
-            label: "Cooldown",
-            value: isShielded ? `${effectiveCooldown}s (×2)` : `${baseCooldown}s`,
-            color: isShielded ? COLORS.shieldedText : undefined
-        });
-    }
-
-    // Cantrip uses
-    if (cantripUses !== undefined) {
-        lines.push({ label: "Cantrip uses", value: `${cantripUses} remaining`, color: "var(--ui-color-accent-arcane)" });
-    }
-
-    if (silenceBlocksSkill) {
-        lines.push({ label: "Blocked", value: "Silenced", color: COLORS.silencedText });
-    }
-
-    return (
-        <div className="skill-tooltip">
-            {skill.description && (
-                <div className="skill-tooltip-desc">{skill.description}</div>
-            )}
-            {lines.map((line, i) => (
-                <div key={i} className="skill-tooltip-row">
-                    <span className="skill-tooltip-label">{line.label}</span>
-                    <span className="skill-tooltip-value" style={line.color ? { color: line.color } : undefined}>
-                        {line.value}
-                    </span>
-                </div>
-            ))}
-            {skill.flavor && (
-                <div className="skill-tooltip-flavor">{skill.flavor}</div>
-            )}
-        </div>
-    );
-}
-
-function SkillCard({
-    unitId, unit, skill, skillCooldowns, displayTime, paused, isShielded, isQueued, onCastSkill, onCancelQueuedSkill, unlearned, canLearn, onLearn
-}: {
-    unitId: number;
-    unit: Unit;
-    skill: Skill;
-    skillCooldowns: Record<string, { end: number; duration: number }>;
-    displayTime: number;
-    paused: boolean;
-    isShielded: boolean;
-    isQueued: boolean;
-    onCastSkill?: (unitId: number, skill: Skill) => void;
-    onCancelQueuedSkill?: (unitId: number, skill: Skill) => void;
-    unlearned?: boolean;
-    canLearn?: boolean;
-    onLearn?: () => void;
-}) {
-    const cooldownKey = `${unitId}-${skill.name}`;
-    const cooldownData = skillCooldowns[cooldownKey];
-    const skillCooldownEnd = cooldownData?.end || 0;
-    const cooldownDuration = Math.max(1, cooldownData?.duration || skill.cooldown);
-    const skillOnCooldown = skillCooldownEnd > displayTime;
-    const cooldownRemaining = skillOnCooldown ? Math.ceil((skillCooldownEnd - displayTime) / 1000) : 0;
-    const cooldownScale = skillOnCooldown
-        ? Math.max(0, Math.min(1, (skillCooldownEnd - displayTime) / cooldownDuration))
-        : 0;
-    const hasManaForSkill = (unit.mana ?? 0) >= skill.manaCost;
-    const isBasicAttack = skill.name === "Attack";
-    const isRanged = skill.range > 2;
-    const silenceBlocksSkill = hasStatusEffect(unit, "silenced") && skill.kind === "spell";
-    const cantripUses = skill.isCantrip ? (unit.cantripUses?.[skill.name] ?? 0) : undefined;
-    const noUsesLeft = skill.isCantrip && cantripUses !== undefined && cantripUses <= 0;
-    const canCast = !unlearned && hasManaForSkill && !noUsesLeft && !silenceBlocksSkill && unit.hp > 0;
-
-    const skillTextColor = getSkillTextColor(skill.type, skill.damageType);
-    const skillBorderColor = getSkillBorderColor(skill.type, skill.damageType);
-
-    const cardClass = [
-        "skill-card",
-        !canCast && !isQueued && !unlearned ? "disabled" : "",
-        isQueued ? "queued" : "",
-        unlearned ? "unlearned" : "",
-        unlearned && canLearn ? "can-learn" : ""
-    ].filter(Boolean).join(" ");
-
-    return (
-        <Tippy
-            content={<SkillTooltip skill={skill} isShielded={isShielded} cantripUses={cantripUses} silenceBlocksSkill={silenceBlocksSkill} />}
-            placement="left"
-            delay={[200, 0]}
-            arrow={true}
-        >
-            <div
-                className={cardClass}
-                onClick={() => {
-                    if (unlearned && canLearn && onLearn) onLearn();
-                    else if (isQueued) onCancelQueuedSkill?.(unitId, skill);
-                    else if (canCast) onCastSkill?.(unitId, skill);
-                }}
-                style={{
-                    borderColor: unlearned ? undefined : (isQueued ? undefined : (canCast ? skillBorderColor : "var(--ui-color-border)")),
-                    cursor: !unlearned ? (isQueued ? "pointer" : "grab") : undefined
-                }}
-                draggable={!unlearned}
-                onDragStart={(e) => {
-                    e.dataTransfer.effectAllowed = "move";
-                    e.dataTransfer.setData(SKILL_DRAG_TYPE, skill.name);
-                }}
-            >
-                {!unlearned && skillOnCooldown && (
-                    <div
-                        className="skill-cooldown-overlay"
-                        style={{
-                            transform: `scaleX(${cooldownScale})`,
-                            background: isQueued ? "var(--ui-color-accent-warning-soft)" : "var(--ui-color-overlay)"
-                        }}
-                    />
-                )}
-                <div className="skill-header">
-                    <span
-                        className={`bold ${isQueued ? "skill-queued-color" : ""}`}
-                        style={!isQueued ? { color: skillTextColor } : undefined}
-                    >
-                        {skill.name}
-                        {skill.isCantrip && <span className="skill-tag">CANTRIP</span>}
-                        {!isBasicAttack && <span className="skill-tag">{skill.kind.toUpperCase()}</span>}
-                        {isBasicAttack && isRanged && <span className="skill-tag">RANGED</span>}
-                        {isBasicAttack && !isRanged && <span className="skill-tag">MELEE</span>}
-                        {isQueued && <span className="skill-tag skill-tag-queued">QUEUED</span>}
-                    </span>
-                    <div className="skill-header-right">
-                        {!unlearned && cantripUses !== undefined && (
-                            <span className="skill-uses-badge">{cantripUses} uses</span>
-                        )}
-                        {skill.manaCost > 0 && <span className="mana-cost">{skill.manaCost} MP</span>}
-                        {unlearned && (
-                            <span className={`skill-learn-tag ${canLearn ? "available" : ""}`}>
-                                {canLearn ? "Learn" : "Locked"}
-                            </span>
-                        )}
-                    </div>
-                </div>
-                {!unlearned && skillOnCooldown && (
-                    <div className="skill-cooldown-text" style={isQueued ? { color: "var(--ui-color-accent-warning)" } : undefined}>
-                        {cooldownRemaining}s{paused && " (paused)"}{isShielded && " (×2)"}
-                    </div>
-                )}
-            </div>
-        </Tippy>
-    );
-}
-
-function SkillsTab({
-    unitId, unit, skillCooldowns, displayTime, paused, queuedAction, onCastSkill, onCancelQueuedSkill, onLearnSkill
-}: {
-    unitId: number;
-    unit: Unit;
-    skillCooldowns: Record<string, { end: number; duration: number }>;
-    displayTime: number;
-    paused: boolean;
-    queuedAction: PanelQueuedAction | null;
-    onCastSkill?: (unitId: number, skill: Skill) => void;
-    onCancelQueuedSkill?: (unitId: number, skill: Skill) => void;
-    onLearnSkill?: (unitId: number, skillName: string) => void;
-}) {
-    const isShielded = hasStatusEffect(unit, "shielded");
-    const learnedSkills = getAllSkills(unitId, unit);
-    const learnedSet = new Set((unit.learnedSkills ?? []).map(n => n));
-    const availableSkills = getAvailableSkills(unitId);
-    const skillPoints = unit.skillPoints ?? 0;
-
-    const cantrips = learnedSkills.filter(s => s.isCantrip);
-    const learnedRegular = learnedSkills.filter(s => !s.isCantrip);
-    const unlearnedSkills = availableSkills.filter(s => !learnedSet.has(s.name));
-
-    return (
-        <div className="flex flex-col gap-8">
-            <EffectsDisplay unit={unit} displayTime={displayTime} />
-
-            {cantrips.length > 0 && (
-                <>
-                    <div className="skills-section-label">Cantrips</div>
-                    {cantrips.map((skill: Skill, i: number) => (
-                        <SkillCard
-                            key={`cantrip-${i}`}
-                            unitId={unitId}
-                            unit={unit}
-                            skill={skill}
-                            skillCooldowns={skillCooldowns}
-                            displayTime={displayTime}
-                            paused={paused}
-                            isShielded={isShielded}
-                            isQueued={queuedAction?.type === "skill" && queuedAction.skillName === skill.name}
-                            onCastSkill={onCastSkill}
-                            onCancelQueuedSkill={onCancelQueuedSkill}
-                        />
-                    ))}
-                </>
-            )}
-
-            {learnedRegular.length > 0 && (
-                <>
-                    <div className="skills-section-label">Skills</div>
-                    {learnedRegular.map((skill: Skill, i: number) => (
-                        <SkillCard
-                            key={`skill-${i}`}
-                            unitId={unitId}
-                            unit={unit}
-                            skill={skill}
-                            skillCooldowns={skillCooldowns}
-                            displayTime={displayTime}
-                            paused={paused}
-                            isShielded={isShielded}
-                            isQueued={queuedAction?.type === "skill" && queuedAction.skillName === skill.name}
-                            onCastSkill={onCastSkill}
-                            onCancelQueuedSkill={onCancelQueuedSkill}
-                        />
-                    ))}
-                </>
-            )}
-
-            {unlearnedSkills.length > 0 && (
-                <>
-                    <div className="skills-section-label">
-                        <span>Unlearned</span>
-                        {skillPoints > 0 && <span className="skill-points-badge">{skillPoints} pts</span>}
-                    </div>
-                    {unlearnedSkills.map((skill: Skill, i: number) => (
-                        <SkillCard
-                            key={`unlearned-${i}`}
-                            unitId={unitId}
-                            unit={unit}
-                            skill={skill}
-                            skillCooldowns={skillCooldowns}
-                            displayTime={displayTime}
-                            paused={paused}
-                            isShielded={false}
-                            isQueued={false}
-                            unlearned
-                            canLearn={skillPoints > 0}
-                            onLearn={() => onLearnSkill?.(unitId, skill.name)}
-                        />
-                    ))}
-                </>
-            )}
-        </div>
-    );
-}
-
-function InventoryTab({
-    unit,
-    units,
-    displayTime,
-    consumableCooldownEnd,
-    onUseConsumable,
-    onCancelQueuedConsumable,
-    queuedAction = null,
-    gold = 0,
-}: {
-    unit: Unit;
-    units: Unit[];
-    displayTime: number;
-    consumableCooldownEnd: number;
-    onUseConsumable?: (itemId: string, targetUnitId: number) => void;
-    onCancelQueuedConsumable?: (itemId: string, targetUnitId: number) => void;
-    queuedAction?: PanelQueuedAction | null;
-    gold?: number;
-}) {
-    const inventory = getPartyInventory();
-    const consumables = inventory.items
-        .map(entry => ({ entry, item: getItem(entry.itemId) }))
-        .filter(({ item }) => item && isConsumable(item));
-
-    const onCooldown = consumableCooldownEnd > displayTime;
-    const cooldownRemaining = onCooldown ? Math.ceil((consumableCooldownEnd - displayTime) / 1000) : 0;
-    const hasDeadAllies = units.some(u => u.team === "player" && u.hp <= 0);
-
-    if (consumables.length === 0 && gold === 0) {
-        return <div className="text-muted" style={{ fontSize: 13 }}>No items</div>;
-    }
-
-    return (
-        <div className="flex flex-col gap-8">
-            {gold > 0 && (
-                <div className="inventory-item-row disabled" style={{ cursor: "default" }}>
-                    <div className="inventory-item-header">
-                        <span className="inventory-item-name">Pouch of Gold</span>
-                    </div>
-                    <div className="inventory-item-stats">
-                        <span className="inventory-item-effect" style={{ color: "var(--ui-color-accent-gold)" }}>
-                            {gold} gold
-                        </span>
-                    </div>
-                </div>
-            )}
-            {consumables.map(({ entry, item }) => {
-                if (!item || !isConsumable(item)) return null;
-
-                const unitAlive = unit.hp > 0;
-                const isQueued = queuedAction?.type === "consumable" && queuedAction.itemId === entry.itemId;
-                const isRevive = item.effect === "revive";
-                const isCleanse = item.effect === "cleanse";
-
-                // Check if using would be wasteful
-                let wouldBeWasted = false;
-                if (unitAlive) {
-                    if (item.effect === "heal") {
-                        const maxHp = getEffectiveMaxHp(unit.id, unit);
-                        wouldBeWasted = unit.hp >= maxHp;
-                    } else if (item.effect === "mana") {
-                        const maxMana = getEffectiveMaxMana(unit.id, unit);
-                        wouldBeWasted = (unit.mana ?? 0) >= maxMana;
-                    } else if (isCleanse) {
-                        const hasPoison = unit.statusEffects?.some(effect => effect.type === "poison") ?? false;
-                        const alreadyCleansed = unit.statusEffects?.some(effect => effect.type === "cleansed") ?? false;
-                        wouldBeWasted = !hasPoison && alreadyCleansed;
-                    } else if (isRevive) {
-                        wouldBeWasted = !hasDeadAllies;
-                    }
-                }
-
-                // Can click if alive and not wasted (can queue even on cooldown)
-                const canClick = unitAlive && !wouldBeWasted;
-
-                const effectColor = item.effect === "heal"
-                    ? COLORS.hpHigh
-                    : item.effect === "mana"
-                        ? COLORS.mana
-                        : isCleanse
-                            ? COLORS.cleansedText
-                            : isRevive
-                                ? "var(--ui-color-accent-gold)"
-                                : "var(--ui-color-accent-arcane)";
-                const effectLabel = item.effect === "heal"
-                    ? "HP"
-                    : item.effect === "mana"
-                        ? "Mana"
-                        : isCleanse
-                            ? "Cleanse"
-                            : isRevive
-                                ? ""
-                                : "Experience";
-                const itemClass = `inventory-item-row ${!canClick && !isQueued ? "disabled" : ""} ${wouldBeWasted ? "wasted" : ""} ${isQueued ? "queued" : ""}`;
-
-                return (
-                    <Tippy
-                        key={entry.itemId}
-                        content={
-                            <div className="consumable-tooltip">
-                                <div className="consumable-tooltip-desc">{item.description}</div>
-                                {isRevive ? (
-                                    <div className="consumable-tooltip-row">
-                                        <span className="consumable-tooltip-value" style={{ color: effectColor }}>
-                                            Revive to {item.value} HP
-                                        </span>
-                                    </div>
-                                ) : isCleanse ? (
-                                    <div className="consumable-tooltip-row">
-                                        <span className="consumable-tooltip-value" style={{ color: effectColor }}>
-                                            Removes poison and grants poison immunity
-                                        </span>
-                                    </div>
-                                ) : (
-                                    <div className="consumable-tooltip-row">
-                                        <span className="consumable-tooltip-label">Restores</span>
-                                        <span className="consumable-tooltip-value" style={{ color: effectColor }}>
-                                            {item.value} {effectLabel}
-                                        </span>
-                                    </div>
-                                )}
-                                {item.poisonChanceOnUse && item.poisonChanceOnUse > 0 && (
-                                    <div className="consumable-tooltip-row">
-                                        <span className="consumable-tooltip-label">Risk</span>
-                                        <span className="consumable-tooltip-value" style={{ color: COLORS.poisonText }}>
-                                            {item.poisonChanceOnUse}% chance to self-poison
-                                        </span>
-                                    </div>
-                                )}
-                                {wouldBeWasted && isRevive && (
-                                    <div className="consumable-tooltip-warning">No fallen allies</div>
-                                )}
-                                {wouldBeWasted && isCleanse && (
-                                    <div className="consumable-tooltip-warning">Already protected</div>
-                                )}
-                                {wouldBeWasted && !isRevive && !isCleanse && (
-                                    <div className="consumable-tooltip-warning">Already at full {effectLabel}</div>
-                                )}
-                            </div>
-                        }
-                        placement="left"
-                        delay={[200, 0]}
-                    >
-                        <div
-                            className={itemClass}
-                            onClick={() => {
-                                if (isQueued) {
-                                    onCancelQueuedConsumable?.(entry.itemId, unit.id);
-                                } else if (canClick) {
-                                    onUseConsumable?.(entry.itemId, unit.id);
-                                }
-                            }}
-                        >
-                            <div className="inventory-item-header">
-                                <span className="inventory-item-name">{item.name}</span>
-                                {isQueued && <span className="skill-tag skill-tag-queued">QUEUED</span>}
-                            </div>
-                            {onCooldown && !isQueued && (
-                                <div className="inventory-item-cooldown">{cooldownRemaining}s</div>
-                            )}
-                            {isQueued && onCooldown && (
-                                <div className="inventory-item-cooldown queued">{cooldownRemaining}s</div>
-                            )}
-                            <div className="inventory-item-stats">
-                                <span className="inventory-item-effect" style={{ color: effectColor }}>
-                                    {isRevive ? "Revive" : isCleanse ? "Cleanse" : `+${item.value} ${effectLabel}`}
-                                </span>
-                                <span className="inventory-item-qty">×{entry.quantity}</span>
-                            </div>
-                        </div>
-                    </Tippy>
-                );
-            })}
         </div>
     );
 }

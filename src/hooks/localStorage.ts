@@ -9,12 +9,31 @@
 export type HotbarAssignments = Record<number, (string | null)[]>;
 
 const HOTBAR_STORAGE_KEY = "skillHotbarAssignments";
-const HOTBAR_SLOT_COUNT = 5;
+export const HOTBAR_SLOT_COUNT = 7;
 const FORMATION_STORAGE_KEY = "formationOrder";
 const AUTO_PAUSE_SETTINGS_STORAGE_KEY = "autoPauseSettings";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function createEmptyHotbarSlots(): (string | null)[] {
+    return Array.from({ length: HOTBAR_SLOT_COUNT }, () => null);
+}
+
+export function normalizeHotbarSlots(rawSlots: readonly unknown[] | undefined): (string | null)[] {
+    const slots = createEmptyHotbarSlots();
+    if (!rawSlots) return slots;
+
+    for (let i = 0; i < HOTBAR_SLOT_COUNT; i++) {
+        const value = rawSlots[i];
+        if (typeof value !== "string") continue;
+
+        const trimmed = value.trim();
+        slots[i] = trimmed.length > 0 ? trimmed : null;
+    }
+
+    return slots;
 }
 
 function sanitizeHotbarAssignments(raw: unknown): HotbarAssignments {
@@ -26,18 +45,7 @@ function sanitizeHotbarAssignments(raw: unknown): HotbarAssignments {
         if (!Number.isFinite(unitId) || unitId <= 0) continue;
         if (!Array.isArray(slotsRaw)) continue;
 
-        const slots: (string | null)[] = [];
-        for (let i = 0; i < HOTBAR_SLOT_COUNT; i++) {
-            const value = slotsRaw[i];
-            if (typeof value === "string") {
-                const trimmed = value.trim();
-                slots.push(trimmed.length > 0 ? trimmed : null);
-            } else {
-                slots.push(null);
-            }
-        }
-
-        sanitized[Math.floor(unitId)] = slots;
+        sanitized[Math.floor(unitId)] = normalizeHotbarSlots(slotsRaw);
     }
 
     return sanitized;

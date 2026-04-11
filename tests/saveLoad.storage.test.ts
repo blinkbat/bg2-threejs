@@ -10,6 +10,7 @@ import {
     saveGame,
     type SaveSlotData,
 } from "../src/game/saveLoad";
+import { HOTBAR_SLOT_COUNT } from "../src/hooks/localStorage";
 
 class LocalStorageMock {
     private readonly values = new Map<string, string>();
@@ -32,6 +33,14 @@ class LocalStorageMock {
 }
 
 const localStorageMock = new LocalStorageMock();
+
+function createExpectedHotbarSlots(...values: Array<string | null>): (string | null)[] {
+    const slots = Array.from({ length: HOTBAR_SLOT_COUNT }, () => null as string | null);
+    for (let i = 0; i < values.length && i < HOTBAR_SLOT_COUNT; i++) {
+        slots[i] = values[i];
+    }
+    return slots;
+}
 
 function createValidSaveData(overrides: Partial<SaveSlotData> = {}): SaveSlotData {
     const saveData: SaveSlotData = {
@@ -58,7 +67,7 @@ function createValidSaveData(overrides: Partial<SaveSlotData> = {}): SaveSlotDat
             items: [{ itemId: "loafOfBread", quantity: 2 }],
         },
         hotbarAssignments: {
-            1: ["Attack", null, null, null, null],
+            1: createExpectedHotbarSlots("Attack"),
         },
         formationOrder: [1, 2, 3, 4, 5, 6],
         dialogTriggerProgress: {
@@ -161,7 +170,7 @@ describe("saveLoad storage", () => {
             expect(loaded.data.openedChests).toEqual(["coast-0"]);
             expect(loaded.data.inventory.items).toEqual([{ itemId: "loafOfBread", quantity: 3 }]);
             expect(loaded.data.formationOrder).toEqual([3, 2]);
-            expect(loaded.data.hotbarAssignments?.[1]).toEqual(["Attack", null, null, null, null]);
+            expect(loaded.data.hotbarAssignments?.[1]).toEqual(createExpectedHotbarSlots("Attack"));
             expect(loaded.data.dialogTriggerProgress?.coast).toEqual(["intro_1"]);
         }
     });

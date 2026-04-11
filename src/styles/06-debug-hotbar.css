@@ -363,6 +363,32 @@
 
 .hotbar-slot.on-cooldown {
     background: var(--ui-color-surface-active);
+    border-color: var(--ui-color-accent-cyan);
+}
+
+@media (max-width: 640px) {
+    .skill-hotbar {
+        gap: 4px;
+        padding: 4px;
+    }
+
+    .hotbar-slot {
+        width: 44px;
+        height: 44px;
+    }
+
+    .hotbar-slot-abbrev {
+        font-size: 11px;
+    }
+}
+
+.hotbar-slot.queued {
+    border-color: var(--ui-color-accent-warning);
+    box-shadow: inset 0 0 0 1px var(--ui-color-accent-warning-soft);
+}
+
+.hotbar-slot.queued.on-cooldown {
+    box-shadow: inset 0 0 0 1px var(--ui-color-accent-warning-soft);
 }
 
 .hotbar-slot.drop-hover {
@@ -378,6 +404,15 @@
     font-size: 10px;
     color: var(--ui-color-text-faint);
     font-weight: 600;
+}
+
+.hotbar-slot-state {
+    position: absolute;
+    top: 3px;
+    right: 5px;
+    font-size: 10px;
+    color: var(--ui-color-accent-warning);
+    font-weight: 700;
 }
 
 .hotbar-slot-abbrev {
@@ -441,6 +476,11 @@
 }
 
 .hotbar-tooltip-cd {
+    color: var(--ui-color-accent-cyan);
+    font-size: 11px;
+}
+
+.hotbar-tooltip-queued {
     color: var(--ui-color-accent-warning);
     font-size: 11px;
 }

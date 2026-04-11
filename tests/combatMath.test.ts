@@ -9,6 +9,7 @@ import {
     getCooldownMultiplier,
     getDistributedStatBonus,
     getEffectiveSpeedMultiplier,
+    getHpPercentage,
     getSkillHitChance,
 } from "../src/combat/combatMath";
 
@@ -133,7 +134,7 @@ describe("combatMath", () => {
     it("refreshes existing poison and keeps stronger damage", () => {
         const unit = makeEnemyUnit({
             statusEffects: [
-                makeStatusEffect("poison", { damagePerTick: 6, duration: 200 }),
+                makeStatusEffect("poison", { damagePerTick: 6, duration: 200, timeSinceTick: 40, lastUpdateTime: 900 }),
                 makeStatusEffect("slowed"),
             ],
         });
@@ -144,6 +145,12 @@ describe("combatMath", () => {
         expect(poison).toBeDefined();
         expect(poison?.damagePerTick).toBe(6);
         expect(poison?.lastUpdateTime).toBe(999);
+        expect(poison?.timeSinceTick).toBe(139);
+    });
+
+    it("returns 0 HP percentage when max HP is zero or below", () => {
+        expect(getHpPercentage(10, 0)).toBe(0);
+        expect(getHpPercentage(10, -5)).toBe(0);
     });
 
     it("combines cooldown multipliers from status effects", () => {

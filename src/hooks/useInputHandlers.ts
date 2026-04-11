@@ -39,7 +39,7 @@ import { distanceToPoint } from "../game/geometry";
 import { getPartyInventory, setPartyInventory } from "../game/equipmentState";
 import { removeFromInventory, addToInventory } from "../game/equipment";
 import { buildEffectiveFormationOrder } from "../game/formationOrder";
-import type { HotbarAssignments } from "./hotbarStorage";
+import { normalizeHotbarSlots, type HotbarAssignments } from "./hotbarStorage";
 import { scheduleEffectAnimation } from "../core/effectScheduler";
 import { getGameTime } from "../core/gameClock";
 
@@ -1213,12 +1213,12 @@ export function useInputHandlers({
                     setters.setSelectedIds([]);
                 }
             }
-            if (["Digit1", "Digit2", "Digit3", "Digit4", "Digit5"].includes(e.code)) {
+            if (["Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6", "Digit7"].includes(e.code)) {
                 const slotIndex = parseInt(e.code.charAt(5)) - 1;
                 const selected = stateRefs.selectedRef.current;
                 if (selected.length === 1) {
                     const unitId = selected[0];
-                    const slots = stateRefs.hotbarAssignmentsRef.current[unitId] || [null, null, null, null, null];
+                    const slots = normalizeHotbarSlots(stateRefs.hotbarAssignmentsRef.current[unitId]);
                     const skillName = slots[slotIndex];
                     if (skillName) {
                         const unit = stateRefs.unitsStateRef.current.find(u => u.id === unitId);

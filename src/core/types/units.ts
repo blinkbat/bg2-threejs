@@ -300,7 +300,7 @@ export interface EnemyStats {
     blockChance?: number;
     // Optional tentacle skill - spawns tentacles toward targets
     tentacleSkill?: EnemyTentacleSkill;
-    // Optional fireball attack - slow projectile that hurts everything it touches
+    // Optional fireball attack - slow projectile that damages opposing-team units
     fireballAttack?: boolean;
     // Base crit chance percentage (0 by default, enemies can crit too)
     baseCrit?: number;

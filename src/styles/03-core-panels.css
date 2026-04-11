@@ -557,6 +557,47 @@
 }
 
 /* -----------------------------------------------------------------------------
+   PANEL TOGGLE BAR (skills / equipment / items buttons)
+   ----------------------------------------------------------------------------- */
+.panel-toggle-bar {
+    display: flex;
+    gap: 4px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--ui-color-border);
+}
+
+.panel-toggle-btn {
+    flex: 1;
+    padding: 7px 0;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    cursor: pointer;
+    border: 1px solid var(--ui-color-border);
+    border-radius: 4px;
+    background: var(--ui-color-surface);
+    color: var(--ui-color-text-secondary);
+    transition: color 0.12s, background 0.12s, border-color 0.12s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    line-height: 1;
+}
+
+.panel-toggle-btn:hover {
+    background: var(--ui-color-surface-hover);
+    color: var(--ui-color-text-secondary);
+}
+
+.panel-toggle-btn.active {
+    background: var(--ui-color-surface-hover);
+    border-color: var(--ui-color-accent-primary-bright);
+    color: var(--ui-color-accent-primary-bright);
+}
+
+/* -----------------------------------------------------------------------------
    TABS
    ----------------------------------------------------------------------------- */
 .tab-container {

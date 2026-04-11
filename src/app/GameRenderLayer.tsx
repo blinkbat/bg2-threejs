@@ -23,6 +23,8 @@ import { CombatLog } from "../components/CombatLog";
 import { CommandBar } from "../components/CommandBar";
 import { DialogModal } from "../components/DialogModal";
 import { EquipmentModal } from "../components/EquipmentModal";
+import { SkillTreeModal } from "../components/SkillTreeModal";
+import { ItemsModal } from "../components/ItemsModal";
 import { FormationIndicator } from "../components/FormationIndicator";
 import { HUD } from "../components/HUD";
 import { LootPickupModal } from "../components/LootPickupModal";
@@ -95,8 +97,15 @@ interface GameRenderLayerProps {
     handleCancelQueuedSkill: (unitId: number, skill: Skill) => void;
     handleCastSkill: (unitId: number, skill: Skill) => void;
     handleChangeEquipmentUnit: (id: number) => void;
+    handleChangeSkillTreeUnit: (id: number) => void;
+    handleChangeItemsUnit: (id: number) => void;
     handleCloseEquipmentModal: () => void;
+    handleCloseSkillTreeModal: () => void;
+    handleCloseItemsModal: () => void;
     handleClosePanel: () => void;
+    handleOpenEquipmentModal: (unitId: number) => void;
+    handleOpenSkillTreeModal: (unitId: number) => void;
+    handleOpenItemsModal: (unitId: number) => void;
     handleDeselectAllPlayers: () => void;
     handleEquipItem: (unitId: number, itemId: string, slot: EquipmentSlot) => void;
     handleHold: () => void;
@@ -136,7 +145,10 @@ interface GameRenderLayerProps {
     onShowControls: () => void;
     onShowGlossary: () => void;
     onShowHelp: () => void;
-    setEquipmentModalUnitId: React.Dispatch<React.SetStateAction<number | null>>;
+    skillTreeModalOpen: boolean;
+    skillTreeModalUnitId: number | null;
+    itemsModalOpen: boolean;
+    itemsModalUnitId: number | null;
     setSelectedIds: React.Dispatch<React.SetStateAction<number[]>>;
     skipDialogTyping: () => void;
     takeLootPickup: () => void;
@@ -189,11 +201,18 @@ export function GameRenderLayer({
     handleAssignSkill,
     handleAttackMove,
     handleCancelQueuedConsumable,
-    handleCancelQueuedSkill,
+    // handleCancelQueuedSkill — kept in interface, not destructured (used by skill tree modal in future)
     handleCastSkill,
     handleChangeEquipmentUnit,
+    handleChangeSkillTreeUnit,
+    handleChangeItemsUnit,
     handleCloseEquipmentModal,
+    handleCloseSkillTreeModal,
+    handleCloseItemsModal,
     handleClosePanel,
+    handleOpenEquipmentModal,
+    handleOpenSkillTreeModal,
+    handleOpenItemsModal,
     handleDeselectAllPlayers,
     handleEquipItem,
     handleHold,
@@ -254,7 +273,10 @@ export function GameRenderLayer({
     selBox,
     selectedConsumableCooldownEnd,
     selectedIds,
-    setEquipmentModalUnitId,
+    skillTreeModalOpen,
+    skillTreeModalUnitId,
+    itemsModalOpen,
+    itemsModalUnitId,
     setSelectedIds,
     showPanel,
     skillCooldowns,
@@ -303,15 +325,21 @@ export function GameRenderLayer({
     const selectedPanelQueuedAction = selectedQueuedActionEntry
         ? actionQueue[selectedIds[0]]
         : undefined;
+    const selectedHotbarQueuedAction = selectedIds.length === 1
+        ? actionQueue[selectedIds[0]]
+        : undefined;
     const queuedPanelAction = selectedPanelQueuedAction?.type === "skill"
         ? { type: "skill" as const, skillName: selectedPanelQueuedAction.skill.name }
         : selectedPanelQueuedAction?.type === "consumable"
             ? { type: "consumable" as const, itemId: selectedPanelQueuedAction.itemId }
             : null;
+    const selectedHotbarQueuedSkillName = selectedHotbarQueuedAction?.type === "skill"
+        ? selectedHotbarQueuedAction.skill.name
+        : null;
 
     return (
         <div
-            className={equipmentModalOpen ? "equip-modal-active" : undefined}
+            className={(equipmentModalOpen || skillTreeModalOpen || itemsModalOpen) ? "equip-modal-active" : undefined}
             style={{
                 width: "100%",
                 height: "100vh",
@@ -543,10 +571,11 @@ export function GameRenderLayer({
                     onAssignSkill={handleAssignSkill}
                     onCastSkill={handleCastSkill}
                     skillCooldowns={skillCooldowns}
+                    queuedSkillName={selectedHotbarQueuedSkillName}
                     paused={paused}
                     formationOrder={formationOrder}
                     onReorderFormation={handleReorderFormation}
-                    hideHotbar={equipmentModalOpen}
+                    hideHotbar={equipmentModalOpen || itemsModalOpen}
                 />
             </div>
             {showPanel && selectedIds.length === 1 && (
@@ -555,18 +584,14 @@ export function GameRenderLayer({
                     units={playerUnits}
                     onClose={handleClosePanel}
                     onToggleAI={handleToggleAI}
-                    onCastSkill={handleCastSkill}
-                    onCancelQueuedSkill={handleCancelQueuedSkill}
-                    skillCooldowns={skillCooldowns}
                     paused={paused}
-                    queuedAction={queuedPanelAction}
-                    onUseConsumable={handleUseConsumable}
-                    onCancelQueuedConsumable={handleCancelQueuedConsumable}
-                    consumableCooldownEnd={selectedConsumableCooldownEnd}
-                    onOpenEquipment={setEquipmentModalUnitId}
+                    onOpenEquipment={handleOpenEquipmentModal}
+                    onOpenSkillTree={handleOpenSkillTreeModal}
+                    onOpenItems={handleOpenItemsModal}
+                    equipmentModalOpen={equipmentModalOpen}
+                    skillTreeModalOpen={skillTreeModalOpen}
+                    itemsModalOpen={itemsModalOpen}
                     onIncrementStat={handleIncrementStat}
-                    onLearnSkill={handleLearnSkill}
-                    gold={gold}
                 />
             )}
             {equipmentModalUnitId !== null && (
@@ -578,6 +603,33 @@ export function GameRenderLayer({
                     onUnequipItem={handleUnequipItem}
                     onMoveEquippedItem={handleMoveEquippedItem}
                     onChangeUnit={handleChangeEquipmentUnit}
+                    formationOrder={formationOrder}
+                />
+            )}
+            {skillTreeModalUnitId !== null && (
+                <SkillTreeModal
+                    key={skillTreeModalUnitId}
+                    unitId={skillTreeModalUnitId}
+                    units={playerUnits}
+                    onClose={handleCloseSkillTreeModal}
+                    onChangeUnit={handleChangeSkillTreeUnit}
+                    onLearnSkill={handleLearnSkill}
+                    formationOrder={formationOrder}
+                />
+            )}
+            {itemsModalUnitId !== null && (
+                <ItemsModal
+                    key={itemsModalUnitId}
+                    unitId={itemsModalUnitId}
+                    units={playerUnits}
+                    onClose={handleCloseItemsModal}
+                    onChangeUnit={handleChangeItemsUnit}
+                    onUseConsumable={handleUseConsumable}
+                    onCancelQueuedConsumable={handleCancelQueuedConsumable}
+                    consumableCooldownEnd={selectedConsumableCooldownEnd}
+                    queuedAction={queuedPanelAction}
+                    gold={gold}
+                    paused={paused}
                     formationOrder={formationOrder}
                 />
             )}

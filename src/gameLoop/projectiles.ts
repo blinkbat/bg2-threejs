@@ -501,7 +501,8 @@ export function updateProjectiles(
 
         let hitCount = 0;
         let totalDamage = 0;
-        forEachProjectileCandidatesNear(explodeX, explodeZ, aoeRadius, "both", (target, tg) => {
+        const aoeTargetTeam = attackerUnit?.team === "player" ? "enemy" : attackerUnit?.team === "enemy" ? "player" : "both";
+        forEachProjectileCandidatesNear(explodeX, explodeZ, aoeRadius, aoeTargetTeam, (target, tg) => {
             if (defeatedThisFrame.has(target.id)) return;
             const targetRadius = getUnitRadius(target);
             if (!isInRange(explodeX, explodeZ, tg.position.x, tg.position.z, targetRadius, aoeRadius)) return;
@@ -972,7 +973,7 @@ export function updateProjectiles(
             return true;
         }
 
-        // Fireball projectile - slow-moving, hurts everything it touches, expires on wall or distance
+        // Fireball projectile - slow-moving, damages opposing-team units, expires on wall or distance
         if (proj.type === "fireball") {
             const fbProj = proj as FireballProjectile;
             const attackerUnit = getUnitById(fbProj.attackerId);
@@ -1011,19 +1012,18 @@ export function updateProjectiles(
                 return false;
             }
 
-            // Check collision with all living units (hurts EVERYTHING - friendly fire!)
-            // But don't hurt the attacker who fired it
+            // Check collision with opposing-team units only (no friendly fire)
+            const fbTargetTeam = attackerUnit?.team === "player" ? "enemy" : attackerUnit?.team === "enemy" ? "player" : "both";
             forEachProjectileCandidatesNear(
                 proj.mesh.position.x,
                 proj.mesh.position.z,
                 0.6,
-                "both",
+                fbTargetTeam,
                 (target, targetG) => {
-                    if (target.id === fbProj.attackerId) return;  // Don't hurt self
+                    if (target.id === fbProj.attackerId) return;
                     if (defeatedThisFrame.has(target.id)) return;
-                    if (fbProj.hitUnits.has(target.id)) return;  // Already hit this unit
+                    if (fbProj.hitUnits.has(target.id)) return;
                     const targetRadius = getUnitRadius(target);
-                    // Hit radius - slightly larger than normal for easier hits
                     if (isInRange(
                         proj.mesh.position.x,
                         proj.mesh.position.z,
@@ -1032,7 +1032,6 @@ export function updateProjectiles(
                         targetRadius,
                         0.6
                     )) {
-                        // Mark as hit so we don't hit again
                         fbProj.hitUnits.add(target.id);
 
                         const targetData = getUnitStats(target);
@@ -1054,16 +1053,10 @@ export function updateProjectiles(
 
                         soundFns.playHit();
 
-                        // Log the hit
                         const attackerName = attackerData?.name ?? "Fireball";
                         addLog(`${attackerName}'s fireball burns ${targetData.name} for ${dmg} damage!`, COLORS.damageNeutral);
 
-                        // Aggro enemies hit by the fireball
-                        if (attackerUnit?.team === "enemy" && target.team === "enemy") {
-                            // Enemy hit by friendly fire - don't aggro
-                        } else {
-                            aggroOnHit(target, fbProj.attackerId, unitsRef);
-                        }
+                        aggroOnHit(target, fbProj.attackerId, unitsRef);
                     }
                 }
             );

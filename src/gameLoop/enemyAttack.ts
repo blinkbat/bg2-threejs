@@ -105,7 +105,7 @@ function createFireballMesh(scene: THREE.Scene, x: number, z: number): THREE.Mes
 }
 
 /**
- * Execute a fireball attack (slow-moving projectile that hurts everything).
+ * Execute a fireball attack (slow-moving projectile that damages opposing-team units).
  */
 function executeEnemyFireballAttack(ctx: EnemyAttackContext): void {
     const { scene, attacker, attackerG, targetG, attackerStats, projectilesRef } = ctx;
