@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import Tippy from "@tippyjs/react";
 import { ChevronLeft, ChevronRight, Circle, Shield, Square, Swords, X } from "lucide-react";
 import type { EquipmentSlot, EquipmentPassives, Item, ItemCategory } from "../core/types";
-import { isAccessory, isArmor, isShield, isWeapon } from "../core/types";
+import { isAccessory, isArmor, isConsumable, isShield, isWeapon } from "../core/types";
 import { COLORS, getDamageTypeColor } from "../core/constants";
 import { CORE_PLAYER_IDS, UNIT_DATA } from "../game/playerUnits";
 import { buildEffectiveFormationOrder } from "../game/formationOrder";
@@ -73,6 +73,7 @@ function pushPassiveLines(lines: TooltipLine[], p: EquipmentPassives): void {
     if (p.hpRegen && p.hpRegenInterval) lines.push({ label: "Regen", value: `+${p.hpRegen} / ${p.hpRegenInterval / 1000}s`, color: COLORS.hpHigh });
     if (p.bonusMoveSpeed) lines.push({ label: "Speed", value: `+${Math.round(p.bonusMoveSpeed * 100)}%`, color: "var(--ui-color-accent-primary-bright)" });
     if (p.aggroReduction) lines.push({ label: "Aggro", value: `-${Math.round(p.aggroReduction * 100)}%`, color: "var(--ui-color-accent-warning)" });
+    if (p.thornsDamage) lines.push({ label: "Thorns", value: `${p.thornsDamage} reflect`, color: COLORS.thornsText });
 }
 
 function getItemTooltipLines(item: Item): TooltipLine[] {
@@ -92,6 +93,35 @@ function getItemTooltipLines(item: Item): TooltipLine[] {
     }
     if (isAccessory(item)) {
         pushPassiveLines(lines, item);
+    }
+    if (isConsumable(item)) {
+        const effectLabels: Record<string, string> = {
+            heal: "Heals",
+            mana: "Restores mana",
+            exp: "Grants XP",
+            revive: "Revives ally",
+            cleanse: "Cleanses",
+            camp: "Rest",
+            waystone_recall: "Recall",
+        };
+        const label = effectLabels[item.effect] ?? item.effect;
+        if (item.value > 0) {
+            const valueColor = item.effect === "heal" || item.effect === "revive"
+                ? COLORS.hpHigh
+                : item.effect === "mana"
+                    ? COLORS.mana
+                    : item.effect === "exp"
+                        ? "#f1c40f"
+                        : undefined;
+            lines.push({ label, value: `${item.value}`, color: valueColor });
+        } else {
+            lines.push({ label, value: "—" });
+        }
+        if (item.cooldown > 0) lines.push({ label: "Cooldown", value: `${(item.cooldown / 1000).toFixed(0)}s` });
+        if (item.targetType === "dead_ally") lines.push({ label: "Target", value: "Fallen ally" });
+        if (item.poisonChanceOnUse) {
+            lines.push({ label: "Self-poison", value: `${item.poisonChanceOnUse}% chance`, color: COLORS.poisonText });
+        }
     }
     return lines;
 }

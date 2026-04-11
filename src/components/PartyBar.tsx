@@ -46,6 +46,8 @@ const EFFECT_ICONS: Record<StatusEffectType, { icon: string; color: string }> = 
     enraged: { icon: "💢", color: COLORS.enragedText },
     feared: { icon: "😱", color: COLORS.fearedText },
     blood_marked: { icon: "🩸", color: COLORS.bloodMarkedText },
+    channeling: { icon: "◎", color: COLORS.channelingText },
+    channeled: { icon: "◉", color: COLORS.channeledText },
 };
 
 interface PartyBarProps {
@@ -280,7 +282,26 @@ function PartyBarComponent({
             : "";
         const showHotbar = isSelected && selectedIds.length === 1 && onAssignSkill && !hideHotbar;
 
-        const portraitDiv = (
+        const portraitIcon = (
+            <div className={`portrait-icon${unit.holdPosition ? " hold-active" : ""}`} style={{ background: `${getPlayerUnitColor(unit.id)} url(${getPortrait(data.class)}) center / cover` }}>
+                <span className="portrait-fkey">F{renderIndex + 1}</span>
+                {hasUnspentPoints && <span className="levelup-badge">+</span>}
+                {unit.statusEffects && unit.statusEffects.length > 0 && (
+                    <div className="portrait-effects">
+                        {unit.statusEffects.map((e, i) => {
+                            const info = EFFECT_ICONS[e.type];
+                            return (
+                                <span key={i} className="portrait-effect-icon" style={{ color: info.color }}>
+                                    {info.icon}
+                                </span>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+        );
+
+        elements.push(
             <div
                 key={unit.id}
                 className={portraitClass}
@@ -326,22 +347,13 @@ function PartyBarComponent({
                         />
                     </div>
                 )}
-                <div className={`portrait-icon${unit.holdPosition ? " hold-active" : ""}`} style={{ background: `${getPlayerUnitColor(unit.id)} url(${getPortrait(data.class)}) center / cover` }}>
-                    <span className="portrait-fkey">F{renderIndex + 1}</span>
-                    {hasUnspentPoints && <span className="levelup-badge">+</span>}
-                    {unit.statusEffects && unit.statusEffects.length > 0 && (
-                        <div className="portrait-effects">
-                            {unit.statusEffects.map((e, i) => {
-                                const info = EFFECT_ICONS[e.type];
-                                return (
-                                    <span key={i} className="portrait-effect-icon" style={{ color: info.color }}>
-                                        {info.icon}
-                                    </span>
-                                );
-                            })}
-                        </div>
-                    )}
-                </div>
+                {hasUnspentPoints
+                    ? (
+                        <Tippy content={unspentHint} placement="top" delay={[300, 0]}>
+                            {portraitIcon}
+                        </Tippy>
+                    )
+                    : portraitIcon}
                 <div className="progress-bar-sm portrait-hp">
                     <div className="progress-fill" style={{ width: `${Math.max(0, hpPct)}%`, backgroundColor: hpColor }} />
                 </div>
@@ -376,12 +388,6 @@ function PartyBarComponent({
                     </div>
                 )}
             </div>
-        );
-
-        elements.push(
-            hasUnspentPoints
-                ? <Tippy key={unit.id} content={unspentHint} placement="top" delay={[300, 0]}>{portraitDiv}</Tippy>
-                : portraitDiv
         );
     });
 

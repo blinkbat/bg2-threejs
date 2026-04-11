@@ -235,6 +235,14 @@ function getEquipmentLifesteal(equipment: CharacterEquipment): number {
     return total;
 }
 
+function getEquipmentThornsDamage(equipment: CharacterEquipment): number {
+    let total = 0;
+    forEachEquippedPassive(equipment, p => {
+        if (p.thornsDamage) total += p.thornsDamage;
+    });
+    return total;
+}
+
 // =============================================================================
 // COMPUTED STATS FROM EQUIPMENT
 // =============================================================================
@@ -254,6 +262,7 @@ export interface EffectivePlayerEquipmentStats {
     hpRegen: { amount: number; interval: number } | null;
     aggroMultiplier: number;
     moveSpeedMultiplier: number;
+    thornsDamage: number;
 }
 
 /** Get computed combat stats from equipment */
@@ -275,6 +284,7 @@ export function getComputedStats(equipment: CharacterEquipment): EffectivePlayer
         hpRegen: getEquipmentHpRegen(equipment),
         aggroMultiplier: getEquipmentAggroReduction(equipment),
         moveSpeedMultiplier: getEquipmentMoveSpeedMultiplier(equipment),
+        thornsDamage: getEquipmentThornsDamage(equipment),
     };
 }
 

@@ -24,6 +24,7 @@ const PLAYER_SPELL_SKILL_KEYS: ReadonlySet<string> = new Set([
     "ankh",
     "bodySwap",
     "chainLightning",
+    "channeling",
     "cleanse",
     "divineLattice",
     "elorasGrasp",
@@ -382,6 +383,18 @@ export const SKILLS: Record<string, Skill> = withSkillKinds({
         range: 8,
         duration: 30000,  // duration in ms (30 seconds)
         damageType: "holy"
+    },
+    channeling: {
+        name: "Channeling",
+        description: "Toggle an arcane conduit. While active, nearby allies cast spells faster and for less mana, but you can only move.",
+        flavor: "\"Be still. Let the lattice do its work.\" - Archmage Konen",
+        manaCost: 0,
+        cooldown: 1500,
+        type: "buff",
+        targetType: "self",
+        range: 5,
+        duration: 120000,
+        damageType: "physical",
     },
     magicWave: {
         name: "Magic Wave",

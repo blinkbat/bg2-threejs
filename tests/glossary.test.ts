@@ -5,6 +5,8 @@ const EXPECTED_STATUS_TERMS = [
     "Blind",
     "Blood Marked",
     "Burn",
+    "Channeled",
+    "Channeling",
     "Chilled",
     "Cleansed",
     "Constricted",

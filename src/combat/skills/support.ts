@@ -10,7 +10,7 @@ import {
     BLIND_DURATION,
     QI_DRAIN_DURATION,
     QI_DRAIN_TICK_INTERVAL,
-    POISON_TICK_INTERVAL,
+    REGEN_TICK_INTERVAL,
     HIGHLAND_DEFENSE_INTERCEPT_CAP,
     getSkillTextColor
 } from "../../core/constants";
@@ -853,7 +853,7 @@ export function executeRestorationSkill(
     const regenEffect: StatusEffect = {
         type: "regen",
         duration,
-        tickInterval: POISON_TICK_INTERVAL,  // 1s ticks (same interval as poison)
+        tickInterval: REGEN_TICK_INTERVAL,  // 1s ticks
         timeSinceTick: 0,
         lastUpdateTime: now,
         damagePerTick: 0,  // Regen heals, not damages (handled specially in status processing)
@@ -1116,4 +1116,61 @@ export function executeVanquishingLightSkill(
             auraDamageType: "holy"
         },
     });
+}
+
+// =============================================================================
+// CHANNELING SKILL (toggle aura - spell cooldown/mana buff for nearby allies)
+// =============================================================================
+
+export function executeChannelingSkill(
+    ctx: SkillExecutionContext,
+    casterId: number,
+    skill: Skill
+): boolean {
+    const { unitsStateRef, setUnits, addLog } = ctx;
+    const caster = unitsStateRef.current.find(u => u.id === casterId);
+    if (!caster) return false;
+
+    const casterData = UNIT_DATA[casterId];
+
+    // Toggle off: if already channeling, remove the effect
+    if (hasStatusEffect(caster, "channeling")) {
+        setUnits(prev => prev.map(u =>
+            u.id === casterId
+                ? { ...u, statusEffects: (u.statusEffects || []).filter(e => e.type !== "channeling") }
+                : u
+        ));
+        addLog(`${casterData.name} stops channeling.`, COLORS.channelingText);
+        consumeSkill(ctx, casterId, skill);
+        return true;
+    }
+
+    // Toggle on: apply channeling status
+    consumeSkill(ctx, casterId, skill);
+
+    const now = Date.now();
+    const effect: StatusEffect = {
+        type: "channeling",
+        duration: skill.duration!,
+        tickInterval: BUFF_TICK_INTERVAL,
+        timeSinceTick: 0,
+        lastUpdateTime: now,
+        damagePerTick: 0,
+        sourceId: casterId,
+        auraRadius: skill.range,
+    };
+
+    setUnits(prev => prev.map(u =>
+        u.id === casterId
+            ? { ...u, statusEffects: applyStatusEffect(u.statusEffects, effect) }
+            : u
+    ));
+
+    createAnimatedRing(ctx.scene, ctx.unitsRef.current[casterId]!.position.x, ctx.unitsRef.current[casterId]!.position.z, "#7ec8e3", {
+        innerRadius: 0.3, outerRadius: skill.range, maxScale: 2, duration: 400
+    });
+    soundFns.playEnergyShield();
+    addLog(`${casterData.name} begins channeling arcane energy.`, COLORS.channelingText);
+
+    return true;
 }

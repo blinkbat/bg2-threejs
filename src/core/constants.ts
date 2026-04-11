@@ -20,14 +20,17 @@ export const HIT_DETECTION_RADIUS = 0.3;
 export const FLASH_DURATION = 200;
 
 // Status Effects - Poison
-export const POISON_DURATION = 8000;       // 8 seconds
-export const POISON_TICK_INTERVAL = 1000;  // tick every 1 second
+export const POISON_DURATION = 16000;      // 16 seconds
+export const POISON_TICK_INTERVAL = 2000;  // tick every 2 seconds
 export const POISON_DAMAGE_PER_TICK = 2;   // 2 damage per tick
 
 // Status Effects - Burn
 export const BURN_DURATION = 4000;         // 4 seconds
 export const BURN_TICK_INTERVAL = 1000;    // tick every 1 second
 export const BURN_DAMAGE_PER_TICK = 3;     // 3 damage per tick
+
+// Status Effects - Regen
+export const REGEN_TICK_INTERVAL = 1000;   // tick every 1 second
 
 // Status Effects - Buffs (shielded, stunned, cleansed, pinned)
 export const BUFF_TICK_INTERVAL = 100;     // tick every 100ms for smooth duration countdown
@@ -52,6 +55,11 @@ export const HAMSTRUNG_MOVE_MULT = 0.6;     // 40% move speed reduction
 
 // Status Effects - Defiance
 export const DEFIANCE_COOLDOWN_MULT = 0.5; // 0.5x cooldowns when under defiance buff
+
+// Status Effects - Channeling (mage aura)
+export const CHANNELING_RADIUS = 5;          // aura range in world units
+export const CHANNELED_COOLDOWN_MULT = 0.6;  // 40% faster spell cooldowns
+export const CHANNELED_MANA_MULT = 0.5;      // 50% mana cost reduction for spells
 
 // Status Effects - Sun Stance (bonus fire damage on attacks)
 export const SUN_STANCE_BONUS_DAMAGE: [number, number] = [2, 3];
@@ -298,6 +306,8 @@ export const COLORS = {
     enragedText: "#ff6633",         // Orange-red - fury
     fearedText: "#cc88ff",          // Pale purple - terror
     bloodMarkedText: "#cc2233",     // Deep crimson - blood mark
+    channelingText: "#7ec8e3",       // Arcane blue - channeling aura
+    channeledText: "#7ec8e3",        // Arcane blue - channeled buff
     fireBreath: "#ff4400",       // Orange-red for fire breath cone
     acid: "#9acd32",            // Yellow-green for acid tiles
     acidText: "#b8e060",        // Brighter for damage text

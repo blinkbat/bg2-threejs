@@ -415,59 +415,63 @@ export const playHolyStrike = () => {
     shimmerNoise.stop(now + 0.5);
 };
 
-// Vines - earthy rustling/growing sound for entangle
+// Vines - soft earthy rustle with gentle snap
 export const playVines = () => {
     if (isMuted()) return;
     const ctx = getAudioCtx();
 
-    // Rustling noise - filtered for organic feel
-    const rustleBuffer = createNoiseBuffer(ctx, 0.4, (i, size) => {
+    // Soft rustling noise - gentler envelope
+    const rustleBuffer = createNoiseBuffer(ctx, 0.35, (i, size) => {
         const t = i / size;
         const rustle = Math.random() * 2 - 1;
-        const envelope = Math.sin(t * Math.PI) * (1 + Math.sin(t * 20) * 0.3);
-        return rustle * envelope * 0.4;
+        const envelope = Math.sin(t * Math.PI) * (1 + Math.sin(t * 14) * 0.2);
+        return rustle * envelope * 0.2;
     });
     const rustleNoise = ctx.createBufferSource();
     rustleNoise.buffer = rustleBuffer;
     const rustleFilter = ctx.createBiquadFilter();
     rustleFilter.type = "bandpass";
-    rustleFilter.frequency.setValueAtTime(800, ctx.currentTime);
-    rustleFilter.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 0.4);
-    rustleFilter.Q.setValueAtTime(2, ctx.currentTime);
+    rustleFilter.frequency.setValueAtTime(600, ctx.currentTime);
+    rustleFilter.frequency.exponentialRampToValueAtTime(350, ctx.currentTime + 0.35);
+    rustleFilter.Q.setValueAtTime(1.5, ctx.currentTime);
     const rustleGain = ctx.createGain();
-    rustleGain.gain.setValueAtTime(0.3, ctx.currentTime);
-    rustleGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+    rustleGain.gain.setValueAtTime(0.15, ctx.currentTime);
+    rustleGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
     rustleNoise.connect(rustleFilter);
     rustleFilter.connect(rustleGain);
     rustleGain.connect(ctx.destination);
     rustleNoise.start();
-    rustleNoise.stop(ctx.currentTime + 0.4);
+    rustleNoise.stop(ctx.currentTime + 0.35);
 
-    // Low earthy tone - vines rising from ground
+    // Low earthy tone - quieter
     const earth = ctx.createOscillator();
     const earthGain = ctx.createGain();
-    earth.type = "triangle";
-    earth.frequency.setValueAtTime(60, ctx.currentTime);
-    earth.frequency.exponentialRampToValueAtTime(120, ctx.currentTime + 0.15);
-    earth.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + 0.35);
-    earthGain.gain.setValueAtTime(0.2, ctx.currentTime);
-    earthGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+    earth.type = "sine";
+    earth.frequency.setValueAtTime(70, ctx.currentTime);
+    earth.frequency.exponentialRampToValueAtTime(110, ctx.currentTime + 0.12);
+    earth.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + 0.3);
+    earthGain.gain.setValueAtTime(0.1, ctx.currentTime);
+    earthGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
     earth.connect(earthGain);
     earthGain.connect(ctx.destination);
     earth.start();
-    earth.stop(ctx.currentTime + 0.4);
+    earth.stop(ctx.currentTime + 0.3);
 
-    // Snap/grab sound at the end
+    // Soft tick instead of harsh square snap
     const snap = ctx.createOscillator();
     const snapGain = ctx.createGain();
-    snap.type = "square";
-    snap.frequency.setValueAtTime(300, ctx.currentTime + 0.25);
-    snap.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.35);
+    const snapFilter = ctx.createBiquadFilter();
+    snap.type = "sine";
+    snap.frequency.setValueAtTime(400, ctx.currentTime + 0.22);
+    snap.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.28);
+    snapFilter.type = "lowpass";
+    snapFilter.frequency.setValueAtTime(1200, ctx.currentTime);
     snapGain.gain.setValueAtTime(0, ctx.currentTime);
-    snapGain.gain.linearRampToValueAtTime(0.25, ctx.currentTime + 0.25);
-    snapGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
-    snap.connect(snapGain);
+    snapGain.gain.linearRampToValueAtTime(0.1, ctx.currentTime + 0.22);
+    snapGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    snap.connect(snapFilter);
+    snapFilter.connect(snapGain);
     snapGain.connect(ctx.destination);
     snap.start();
-    snap.stop(ctx.currentTime + 0.35);
+    snap.stop(ctx.currentTime + 0.3);
 };

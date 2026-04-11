@@ -30,7 +30,7 @@ import { LEVEL_UP_HP, LEVEL_UP_MANA, LEVEL_UP_STAT_POINTS, LEVEL_UP_SKILL_POINTS
 import { trySubmergeKraken } from "../gameLoop/enemyBehaviors/submerge";
 import { isEnemyUntargetable } from "../gameLoop/enemyBehaviors/untargetable";
 import { getCurrentArea } from "../game/areas";
-import { getEffectivePlayerLifesteal } from "../game/equipmentState";
+import { getEffectivePlayerLifesteal, getEffectivePlayerThornsDamage } from "../game/equipmentState";
 
 // =============================================================================
 // PROJECTILE CREATION
@@ -799,24 +799,29 @@ export function applyDamageToUnit(
         addLog(resolvedHitMessage.text, resolvedHitMessage.color);
     }
 
-    // Thorns retaliation: reflect damage to the melee attacker.
-    if (isMeleeHit && attackerId !== undefined && attackerId !== targetId && refUnit && hasStatusEffect(refUnit, "thorns")) {
-        const attackerUnit = unitsStateRef.current.find(u => u.id === attackerId);
-        const attackerGroup = unitsRef[attackerId];
+    // Thorns retaliation: reflect damage to the melee attacker (status effect + equipment).
+    if (isMeleeHit && attackerId !== undefined && attackerId !== targetId && refUnit) {
         const thornsEffect = refUnit.statusEffects?.find(e => e.type === "thorns");
-        const thornsDamage = Math.max(1, thornsEffect?.thornsDamage ?? 2);
+        const statusThorns = thornsEffect?.thornsDamage ?? 0;
+        const equipThorns = refUnit.team === "player" ? getEffectivePlayerThornsDamage(targetId) : 0;
+        const thornsDamage = statusThorns + equipThorns;
 
-        if (attackerUnit && attackerGroup && attackerUnit.hp > 0) {
-            const attackerDataName = getUnitDisplayName(attackerUnit);
+        if (thornsDamage > 0) {
+            const attackerUnit = unitsStateRef.current.find(u => u.id === attackerId);
+            const attackerGroup = unitsRef[attackerId];
 
-            applyDamageToUnit(ctx, attackerId, attackerGroup, thornsDamage, attackerDataName, {
-                color: COLORS.thornsText,
-                hitMessage: { text: `${targetName}'s thorns strike back for ${thornsDamage}!`, color: COLORS.thornsText },
-                targetUnit: attackerUnit,
-                attackerName: targetName,
-                attackerPosition: { x: targetGroup.position.x, z: targetGroup.position.z },
-                damageType: "physical"
-            });
+            if (attackerUnit && attackerGroup && attackerUnit.hp > 0) {
+                const attackerDataName = getUnitDisplayName(attackerUnit);
+
+                applyDamageToUnit(ctx, attackerId, attackerGroup, thornsDamage, attackerDataName, {
+                    color: COLORS.thornsText,
+                    hitMessage: { text: `${targetName}'s thorns strike back for ${thornsDamage}!`, color: COLORS.thornsText },
+                    targetUnit: attackerUnit,
+                    attackerName: targetName,
+                    attackerPosition: { x: targetGroup.position.x, z: targetGroup.position.z },
+                    damageType: "physical"
+                });
+            }
         }
     }
 

@@ -251,7 +251,7 @@ const STATUS_GLOSSARY: Record<StatusEffectType, GlossaryEntry> = {
     defiance: {
         term: "Defiance",
         category: "Status",
-        body: "Defiance hardens and hastens the target. It adds bonus armor and shortens cooldowns while the rally lasts."
+        body: "Defiance hardens and hastens the target. It adds bonus armor and shortens attack and ability cooldowns while the rally lasts. Does not affect spells."
     },
     divine_lattice: {
         term: "Divine Lattice",
@@ -356,7 +356,17 @@ const STATUS_GLOSSARY: Record<StatusEffectType, GlossaryEntry> = {
     constricted: {
         term: "Constricted",
         category: "Status",
-        body: "Constricted lengthens attack and skill cooldowns, leaving the target less effective in sustained combat."
+        body: "Constricted lengthens attack and ability cooldowns, leaving the target less effective in sustained combat. Does not affect spells."
+    },
+    channeling: {
+        term: "Channeling",
+        category: "Status",
+        body: "The caster channels arcane energy, preventing all actions except movement. Nearby allies gain the Channeled buff."
+    },
+    channeled: {
+        term: "Channeled",
+        category: "Status",
+        body: "Channeled allies cast spells faster and for less mana while within range of the channeler."
     }
 };
 

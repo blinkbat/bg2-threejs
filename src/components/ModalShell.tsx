@@ -3,6 +3,7 @@ import { useEffect, type MouseEvent, type ReactNode } from "react";
 interface ModalShellProps {
     children: ReactNode;
     onClose?: () => void;
+    onProceed?: () => void;
     overlayClassName?: string;
     contentClassName?: string;
     closeOnBackdrop?: boolean;
@@ -16,25 +17,37 @@ function mergeClassName(baseClassName: string, extraClassName?: string): string 
 export function ModalShell({
     children,
     onClose,
+    onProceed,
     overlayClassName,
     contentClassName,
     closeOnBackdrop = true,
     closeOnEscape = false,
 }: ModalShellProps) {
     useEffect(() => {
-        if (!onClose || !closeOnEscape) return;
+        const spaceTarget = onProceed ?? onClose;
+        const hasEscape = closeOnEscape && onClose;
+        if (!spaceTarget && !hasEscape) return;
 
         const handleKeyDown = (event: KeyboardEvent) => {
-            if (event.key !== "Escape") return;
+            if (event.defaultPrevented) return;
 
-            event.preventDefault();
-            event.stopPropagation();
-            onClose();
+            if (event.key === "Escape" && hasEscape) {
+                event.preventDefault();
+                event.stopPropagation();
+                onClose!();
+                return;
+            }
+
+            if (event.key === " " && spaceTarget) {
+                event.preventDefault();
+                event.stopPropagation();
+                spaceTarget();
+            }
         };
 
-        window.addEventListener("keydown", handleKeyDown);
-        return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [closeOnEscape, onClose]);
+        window.addEventListener("keydown", handleKeyDown, true);
+        return () => window.removeEventListener("keydown", handleKeyDown, true);
+    }, [closeOnEscape, onClose, onProceed]);
 
     const handleOverlayClick = (): void => {
         if (!closeOnBackdrop || !onClose) return;

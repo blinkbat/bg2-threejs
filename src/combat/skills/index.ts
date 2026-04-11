@@ -14,7 +14,7 @@ export type { SkillExecutionContext } from "./types";
 // Import for internal use
 import type { SkillExecutionContext } from "./types";
 import { executeAoeSkill, executeMeleeSkill, executeSmiteSkill, executeRangedSkill, executeFlurrySkill, executeMagicWaveSkill, executeChainLightningSkill, executeForcePushSkill, executeWellOfGravitySkill, executeHolyCrossSkill, executeHolyStrikeSkill, executeGlacialWhorlSkill, executeCleaveSkill, executeSmiteStrikeSkill, executeLeapStrikeSkill, executeWallOfFireSkill } from "./damage";
-import { executeHealSkill, executeMassHealSkill, executeManaTransferSkill, executeBuffSkill, executeAoeBuffSkill, executeEnergyShieldSkill, executeCleanseSkill, executeRestorationSkill, executeReviveSkill, executeSunStanceSkill, executePangolinStanceSkill, executeHighlandDefenseSkill, executeDivineLatticeSkill, executeVanquishingLightSkill } from "./support";
+import { executeHealSkill, executeMassHealSkill, executeManaTransferSkill, executeBuffSkill, executeAoeBuffSkill, executeEnergyShieldSkill, executeCleanseSkill, executeRestorationSkill, executeReviveSkill, executeSunStanceSkill, executePangolinStanceSkill, executeHighlandDefenseSkill, executeDivineLatticeSkill, executeVanquishingLightSkill, executeChannelingSkill } from "./support";
 import { executeTauntSkill, executeDebuffSkill, executeBloodMarkSkill, executeElorasGraspSkill, executeTrapSkill, executeSanctuarySkill, executeSummonSkill, executeTurnUndeadSkill, executeSmokeBombSkill, executeIntimidateSkill, executeFivePointPalmSkill, executeDimMakSkill } from "./utility";
 import { executeDodgeSkill, executeBodySwapSkill, executeDisplacementSkill } from "./movement";
 import { startAttackBump } from "../../gameLoop/swingAnimations";
@@ -56,6 +56,10 @@ export function executeSkill(
     }
     if (hasStatusEffect(caster, "divine_lattice")) {
         ctx.addLog(`${UNIT_DATA[casterId].name} cannot act while in Divine Lattice.`, COLORS.divineLatticeText);
+        return false;
+    }
+    if (hasStatusEffect(caster, "channeling") && skill.name !== "Channeling") {
+        ctx.addLog(`${UNIT_DATA[casterId].name} is channeling and cannot cast ${skill.name}.`, COLORS.channelingText);
         return false;
     }
     if ((caster.mana ?? 0) < skill.manaCost) {
@@ -142,6 +146,9 @@ export function executeSkill(
         }
         if (skill.name === "Vanquishing Light") {
             return executeVanquishingLightSkill(ctx, casterId, skill);
+        }
+        if (skill.name === "Channeling") {
+            return executeChannelingSkill(ctx, casterId, skill);
         }
         return executeBuffSkill(ctx, casterId, skill);
     } else if (skill.type === "energy_shield" && skill.targetType === "self") {

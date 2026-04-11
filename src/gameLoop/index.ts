@@ -131,13 +131,20 @@ export function updateUnitAI(
     }
 
     const hasDivineLattice = hasStatusEffect(unit, "divine_lattice");
+    const isChanneling = isPlayer && hasStatusEffect(unit, "channeling");
 
-    // Divine Lattice: cannot use skills/attacks, but can still move.
-    if (hasDivineLattice) {
+    // Divine Lattice / Channeling: cannot use skills/attacks, but can still move.
+    if (hasDivineLattice || isChanneling) {
         g.userData.attackTarget = null;
-        if (actionQueueRef && actionQueueRef[unit.id]?.type === "skill") {
-            delete actionQueueRef[unit.id];
-            setQueuedActions?.(prev => prev.filter(q => q.unitId !== unit.id));
+        if (actionQueueRef) {
+            const queued = actionQueueRef[unit.id];
+            if (queued?.type === "skill") {
+                // Allow toggling Channeling off via the queue
+                if (!isChanneling || queued.skill.name !== "Channeling") {
+                    delete actionQueueRef[unit.id];
+                    setQueuedActions?.(prev => prev.filter(q => q.unitId !== unit.id));
+                }
+            }
         }
     }
 

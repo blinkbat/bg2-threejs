@@ -191,6 +191,11 @@ export function getEffectivePlayerLifesteal(unitId: number): number {
     return getEffectivePlayerEquipmentStats(unitId).lifesteal;
 }
 
+/** Get thorns reflect damage from equipment */
+export function getEffectivePlayerThornsDamage(unitId: number): number {
+    return getEffectivePlayerEquipmentStats(unitId).thornsDamage;
+}
+
 // =============================================================================
 // TRANSACTIONAL EQUIP/UNEQUIP API
 // =============================================================================

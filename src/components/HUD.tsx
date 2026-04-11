@@ -140,6 +140,7 @@ export const HUD = memo(function HUD({
     // ESC key - close debug panel if open, close menu if open, open menu if no modals/selection
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.defaultPrevented) return;
             if (e.key === "Escape") {
                 if (debugPanelOpen) {
                     e.preventDefault();

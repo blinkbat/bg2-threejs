@@ -4,7 +4,7 @@
 
 import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, StatusEffect, StatusEffectType } from "../core/types";
-import { COLORS, BUFF_TICK_INTERVAL, BLIND_DURATION } from "../core/constants";
+import { COLORS, BUFF_TICK_INTERVAL, BLIND_DURATION, CHANNELING_RADIUS } from "../core/constants";
 import { getUnitStats } from "../game/units";
 import { getEffectiveMaxHp } from "../game/playerUnits";
 import { getUnitRadius, isInRange } from "../rendering/range";
@@ -238,16 +238,49 @@ export function processStatusEffects(
         mutations.set(unit.id, { hpDelta, maxHp, doom, newEffects: finalEffects });
     }
 
-    if (mutations.size === 0) return;
+    // Channeling aura: apply/refresh "channeled" on nearby player allies
+    const channeledAllies = new Set<number>();
+    for (const unit of unitsState) {
+        if (!isUnitAlive(unit, defeatedThisFrame)) continue;
+        if (unit.team !== "player") continue;
+        if (!hasStatusEffect(unit, "channeling")) continue;
+        const casterG = unitsRef[unit.id];
+        if (!casterG) continue;
+        const channelingEffect = unit.statusEffects!.find(e => e.type === "channeling")!;
+        const radius = channelingEffect.auraRadius ?? CHANNELING_RADIUS;
+        for (const ally of unitsState) {
+            if (ally.id === unit.id || ally.team !== "player" || !isUnitAlive(ally, defeatedThisFrame)) continue;
+            const allyG = unitsRef[ally.id];
+            if (!allyG) continue;
+            if (isInRange(casterG.position.x, casterG.position.z, allyG.position.x, allyG.position.z, getUnitRadius(ally), radius)) {
+                channeledAllies.add(ally.id);
+            }
+        }
+    }
+
+    if (mutations.size === 0 && channeledAllies.size === 0) return;
 
     // Phase 2: Single setUnits call for all units.
     // Track which units were killed inside the callback so defeat handling
     // uses the *actual* HP from React state, not the stale per-frame cache.
     const defeatedInThisPass = new Set<number>();
+    const channeledEffect: StatusEffect = {
+        type: "channeled",
+        duration: 600,
+        tickInterval: BUFF_TICK_INTERVAL,
+        timeSinceTick: 0,
+        lastUpdateTime: now,
+        damagePerTick: 0,
+        sourceId: 0,
+    };
+
     setUnits(prev => prev.map(u => {
         const mut = mutations.get(u.id);
         const pendingBlind = pendingBlinds.get(u.id);
-        if (!mut && !pendingBlind) return u;
+        const shouldBeChanneled = channeledAllies.has(u.id);
+        const isCurrentlyChanneled = hasStatusEffect(u, "channeled");
+
+        if (!mut && !pendingBlind && !shouldBeChanneled && !isCurrentlyChanneled) return u;
 
         let nextUnit = u;
 
@@ -272,6 +305,16 @@ export function processStatusEffects(
                 ...nextUnit,
                 statusEffects: applyStatusEffect(nextUnit.statusEffects, pendingBlind.effect)
             };
+        }
+
+        // Apply or remove channeled aura
+        if (nextUnit.hp > 0) {
+            if (shouldBeChanneled) {
+                nextUnit = { ...nextUnit, statusEffects: applyStatusEffect(nextUnit.statusEffects, channeledEffect) };
+            } else if (isCurrentlyChanneled) {
+                const filtered = (nextUnit.statusEffects || []).filter(e => e.type !== "channeled");
+                nextUnit = { ...nextUnit, statusEffects: filtered.length > 0 ? filtered : undefined };
+            }
         }
 
         return nextUnit;

@@ -52,6 +52,8 @@ const STATUS_EFFECT_TYPES: ReadonlySet<StatusEffectType> = new Set([
     "enraged",
     "feared",
     "blood_marked",
+    "channeling",
+    "channeled",
 ]);
 
 const SUMMON_TYPES: ReadonlySet<SummonType> = new Set([

@@ -33,6 +33,7 @@ export interface EquipmentPassives {
     hpRegen?: number;               // HP regenerated per tick (in combat)
     hpRegenInterval?: number;       // Interval in ms for regen tick
     aggroReduction?: number;        // 0-1, reduces enemy targeting priority
+    thornsDamage?: number;          // Flat damage reflected back to melee attackers
 }
 
 // Weapon item

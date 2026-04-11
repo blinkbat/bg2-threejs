@@ -214,6 +214,7 @@ const SHIELDS: Record<string, ShieldItem> = {
         description: "The brambles woven into its face are not decorative.",
         category: "shield",
         armor: 1,
+        thornsDamage: 2,
     },
     towerShield: {
         id: "towerShield",

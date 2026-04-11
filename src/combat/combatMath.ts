@@ -4,7 +4,7 @@
 
 import type { Unit, UnitData, EnemyStats, StatusEffect, StatusEffectType, DamageType, SkillKind } from "../core/types";
 import { isEnemyData } from "../game/units";
-import { POISON_DURATION, POISON_TICK_INTERVAL, POISON_DAMAGE_PER_TICK, BURN_DURATION, BURN_TICK_INTERVAL, BURN_DAMAGE_PER_TICK, SLOW_DURATION, BUFF_TICK_INTERVAL, COLORS, SLOW_COOLDOWN_MULT, SLOW_MOVE_MULT, DEFIANCE_COOLDOWN_MULT, SLEEP_MIN_DURATION, SLEEP_MAX_DURATION, CHILLED_DURATION, CHILLED_COOLDOWN_MULT, CHILLED_MOVE_MULT, CONSTRICTED_COOLDOWN_MULT, HAMSTRUNG_MOVE_MULT, BLIND_ACCURACY_MULT } from "../core/constants";
+import { POISON_DURATION, POISON_TICK_INTERVAL, POISON_DAMAGE_PER_TICK, BURN_DURATION, BURN_TICK_INTERVAL, BURN_DAMAGE_PER_TICK, SLOW_DURATION, BUFF_TICK_INTERVAL, COLORS, SLOW_COOLDOWN_MULT, SLOW_MOVE_MULT, DEFIANCE_COOLDOWN_MULT, SLEEP_MIN_DURATION, SLEEP_MAX_DURATION, CHILLED_DURATION, CHILLED_COOLDOWN_MULT, CHILLED_MOVE_MULT, CONSTRICTED_COOLDOWN_MULT, HAMSTRUNG_MOVE_MULT, BLIND_ACCURACY_MULT, CHANNELED_COOLDOWN_MULT } from "../core/constants";
 import { getStrengthDamageBonus, getIntelligenceMagicDamageBonus, getFaithHolyDamageBonus, getDexterityCritChance, CRIT_MULTIPLIER } from "../game/statBonuses";
 import { getEffectivePlayerBonusMagicDamage, getEffectivePlayerMoveSpeedMultiplier, getEffectivePlayerBonusCritChance } from "../game/equipmentState";
 import { normalizeAngle } from "../game/geometry";
@@ -497,15 +497,19 @@ export function getEffectiveArmor(unit: Unit, baseArmor: number): number {
 
 /**
  * Get effective cooldown multiplier for a unit, accounting for slow (increases) and defiance (decreases).
- * Slow: 1.5x cooldowns, Defiance: 0.5x cooldowns
- * If both apply, they multiply together (1.5 * 0.5 = 0.75)
+ * @param kind - Skill kind ("spell" | "ability") or undefined for basic attacks.
+ *   Constricted and Defiance only affect basic attacks and ability-kind skills.
+ *   Channeled only affects spell-kind skills.
  */
-export function getCooldownMultiplier(unit: Unit): number {
+export function getCooldownMultiplier(unit: Unit, kind?: SkillKind): number {
     let mult = 1;
     if (hasStatusEffect(unit, "slowed")) mult *= SLOW_COOLDOWN_MULT;
     if (hasStatusEffect(unit, "chilled")) mult *= CHILLED_COOLDOWN_MULT;
-    if (hasStatusEffect(unit, "constricted")) mult *= CONSTRICTED_COOLDOWN_MULT;
-    if (hasStatusEffect(unit, "defiance")) mult *= DEFIANCE_COOLDOWN_MULT;
+    if (kind !== "spell") {
+        if (hasStatusEffect(unit, "constricted")) mult *= CONSTRICTED_COOLDOWN_MULT;
+        if (hasStatusEffect(unit, "defiance")) mult *= DEFIANCE_COOLDOWN_MULT;
+    }
+    if (kind === "spell" && hasStatusEffect(unit, "channeled")) mult *= CHANNELED_COOLDOWN_MULT;
     return mult;
 }
 
@@ -518,9 +522,10 @@ export function setSkillCooldown(
     key: string,
     baseCooldown: number,
     now: number,
-    unit?: Unit
+    unit?: Unit,
+    kind?: SkillKind
 ): void {
-    const mult = unit ? getCooldownMultiplier(unit) : 1;
+    const mult = unit ? getCooldownMultiplier(unit, kind) : 1;
     setSkillCooldowns(prev => ({
         ...prev,
         [key]: { end: now + baseCooldown * mult, duration: baseCooldown }

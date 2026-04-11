@@ -1176,6 +1176,7 @@ export function useInputHandlers({
         // =============================================================================
         const onKeyDown = (e: KeyboardEvent) => {
             if (e.code === "Space") {
+                if (e.defaultPrevented) return;
                 e.preventDefault();
                 if (stateRefs.pauseToggleLockedRef.current && stateRefs.pausedRef.current) {
                     return;
@@ -1194,6 +1195,7 @@ export function useInputHandlers({
                 );
             }
             if (e.code === "Escape") {
+                if (e.defaultPrevented) return;
                 if (dragLineStateRef.current) {
                     clearDragLinePreview();
                 }

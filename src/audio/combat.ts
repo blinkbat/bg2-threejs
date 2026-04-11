@@ -5,48 +5,48 @@
 import { isMuted, getAudioCtx } from "./core";
 import { createNoiseBuffer } from "./noise";
 
-// Fireball - whooshing explosion with long decay
+// Fireball - soft whoosh with gentle crackle
 export const playFireball = () => {
     if (isMuted()) return;
     const ctx = getAudioCtx();
 
-    // Whoosh layer - rising then falling
+    // Soft whoosh - sine sweep instead of sawtooth
     const whoosh = ctx.createOscillator();
     const whooshGain = ctx.createGain();
     const whooshFilter = ctx.createBiquadFilter();
-    whoosh.type = "sawtooth";
-    whoosh.frequency.setValueAtTime(200, ctx.currentTime);
-    whoosh.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 0.15);
-    whoosh.frequency.exponentialRampToValueAtTime(60, ctx.currentTime + 0.6);
+    whoosh.type = "sine";
+    whoosh.frequency.setValueAtTime(180, ctx.currentTime);
+    whoosh.frequency.exponentialRampToValueAtTime(500, ctx.currentTime + 0.12);
+    whoosh.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + 0.45);
     whooshFilter.type = "lowpass";
-    whooshFilter.frequency.setValueAtTime(2000, ctx.currentTime);
-    whooshFilter.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.6);
-    whooshGain.gain.setValueAtTime(0.15, ctx.currentTime);
-    whooshGain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.1);
-    whooshGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+    whooshFilter.frequency.setValueAtTime(1200, ctx.currentTime);
+    whooshFilter.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.45);
+    whooshGain.gain.setValueAtTime(0.08, ctx.currentTime);
+    whooshGain.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 0.08);
+    whooshGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
     whoosh.connect(whooshFilter);
     whooshFilter.connect(whooshGain);
     whooshGain.connect(ctx.destination);
     whoosh.start();
-    whoosh.stop(ctx.currentTime + 0.6);
+    whoosh.stop(ctx.currentTime + 0.45);
 
-    // Crackle layer - noise burst
-    const noiseBuffer = createNoiseBuffer(ctx, 0.4, (i, size) => (
-        (Math.random() * 2 - 1) * Math.exp(-i / (size * 0.3))
+    // Gentle crackle - tighter bandpass, lower volume
+    const noiseBuffer = createNoiseBuffer(ctx, 0.3, (i, size) => (
+        (Math.random() * 2 - 1) * Math.exp(-i / (size * 0.25))
     ));
     const noise = ctx.createBufferSource();
     noise.buffer = noiseBuffer;
     const noiseGain = ctx.createGain();
     const noiseFilter = ctx.createBiquadFilter();
     noiseFilter.type = "bandpass";
-    noiseFilter.frequency.setValueAtTime(1500, ctx.currentTime);
-    noiseFilter.Q.setValueAtTime(0.5, ctx.currentTime);
-    noiseGain.gain.setValueAtTime(0.12, ctx.currentTime);
-    noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+    noiseFilter.frequency.setValueAtTime(1000, ctx.currentTime);
+    noiseFilter.Q.setValueAtTime(1.5, ctx.currentTime);
+    noiseGain.gain.setValueAtTime(0.06, ctx.currentTime);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
     noise.connect(noiseFilter);
     noiseFilter.connect(noiseGain);
     noiseGain.connect(ctx.destination);
-    noise.start(ctx.currentTime + 0.08);
+    noise.start(ctx.currentTime + 0.06);
 };
 
 // Fireball explosion on impact - deep boom with crackle

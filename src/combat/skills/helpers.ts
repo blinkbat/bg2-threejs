@@ -3,7 +3,7 @@
 // =============================================================================
 
 import type { Unit, UnitGroup, Skill } from "../../core/types";
-import { COLORS } from "../../core/constants";
+import { COLORS, CHANNELED_MANA_MULT } from "../../core/constants";
 import { UNIT_DATA } from "../../game/playerUnits";
 import { hasStatusEffect, getCooldownMultiplier } from "../combatMath";
 import { distanceToPoint } from "../../game/geometry";
@@ -140,8 +140,8 @@ export function consumeSkill(ctx: SkillExecutionContext, casterId: number, skill
     const caster = unitsStateRef.current.find(u => u.id === casterId);
     // Shielded doubles cooldowns (defensive stance penalty)
     const shieldedMult = caster && hasStatusEffect(caster, "shielded") ? 2 : 1;
-    // Slow/Defiance affect cooldowns (slow increases, defiance decreases)
-    const statusMult = caster ? getCooldownMultiplier(caster) : 1;
+    // Status effects affect cooldowns (slow/chilled increase; defiance/channeled decrease depending on kind)
+    const statusMult = caster ? getCooldownMultiplier(caster, skill.kind) : 1;
 
     const effectiveCooldown = skill.cooldown * shieldedMult * statusMult;
     const cooldownEnd = now + effectiveCooldown;
@@ -155,8 +155,11 @@ export function consumeSkill(ctx: SkillExecutionContext, casterId: number, skill
         [skillCooldownKey]: { end: cooldownEnd, duration: effectiveCooldown }
     }));
 
-    // Deduct mana (clamped to 0 minimum)
-    updateUnitWith(setUnits, casterId, u => ({ mana: Math.max(0, (u.mana ?? 0) - skill.manaCost) }));
+    // Deduct mana (clamped to 0 minimum; channeled reduces spell mana costs)
+    const manaCost = (skill.kind === "spell" && caster && hasStatusEffect(caster, "channeled"))
+        ? Math.floor(skill.manaCost * CHANNELED_MANA_MULT)
+        : skill.manaCost;
+    updateUnitWith(setUnits, casterId, u => ({ mana: Math.max(0, (u.mana ?? 0) - manaCost) }));
 
     // Bark on mana-costing spell (damage spells only)
     if (skill.manaCost > 0 && skill.type === "damage") {

@@ -13,7 +13,7 @@ export { isMuted, toggleMute };
 
 // Export all sound functions as a single object
 export const soundFns = {
-    playMove: () => playTone(800, 0.06, 0.12, "square", undefined, 3000),
+    playMove: () => playTone(1400, 0.022, 0.05, "sine", 1100, 5000),
     playAttack: () => playTone(440, 0.08, 0.15, "square", 330, 2500),
     playHit: () => playTone(120, 0.15, 0.25, "sawtooth", 40, 800),
     playMiss: () => playTone(200, 0.12, 0.1, "triangle", 400, 2000),
