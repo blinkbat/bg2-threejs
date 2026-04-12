@@ -184,9 +184,6 @@ function executeEnemyMeleeAttack(ctx: EnemyAttackContext): void {
         const attackName = isBite ? "Bite" : "Attack";
         const willPoison = shouldApplyPoison(attackerStats);
         const willSlow = shouldApplySlow(attackerStats);
-        const targetSurvivesHit = target.hp - dmg > 0;
-        const canApplyStun = !hasStatusEffect(target, "stunned") && targetSurvivesHit;
-        const willStun = canApplyStun && !!attackerStats.stunChance && rollChance(attackerStats.stunChance);
         const poisonDmg = willPoison ? attackerStats.poisonDamage : undefined;
         const lifesteal = attackerStats.lifesteal;
         const getLifestealHealAmount = (totalHpDamage: number): number => {
@@ -221,6 +218,10 @@ function executeEnemyMeleeAttack(ctx: EnemyAttackContext): void {
         if (willSlow) {
             addLog(logSlowed(targetData.name), "#5599ff");
         }
+        const willStun = !damageResult.wasDefeated
+            && !hasStatusEffect(target, "stunned")
+            && !!attackerStats.stunChance
+            && rollChance(attackerStats.stunChance);
         if (willStun) {
             const stunDuration = attackerStats.stunDuration ?? 1800;
             setUnits(prev => prev.map(u => {

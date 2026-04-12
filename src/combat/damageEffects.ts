@@ -17,6 +17,7 @@ import { distanceToPoint } from "../game/geometry";
 import { soundFns } from "../audio";
 import { cleanupUnitState } from "../ai/movement";
 import { cleanupEnemyKiteCooldown } from "../game/enemyState";
+import { cleanupEnemyActionCooldown } from "../gameLoop/enemyBehaviors";
 import { getGameTime } from "../core/gameClock";
 import { getUnitStats, getEnemyUnitStats } from "../game/units";
 import { scheduleEffectAnimation } from "../core/effectScheduler";
@@ -1108,4 +1109,5 @@ export function handleUnitDefeat(
     // Clean up state for defeated unit
     cleanupUnitState(targetId);
     cleanupEnemyKiteCooldown(targetId);
+    cleanupEnemyActionCooldown(targetId);
 }

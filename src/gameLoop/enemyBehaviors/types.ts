@@ -16,6 +16,7 @@ import type {
     EnemyCurseSkill,
     EnemyGlareSkill,
     EnemySleepSkill,
+    EnemySilenceSkill,
     EnemyDreamEaterSkill,
     EnemyPhaseShiftSkill,
     DamageText
@@ -122,6 +123,15 @@ export interface DreamEaterContext extends BehaviorBaseContext {
     damageTexts: DamageText[];
     hitFlashRef: Record<number, number>;
     unitsStateRef: React.RefObject<Unit[]>;
+    defeatedThisFrame: Set<number>;
+}
+
+export interface SilenceContext extends BehaviorBaseContext {
+    silenceSkill: EnemySilenceSkill;
+    unitsState: Unit[];
+    unitsRef: Record<number, UnitGroup>;
+    scene: THREE.Scene;
+    setUnits: React.Dispatch<React.SetStateAction<Unit[]>>;
     defeatedThisFrame: Set<number>;
 }
 

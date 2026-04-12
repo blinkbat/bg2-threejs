@@ -772,6 +772,28 @@ let wallOpacityTransitionsActive = true;
 let candleOpacityTransitionsActive = true;
 let flameOpacityTransitionsActive = true;
 
+/** Reset all module-level caches between area transitions to avoid stale references. */
+export function resetUpdateCaches(): void {
+    cachedTreeMeshesRef = undefined;
+    cachedTreeMeshCount = -1;
+    cachedTreeOcclusionGroups = [];
+    cachedColumnGroupsRef = undefined;
+    cachedColumnGroupMeshCount = -1;
+    cachedGroupedColumnMeshes = new Set();
+    cachedOccludingMeshes.clear();
+    cachedOccludingTreeGroups.clear();
+    cachedOccludingColumnGroups.clear();
+    lastOcclusionCameraKey = Number.NaN;
+    lastOcclusionPlayerHash = 0;
+    lastOcclusionPlayerCount = -1;
+    occlusionDirty = true;
+    wallOpacityTransitionsActive = true;
+    candleOpacityTransitionsActive = true;
+    flameOpacityTransitionsActive = true;
+    wallCheckFrame = WALL_CHECK_INTERVAL;
+    lastLiquidUpdateTime = 0;
+}
+
 function syncMaterialTransparency(
     material: THREE.MeshStandardMaterial | THREE.MeshBasicMaterial,
     targetOpacity: number,

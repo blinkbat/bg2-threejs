@@ -40,7 +40,7 @@ import { executeEnemyBasicAttack } from "./enemyAttack";
 import { isUnitCharging } from "./constructCharge";
 import { isUnitBreathing, startFireBreath } from "./fireBreath";
 import { tryStartChargeAttack, tryLeapToTarget, isUnitLeaping, tryVinesSkill, tryAcidSlugPatrol, processAcidTrailAndAura, runPreAttackBehaviors, isShadePhased, isUnitCastingGlare } from "./enemyBehaviors";
-export { clearLeaps, updateLeaps, updateTentacles, clearTentacles, updateSubmergedKrakens, clearSubmergedKrakens, processGlares, clearGlares, processShadePhases, clearShadePhases } from "./enemyBehaviors";
+export { clearLeaps, updateLeaps, updateTentacles, clearTentacles, updateSubmergedKrakens, clearSubmergedKrakens, processGlares, clearGlares, processShadePhases, clearShadePhases, resetAllEnemyActionCooldowns } from "./enemyBehaviors";
 export { spawnLootBag, removeLootBag, resetLootBagIds } from "./lootBags";
 
 // Re-export unit ID utilities for backwards compatibility
@@ -480,7 +480,8 @@ export function updateUnitAI(
             delete g.userData.formationRamp;
         } else {
             const aheadG = unitsRef[ramp.leaderId];
-            if (!aheadG) {
+            const leaderUnit = getUnitById(ramp.leaderId);
+            if (!aheadG || !leaderUnit || leaderUnit.hp <= 0) {
                 delete g.userData.formationRamp;
             } else {
                 // Formation throttle should track progress to the assigned slot, not just the next waypoint.

@@ -87,6 +87,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         expReward: 300,
         tentacleSkill: {
             kind: "ability",
+            name: "tentacle",
             cooldown: 4000,        // Spawn tentacle every 4 seconds
             maxTentacles: 3,       // Up to 3 active tentacles
             spawnRange: 6,         // Tentacles spawn up to 6 tiles away toward targets
@@ -240,10 +241,20 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         // Vines skill - immobilizes and damages target
         vinesSkill: {
             kind: "spell",
+            name: "vines",
             cooldown: 12000,   // 12 seconds between casts
             range: 6,          // Cast range
             duration: 5000,    // 5 seconds immobilized
             damage: [4, 8]     // Damage on grab
+        },
+        // Silence skill - prevents a player from casting spells
+        silenceSkill: {
+            kind: "spell",
+            name: "Silence",
+            cooldown: 18000,   // 18 seconds between casts
+            range: 7,
+            duration: 6000,    // 6 seconds
+            accuracy: 65
         }
     },
     dire_possum: {
@@ -283,6 +294,7 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         baseCrit: 20,      // 20% crit chance
         leapSkill: {
             kind: "ability",
+            name: "leap",
             cooldown: 7000,    // Can leap every 7 seconds
             minRange: 3,       // Only leap if target is at least 3 tiles away
             maxRange: 5,       // Maximum leap distance
@@ -440,6 +452,15 @@ export const ENEMY_STATS: Record<EnemyType, EnemyStats> = {
         kiteTrigger: 4,
         kiteDistance: 3,
         kiteCooldown: 4000,
+        // Silence skill - prevents a player from casting spells
+        silenceSkill: {
+            kind: "spell",
+            name: "Silence",
+            cooldown: 15000,   // 15 seconds between casts
+            range: 7,
+            duration: 5000,    // 5 seconds
+            accuracy: 60
+        },
         // Raise dead - batch spawns skeleton minions, re-raises when all die
         raiseSkill: {
             kind: "spell",

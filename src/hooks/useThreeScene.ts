@@ -9,8 +9,9 @@ import { getCurrentArea, getCurrentAreaId } from "../game/areas";
 import type { Unit, FogTexture, Projectile, SwingAnimation, DamageText, UnitGroup, SanctuaryTile, HolyTile, SmokeTile, FireTile } from "../core/types";
 import type { AcidTile, LootBag } from "../core/types";
 import { createScene, updateChestStates, updateCamera, type DoorMesh, type WaystoneMesh, type SecretDoorMesh, type ChestMeshData } from "../rendering/scene";
+import { resetUpdateCaches } from "../rendering/scene/updates";
 import { disposeLoadedTextures } from "../rendering/scene/units";
-import { resetFogCache, resetSpriteFacing, clearChargeAttacks, clearFireBreaths, clearCurses, clearGlares, clearLeaps, clearTentacles, clearShadePhases, clearSubmergedKrakens, resetLootBagIds, resetProjectileState } from "../gameLoop";
+import { resetFogCache, resetSpriteFacing, clearChargeAttacks, clearFireBreaths, clearCurses, clearGlares, clearLeaps, clearTentacles, clearShadePhases, clearSubmergedKrakens, resetLootBagIds, resetProjectileState, resetAllEnemyActionCooldowns } from "../gameLoop";
 import { resetAllBroodMotherScreeches, resetAllEnemyKiteCooldowns, resetAllEnemyKitingState } from "../game/enemyState";
 import { resetAllMovementState } from "../ai/movement";
 import { resetVisibilityTracking } from "../ai/pathfinding";
@@ -289,12 +290,14 @@ export function useThreeScene({
         const areaIdAtMount = getCurrentAreaId();
 
         // Reset module-level caches and runtime state for this scene mount
+        resetUpdateCaches();
         resetFogCache();
         resetSpriteFacing();
         disposeLoadedTextures();
         resetAllBroodMotherScreeches();
         resetAllEnemyKiteCooldowns();
         resetAllEnemyKitingState();
+        resetAllEnemyActionCooldowns();
         resetAllMovementState();
         resetVisibilityTracking();
         resetBarks();

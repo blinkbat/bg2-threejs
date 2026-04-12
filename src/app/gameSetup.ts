@@ -33,6 +33,7 @@ export interface PersistedPlayer {
     summonType?: SummonType;
     summonedBy?: number;
     summonExpireAt?: number;
+    summonRemainingDurationMs?: number;
 }
 
 interface CreateUnitsForAreaOptions {

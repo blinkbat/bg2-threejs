@@ -13,6 +13,7 @@ import { tryBasiliskGlare } from "./basiliskGlare";
 import { tryDreamEater } from "./dreamEater";
 import { trySleep } from "./sleep";
 import { tryShadePhase } from "./shadePhase";
+import { trySilence } from "./silence";
 
 // =============================================================================
 // CONTEXT — superset of fields needed by all pre-attack behaviors
@@ -38,13 +39,40 @@ interface PreAttackContext {
 }
 
 // =============================================================================
+// SHARED ACTION COOLDOWN — prevents enemies from burst-casting multiple skills
+// =============================================================================
+
+const ENEMY_ACTION_COOLDOWN_MS = 2000;
+const lastActionTime: Record<number, number> = {};
+
+/** Check if the enemy can use a skill (shared cooldown between all skills). */
+function canAct(unitId: number, now: number): boolean {
+    return (lastActionTime[unitId] ?? 0) <= now;
+}
+
+/** Mark the enemy as having just used a skill. */
+function markAction(unitId: number, now: number): void {
+    lastActionTime[unitId] = now + ENEMY_ACTION_COOLDOWN_MS;
+}
+
+/** Clean up action cooldown for a unit (call on death/restart). */
+export function cleanupEnemyActionCooldown(unitId: number): void {
+    delete lastActionTime[unitId];
+}
+
+/** Reset all action cooldowns (call on game restart). */
+export function resetAllEnemyActionCooldowns(): void {
+    Object.keys(lastActionTime).forEach(k => delete lastActionTime[Number(k)]);
+}
+
+// =============================================================================
 // DISPATCH
 // =============================================================================
 
 /**
- * Run all fire-and-forget pre-attack behaviors for an enemy.
- * These behaviors don't block normal attack flow — they check conditions and
- * fire independently (spawning, raising, tentacles, curses, glares, phase shifts).
+ * Run pre-attack behaviors for an enemy, stopping after the first skill fires.
+ * After a skill fires, the enemy enters a 2s shared action cooldown before it
+ * can use any other skill. This prevents burst-casting multiple skills per frame.
  *
  * To add a new fire-and-forget behavior:
  * 1. Create `tryMyBehavior(ctx)` in its own file
@@ -53,38 +81,45 @@ interface PreAttackContext {
  */
 export function runPreAttackBehaviors(ctx: PreAttackContext): void {
     const { unit, g, enemyStats, unitsState, unitsRef, scene, setUnits, skillCooldowns, setSkillCooldowns, addLog, now, damageTexts, hitFlashRef, unitsStateRef, defeatedThisFrame } = ctx;
+
+    if (!canAct(unit.id, now)) return;
+
     const base = { unit, g, enemyStats, skillCooldowns, setSkillCooldowns, addLog, now };
 
     if (enemyStats.spawnSkill && !isSkillBlockedBySilence(unit, enemyStats.spawnSkill.kind)) {
-        trySpawnMinion({ ...base, spawnSkill: enemyStats.spawnSkill, unitsState, unitsRef, scene, setUnits });
+        if (trySpawnMinion({ ...base, spawnSkill: enemyStats.spawnSkill, unitsState, unitsRef, scene, setUnits })) { markAction(unit.id, now); return; }
     }
 
     if (enemyStats.raiseSkill && !isSkillBlockedBySilence(unit, enemyStats.raiseSkill.kind)) {
-        tryRaiseDead({ ...base, raiseSkill: enemyStats.raiseSkill, unitsState, unitsRef, scene, setUnits });
+        if (tryRaiseDead({ ...base, raiseSkill: enemyStats.raiseSkill, unitsState, unitsRef, scene, setUnits })) { markAction(unit.id, now); return; }
     }
 
     if (enemyStats.tentacleSkill && !isSkillBlockedBySilence(unit, enemyStats.tentacleSkill.kind)) {
-        trySpawnTentacle({ ...base, tentacleSkill: enemyStats.tentacleSkill, unitsState, unitsRef, scene, setUnits });
+        if (trySpawnTentacle({ ...base, tentacleSkill: enemyStats.tentacleSkill, unitsState, unitsRef, scene, setUnits })) { markAction(unit.id, now); return; }
     }
 
     if (enemyStats.curseSkill && !isSkillBlockedBySilence(unit, enemyStats.curseSkill.kind)) {
-        tryCurse({ ...base, curseSkill: enemyStats.curseSkill, unitsState, unitsRef, scene });
+        if (tryCurse({ ...base, curseSkill: enemyStats.curseSkill, unitsState, unitsRef, scene })) { markAction(unit.id, now); return; }
     }
 
     if (enemyStats.glareSkill && !isSkillBlockedBySilence(unit, enemyStats.glareSkill.kind)) {
-        tryBasiliskGlare({ ...base, glareSkill: enemyStats.glareSkill, unitsState, unitsRef, scene });
+        if (tryBasiliskGlare({ ...base, glareSkill: enemyStats.glareSkill, unitsState, unitsRef, scene })) { markAction(unit.id, now); return; }
     }
 
     // Dream Eater before Sleep — prioritize nuking sleeping targets over casting more sleep
     if (enemyStats.dreamEaterSkill && !isSkillBlockedBySilence(unit, enemyStats.dreamEaterSkill.kind)) {
-        tryDreamEater({ ...base, dreamEaterSkill: enemyStats.dreamEaterSkill, unitsState, unitsRef, scene, setUnits, damageTexts, hitFlashRef, unitsStateRef, defeatedThisFrame });
+        if (tryDreamEater({ ...base, dreamEaterSkill: enemyStats.dreamEaterSkill, unitsState, unitsRef, scene, setUnits, damageTexts, hitFlashRef, unitsStateRef, defeatedThisFrame })) { markAction(unit.id, now); return; }
     }
 
     if (enemyStats.sleepSkill && !isSkillBlockedBySilence(unit, enemyStats.sleepSkill.kind)) {
-        trySleep({ ...base, sleepSkill: enemyStats.sleepSkill, unitsState, unitsRef, scene, setUnits, defeatedThisFrame });
+        if (trySleep({ ...base, sleepSkill: enemyStats.sleepSkill, unitsState, unitsRef, scene, setUnits, defeatedThisFrame })) { markAction(unit.id, now); return; }
+    }
+
+    if (enemyStats.silenceSkill && !isSkillBlockedBySilence(unit, enemyStats.silenceSkill.kind)) {
+        if (trySilence({ ...base, silenceSkill: enemyStats.silenceSkill, unitsState, unitsRef, scene, setUnits, defeatedThisFrame })) { markAction(unit.id, now); return; }
     }
 
     if (enemyStats.phaseShiftSkill && !isSkillBlockedBySilence(unit, enemyStats.phaseShiftSkill.kind)) {
-        tryShadePhase({ ...base, phaseShiftSkill: enemyStats.phaseShiftSkill, unitsState, unitsRef, setUnits });
+        if (tryShadePhase({ ...base, phaseShiftSkill: enemyStats.phaseShiftSkill, unitsState, unitsRef, setUnits })) { markAction(unit.id, now); }
     }
 }

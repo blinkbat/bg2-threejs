@@ -167,7 +167,7 @@ export function processSmokeTiles(
                     duration: params.duration,
                     tickInterval: BUFF_TICK_INTERVAL,
                     timeSinceTick: 0,
-                    lastUpdateTime: Date.now(),
+                    lastUpdateTime: now,
                     damagePerTick: 0,
                     sourceId: 0
                 };

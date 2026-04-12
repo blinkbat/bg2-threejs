@@ -396,8 +396,7 @@ function updateAncestorAuraBonuses(
 
             for (const source of auraSources) {
                 if (source.id === unit.id) continue;
-                const dist = Math.hypot(unitX - source.x, unitZ - source.z);
-                if (dist <= ANCESTOR_AURA_RANGE) {
+                if (isInRange(source.x, source.z, unitX, unitZ, getUnitRadius(unit), ANCESTOR_AURA_RANGE)) {
                     nextBonus = ANCESTOR_AURA_DAMAGE_BONUS;
                     break;
                 }

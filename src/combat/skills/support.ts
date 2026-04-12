@@ -834,10 +834,11 @@ export function executeRestorationSkill(
     const hasHamstrung = hasStatusEffect(targetAlly, "hamstrung");
     const hasConstricted = hasStatusEffect(targetAlly, "constricted");
     const hasSleep = hasStatusEffect(targetAlly, "sleep");
+    const hasSilenced = hasStatusEffect(targetAlly, "silenced");
     const targetMaxHp = getEffectiveMaxHp(targetAlly.id, targetAlly);
     const needsHealing = targetAlly.hp < targetMaxHp;
 
-    if (!hasDoom && !hasPoison && !hasBurn && !hasSlow && !hasHamstrung && !hasConstricted && !hasSleep && !needsHealing) {
+    if (!hasDoom && !hasPoison && !hasBurn && !hasSlow && !hasHamstrung && !hasConstricted && !hasSleep && !hasSilenced && !needsHealing) {
         addLog(`${UNIT_DATA[casterId].name}: ${targetData.name} doesn't need restoration!`, COLORS.logNeutral);
         return false;
     }
@@ -872,6 +873,7 @@ export function executeRestorationSkill(
                 && e.type !== "hamstrung"
                 && e.type !== "constricted"
                 && e.type !== "sleep"
+                && e.type !== "silenced"
         );
         return { ...u, statusEffects: applyStatusEffect(cleansedEffects, regenEffect) };
     }));
@@ -885,6 +887,7 @@ export function executeRestorationSkill(
     if (hasHamstrung) removedEffects.push("Hamstrung");
     if (hasConstricted) removedEffects.push("Constricted");
     if (hasSleep) removedEffects.push("Sleep");
+    if (hasSilenced) removedEffects.push("Silence");
 
     soundFns.playHeal();
     if (removedEffects.length > 0) {

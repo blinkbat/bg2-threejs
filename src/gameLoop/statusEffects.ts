@@ -245,7 +245,8 @@ export function processStatusEffects(
         if (!hasStatusEffect(unit, "channeling")) continue;
         const casterG = unitsRef[unit.id];
         if (!casterG) continue;
-        const channelingEffect = unit.statusEffects!.find(e => e.type === "channeling")!;
+        const channelingEffect = unit.statusEffects?.find(e => e.type === "channeling");
+        if (!channelingEffect) continue;
         const radius = channelingEffect.auraRadius ?? CHANNELING_RADIUS;
         for (const ally of unitsState) {
             if (ally.id === unit.id || ally.team !== "player" || !isUnitAlive(ally, defeatedThisFrame)) continue;

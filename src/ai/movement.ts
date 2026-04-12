@@ -269,10 +269,18 @@ export function getBlockedTargets(unitId: number, now: number): Set<number> {
     const unreachable = unreachableTargets[unitId];
     if (!unreachable) return blocked;
 
-    for (const entry of unreachable) {
-        if (entry.until > now) {
-            blocked.add(entry.targetId);
+    // Prune expired entries on read to prevent unbounded growth
+    const active = unreachable.filter(entry => entry.until > now);
+    if (active.length !== unreachable.length) {
+        if (active.length === 0) {
+            delete unreachableTargets[unitId];
+        } else {
+            unreachableTargets[unitId] = active;
         }
+    }
+
+    for (const entry of active) {
+        blocked.add(entry.targetId);
     }
 
     return blocked;

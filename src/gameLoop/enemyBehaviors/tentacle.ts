@@ -46,7 +46,7 @@ const krakenLifetimeTentacles: Map<number, number> = new Map();
 export function trySpawnTentacle(ctx: TentacleContext): boolean {
     const { unit, g, enemyStats, tentacleSkill, unitsState, unitsRef, scene, skillCooldowns, setSkillCooldowns, setUnits, addLog, now } = ctx;
 
-    const spawnKey = `${unit.id}-tentacle`;
+    const spawnKey = `${unit.id}-${tentacleSkill.name}`;
     const spawnCooldownEnd = skillCooldowns[spawnKey]?.end ?? 0;
 
     if (now < spawnCooldownEnd) {

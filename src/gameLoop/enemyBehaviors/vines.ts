@@ -31,7 +31,7 @@ export function tryVinesSkill(ctx: VinesContext): boolean {
         damageTexts, hitFlashRef, unitsRef, unitsStateRef, defeatedThisFrame
     } = ctx;
 
-    const vinesKey = `${unit.id}-vines`;
+    const vinesKey = `${unit.id}-${vinesSkill.name}`;
     const vinesCooldownEnd = skillCooldowns[vinesKey]?.end ?? 0;
 
     if (now < vinesCooldownEnd) {

@@ -128,7 +128,7 @@ export function getEffectiveMaxHpForStats(unitId: number, stats?: CharacterStats
 }
 
 /** Get effective max HP for a player (base + equipment + vitality bonuses) */
-export function getEffectiveMaxHp(unitId: number, unit?: Unit): number {
+export function getEffectiveMaxHp(unitId: number, unit?: { stats?: CharacterStats }): number {
     return getEffectiveMaxHpForStats(unitId, unit?.stats);
 }
 
@@ -141,7 +141,7 @@ export function getEffectiveMaxManaForStats(unitId: number, stats?: CharacterSta
 }
 
 /** Get effective max mana for a player (base + intelligence bonus) */
-export function getEffectiveMaxMana(unitId: number, unit?: Unit): number {
+export function getEffectiveMaxMana(unitId: number, unit?: { stats?: CharacterStats }): number {
     return getEffectiveMaxManaForStats(unitId, unit?.stats);
 }
 

@@ -3,7 +3,7 @@
 // =============================================================================
 
 // Pre-attack dispatch (fire-and-forget behaviors)
-export { runPreAttackBehaviors } from "./preAttack";
+export { runPreAttackBehaviors, cleanupEnemyActionCooldown, resetAllEnemyActionCooldowns } from "./preAttack";
 
 // Construct Charge
 export { tryStartChargeAttack } from "./charge";

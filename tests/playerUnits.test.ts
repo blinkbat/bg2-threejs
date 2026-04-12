@@ -35,7 +35,7 @@ describe("playerUnits", () => {
 
         it("uses unit override stats when provided", () => {
             const unit = { stats: { strength: 0, dexterity: 0, vitality: 10, intelligence: 0, faith: 0 } };
-            const result = getEffectiveMaxHp(1, unit as any);
+            const result = getEffectiveMaxHp(1, unit);
             const expected = UNIT_DATA[1].maxHp + 10 + (10 * HP_PER_VITALITY);
             expect(result).toBe(expected);
         });
@@ -58,7 +58,7 @@ describe("playerUnits", () => {
 
         it("uses unit override stats when provided", () => {
             const unit = { stats: { strength: 0, dexterity: 0, vitality: 0, intelligence: 20, faith: 0 } };
-            const result = getEffectiveMaxMana(4, unit as any);
+            const result = getEffectiveMaxMana(4, unit);
             const expected = UNIT_DATA[4].maxMana! + 5 + (20 * MP_PER_INTELLIGENCE);
             expect(result).toBe(expected);
         });

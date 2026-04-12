@@ -141,6 +141,7 @@ export interface EnemyChargeAttack extends EnemySkillConfig {
 }
 
 export interface EnemyLeapSkill extends EnemySkillConfig {
+    name: string;            // Cooldown key name
     cooldown: number;        // ms between leaps
     minRange: number;        // Minimum distance to target to trigger leap
     maxRange: number;        // Maximum leap distance
@@ -148,6 +149,7 @@ export interface EnemyLeapSkill extends EnemySkillConfig {
 }
 
 export interface EnemyVinesSkill extends EnemySkillConfig {
+    name: string;            // Cooldown key name
     cooldown: number;        // ms between casts
     range: number;           // Cast range
     duration: number;        // How long target is immobilized (ms)
@@ -155,6 +157,7 @@ export interface EnemyVinesSkill extends EnemySkillConfig {
 }
 
 export interface EnemyTentacleSkill extends EnemySkillConfig {
+    name: string;            // Cooldown key name
     cooldown: number;        // ms between tentacle spawns
     maxTentacles: number;    // Maximum active tentacles at once
     spawnRange: number;      // How far from the kraken to spawn tentacles (toward targets)
@@ -217,6 +220,14 @@ export interface EnemyBreathSkill extends EnemySkillConfig {
     damage: [number, number];
     damageType: DamageType;
     duration: number;        // ms channel duration
+}
+
+export interface EnemySilenceSkill extends EnemySkillConfig {
+    name: string;
+    cooldown: number;        // ms between casts
+    range: number;           // Targeting range (single target)
+    duration: number;        // ms silence duration
+    accuracy: number;        // Hit chance (0-100)
 }
 
 export interface EnemyPhaseShiftSkill extends EnemySkillConfig {
@@ -320,6 +331,8 @@ export interface EnemyStats {
     dreamEaterSkill?: EnemyDreamEaterSkill;
     // Optional breath skill - sustained channeled cone attack (locks in place)
     breathSkill?: EnemyBreathSkill;
+    // Optional silence skill - prevents target from casting spells
+    silenceSkill?: EnemySilenceSkill;
     // Optional phase shift - go invisible and reposition
     phaseShiftSkill?: EnemyPhaseShiftSkill;
     // Optional death effect - spawn a temporary acid pool at death location

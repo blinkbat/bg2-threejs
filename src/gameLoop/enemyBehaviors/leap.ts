@@ -43,7 +43,7 @@ const activeLeaps: ActiveLeap[] = [];
 export function tryLeapToTarget(ctx: LeapContext): boolean {
     const { unit, g, leapSkill, targetUnit, targetG, skillCooldowns, setSkillCooldowns, addLog, now } = ctx;
 
-    const leapKey = `${unit.id}-leap`;
+    const leapKey = `${unit.id}-${leapSkill.name}`;
     const leapCooldownEnd = skillCooldowns[leapKey]?.end ?? 0;
 
     if (now < leapCooldownEnd) {

@@ -54,7 +54,7 @@ function areaDialogToRuntimeDefinition(areaDialog: AreaDialogDefinition): Dialog
         nodes[runtimeNode.id] = runtimeNode;
     }
 
-    const nodeIds = Object.keys(nodes);
+    const nodeIds = Object.keys(nodes).sort();
     const startNodeId = nodes[areaDialog.startNodeId]
         ? areaDialog.startNodeId
         : (nodeIds[0] ?? areaDialog.startNodeId);
