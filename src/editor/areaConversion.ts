@@ -23,12 +23,7 @@ export function normalizeLightHexColor(color: string | undefined, fallback: stri
     return fallback;
 }
 
-export function clampFiniteNumber(value: number | undefined, min: number, max: number, fallback: number): number {
-    if (typeof value !== "number" || !Number.isFinite(value)) {
-        return fallback;
-    }
-    return Math.max(min, Math.min(max, value));
-}
+export { clampFinite as clampFiniteNumber } from "../rendering/scene/lightUtils";
 
 export function createEmptyLayer(width: number, height: number, fill: string): string[][] {
     return Array.from({ length: height }, () => Array(width).fill(fill));

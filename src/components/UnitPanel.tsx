@@ -85,7 +85,7 @@ export function UnitPanel({
             </div>
 
             <div className="panel-toggle-bar">
-                <Tippy content="K" placement="top" delay={[400, 0]}>
+                <Tippy content="Click or press K to open" placement="top" delay={[400, 0]}>
                     <button
                         type="button"
                         className={`panel-toggle-btn ${skillTreeModalOpen ? "active" : ""}`}
@@ -94,7 +94,7 @@ export function UnitPanel({
                         skills{(unit.skillPoints ?? 0) > 0 && <span className="tab-dot" />}
                     </button>
                 </Tippy>
-                <Tippy content="E" placement="top" delay={[400, 0]}>
+                <Tippy content="Click or press E to open" placement="top" delay={[400, 0]}>
                     <button
                         type="button"
                         className={`panel-toggle-btn ${equipmentModalOpen ? "active" : ""}`}
@@ -103,7 +103,7 @@ export function UnitPanel({
                         equipment
                     </button>
                 </Tippy>
-                <Tippy content="I" placement="top" delay={[400, 0]}>
+                <Tippy content="Click or press I to open" placement="top" delay={[400, 0]}>
                     <button
                         type="button"
                         className={`panel-toggle-btn ${itemsModalOpen ? "active" : ""}`}

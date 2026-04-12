@@ -21,6 +21,10 @@ import { getGameTime } from "../core/gameClock";
 const FIREBALL_SPEED = 0.03;        // Very slow-moving projectile
 const FIREBALL_MAX_DISTANCE = 12;   // Max travel distance before expiring
 
+// Cached fireball geometries (shared across all fireballs, never disposed)
+const fireballOuterGeo = new THREE.SphereGeometry(0.35, 12, 8);
+const fireballInnerGeo = new THREE.SphereGeometry(0.25, 8, 6);
+
 // =============================================================================
 // TYPES
 // =============================================================================
@@ -73,7 +77,6 @@ function executeEnemyRangedAttack(ctx: EnemyAttackContext): void {
  * Create a fireball mesh - glowing orange sphere.
  */
 function createFireballMesh(scene: THREE.Scene, x: number, z: number): THREE.Mesh {
-    const geometry = new THREE.SphereGeometry(0.35, 12, 8);
     const material = new THREE.MeshPhongMaterial({
         color: "#ff4500",
         emissive: "#9a2400",
@@ -83,14 +86,14 @@ function createFireballMesh(scene: THREE.Scene, x: number, z: number): THREE.Mes
         transparent: true,
         opacity: 0.9
     });
-    const mesh = new THREE.Mesh(geometry, material);
+    const mesh = new THREE.Mesh(fireballOuterGeo, material);
     mesh.position.set(x, 0.5, z);
     mesh.userData.visualPhase = Math.random() * Math.PI * 2;
+    mesh.userData.sharedGeometry = true;
     scene.add(mesh);
 
-    // Add inner glow
     const innerGlow = new THREE.Mesh(
-        new THREE.SphereGeometry(0.25, 8, 6),
+        fireballInnerGeo,
         new THREE.MeshBasicMaterial({
             color: "#ffcc00",
             transparent: true,
@@ -99,6 +102,7 @@ function createFireballMesh(scene: THREE.Scene, x: number, z: number): THREE.Mes
             depthWrite: false
         })
     );
+    innerGlow.userData.sharedGeometry = true;
     mesh.add(innerGlow);
 
     return mesh;

@@ -3,7 +3,7 @@
 // =============================================================================
 
 import type { Unit, UnitGroup } from "../../core/types";
-import { ENEMY_STATS } from "../../game/enemyStats";
+import { getEnemyUnitStats } from "../../game/units";
 import { clampToGrid, distance } from "../../game/geometry";
 import { isInRange, getUnitRadius } from "../../rendering/range";
 import { setSkillCooldown } from "../../combat/combatMath";
@@ -182,7 +182,7 @@ export function processShadePhases(
             continue;
         }
 
-        const displayName = shadeUnit.enemyType ? ENEMY_STATS[shadeUnit.enemyType].name : "Enemy";
+        const displayName = shadeUnit.enemyType ? getEnemyUnitStats(shadeUnit).name : "Enemy";
         addLog(`${displayName} materializes nearby!`, SHADE_PHASE_LOG_COLOR);
         activeShadePhases.splice(i, 1);
     }

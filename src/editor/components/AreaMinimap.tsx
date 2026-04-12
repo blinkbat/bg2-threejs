@@ -298,7 +298,6 @@ export function AreaMinimap({ areaId, spawnX, spawnZ, onSpawnChange, width = 200
                         fontSize: 12,
                         fontWeight: 600,
                     }}
-                    title="Zoom in"
                 >+</button>
                 <button
                     onClick={handleZoomOut}
@@ -312,7 +311,6 @@ export function AreaMinimap({ areaId, spawnX, spawnZ, onSpawnChange, width = 200
                         fontSize: 12,
                         fontWeight: 600,
                     }}
-                    title="Zoom out"
                 >-</button>
                 <button
                     onClick={handleReset}
@@ -325,7 +323,6 @@ export function AreaMinimap({ areaId, spawnX, spawnZ, onSpawnChange, width = 200
                         cursor: "pointer",
                         fontSize: 10,
                     }}
-                    title="Reset view"
                 >R</button>
                 <button
                     onClick={handleCenterOnSpawn}
@@ -338,7 +335,6 @@ export function AreaMinimap({ areaId, spawnX, spawnZ, onSpawnChange, width = 200
                         cursor: "pointer",
                         fontSize: 10,
                     }}
-                    title="Center on spawn"
                 >C</button>
             </div>
             {/* Info display */}

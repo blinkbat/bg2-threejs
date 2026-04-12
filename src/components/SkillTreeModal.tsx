@@ -209,22 +209,26 @@ function NodeCard({
                     {typeLabel}
                 </span>
             </div>
-            <div className="skill-tree-node-desc">{node.description}</div>
             <div className="skill-tree-node-footer">
                 {learned && <span className="skill-tree-node-status learned">LEARNED</span>}
                 {canLearn && <span className="skill-tree-node-status available">Click to learn</span>}
                 {implemented && !learned && !canLearn && prereqMet && <span className="skill-tree-node-status">Not learned</span>}
                 {implemented && !learned && !prereqMet && <span className="skill-tree-node-status">Requires previous tier</span>}
                 {!implemented && <span className="skill-tree-node-status not-impl">NOT IMPLEMENTED</span>}
-                <span className="skill-tree-node-tier">Tier {TIER_LABELS[node.tier - 1]}</span>
             </div>
         </div>
     );
 
-    if (skill) {
+    const tooltipContent = skill
+        ? <SkillNodeTooltip skill={skill} />
+        : node.description
+            ? <div className="skill-tooltip"><div className="skill-tooltip-desc">{node.description}</div></div>
+            : null;
+
+    if (tooltipContent) {
         return (
             <Tippy
-                content={<SkillNodeTooltip skill={skill} />}
+                content={tooltipContent}
                 placement="left"
                 delay={[200, 0]}
                 maxWidth={260}
@@ -327,7 +331,7 @@ export function SkillTreeModal({
                 <div className="char-modal-title-block">
                     <h2 className="char-modal-title">Skills <span className="char-modal-hotkey">K</span></h2>
                     <div className="char-modal-subtitle">{unitName}</div>
-                    <div className="char-modal-desc">Learn and upgrade abilities from your class tree.</div>
+                    <div className="char-modal-desc">Hover any skill for info, and drag it to your Skill Bar to assign and use.</div>
                 </div>
                 <div className="char-modal-right">
                     <div className="skill-tree-points">

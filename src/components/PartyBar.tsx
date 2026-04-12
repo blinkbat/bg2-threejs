@@ -68,6 +68,7 @@ interface PartyBarProps {
     formationOrder?: number[];
     onReorderFormation?: (newOrder: number[]) => void;
     hideHotbar?: boolean;
+    tooltipsDisabled?: boolean;
 }
 
 function PartyBarComponent({
@@ -86,6 +87,7 @@ function PartyBarComponent({
     formationOrder = [],
     onReorderFormation,
     hideHotbar = false,
+    tooltipsDisabled = false,
 }: PartyBarProps) {
     const playerUnits = useMemo(() => units.filter((u: Unit) => u.team === "player"), [units]);
     const corePlayerUnits = useMemo(() => playerUnits.filter(u => isCorePlayerId(u.id)), [playerUnits]);
@@ -350,7 +352,7 @@ function PartyBarComponent({
                         />
                     </div>
                 )}
-                {hasUnspentPoints
+                {hasUnspentPoints && !tooltipsDisabled
                     ? (
                         <Tippy content={unspentHint} placement="top" delay={[300, 0]}>
                             {portraitIcon}
@@ -459,6 +461,7 @@ function PartyBarComponent({
                                 }
                                 placement="top"
                                 delay={[120, 0]}
+                                disabled={tooltipsDisabled}
                             >
                                 <button
                                     className={chipClass}
@@ -512,7 +515,8 @@ function arePartyBarPropsEqual(prev: PartyBarProps, next: PartyBarProps): boolea
         && prev.paused === next.paused
         && areNumberArraysEqual(prev.formationOrder ?? [], next.formationOrder ?? [])
         && prev.onReorderFormation === next.onReorderFormation
-        && prev.hideHotbar === next.hideHotbar;
+        && prev.hideHotbar === next.hideHotbar
+        && prev.tooltipsDisabled === next.tooltipsDisabled;
 }
 
 export const PartyBar = memo(PartyBarComponent, arePartyBarPropsEqual);

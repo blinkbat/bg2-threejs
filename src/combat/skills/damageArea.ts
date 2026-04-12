@@ -16,7 +16,7 @@ import {
     getSkillTextColor,
 } from "../../core/constants";
 import { UNIT_DATA } from "../../game/playerUnits";
-import { getUnitStats } from "../../game/units";
+import { getUnitStats, getEnemyUnitStats } from "../../game/units";
 import {
     rollChance,
     calculateDamageWithCrit,
@@ -31,7 +31,6 @@ import {
     applyStatusEffect,
     getDistributedStatBonus,
 } from "../combatMath";
-import { ENEMY_STATS } from "../../game/enemyStats";
 import { getUnitRadius, isInRange } from "../../rendering/range";
 import { isPointInRectangle } from "../../game/geometry";
 import { getAliveUnits } from "../../game/unitQuery";
@@ -136,7 +135,7 @@ export function executeFlurrySkill(
 
         // Check for front-shield block
         if (target.enemyType) {
-            const enemyStats = ENEMY_STATS[target.enemyType];
+            const enemyStats = getEnemyUnitStats(target);
             if (checkEnemyDefenses(enemyStats, target.facing, casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z) === "frontShield") {
                 soundFns.playBlock();
                 continue;  // Skip this hit - blocked by shield
@@ -593,7 +592,7 @@ export function executeForcePushSkill(
         const targetData = getUnitStats(target);
 
         if (target.enemyType) {
-            const enemyStats = ENEMY_STATS[target.enemyType];
+            const enemyStats = getEnemyUnitStats(target);
             if (checkEnemyDefenses(
                 enemyStats,
                 target.facing,
@@ -798,7 +797,7 @@ export function executeWellOfGravitySkill(
         const targetData = getUnitStats(target);
 
         if (target.enemyType) {
-            const enemyStats = ENEMY_STATS[target.enemyType];
+            const enemyStats = getEnemyUnitStats(target);
             if (checkEnemyDefenses(
                 enemyStats,
                 target.facing,

@@ -1063,8 +1063,6 @@
 .skill-tree-body {
     display: flex;
     flex-direction: column;
-    padding: 0 12px 14px;
-    padding-right: 8px;
     gap: 0;
     flex: 1;
     min-height: 0;
@@ -1190,13 +1188,6 @@
     text-transform: uppercase;
 }
 
-.skill-tree-node-desc {
-    font-size: 12px;
-    color: var(--ui-color-text-secondary);
-    line-height: 1.4;
-    margin-top: 4px;
-}
-
 .skill-tree-node-footer {
     display: flex;
     align-items: center;
@@ -1223,11 +1214,6 @@
     color: var(--ui-color-text-faint);
     font-weight: 700;
     letter-spacing: 0.3px;
-}
-
-.skill-tree-node-tier {
-    color: var(--ui-color-text-faint);
-    font-size: 10px;
 }
 
 /* Skill points display */
@@ -1260,7 +1246,6 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
-    padding: 10px 16px 16px;
     max-height: min(55vh, 450px);
     overflow-y: auto;
 }

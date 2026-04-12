@@ -934,6 +934,7 @@
 .tippy-box {
     background: #1a1a2a !important;
     border: none !important;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.7), 0 2px 8px rgba(0, 0, 0, 0.5) !important;
 }
 
 .tippy-arrow {

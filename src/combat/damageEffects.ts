@@ -18,13 +18,13 @@ import { soundFns } from "../audio";
 import { cleanupUnitState } from "../ai/movement";
 import { cleanupEnemyKiteCooldown } from "../game/enemyState";
 import { getGameTime } from "../core/gameClock";
-import { getUnitStats } from "../game/units";
+import { getUnitStats, getEnemyUnitStats } from "../game/units";
 import { scheduleEffectAnimation } from "../core/effectScheduler";
 import { applySyncedUnitUpdate, applySyncedUnitsUpdate } from "../core/stateUtils";
 import { logDefeated, applyPoison, applyBurn, applySlowed, hasStatusEffect, isUnitAlive } from "./combatMath";
 import { tryKillBark } from "./barks";
 import { getNextUnitId } from "../core/unitIds";
-import { ENEMY_STATS, getAmoebaMaxHpForSplitCount } from "../game/enemyStats";
+import { getAmoebaMaxHpForSplitCount } from "../game/enemyStats";
 import { UNIT_DATA, getXpForLevel, getEffectiveMaxHp, getEffectiveMaxMana } from "../game/playerUnits";
 import { LEVEL_UP_HP, LEVEL_UP_MANA, LEVEL_UP_STAT_POINTS, LEVEL_UP_SKILL_POINTS } from "../game/statBonuses";
 import { trySubmergeKraken } from "../gameLoop/enemyBehaviors/submerge";
@@ -71,12 +71,14 @@ const projectileBaseMaterials: Record<ProjectileType, THREE.MeshPhongMaterial> =
     })
 };
 
+const _scratchColor = new THREE.Color();
+
 function createProjectileMaterial(type: ProjectileType, colorHex: string): THREE.MeshPhongMaterial {
     const material = projectileBaseMaterials[type].clone();
-    const color = new THREE.Color(colorHex);
-    material.color.copy(color);
+    _scratchColor.set(colorHex);
+    material.color.copy(_scratchColor);
     const emissiveFactor = type === "aoe" ? 0.38 : 0.24;
-    material.emissive.copy(color).multiplyScalar(emissiveFactor);
+    material.emissive.copy(_scratchColor).multiplyScalar(emissiveFactor);
     return material;
 }
 
@@ -460,7 +462,7 @@ function getUnitDisplayName(unit: Unit): string {
         return UNIT_DATA[unit.id]?.name ?? "Unknown";
     }
     if (unit.enemyType) {
-        return ENEMY_STATS[unit.enemyType]?.name ?? "Unknown";
+        return getEnemyUnitStats(unit).name;
     }
     return "Unknown";
 }
@@ -639,7 +641,7 @@ export function applyDamageToUnit(
     // The spawned children always start at their stage max HP.
     const shouldSplit = targetState?.enemyType === "giant_amoeba" &&
         projectedHp <= 0 &&
-        (targetState.splitCount ?? 0) < (ENEMY_STATS.giant_amoeba.maxSplitCount ?? 3);
+        (targetState.splitCount ?? 0) < (getEnemyUnitStats(targetState).maxSplitCount ?? 3);
 
     if (shouldSplit && targetState) {
         // Amoeba splits! Original dies, two smaller ones spawn
@@ -862,7 +864,7 @@ export function applyDamageToUnit(
         }
         // Award XP to all living player units when an enemy dies
         if (targetState && targetState.team === "enemy" && targetState.enemyType) {
-            const expReward = ENEMY_STATS[targetState.enemyType]?.expReward ?? 0;
+            const expReward = getEnemyUnitStats(targetState).expReward ?? 0;
             if (expReward > 0) {
                 // Compute level ups BEFORE state update using ref
                 const currentUnits = unitsStateRef.current ?? [];
@@ -935,7 +937,7 @@ export function applyDamageToUnit(
                 if (parentKraken) {
                     const krakenG = unitsRef[parentKraken.id];
                     if (krakenG) {
-                        const krakenStats = ENEMY_STATS.baby_kraken;
+                        const krakenStats = getEnemyUnitStats(parentKraken);
                         const tentacleDamage = krakenStats.tentacleSkill?.damageToParent ?? 15;
                         // Recursively apply damage to the kraken (skip defeat tracking since this is bonus damage)
                         applyDamageToUnit(

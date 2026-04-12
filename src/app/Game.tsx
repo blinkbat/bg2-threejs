@@ -15,6 +15,7 @@ import { getCurrentArea, getCurrentAreaId, AREAS, type AreaId, type AreaTransiti
 import { UNIT_DATA, CORE_PLAYER_IDS, getEffectiveMaxHp, getEffectiveMaxMana, getXpForLevel, isCorePlayerId } from "../game/playerUnits";
 import { LEVEL_UP_HP, LEVEL_UP_MANA, LEVEL_UP_STAT_POINTS, LEVEL_UP_SKILL_POINTS, HP_PER_VITALITY, MP_PER_INTELLIGENCE } from "../game/statBonuses";
 import { ENEMY_STATS, isEnemyPermanentDeath } from "../game/enemyStats";
+import { getEnemyUnitStats } from "../game/units";
 import { SKILLS } from "../game/skills";
 import { formatRolledEnemyLootSummary, rollEnemyLoot } from "../game/enemyLoot";
 import { getPartyInventory, setPartyInventory, equipItemForCharacter, unequipItemForCharacter, moveEquippedItemForCharacter } from "../game/equipmentState";
@@ -1815,7 +1816,7 @@ export function Game({
         for (const enemy of aliveEnemies) {
             const enemyType = enemy.enemyType;
             if (!enemyType) continue;
-            const enemyStats = ENEMY_STATS[enemyType];
+            const enemyStats = getEnemyUnitStats(enemy);
             const enemyGroup = unitGroups[enemy.id];
             const enemyX = enemyGroup?.position.x ?? enemy.x;
             const enemyZ = enemyGroup?.position.z ?? enemy.z;

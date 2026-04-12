@@ -352,9 +352,24 @@ export function shouldApplyPoison(attackerData: UnitData | EnemyStats): boolean 
 
 /**
  * Check if a unit currently has a specific status effect.
+ * Uses a WeakMap cache keyed on the statusEffects array reference for O(1) lookups.
  */
+const _statusEffectSetCache = new WeakMap<StatusEffect[], Set<StatusEffectType>>();
+
+function getStatusEffectSet(effects: StatusEffect[]): Set<StatusEffectType> {
+    let set = _statusEffectSetCache.get(effects);
+    if (!set) {
+        set = new Set<StatusEffectType>();
+        for (const e of effects) set.add(e.type);
+        _statusEffectSetCache.set(effects, set);
+    }
+    return set;
+}
+
 export function hasStatusEffect(unit: Unit, effectType: StatusEffectType): boolean {
-    return unit.statusEffects?.some(e => e.type === effectType) ?? false;
+    const effects = unit.statusEffects;
+    if (!effects || effects.length === 0) return false;
+    return getStatusEffectSet(effects).has(effectType);
 }
 
 type IncapacitatingStatus = "stunned" | "sleep";

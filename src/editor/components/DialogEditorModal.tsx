@@ -784,7 +784,6 @@ export function DialogEditorModal({
                 <div className="editor-dialog-header">
                     {editorView !== "list" && (
                         <button
-                            title="Back"
                             onClick={() => setEditorView(editorView === "dialog" ? "trigger" : "list")}
                             className="editor-btn editor-btn--muted editor-btn--small"
                         >
@@ -800,7 +799,6 @@ export function DialogEditorModal({
                     <div className="editor-dialog-header-actions">
                         {editorView === "list" && (
                             <button
-                                title="Create trigger"
                                 onClick={() => onAddDialogTrigger()}
                                 className="editor-btn editor-btn--primary"
                             >
@@ -827,7 +825,6 @@ export function DialogEditorModal({
                             </span>
                         </button>
                         <button
-                            title="Close"
                             onClick={onClose}
                             className="editor-btn editor-btn--muted"
                         >
@@ -860,7 +857,7 @@ export function DialogEditorModal({
                                     ))}
                                 </select>
                                 {triggerSearchText.trim().length > 0 && (
-                                    <button title="Clear search" onClick={() => setTriggerSearchText("")} className="editor-btn editor-btn--muted editor-btn--small">
+                                    <button onClick={() => setTriggerSearchText("")} className="editor-btn editor-btn--muted editor-btn--small">
                                         <XIcon size={12} />
                                     </button>
                                 )}
@@ -914,7 +911,6 @@ export function DialogEditorModal({
                                         )}
                                         <span className="editor-trigger-status" style={{ color: statusColor }}>{statusLabel}</span>
                                         <button
-                                            title="Remove trigger"
                                             onClick={event => { event.stopPropagation(); onRemoveDialogTrigger(trigger.id); }}
                                             className="editor-btn editor-btn--danger editor-btn--tiny"
                                         >
@@ -1040,7 +1036,6 @@ export function DialogEditorModal({
                                                         {conditionValid ? <CheckIcon size={12} /> : <AlertTriangleIcon size={12} />}
                                                     </span>
                                                     <button
-                                                        title="Remove condition"
                                                         onClick={() => onRemoveDialogCondition(trigger.id, conditionIndex)}
                                                         style={{ padding: "4px", fontSize: 13, background: "#934", color: "#fff", border: "none", borderRadius: 3, cursor: "pointer" }}
                                                     >
@@ -1125,7 +1120,6 @@ export function DialogEditorModal({
                                         );
                                     })}
                                     <button
-                                        title="Add condition"
                                         onClick={() => onAddDialogCondition(trigger.id)}
                                         style={{ alignSelf: "flex-start", padding: "6px 10px", fontSize: 13, background: "#355eaa", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
                                     >
@@ -1209,7 +1203,7 @@ export function DialogEditorModal({
                         <div style={{ border: "1px solid #3f475b", borderRadius: 8, background: "#252b3c", padding: 14, display: "flex", flexDirection: "column", gap: 8 }}>
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                                 <div style={{ fontSize: 15, fontWeight: 700 }}>Dialogs</div>
-                                <button title="Create dialog" onClick={addDialog} style={{ padding: "4px 8px", fontSize: 13, background: "#3484d0", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}>
+                                <button onClick={addDialog} style={{ padding: "4px 8px", fontSize: 13, background: "#3484d0", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}>
                                     <PlusIcon size={13} />
                                 </button>
                             </div>
@@ -1253,7 +1247,6 @@ export function DialogEditorModal({
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                                 <div style={{ fontSize: 15, fontWeight: 700 }}>Nodes</div>
                                 <select
-                                    title="Add node"
                                     disabled={!selectedDialog}
                                     value=""
                                     onChange={event => {
@@ -1500,8 +1493,7 @@ export function DialogEditorModal({
                                                                     <button
                                                                         onClick={() => removeChoiceCondition(choice.id, condition.type)}
                                                                         className="editor-btn editor-btn--danger editor-btn--small editor-choice-condition-remove"
-                                                                        title="Remove condition"
-                                                                    >
+                                                                                    >
                                                                         <XIcon size={14} />
                                                                     </button>
                                                                 </div>

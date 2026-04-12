@@ -9,7 +9,8 @@ import type {
     Unit,
 } from "../core/types";
 import { AREAS, type AreaId } from "../game/areas";
-import { ENEMY_STATS, getAmoebaMaxHpForSplitCount, getMonsterTypeLabel } from "../game/enemyStats";
+import { getAmoebaMaxHpForSplitCount, getMonsterTypeLabel } from "../game/enemyStats";
+import { getEnemyUnitStats } from "../game/units";
 import { getEffectiveMaxHp, isCorePlayerId, UNIT_DATA } from "../game/playerUnits";
 import type { HotbarAssignments } from "../hooks/hotbarStorage";
 import type { AutoPauseSettings } from "../hooks/localStorage";
@@ -375,7 +376,7 @@ export function GameRenderLayer({
             {hoveredEnemy && (() => {
                 const enemy = hoveredEnemyUnit;
                 if (!enemy?.enemyType || enemy.hp <= 0) return null;
-                const stats = ENEMY_STATS[enemy.enemyType];
+                const stats = getEnemyUnitStats(enemy);
                 const maxHp = getEnemyDisplayMaxHp(enemy, stats);
                 const monsterTypeLabel = getMonsterTypeLabel(stats.monsterType);
                 const primaryStatusLabel = getPrimaryStatusLabel(enemy.statusEffects);
@@ -576,6 +577,7 @@ export function GameRenderLayer({
                     formationOrder={formationOrder}
                     onReorderFormation={handleReorderFormation}
                     hideHotbar={equipmentModalOpen || itemsModalOpen}
+                    tooltipsDisabled={equipmentModalOpen || skillTreeModalOpen || itemsModalOpen || menuOpen || otherModalOpen}
                 />
             </div>
             {showPanel && selectedIds.length === 1 && (

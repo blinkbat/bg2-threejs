@@ -17,7 +17,6 @@ import { getGameTime, updateGameClock } from "../core/gameClock";
 import { updateEffectAnimations } from "../core/effectScheduler";
 import { getCurrentArea } from "../game/areas";
 import type { Unit, UnitGroup } from "../core/types";
-import { ENEMY_STATS } from "../game/enemyStats";
 import { getEffectiveMaxHp, isCorePlayerId } from "../game/playerUnits";
 import { getEffectivePlayerHpRegen } from "../game/equipmentState";
 import { createLiveUnitsDispatch } from "../core/stateUtils";
@@ -26,7 +25,7 @@ import { updateDynamicObstacles } from "../ai/pathfinding";
 import { updateAvoidanceCache, updateTargetingCache } from "../ai/unitAI";
 import { buildUnitSpatialFrame, type UnitSpatialEntry } from "../ai/spatialCache";
 import { updateUnitCache } from "../game/unitQuery";
-import { clearUnitStatsCache } from "../game/units";
+import { clearUnitStatsCache, getEnemyUnitStats } from "../game/units";
 import { getUnitRadius, isInRange } from "../rendering/range";
 import {
     updateDamageTexts,
@@ -574,7 +573,7 @@ function processEnemyDeathAcidPools(
             continue;
         }
 
-        const enemyStats = ENEMY_STATS[unit.enemyType];
+        const enemyStats = getEnemyUnitStats(unit);
         const deathPool = enemyStats.deathAcidPool;
         if (!deathPool) {
             continue;

@@ -7,9 +7,8 @@ import type { Unit, Skill, UnitGroup, BasicProjectile } from "../../core/types";
 import { COLORS, SUN_STANCE_BONUS_DAMAGE, getDamageTypeColor, getSkillTextColor } from "../../core/constants";
 import { UNIT_DATA, getEffectiveUnitData } from "../../game/playerUnits";
 import { CRIT_MULTIPLIER } from "../../game/statBonuses";
-import { getUnitStats } from "../../game/units";
+import { getUnitStats, getEnemyUnitStats } from "../../game/units";
 import { rollChance, rollDamage, calculateDamageWithCrit, rollSkillHit, getEffectiveArmor, logHit, logMiss, logPoisoned, logBurning, logCast, logAoeHit, logAoeMiss, calculateSkillStatBonusBudget, checkEnemyDefenses, hasStatusEffect, getDistributedStatBonus, applyArmor } from "../combatMath";
-import { ENEMY_STATS } from "../../game/enemyStats";
 import { getUnitRadius, isInRange } from "../../rendering/range";
 import { getAliveUnits } from "../../game/unitQuery";
 import { findNearestPassable } from "../../ai/pathfinding";
@@ -266,7 +265,7 @@ function executeTargetedDamageSkill(
 
     // --- Phase 5: Defense check ---
     if (targetEnemy.enemyType) {
-        const enemyStats = ENEMY_STATS[targetEnemy.enemyType];
+        const enemyStats = getEnemyUnitStats(targetEnemy);
         if (delivery.mode === "melee") {
             // Full defense check: front shield + block chance
             const defense = checkEnemyDefenses(enemyStats, targetEnemy.facing, casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, skill.damageType);
@@ -767,7 +766,7 @@ export function executeSmiteStrikeSkill(
 
     // Defense check
     if (targetEnemy.enemyType) {
-        const enemyStats = ENEMY_STATS[targetEnemy.enemyType];
+        const enemyStats = getEnemyUnitStats(targetEnemy);
         const defense = checkEnemyDefenses(enemyStats, targetEnemy.facing, casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, skill.damageType);
         if (defense !== "none") {
             soundFns.playBlock();
@@ -784,7 +783,7 @@ export function executeSmiteStrikeSkill(
         const statBonus = calculateSkillStatBonusBudget(casterUnit, skill.damageType, skill);
 
         // Check if target is undead or demon for bonus damage
-        const enemyStats = targetEnemy.enemyType ? ENEMY_STATS[targetEnemy.enemyType] : undefined;
+        const enemyStats = targetEnemy.enemyType ? getEnemyUnitStats(targetEnemy) : undefined;
         const isBonusTarget = enemyStats?.monsterType === "undead" || enemyStats?.monsterType === "demon";
         const bonusMultiplier = isBonusTarget ? 1.5 : 1.0;
 

@@ -1,4 +1,5 @@
 import { memo } from "react";
+import Tippy from "@tippyjs/react";
 import { Swords, Square, Shield, UsersRound, X, Brain } from "lucide-react";
 
 interface CommandBarProps {
@@ -21,51 +22,57 @@ export const CommandBar = memo(function CommandBar({
 }: CommandBarProps) {
     return (
         <div className="command-bar glass-panel">
-            <button
-                className={`cmd-btn${commandMode === "attackMove" ? " cmd-active" : ""}`}
-                onClick={onAttackMove}
-                title="Attack-Move (A)"
-                disabled={!hasSelection}
-            >
-                <Swords size={18} />
-            </button>
-            <button
-                className="cmd-btn"
-                onClick={onStop}
-                title="Stop (S)"
-                disabled={!hasSelection}
-            >
-                <Square size={16} />
-            </button>
-            <button
-                className={`cmd-btn${holdActive ? " cmd-active" : ""}`}
-                onClick={onHold}
-                title="Hold Position (H)"
-                disabled={!hasSelection}
-            >
-                <Shield size={18} />
-            </button>
-            <button
-                className="cmd-btn"
-                onClick={onSelectAll}
-                title="Select All (G)"
-            >
-                <UsersRound size={16} />
-            </button>
-            <button
-                className="cmd-btn"
-                onClick={onDeselectAll}
-                title="Deselect All (D)"
-            >
-                <X size={16} />
-            </button>
-            <button
-                className={`cmd-btn${partyAutoAttackActive ? " cmd-active" : ""}`}
-                onClick={onToggleAutoAttack}
-                title="Toggle Party Auto-Attack"
-            >
-                <Brain size={16} />
-            </button>
+            <Tippy content="Attack-Move (A)" placement="top" delay={[300, 0]}>
+                <button
+                    className={`cmd-btn${commandMode === "attackMove" ? " cmd-active" : ""}`}
+                    onClick={onAttackMove}
+                    disabled={!hasSelection}
+                >
+                    <Swords size={18} />
+                </button>
+            </Tippy>
+            <Tippy content="Stop (S)" placement="top" delay={[300, 0]}>
+                <button
+                    className="cmd-btn"
+                    onClick={onStop}
+                    disabled={!hasSelection}
+                >
+                    <Square size={16} />
+                </button>
+            </Tippy>
+            <Tippy content="Hold Position (H)" placement="top" delay={[300, 0]}>
+                <button
+                    className={`cmd-btn${holdActive ? " cmd-active" : ""}`}
+                    onClick={onHold}
+                    disabled={!hasSelection}
+                >
+                    <Shield size={18} />
+                </button>
+            </Tippy>
+            <Tippy content="Select All (G)" placement="top" delay={[300, 0]}>
+                <button
+                    className="cmd-btn"
+                    onClick={onSelectAll}
+                >
+                    <UsersRound size={16} />
+                </button>
+            </Tippy>
+            <Tippy content="Deselect All (D)" placement="top" delay={[300, 0]}>
+                <button
+                    className="cmd-btn"
+                    onClick={onDeselectAll}
+                >
+                    <X size={16} />
+                </button>
+            </Tippy>
+            <Tippy content="Toggle Party Auto-Attack" placement="top" delay={[300, 0]}>
+                <button
+                    className={`cmd-btn${partyAutoAttackActive ? " cmd-active" : ""}`}
+                    onClick={onToggleAutoAttack}
+                >
+                    <Brain size={16} />
+                </button>
+            </Tippy>
         </div>
     );
 });

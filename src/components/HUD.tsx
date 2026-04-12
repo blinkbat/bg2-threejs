@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, memo } from "react";
+import Tippy from "@tippyjs/react";
 import { Play, Pause, Menu, Bug } from "lucide-react";
 import { MenuModal } from "./MenuModal";
 import { JukeboxModal } from "./JukeboxModal";
@@ -182,31 +183,34 @@ export const HUD = memo(function HUD({
                     {!isDefeat && <div className="hud-area-flavor">{areaFlavor}</div>}
                 </div>
                 <div className="hud-buttons">
-                    <button
-                        className={`btn btn-with-icon ${paused ? "btn-resume" : "btn-pause"} ${paused && anyModalOpen ? "disabled" : ""}`}
-                        onClick={handlePauseResume}
-                        title={paused ? "Resume (Space)" : "Pause (Space)"}
-                        disabled={paused && anyModalOpen}
-                    >
-                        {paused ? <Play size={16} /> : <Pause size={16} />}
-                        <span>{paused ? "Resume" : "Pause"}</span>
-                    </button>
-                    <button
-                        className="btn btn-with-icon"
-                        onClick={onOpenMenu}
-                        title="Menu (Esc)"
-                    >
-                        <Menu size={16} />
-                        <span>Menu</span>
-                    </button>
-                    <button
-                        className={`btn btn-with-icon btn-debug ${debugPanelOpen ? "btn-debug-active" : ""}`}
-                        onClick={() => setDebugPanelOpen(prev => !prev)}
-                        title="Toggle Debug Panel"
-                    >
-                        <Bug size={16} />
-                        <span>Debug</span>
-                    </button>
+                    <Tippy content={paused ? "Resume (Space)" : "Pause (Space)"} placement="bottom" delay={[300, 0]}>
+                        <button
+                            className={`btn btn-with-icon ${paused ? "btn-resume" : "btn-pause"} ${paused && anyModalOpen ? "disabled" : ""}`}
+                            onClick={handlePauseResume}
+                            disabled={paused && anyModalOpen}
+                        >
+                            {paused ? <Play size={16} /> : <Pause size={16} />}
+                            <span>{paused ? "Resume" : "Pause"}</span>
+                        </button>
+                    </Tippy>
+                    <Tippy content="Menu (Esc)" placement="bottom" delay={[300, 0]}>
+                        <button
+                            className="btn btn-with-icon"
+                            onClick={onOpenMenu}
+                        >
+                            <Menu size={16} />
+                            <span>Menu</span>
+                        </button>
+                    </Tippy>
+                    <Tippy content="Toggle Debug Panel" placement="bottom" delay={[300, 0]}>
+                        <button
+                            className={`btn btn-with-icon btn-debug ${debugPanelOpen ? "btn-debug-active" : ""}`}
+                            onClick={() => setDebugPanelOpen(prev => !prev)}
+                        >
+                            <Bug size={16} />
+                            <span>Debug</span>
+                        </button>
+                    </Tippy>
                 </div>
                 {/* Debug options inline */}
                 {debugPanelOpen && (

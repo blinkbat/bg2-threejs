@@ -21,8 +21,7 @@ import {
 } from "./movement";
 import { getUnitRadius, isInRange } from "../rendering/range";
 import { clampToGrid, distanceBetween } from "../game/geometry";
-import { getAttackRange } from "../game/units";
-import { ENEMY_STATS } from "../game/enemyStats";
+import { getAttackRange, getEnemyUnitStats } from "../game/units";
 import { getEffectivePlayerAggroMultiplier } from "../game/equipmentState";
 import { hasStatusEffect, isUnitAlive } from "../combat/combatMath";
 import { isEnemyUntargetable } from "../gameLoop/enemyBehaviors/untargetable";
@@ -32,7 +31,7 @@ import type { Unit, UnitGroup } from "../core/types";
 function getMovementFlags(unit: Unit): { isFlying: boolean; canTraverseWaterTerrain: boolean } {
     const enemyType = unit.team === "enemy" ? unit.enemyType : undefined;
     return {
-        isFlying: !!(enemyType && ENEMY_STATS[enemyType]?.flying === true),
+        isFlying: !!(enemyType && getEnemyUnitStats(unit).flying === true),
         canTraverseWaterTerrain: enemyType === "baby_kraken"
     };
 }
@@ -249,7 +248,7 @@ function getMothersSightTarget(
     if (!broodlingG) return null;
 
     // Check if mother can see ANY player (use mother's aggro range)
-    const motherStats = ENEMY_STATS.brood_mother;
+    const motherStats = getEnemyUnitStats(mother);
     let motherCanSeeAnyPlayer = false;
 
     for (const player of unitsState) {

@@ -21,9 +21,8 @@ import {
     getSkillTextColor
 } from "../../core/constants";
 import { UNIT_DATA, ANCESTOR_SUMMON_ID, VISHAS_EYE_SUMMON_IDS, getEffectiveMaxHp } from "../../game/playerUnits";
-import { getUnitStats } from "../../game/units";
+import { getUnitStats, getEnemyUnitStats } from "../../game/units";
 import { rollChance, rollSkillHit, hasStatusEffect, logTaunt, logTauntMiss, logStunned, logTrapThrown, applyStatusEffect, checkEnemyDefenses, calculateSkillStatBonusBudget, getEffectiveArmor, calculateDamageWithCrit, logAoeHit, logAoeMiss, logCast } from "../combatMath";
-import { ENEMY_STATS } from "../../game/enemyStats";
 import { getUnitRadius, isInRange } from "../../rendering/range";
 import { getAliveUnits } from "../../game/unitQuery";
 import { soundFns } from "../../audio";
@@ -164,7 +163,7 @@ export function executeDebuffSkill(
 
     // Check for front-shield block (debuffs are non-physical, skip block chance)
     if (targetEnemy.enemyType) {
-        const enemyStats = ENEMY_STATS[targetEnemy.enemyType];
+        const enemyStats = getEnemyUnitStats(targetEnemy);
         if (checkEnemyDefenses(enemyStats, targetEnemy.facing, casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z) === "frontShield") {
             soundFns.playBlock();
             addLog(`${casterData.name}'s ${skill.name} is blocked by ${targetData.name}'s shield!`, COLORS.mana);
@@ -737,7 +736,7 @@ export function executeTurnUndeadSkill(
         const enemyG = unitsRef.current[enemy.id];
         if (!enemyG) continue;
         if (isInRange(casterG.position.x, casterG.position.z, enemyG.position.x, enemyG.position.z, getUnitRadius(enemy), aoeRadius)) {
-            const enemyStats = enemy.enemyType ? ENEMY_STATS[enemy.enemyType] : undefined;
+            const enemyStats = enemy.enemyType ? getEnemyUnitStats(enemy) : undefined;
             const isUndead = enemyStats?.monsterType === "undead";
             enemiesInArea.push({ unit: enemy, group: enemyG, isUndead });
         }
@@ -1125,7 +1124,7 @@ export function executeFivePointPalmSkill(
 
     // Defense check
     if (targetEnemy.enemyType) {
-        const enemyStats = ENEMY_STATS[targetEnemy.enemyType];
+        const enemyStats = getEnemyUnitStats(targetEnemy);
         const defense = checkEnemyDefenses(enemyStats, targetEnemy.facing, casterG.position.x, casterG.position.z, targetG.position.x, targetG.position.z, skill.damageType);
         if (defense !== "none") {
             soundFns.playBlock();
@@ -1248,7 +1247,7 @@ export function executeDimMakSkill(
     }
 
     // Check doom immunity (miniboss/boss)
-    const enemyStats = targetEnemy.enemyType ? ENEMY_STATS[targetEnemy.enemyType] : undefined;
+    const enemyStats = targetEnemy.enemyType ? getEnemyUnitStats(targetEnemy) : undefined;
     if (enemyStats && (enemyStats.tier === "miniboss" || enemyStats.tier === "boss")) {
         addLog(`${UNIT_DATA[casterId].name}: ${getUnitStats(targetEnemy).name} is immune to Doom!`, COLORS.logNeutral);
         return false;

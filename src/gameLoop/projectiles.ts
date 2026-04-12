@@ -5,12 +5,11 @@
 import * as THREE from "three";
 import type { Unit, UnitGroup, DamageText, Projectile, EnemyStats, MagicMissileProjectile, TrapProjectile, FireballProjectile, PiercingProjectile, StatusEffect, DamageType, UnitData, SkillOnHitEffect } from "../core/types";
 import { HIT_DETECTION_RADIUS, COLORS, BUFF_TICK_INTERVAL, SUN_STANCE_BONUS_DAMAGE, GLACIAL_WHORL_HIT_RADIUS } from "../core/constants";
-import { getUnitStats, isEnemyData } from "../game/units";
+import { getUnitStats, isEnemyData, getEnemyUnitStats } from "../game/units";
 import { calculateDamageWithCrit, calculateDamageWithOptionalCritChance, getDirectionAndDistance, rollSkillHit, rollDamage, shouldApplyPoison, getEffectiveArmor, logHit, logLifestealHit, logMiss, logPoisoned, logBurning, logAoeHit, logAoeMiss, getDamageColor, logTrapTriggered, calculateStatBonus, applyStatusEffect, checkEnemyDefenses, hasStatusEffect, rollChance, applyChilled, logStunned, logConstricted, logHamstrung } from "../combat/combatMath";
 import { accumulateDelta } from "../core/gameClock";
 import { isBlocked } from "../ai/pathfinding";
 import { isTreeBlocked } from "../game/areas";
-import { ENEMY_STATS } from "../game/enemyStats";
 import { applyDamageToUnit, animateExpandingMesh, buildDamageContext, applyLifesteal, createAnimatedRing } from "../combat/damageEffects";
 import { soundFns } from "../audio";
 import { getUnitById } from "../game/unitQuery";
@@ -631,7 +630,7 @@ export function updateProjectiles(
 
                 // Check for front-shield block (magic missiles have partial block chance)
                 if (attackerUnit.team === "player" && targetUnit.enemyType) {
-                    const enemyStats = ENEMY_STATS[targetUnit.enemyType];
+                    const enemyStats = getEnemyUnitStats(targetUnit);
                     if (
                         checkEnemyDefenses(
                             enemyStats,
@@ -1116,7 +1115,7 @@ export function updateProjectiles(
 
             // Check for enemy defensive abilities (player attacking shielded enemy)
             if (attackerUnit.team === "player" && targetUnit.enemyType) {
-                const enemyStats = ENEMY_STATS[targetUnit.enemyType];
+                const enemyStats = getEnemyUnitStats(targetUnit);
                 const defense = checkEnemyDefenses(
                     enemyStats,
                     targetUnit.facing,

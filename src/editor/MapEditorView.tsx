@@ -227,10 +227,10 @@ export function MapEditorView(props: MapEditorViewProps) {
 
     return (
         <div style={{ display: "flex", height: "100vh", background: "#1a1a2e", color: "#eee" }}>
+            <Tippy content="Save map (Ctrl+S)" placement="bottom" delay={[300, 0]}>
             <button
                 onClick={onSaveMap}
                 disabled={saveStatus === "saving"}
-                title="Save map (Ctrl+S)"
                 style={{
                     position: "fixed",
                     top: 16,
@@ -249,6 +249,7 @@ export function MapEditorView(props: MapEditorViewProps) {
             >
                 {saveStatus === "saving" ? "Saving..." : saveStatus === "saved" ? "Saved!" : saveStatus === "error" ? "Error" : "Save Map"}
             </button>
+            </Tippy>
 
             <div
                 style={{
