@@ -8,7 +8,7 @@ import { COLORS, SUN_STANCE_BONUS_DAMAGE, getDamageTypeColor, getSkillTextColor 
 import { UNIT_DATA, getEffectiveUnitData } from "../../game/playerUnits";
 import { CRIT_MULTIPLIER } from "../../game/statBonuses";
 import { getUnitStats, getEnemyUnitStats } from "../../game/units";
-import { rollChance, rollDamage, calculateDamageWithCrit, rollSkillHit, getEffectiveArmor, logHit, logMiss, logPoisoned, logBurning, logCast, logAoeHit, logAoeMiss, calculateSkillStatBonusBudget, checkEnemyDefenses, hasStatusEffect, getDistributedStatBonus, applyArmor } from "../combatMath";
+import { rollChance, rollDamage, calculateDamageWithCrit, rollSkillHit, getEffectiveArmor, logHit, logMiss, logPoisoned, logBurning, logCast, logAoeHit, calculateSkillStatBonusBudget, checkEnemyDefenses, hasStatusEffect, getDistributedStatBonus, applyArmor } from "../combatMath";
 import { getUnitRadius, isInRange } from "../../rendering/range";
 import { getAliveUnits } from "../../game/unitQuery";
 import { findNearestPassable } from "../../ai/pathfinding";
@@ -627,7 +627,7 @@ export function executeCleaveSkill(
         const dz = enemyG.position.z - casterG.position.z;
         const dot = facingX * dx + facingZ * dz;
         const dist = Math.hypot(dx, dz);
-        if (dist > 0 && Math.acos(Math.min(1, Math.max(-1, dot / dist))) <= coneHalfAngle) {
+        if (dist === 0 || Math.acos(Math.min(1, Math.max(-1, dot / dist))) <= coneHalfAngle) {
             enemiesInArc.push({ unit: enemy, group: enemyG });
         }
     }
@@ -649,6 +649,7 @@ export function executeCleaveSkill(
     };
 
     let hitCount = 0;
+    let missCount = 0;
     let totalDamage = 0;
 
     // Swing animation toward first enemy
@@ -661,7 +662,7 @@ export function executeCleaveSkill(
         const targetData = getUnitStats(enemy);
 
         if (!rollSkillHit(skill, casterData.accuracy, casterUnit)) {
-            addLog(logAoeMiss(casterData.name, skill.name), COLORS.logNeutral);
+            missCount++;
             continue;
         }
 
@@ -697,6 +698,9 @@ export function executeCleaveSkill(
     const skillLogColor = getSkillTextColor(skill.type, skill.damageType);
     if (hitCount > 0) {
         addLog(logAoeHit(casterData.name, skill.name, hitCount, totalDamage), skillLogColor);
+    }
+    if (missCount > 0) {
+        addLog(`${casterData.name}'s ${skill.name} misses ${missCount} target${missCount > 1 ? "s" : ""}.`, COLORS.logNeutral);
     }
 
     return true;

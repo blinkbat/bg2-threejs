@@ -9,7 +9,7 @@ export const isMuted = () => muted;
 export const toggleMute = () => { muted = !muted; return muted; };
 
 export const getAudioCtx = () => {
-    if (!audioCtx) audioCtx = new AudioContext();
+    if (!audioCtx || audioCtx.state === "closed") audioCtx = new AudioContext();
     return audioCtx;
 };
 

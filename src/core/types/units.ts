@@ -341,8 +341,3 @@ export interface EnemyStats {
     enrage?: EnrageConfig;
 }
 
-// =============================================================================
-// TYPE GUARDS
-// =============================================================================
-
-/** Check if an enemy has a front shield (requires EnemyStats) */

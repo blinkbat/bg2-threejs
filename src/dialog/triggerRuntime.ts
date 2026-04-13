@@ -187,6 +187,9 @@ export function isDialogTriggerSatisfied(context: DialogTriggerEvaluationContext
             }
             return false;
         }
+
+        // Unknown condition type — treat as unsatisfied
+        return false;
     }
 
     return true;

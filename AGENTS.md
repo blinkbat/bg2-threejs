@@ -20,6 +20,7 @@
 - **Basic attacks:** do not pre-bake stat bonuses into payloads; apply them at combat or projectile runtime.
 - **Unit rendering:** no per-enemy mesh branches in `src/rendering/scene/units.ts`.
 - **Rendering changes:** run `npm run build` and include a visual verification note.
+- **Testing:** run `npm run test` after every task to catch regressions early. If you change logic covered by existing tests, run the relevant test file first (`npx vitest run tests/<file>.test.ts`) to confirm your understanding, then again after the change. Never skip tests to save time.
 - **Visual style:** no flashy visuals unless explicitly requested.
 
 ## Architecture
@@ -268,8 +269,17 @@ Renderer (scene/updates.ts) reads UnitGroups for fog/transparency/animations
 - Fast: `npm run lint` + `npm run build`
 - Full: `npm run test` (`lint` + `build` + `test:unit`)
 - Unit only: `npm run test:unit`
+- Targeted: `npx vitest run tests/<file>.test.ts` for a single suite
 - Coverage: `npm run test:coverage`
 - Rendering or editor changes: build plus a visual verification note
+
+### When to Run Tests
+
+- **After every completed task** — run `npm run test` before reporting success.
+- **Before committing** — full suite must pass; do not commit with known failures.
+- **When modifying core modules** (`src/core/`, `src/game/`, `src/combat/`, `src/ai/`, `src/gameLoop/`) — run the full suite since these modules are heavily cross-tested.
+- **When changing a function covered by an existing test** — run that specific test file before and after to confirm the change is intentional.
+- **When adding new logic** — check whether a related test file exists and add cases for the new behavior. Test files live in `tests/` and mirror source module names.
 
 ## Change Checklist
 
@@ -277,7 +287,8 @@ Renderer (scene/updates.ts) reads UnitGroups for fog/transparency/animations
 2. Invariants are preserved (ordering, caps, IDs, range checks, behavior patterns).
 3. Module ownership is respected (scene vs updates, editor state vs view vs serialization).
 4. Equipment effects flow through centralized helpers only.
-5. Verification passed.
+5. Existing tests still pass (`npm run test`).
+6. New logic has test coverage if a related test file exists.
 
 ## Anti-Patterns
 

@@ -617,6 +617,10 @@ function buildTreeOcclusionCircle(meshes: THREE.Mesh[]): OcclusionCircle {
         }
     }
 
+    if (meshes.length === 0) {
+        return { x: 0, z: 0, radius: 0.8 };
+    }
+
     _treeUnionBox.makeEmpty();
     for (const mesh of meshes) {
         _treeUnionBox.union(getStableCachedBox(mesh));
