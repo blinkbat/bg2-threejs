@@ -5,6 +5,7 @@ import { getAllSkills, getAvailableSkills } from "../game/playerUnits";
 import { getSkillTextColor } from "../core/constants";
 import { normalizeHotbarSlots, type HotbarAssignments } from "../hooks/hotbarStorage";
 import { useDisplayTime } from "../hooks/useDisplayTime";
+import { SkillDetailsTooltip } from "./SkillDetailsTooltip";
 
 /** Drag data type used for skill-to-hotbar and hotbar-to-hotbar transfers */
 export const SKILL_DRAG_TYPE = "application/x-skill";
@@ -111,13 +112,6 @@ function HotbarSlot({
     };
 
     const skillColor = skill ? getSkillTextColor(skill.type, skill.damageType) : undefined;
-    const abilityLabel = skill
-        ? (skill.name === "Attack"
-            ? "Basic Attack"
-            : skill.isCantrip
-                ? `${skill.kind === "spell" ? "Spell" : "Ability"} Cantrip`
-                : (skill.kind === "spell" ? "Spell" : "Ability"))
-        : "Skill";
 
     const slotClass = [
         "hotbar-slot",
@@ -130,37 +124,57 @@ function HotbarSlot({
 
     const abbrev = skill ? skill.name.slice(0, 3).toUpperCase() : "";
 
-    return (
-        <Tippy
-            content={locked && skill ? (
-                <div className="hotbar-tooltip">
-                    <div className="hotbar-tooltip-name" style={{ color: getSkillTextColor(skill.type, skill.damageType) }}>{skill.name}</div>
-                    <div className="hotbar-tooltip-hint">{abilityLabel}</div>
-                    <div className="hotbar-tooltip-hint" style={{ color: "var(--ui-color-accent-warning)" }}>Not yet learned</div>
-                    <div className="hotbar-tooltip-hint">Drag skills here to assign</div>
-                </div>
-            ) : skill ? (
-                <div className="hotbar-tooltip">
-                    <div className="hotbar-tooltip-name" style={{ color: getSkillTextColor(skill.type, skill.damageType) }}>{skill.name}</div>
-                    <div className="hotbar-tooltip-hint">{abilityLabel}</div>
-                    {skill.manaCost > 0 && <div className="hotbar-tooltip-cost">{skill.manaCost} MP</div>}
-                    {isCantrip && usesLeft !== undefined && (
-                        <div className="hotbar-tooltip-cost">{usesLeft} cantrip uses remaining</div>
-                    )}
-                    {isQueued && <div className="hotbar-tooltip-queued">Queued</div>}
-                    {onCooldown && cooldownRemaining > 0 && (
-                        <div className="hotbar-tooltip-cd">{cooldownRemaining}s cooldown remaining</div>
-                    )}
-                    {silenceBlocksSkill && <div className="hotbar-tooltip-cost" style={{ color: "var(--ui-color-accent-danger)" }}>Blocked by Silence</div>}
-                    <div className="hotbar-tooltip-hint">Press {slotIndex + 1} to use</div>
-                    <div className="hotbar-tooltip-hint">Drag to rearrange · drag off to clear</div>
-                </div>
-            ) : (
-                <div className="hotbar-tooltip">
-                    <div className="hotbar-tooltip-hint">Drag skills here to assign</div>
-                    <div className="hotbar-tooltip-hint">Press {slotIndex + 1} to use</div>
+    const tooltipFooter = skill ? (
+        <>
+            {locked && (
+                <div className="skill-tooltip-row" style={{ color: "var(--ui-color-accent-warning)" }}>
+                    <span className="skill-tooltip-label">Status</span>
+                    <span className="skill-tooltip-value">Not yet learned</span>
                 </div>
             )}
+            {isCantrip && usesLeft !== undefined && (
+                <div className="skill-tooltip-row">
+                    <span className="skill-tooltip-label">Cantrip uses left</span>
+                    <span className="skill-tooltip-value">{usesLeft}</span>
+                </div>
+            )}
+            {isQueued && (
+                <div className="skill-tooltip-row">
+                    <span className="skill-tooltip-label">Queued</span>
+                    <span className="skill-tooltip-value">yes</span>
+                </div>
+            )}
+            {onCooldown && cooldownRemaining > 0 && (
+                <div className="skill-tooltip-row">
+                    <span className="skill-tooltip-label">Cooldown left</span>
+                    <span className="skill-tooltip-value">{cooldownRemaining}s</span>
+                </div>
+            )}
+            {silenceBlocksSkill && (
+                <div className="skill-tooltip-row" style={{ color: "var(--ui-color-accent-danger)" }}>
+                    <span className="skill-tooltip-label">Blocked</span>
+                    <span className="skill-tooltip-value">Silence</span>
+                </div>
+            )}
+        </>
+    ) : null;
+
+    const tooltipHint = skill ? (
+        <div className="hotbar-tooltip-hint">Press {slotIndex + 1} to use · drag to rearrange</div>
+    ) : null;
+
+    const tooltipContent = skill ? (
+        <SkillDetailsTooltip skill={skill} unit={unit} footer={tooltipFooter} hint={tooltipHint} />
+    ) : (
+        <div className="hotbar-tooltip">
+            <div className="hotbar-tooltip-hint">Drag skills here to assign</div>
+            <div className="hotbar-tooltip-hint">Press {slotIndex + 1} to use</div>
+        </div>
+    );
+
+    return (
+        <Tippy
+            content={tooltipContent}
             placement="top"
             delay={[100, 0]}
         >

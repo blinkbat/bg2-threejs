@@ -3,7 +3,6 @@ import {
     THORNS_DURATION,
     THORNS_DAMAGE_MIN,
     THORNS_DAMAGE_MAX,
-    HIGHLAND_DEFENSE_DURATION,
     VISHAS_EYES_ORB_DURATION,
     VISHAS_EYES_ORB_HEAL_RADIUS,
     VISHAS_EYES_ORB_HEAL_RANGE,
@@ -243,7 +242,6 @@ export const SKILLS: Record<string, Skill> = withSkillKinds({
         type: "buff",
         targetType: "self",
         range: 0,
-        duration: HIGHLAND_DEFENSE_DURATION,
         damageType: "physical",
         isCantrip: true,
         maxUses: 1
@@ -420,7 +418,6 @@ export const SKILLS: Record<string, Skill> = withSkillKinds({
         type: "dodge",
         targetType: "unit",
         range: 9,
-        duration: 0,
         damageType: "chaos",
         isCantrip: true,
         maxUses: 2

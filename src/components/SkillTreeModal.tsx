@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import Tippy from "@tippyjs/react";
 import type { Unit, Skill } from "../core/types";
-import { getSkillTextColor, getDamageTypeColor } from "../core/constants";
 import { CORE_PLAYER_IDS, UNIT_DATA } from "../game/playerUnits";
 import { buildEffectiveFormationOrder } from "../game/formationOrder";
 import { getPlayerUnitColor } from "../game/unitColors";
@@ -11,6 +10,7 @@ import { getPortrait } from "./portraitRegistry";
 import { ModalShell } from "./ModalShell";
 import { getClassSkillTree, type SkillTreeNode } from "../game/skillTrees";
 import { SKILL_DRAG_TYPE } from "./SkillHotbar";
+import { SkillDetailsTooltip } from "./SkillDetailsTooltip";
 
 interface SkillTreeModalProps {
     unitId: number;
@@ -27,152 +27,20 @@ function getSkillByName(name: string): Skill | undefined {
     return Object.values(SKILLS).find(s => s.name === name);
 }
 
-function SkillNodeTooltip({ skill }: { skill: Skill }) {
-    const nameColor = getSkillTextColor(skill.type, skill.damageType);
-    const kindLabel = skill.kind === "spell" ? "Spell" : "Ability";
-    const dmgColor = getDamageTypeColor(skill.damageType);
-    const dmgLabel = skill.damageType[0].toUpperCase() + skill.damageType.slice(1);
-
-    return (
-        <div className="skill-tooltip">
-            <div className="skill-tooltip-row">
-                <span className="skill-tooltip-label">{kindLabel}</span>
-                <span className="skill-tooltip-value" style={{ color: nameColor }}>{skill.name}</span>
-            </div>
-            {skill.description && (
-                <div className="skill-tooltip-desc">{skill.description}</div>
-            )}
-            {skill.damageRange && (
-                <div className="skill-tooltip-row">
-                    <span className="skill-tooltip-label">Damage</span>
-                    <span className="skill-tooltip-value" style={{ color: dmgColor }}>{skill.damageRange[0]}-{skill.damageRange[1]} {dmgLabel}</span>
-                </div>
-            )}
-            {skill.healRange && (
-                <div className="skill-tooltip-row">
-                    <span className="skill-tooltip-label">Heal</span>
-                    <span className="skill-tooltip-value" style={{ color: "var(--ui-color-accent-success)" }}>{skill.healRange[0]}-{skill.healRange[1]}</span>
-                </div>
-            )}
-            {skill.shieldAmount !== undefined && (
-                <div className="skill-tooltip-row">
-                    <span className="skill-tooltip-label">Shield</span>
-                    <span className="skill-tooltip-value">{skill.shieldAmount} HP</span>
-                </div>
-            )}
-            {skill.manaCost > 0 && (
-                <div className="skill-tooltip-row">
-                    <span className="skill-tooltip-label">Mana</span>
-                    <span className="skill-tooltip-value" style={{ color: "var(--ui-color-accent-primary-bright)" }}>{skill.manaCost}</span>
-                </div>
-            )}
-            <div className="skill-tooltip-row">
-                <span className="skill-tooltip-label">Cooldown</span>
-                <span className="skill-tooltip-value">{(skill.cooldown / 1000).toFixed(1)}s</span>
-            </div>
-            {skill.range > 0 && (
-                <div className="skill-tooltip-row">
-                    <span className="skill-tooltip-label">Range</span>
-                    <span className="skill-tooltip-value">{skill.range}</span>
-                </div>
-            )}
-            {skill.aoeRadius !== undefined && (
-                <div className="skill-tooltip-row">
-                    <span className="skill-tooltip-label">AoE Radius</span>
-                    <span className="skill-tooltip-value">{skill.aoeRadius}</span>
-                </div>
-            )}
-            {skill.duration !== undefined && (
-                <div className="skill-tooltip-row">
-                    <span className="skill-tooltip-label">Duration</span>
-                    <span className="skill-tooltip-value">{(skill.duration / 1000).toFixed(0)}s</span>
-                </div>
-            )}
-            {skill.hitCount !== undefined && skill.hitCount > 1 && (
-                <div className="skill-tooltip-row">
-                    <span className="skill-tooltip-label">Hits</span>
-                    <span className="skill-tooltip-value">{skill.hitCount}</span>
-                </div>
-            )}
-            {skill.burnChance !== undefined && skill.burnChance > 0 && (
-                <div className="skill-tooltip-row">
-                    <span className="skill-tooltip-label">Burn chance</span>
-                    <span className="skill-tooltip-value" style={{ color: getDamageTypeColor("fire") }}>{skill.burnChance}%</span>
-                </div>
-            )}
-            {skill.poisonChance !== undefined && skill.poisonChance > 0 && (
-                <div className="skill-tooltip-row">
-                    <span className="skill-tooltip-label">Poison chance</span>
-                    <span className="skill-tooltip-value" style={{ color: "var(--ui-color-accent-success)" }}>{skill.poisonChance}%</span>
-                </div>
-            )}
-            {skill.stunChance !== undefined && skill.stunChance > 0 && (
-                <div className="skill-tooltip-row">
-                    <span className="skill-tooltip-label">Stun chance</span>
-                    <span className="skill-tooltip-value">{skill.stunChance}%</span>
-                </div>
-            )}
-            {skill.chillChance !== undefined && skill.chillChance > 0 && (
-                <div className="skill-tooltip-row">
-                    <span className="skill-tooltip-label">Chill chance</span>
-                    <span className="skill-tooltip-value" style={{ color: getDamageTypeColor("cold") }}>{skill.chillChance}%</span>
-                </div>
-            )}
-            {skill.blindChance !== undefined && skill.blindChance > 0 && (
-                <div className="skill-tooltip-row">
-                    <span className="skill-tooltip-label">Blind chance</span>
-                    <span className="skill-tooltip-value">{skill.blindChance}%</span>
-                </div>
-            )}
-            {skill.knockbackDistance !== undefined && (
-                <div className="skill-tooltip-row">
-                    <span className="skill-tooltip-label">Knockback</span>
-                    <span className="skill-tooltip-value">{skill.knockbackDistance}</span>
-                </div>
-            )}
-            {skill.critChanceOverride !== undefined && (
-                <div className="skill-tooltip-row">
-                    <span className="skill-tooltip-label">Crit chance</span>
-                    <span className="skill-tooltip-value">{skill.critChanceOverride}%</span>
-                </div>
-            )}
-            {skill.isCantrip && skill.maxUses !== undefined && (
-                <div className="skill-tooltip-row">
-                    <span className="skill-tooltip-label">Cantrip uses</span>
-                    <span className="skill-tooltip-value">{skill.maxUses}</span>
-                </div>
-            )}
-            {skill.targetType === "ally" && (
-                <div className="skill-tooltip-row">
-                    <span className="skill-tooltip-label">Target</span>
-                    <span className="skill-tooltip-value">Ally</span>
-                </div>
-            )}
-            {skill.targetType === "self" && (
-                <div className="skill-tooltip-row">
-                    <span className="skill-tooltip-label">Target</span>
-                    <span className="skill-tooltip-value">Self</span>
-                </div>
-            )}
-            {skill.flavor && (
-                <div className="skill-tooltip-flavor">{skill.flavor}</div>
-            )}
-        </div>
-    );
-}
-
 function NodeCard({
     node,
     learned,
     available,
     prereqMet,
     onLearn,
+    unit,
 }: {
     node: SkillTreeNode;
     learned: boolean;
     available: boolean;
     prereqMet: boolean;
     onLearn: () => void;
+    unit?: Unit;
 }) {
     // A node is implemented if it's a skill with a skillName referencing an existing SKILLS entry
     const implemented = node.type === "skill" && !!node.skillName;
@@ -220,7 +88,7 @@ function NodeCard({
     );
 
     const tooltipContent = skill
-        ? <SkillNodeTooltip skill={skill} />
+        ? <SkillDetailsTooltip skill={skill} unit={unit} />
         : node.description
             ? <div className="skill-tooltip"><div className="skill-tooltip-desc">{node.description}</div></div>
             : null;
@@ -373,6 +241,7 @@ export function SkillTreeModal({
                                         available={available}
                                         prereqMet={prereqMet}
                                         onLearn={() => handleLearnNode(node.id)}
+                                        unit={unit}
                                     />
                                 </div>
                             );

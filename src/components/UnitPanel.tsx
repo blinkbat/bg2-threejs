@@ -7,6 +7,7 @@ import { getTotalCritChance } from "../combat/combatMath";
 import { COLORS } from "../core/constants";
 import { useDisplayTime } from "../hooks/useDisplayTime";
 import { getPortrait } from "./portraitRegistry";
+import { resolveStatBonuses, resolveStatusEffectDetails } from "../game/statDisplay";
 
 const PORTRAIT_POS: Record<string, string> = {
     Cleric: "35% bottom",
@@ -121,46 +122,12 @@ export function UnitPanel({
     );
 }
 
-const STAT_INFO: Record<keyof CharacterStats, { label: string; name: string; color: string; bonuses: { desc: string; rate: string }[] }> = {
-    strength: {
-        label: "STR",
-        name: "Strength",
-        color: "var(--ui-color-accent-danger)",
-        bonuses: [{ desc: "Physical Damage", rate: "+1 per 2 pts" }]
-    },
-    dexterity: {
-        label: "DEX",
-        name: "Dexterity",
-        color: "var(--ui-color-accent-success)",
-        bonuses: [
-            { desc: "Hit Chance", rate: "+1% per 2 pts" },
-            { desc: "Crit Chance", rate: "+1% per 2 pts" }
-        ]
-    },
-    vitality: {
-        label: "VIT",
-        name: "Vitality",
-        color: "var(--ui-color-accent-warning)",
-        bonuses: [{ desc: "Max HP", rate: "+1 per pt" }]
-    },
-    intelligence: {
-        label: "INT",
-        name: "Intelligence",
-        color: "var(--ui-color-accent-arcane)",
-        bonuses: [
-            { desc: "Max Mana", rate: "+1 per pt" },
-            { desc: "Magic Damage", rate: "+1 per 2 pts" }
-        ]
-    },
-    faith: {
-        label: "FAI",
-        name: "Faith",
-        color: "var(--ui-color-accent-gold)",
-        bonuses: [
-            { desc: "Holy Damage", rate: "+1 per 2 pts" },
-            { desc: "Healing Power", rate: "+1 per 2 pts" }
-        ]
-    }
+const STAT_INFO: Record<keyof CharacterStats, { label: string; name: string; color: string }> = {
+    strength: { label: "STR", name: "Strength", color: "var(--ui-color-accent-danger)" },
+    dexterity: { label: "DEX", name: "Dexterity", color: "var(--ui-color-accent-success)" },
+    vitality: { label: "VIT", name: "Vitality", color: "var(--ui-color-accent-warning)" },
+    intelligence: { label: "INT", name: "Intelligence", color: "var(--ui-color-accent-arcane)" },
+    faith: { label: "FAI", name: "Faith", color: "var(--ui-color-accent-gold)" },
 };
 
 /** Effect metadata for display */
@@ -208,6 +175,7 @@ function EffectsDisplay({ unit, displayTime }: { unit: Unit; displayTime: number
                 const displayName = effect.type.replace(/_/g, " ");
                 const now = displayTime;
 
+                const mechanicalDetails = resolveStatusEffectDetails(effect);
                 return (
                     <Tippy
                         key={i}
@@ -220,6 +188,15 @@ function EffectsDisplay({ unit, displayTime }: { unit: Unit; displayTime: number
                                 <div className="effect-tooltip-time">
                                     {effect.type === "highland_defense" ? "Until exhausted" : `${remainingSec}s remaining`}
                                 </div>
+                                {mechanicalDetails.map((detail, di) => (
+                                    <div
+                                        key={`mech-${di}`}
+                                        className="effect-tooltip-extra"
+                                        style={{ color: info.color, opacity: 0.95 }}
+                                    >
+                                        {detail.label}: {detail.value}
+                                    </div>
+                                ))}
                                 {effect.type === "energy_shield" && effect.shieldAmount !== undefined && (
                                     <div className="effect-tooltip-extra" style={{ color: info.color }}>
                                         {effect.shieldAmount} HP remaining
@@ -285,6 +262,7 @@ function StatusTab({ unit, effectiveData, onToggleAI, unitId, onIncrementStat, d
     // Stat points
     const statPoints = unit.statPoints ?? 0;
     const stats = unit.stats ?? { strength: 0, dexterity: 0, vitality: 0, intelligence: 0, faith: 0 };
+    const resolvedBonuses = resolveStatBonuses(unit);
 
     return (
         <div style={{ fontSize: 13 }}>
@@ -302,14 +280,6 @@ function StatusTab({ unit, effectiveData, onToggleAI, unitId, onIncrementStat, d
 
             <div className="stat-grid">
                 <div className="card">
-                    <span className="text-muted">Accuracy</span>
-                    <span className="float-right">{effectiveData.accuracy}%</span>
-                </div>
-                <div className="card">
-                    <span className="text-muted">Crit</span>
-                    <span className="float-right">{getTotalCritChance(unit)}%</span>
-                </div>
-                <div className="card">
                     <span className="text-muted">Armor</span>
                     <span className="float-right" style={isShielded ? { color: COLORS.shieldedText } : undefined}>
                         {displayArmor}
@@ -319,6 +289,14 @@ function StatusTab({ unit, effectiveData, onToggleAI, unitId, onIncrementStat, d
                 <div className="card">
                     <span className="text-muted">Damage</span>
                     <span className="float-right">{effectiveData.damage[0]}-{effectiveData.damage[1]}</span>
+                </div>
+                <div className="card">
+                    <span className="text-muted">Critical</span>
+                    <span className="float-right">{getTotalCritChance(unit)}%</span>
+                </div>
+                <div className="card">
+                    <span className="text-muted">Accuracy</span>
+                    <span className="float-right">{effectiveData.accuracy}%</span>
                 </div>
             </div>
 
@@ -334,6 +312,7 @@ function StatusTab({ unit, effectiveData, onToggleAI, unitId, onIncrementStat, d
                         const info = STAT_INFO[statKey];
                         const value = stats[statKey];
                         const canIncrement = statPoints > 0 && onIncrementStat;
+                        const bonuses = resolvedBonuses[statKey];
                         return (
                             <Tippy
                                 key={statKey}
@@ -341,10 +320,19 @@ function StatusTab({ unit, effectiveData, onToggleAI, unitId, onIncrementStat, d
                                     <div className="stat-tooltip">
                                         <div className="stat-tooltip-header" style={{ color: info.color }}>{info.name}</div>
                                         <div className="stat-tooltip-bonuses">
-                                            {info.bonuses.map((bonus, i) => (
+                                            {bonuses.map((bonus, i) => (
                                                 <div key={i} className="stat-tooltip-row">
                                                     <span className="stat-tooltip-label">{bonus.desc}</span>
-                                                    <span className="stat-tooltip-rate">{bonus.rate}</span>
+                                                    <span className="stat-tooltip-rate">
+                                                        {bonus.current ? (
+                                                            <>
+                                                                <span style={{ color: "var(--ui-color-accent-success)" }}>{bonus.current}</span>
+                                                                <span style={{ opacity: 0.55 }}> &middot; {bonus.rate}</span>
+                                                            </>
+                                                        ) : (
+                                                            <span style={{ opacity: 0.75 }}>{bonus.rate}</span>
+                                                        )}
+                                                    </span>
                                                 </div>
                                             ))}
                                         </div>

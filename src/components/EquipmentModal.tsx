@@ -12,6 +12,7 @@ import { getItem } from "../game/items";
 import { getPlayerUnitColor } from "../game/unitColors";
 import { getPortrait } from "./portraitRegistry";
 import { ModalShell } from "./ModalShell";
+import { resolveEquipDiff, type StatDelta } from "../game/statDisplay";
 
 interface EquipmentModalProps {
     unitId: number;
@@ -126,10 +127,30 @@ function getItemTooltipLines(item: Item): TooltipLine[] {
     return lines;
 }
 
-export function ItemTooltip({ item }: { item: Item }) {
+interface ItemTooltipProps {
+    item: Item;
+    /** If provided, diff-vs-currently-equipped is rendered after the item's stats. */
+    diff?: StatDelta[];
+    /** Header caption, e.g. "EQUIPPED" for the current slot item. */
+    heading?: string;
+}
+
+function deltaColor(sign: StatDelta["sign"]): string | undefined {
+    if (sign === "positive") return "var(--ui-color-accent-success)";
+    if (sign === "negative") return "var(--ui-color-accent-danger)";
+    return undefined;
+}
+
+export function ItemTooltip({ item, diff, heading }: ItemTooltipProps) {
     const lines = getItemTooltipLines(item);
     return (
         <div className="skill-tooltip">
+            {heading && (
+                <div className="skill-tooltip-row">
+                    <span className="skill-tooltip-label">{heading}</span>
+                    <span className="skill-tooltip-value">{item.name}</span>
+                </div>
+            )}
             {item.description && (
                 <div className="skill-tooltip-desc">{item.description}</div>
             )}
@@ -141,6 +162,26 @@ export function ItemTooltip({ item }: { item: Item }) {
                     </span>
                 </div>
             ))}
+            {diff && diff.length > 0 && (
+                <>
+                    <div className="skill-tooltip-row" style={{ opacity: 0.7, marginTop: 6 }}>
+                        <span className="skill-tooltip-label">Equip change</span>
+                        <span className="skill-tooltip-value">vs current</span>
+                    </div>
+                    {diff.map((d, i) => (
+                        <div key={`diff-${i}`} className="skill-tooltip-row">
+                            <span className="skill-tooltip-label">{d.label}</span>
+                            <span className="skill-tooltip-value" style={{ color: deltaColor(d.sign) }}>{d.deltaText}</span>
+                        </div>
+                    ))}
+                </>
+            )}
+            {diff && diff.length === 0 && (
+                <div className="skill-tooltip-row" style={{ opacity: 0.55 }}>
+                    <span className="skill-tooltip-label">Equip change</span>
+                    <span className="skill-tooltip-value">no stat change</span>
+                </div>
+            )}
         </div>
     );
 }
@@ -442,10 +483,11 @@ export function EquipmentModal({
 
                                     {!selectedSlotDisabled && equippableItems.map(({ entry, item }) => {
                                         const alreadyEquipped = selectedItemId === entry.itemId;
+                                        const diff = alreadyEquipped ? undefined : resolveEquipDiff(unitId, entry.itemId, selectedSlot);
                                         return (
                                             <Tippy
                                                 key={entry.itemId}
-                                                content={<ItemTooltip item={item} />}
+                                                content={<ItemTooltip item={item} diff={diff} />}
                                                 placement="left"
                                                 delay={[0, 0]}
                                             >

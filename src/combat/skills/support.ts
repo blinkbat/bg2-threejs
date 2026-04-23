@@ -11,6 +11,7 @@ import {
     QI_DRAIN_DURATION,
     QI_DRAIN_TICK_INTERVAL,
     REGEN_TICK_INTERVAL,
+    HIGHLAND_DEFENSE_DURATION,
     HIGHLAND_DEFENSE_INTERCEPT_CAP,
     getSkillTextColor
 } from "../../core/constants";
@@ -455,6 +456,13 @@ interface BuffTemplate {
     logColor?: string;
     extraEffectFields?: Partial<StatusEffect>;
     aoe?: boolean;
+    /**
+     * Status-effect duration in ms. Used when the buff's expiry isn't
+     * time-based (e.g. Highland Defense ends when its intercept pool drains),
+     * so the skill definition itself carries no user-facing duration.
+     * When set, takes precedence over skill.duration.
+     */
+    effectDuration?: number;
 }
 
 /**
@@ -472,7 +480,7 @@ function applyBuffFromTemplate(
     const casterG = unitsRef.current[casterId];
     if (!casterG) return false;
 
-    const { duration } = skill;
+    const duration = template.effectDuration ?? skill.duration;
     if (!duration) return false;
 
     consumeSkill(ctx, casterId, skill);
@@ -1083,6 +1091,9 @@ export function executeHighlandDefenseSkill(
         logMessage: (name, skillName) => `${name} channels ${skillName}!`,
         logColor: COLORS.highlandDefenseText,
         extraEffectFields: { interceptRemaining: HIGHLAND_DEFENSE_INTERCEPT_CAP, interceptCooldownEnd: 0 },
+        // Highland Defense ends when its intercept pool drains, not by time —
+        // the skill definition itself has no user-facing duration.
+        effectDuration: HIGHLAND_DEFENSE_DURATION,
     });
 }
 
