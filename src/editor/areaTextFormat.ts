@@ -154,6 +154,8 @@ const DECORATION_TYPES: readonly DecorationType[] = [
     "warrior_statue",
     "robed_statue",
     "beast_statue",
+    "wall_vines",
+    "tapestry",
 ];
 const DECORATION_TYPE_SET = new Set<string>(DECORATION_TYPES);
 // === LOCATIONS ===

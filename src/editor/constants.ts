@@ -89,6 +89,8 @@ const PROP_BRUSHES: PropBrushDef[] = [
     { char: "U", label: "War Statue", color: "#9b9388", decorationType: "warrior_statue" },
     { char: "V", label: "Robed Stat", color: "#8e897f", decorationType: "robed_statue" },
     { char: "Z", label: "Beast Stat", color: "#857d73", decorationType: "beast_statue" },
+    { char: "v", label: "Wall Vines", color: "#3a6a2a", decorationType: "wall_vines" },
+    { char: "t", label: "Tapestry", color: "#8a2a2a", decorationType: "tapestry" },
 ];
 
 const ENTITY_BRUSHES: BrushDef[] = [

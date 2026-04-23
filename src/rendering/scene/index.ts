@@ -79,6 +79,8 @@ export {
 // Re-export unit functions
 export { addUnitToScene } from "./units";
 import { buildDecorationsScene } from "./decorations";
+import { buildWallAttachments } from "./wallAttachments";
+import type { WallAttachmentMesh } from "./types";
 import { createUnitSceneGroup, ensureTexturesLoaded } from "./units";
 
 function attachUserData<TObject extends THREE.Object3D, TUserData extends Record<string, unknown>>(
@@ -1242,6 +1244,16 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         wallMeshes.push(mesh);
     });
 
+    // Wall-attached decorations (vines, tapestries) - hung against visible wall faces.
+    const wallAttachments: WallAttachmentMesh[] = buildWallAttachments(
+        scene,
+        area.decorations,
+        wallMeshes,
+        computed.blocked,
+        area.gridWidth,
+        area.gridHeight
+    );
+
     // Doors - clickable transitions to other areas
     const doorMeshes: DoorMesh[] = [];
     area.transitions.forEach(transition => {
@@ -1668,6 +1680,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         unitOriginalColors,
         maxHp,
         wallMeshes,
+        wallAttachments,
         treeMeshes,
         fogOccluderMeshes,
         columnMeshes,

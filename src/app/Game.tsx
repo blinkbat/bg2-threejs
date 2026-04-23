@@ -50,6 +50,7 @@ import {
     type PlaytestSettings
 } from "../hooks/localStorage";
 import { loadFormationOrder, saveFormationOrder } from "../hooks/formationStorage";
+import { recordKnownEnemy } from "../hooks/bestiaryStorage";
 import type { WaystoneDestination } from "../components/WaystoneTravelModal";
 import { captureFogVisibilityMemory } from "../game/fogMemory";
 import { buildAreaDialogDefinitionMap } from "../dialog/areaDialogs";
@@ -69,7 +70,7 @@ import { useGameDebugControls } from "./useGameDebugControls";
 type AutoPauseReason = "ally_killed" | "ally_near_death" | "enemy_sighted";
 
 export function Game({
-    onRestart, onAreaTransition, onShowControls, onShowHelp, onShowGlossary, onCloseInfoModal, infoModalOpen, saveLoadOpen,
+    onRestart, onAreaTransition, onShowControls, onShowHelp, onShowGlossary, onShowBestiary, onCloseInfoModal, infoModalOpen, saveLoadOpen,
     menuOpen, jukeboxOpen,
     persistedPlayers, spawnPoint, spawnDirection, onSaveClick, onLoadClick,
     onOpenMenu, onCloseMenu, onOpenJukebox, onCloseJukebox, onOpenEquipment, onCloseEquipment,
@@ -1747,6 +1748,10 @@ export function Game({
             });
         }
 
+        for (const u of newlyDeadUnits) {
+            if (u.enemyType) recordKnownEnemy(u.enemyType);
+        }
+
         if (sceneState.scene) {
             for (const u of newlyDeadUnits) {
                 if (!isEnemyPermanentDeath(u)) continue;
@@ -2414,6 +2419,7 @@ export function Game({
             onSaveClick={onSaveClick}
             onShowControls={onShowControls}
             onShowGlossary={onShowGlossary}
+            onShowBestiary={onShowBestiary}
             onShowHelp={onShowHelp}
             openedChests={openedChests}
             otherModalOpen={otherModalOpen}

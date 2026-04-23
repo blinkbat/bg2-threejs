@@ -80,6 +80,8 @@ export function DecorationEditPopup({ decoration, onSave, onClose }: DecorationE
                     <option value="warrior_statue">warrior_statue</option>
                     <option value="robed_statue">robed_statue</option>
                     <option value="beast_statue">beast_statue</option>
+                    <option value="wall_vines">wall_vines</option>
+                    <option value="tapestry">tapestry</option>
                 </select>
             </label>
             <label style={{ display: "block", marginBottom: 10 }}>

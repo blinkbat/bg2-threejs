@@ -145,6 +145,7 @@ interface GameRenderLayerProps {
     onSaveClick: (options?: { chainAction?: MenuChainAction }) => void;
     onShowControls: () => void;
     onShowGlossary: () => void;
+    onShowBestiary: () => void;
     onShowHelp: () => void;
     skillTreeModalOpen: boolean;
     skillTreeModalUnitId: number | null;
@@ -265,6 +266,7 @@ export function GameRenderLayer({
     onSaveClick,
     onShowControls,
     onShowGlossary,
+    onShowBestiary,
     onShowHelp,
     openedChests,
     otherModalOpen,
@@ -513,6 +515,7 @@ export function GameRenderLayer({
                 onShowControls={onShowControls}
                 onShowHelp={onShowHelp}
                 onShowGlossary={onShowGlossary}
+                onShowBestiary={onShowBestiary}
                 onRestart={onRestart}
                 onSaveClick={onSaveClick}
                 onLoadClick={onLoadClick}

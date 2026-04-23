@@ -6,6 +6,13 @@ import * as THREE from "three";
 import type { AreaTransition, SecretDoor, Waystone } from "../../game/areas";
 import type { UnitGroup, FogTexture } from "../../core/types";
 
+export interface WallAttachmentMesh extends THREE.Mesh {
+    userData: {
+        parentWall: THREE.Mesh;
+        baseOpacity: number;
+    };
+}
+
 export interface DoorMesh extends THREE.Mesh {
     userData: {
         transition: AreaTransition;
@@ -57,6 +64,7 @@ export interface SceneRefs {
     unitOriginalColors: Record<number, THREE.Color>;
     maxHp: Record<number, number>;
     wallMeshes: THREE.Mesh[];
+    wallAttachments: WallAttachmentMesh[];  // Vines/tapestries hung on wall faces
     treeMeshes: THREE.Mesh[];  // Tree foliage meshes for transparency
     fogOccluderMeshes: THREE.Mesh[];  // Tall non-tree meshes clipped under unexplored fog
     columnMeshes: THREE.Mesh[];  // Column meshes for transparency

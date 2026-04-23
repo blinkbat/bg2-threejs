@@ -208,7 +208,7 @@ export interface TreeLocation {
 export interface Decoration {
     x: number;
     z: number;
-    type: "column" | "broken_column" | "broken_wall" | "stalactite" | "stalagmite" | "geyser" | "rock" | "small_rock" | "bones" | "crystals" | "large_crystals" | "mushroom" | "small_mushroom" | "weeds" | "small_weeds" | "fern" | "small_fern" | "bookshelf" | "bar" | "chair" | "bed" | "warrior_statue" | "robed_statue" | "beast_statue";
+    type: "column" | "broken_column" | "broken_wall" | "stalactite" | "stalagmite" | "geyser" | "rock" | "small_rock" | "bones" | "crystals" | "large_crystals" | "mushroom" | "small_mushroom" | "weeds" | "small_weeds" | "fern" | "small_fern" | "bookshelf" | "bar" | "chair" | "bed" | "warrior_statue" | "robed_statue" | "beast_statue" | "wall_vines" | "tapestry";
     rotation?: number;  // Rotation in radians (for broken walls)
     size?: number;      // Scale multiplier
 }

@@ -6,6 +6,7 @@ import { Game } from "./app/Game";
 import type { PersistedPlayer } from "./app/gameSetup";
 import type { SaveableGameState } from "./app/gameShared";
 import { clearPathCache, invalidateDynamicObstacles } from "./ai/pathfinding";
+import { BestiaryModal } from "./components/BestiaryModal";
 import { ControlsModal } from "./components/ControlsModal";
 import { GlossaryModal } from "./components/GlossaryModal";
 import { HelpModal } from "./components/HelpModal";
@@ -55,7 +56,7 @@ const AREA_FADE_DURATION = 300; // ms for area transition fade in/out
 const STARTUP_SCENE_FADE_IN_DURATION = 1400; // ms for initial black-to-scene fade
 const STARTUP_FANFARE_LEAD_IN_MS = 550;
 type StartupPhase = "title" | "booting" | "running";
-type InfoModalKind = "controls" | "help" | "glossary";
+type InfoModalKind = "controls" | "help" | "glossary" | "bestiary";
 
 function shouldSkipGameIntro(): boolean {
     return loadPlaytestSettings().skipDialogs;
@@ -179,6 +180,11 @@ export default function App() {
         setOpenInfoModal("glossary");
     }, []);
 
+    const handleShowBestiary = useCallback(() => {
+        pendingChainActionRef.current = null;
+        setOpenInfoModal("bestiary");
+    }, []);
+
     const handleCloseInfoModal = useCallback(() => {
         pendingChainActionRef.current = null;
         setOpenInfoModal(null);
@@ -195,6 +201,11 @@ export default function App() {
     }, [executePendingChain]);
 
     const handleCloseGlossaryModal = useCallback(() => {
+        setOpenInfoModal(null);
+        executePendingChain();
+    }, [executePendingChain]);
+
+    const handleCloseBestiaryModal = useCallback(() => {
         setOpenInfoModal(null);
         executePendingChain();
     }, [executePendingChain]);
@@ -489,7 +500,7 @@ export default function App() {
             {gameMounted && (
                 <Game
                     key={gameKey} onRestart={handleFullRestart} onAreaTransition={handleAreaTransition}
-                    onShowControls={handleShowControls} onShowHelp={handleShowHelp} onShowGlossary={handleShowGlossary} onCloseInfoModal={handleCloseInfoModal}
+                    onShowControls={handleShowControls} onShowHelp={handleShowHelp} onShowGlossary={handleShowGlossary} onShowBestiary={handleShowBestiary} onCloseInfoModal={handleCloseInfoModal}
                     infoModalOpen={openInfoModal !== null} saveLoadOpen={showSaveLoad}
                     menuOpen={menuOpen} jukeboxOpen={jukeboxOpen}
                     persistedPlayers={persistedPlayers} spawnPoint={spawnPoint} spawnDirection={spawnDirection}
@@ -511,6 +522,7 @@ export default function App() {
             {gameMounted && openInfoModal === "controls" && <ControlsModal onClose={handleCloseInfoModal} onConfirm={handleConfirmControlsModal} />}
             {gameMounted && openInfoModal === "help" && <HelpModal onClose={handleCloseHelpModal} />}
             {gameMounted && openInfoModal === "glossary" && <GlossaryModal onClose={handleCloseGlossaryModal} />}
+            {gameMounted && openInfoModal === "bestiary" && <BestiaryModal onClose={handleCloseBestiaryModal} />}
             {showSaveLoad && (
                 <SaveLoadModal
                     mode={saveLoadMode}

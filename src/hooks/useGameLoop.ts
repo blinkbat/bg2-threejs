@@ -665,7 +665,7 @@ export function useGameLoop({
         const {
             scene, camera, renderer, flames, candleLights, fogTexture, fogMesh, moveMarker,
             rangeIndicator, unitGroups, selectRings, targetRings, shieldIndicators,
-            unitMeshes, unitOriginalColors, maxHp, wallMeshes, treeMeshes, fogOccluderMeshes,
+            unitMeshes, unitOriginalColors, maxHp, wallMeshes, wallAttachments, treeMeshes, fogOccluderMeshes,
             columnMeshes, columnGroups, billboards, candleMeshes, waterMesh, rainOverlay,
             hpBarGroups
         } = sceneState;
@@ -1124,7 +1124,7 @@ export function useGameLoop({
 
             // Wall/tree/candle transparency
             sectionStart = performance.now();
-            updateWallTransparency(camera, wallMeshes, unitGroups, currentUnits, treeMeshes, columnMeshes, columnGroups, candleMeshes, flames);
+            updateWallTransparency(camera, wallMeshes, unitGroups, currentUnits, treeMeshes, columnMeshes, columnGroups, candleMeshes, flames, wallAttachments);
             const wallMs = performance.now() - sectionStart;
 
             // Light LOD

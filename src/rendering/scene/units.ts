@@ -332,6 +332,13 @@ function resolveEnemySpriteTemplate(unit: Unit): SpriteTemplate | undefined {
     return ENEMY_SPRITE_TEMPLATES[unit.enemyType];
 }
 
+export function getEnemySpriteTintHex(enemyType: string): string | null {
+    const key = enemyType === "giant_amoeba" ? "giant_amoeba_lg" : enemyType;
+    const template = ENEMY_SPRITE_TEMPLATES[key];
+    if (!template) return null;
+    return `#${template.color.toString(16).padStart(6, "0")}`;
+}
+
 function toSpriteConfig(template: SpriteTemplate | undefined): SpriteConfig | undefined {
     if (!template) return undefined;
     const { textureKey, ...rest } = template;

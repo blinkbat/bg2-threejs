@@ -11,6 +11,7 @@ import {
     Volume2,
     VolumeX,
     HelpCircle,
+    ScrollText,
     X
 } from "lucide-react";
 import { toggleMute, isMuted } from "../audio";
@@ -22,6 +23,7 @@ interface MenuModalProps {
     onShowControls: () => void;
     onShowHelp: () => void;
     onShowGlossary: () => void;
+    onShowBestiary: () => void;
     onRestart: () => void;
     onSaveClick: () => void;
     onLoadClick: () => void;
@@ -36,6 +38,7 @@ export function MenuModal({
     onShowControls,
     onShowHelp,
     onShowGlossary,
+    onShowBestiary,
     onRestart,
     onSaveClick,
     onLoadClick,
@@ -73,6 +76,11 @@ export function MenuModal({
 
     const handleGlossary = () => {
         onShowGlossary();
+        onClose();
+    };
+
+    const handleBestiary = () => {
+        onShowBestiary();
         onClose();
     };
 
@@ -120,6 +128,10 @@ export function MenuModal({
                         <button className="menu-btn" onClick={handleGlossary}>
                             <BookOpen size={18} />
                             <span>Glossary</span>
+                        </button>
+                        <button className="menu-btn" onClick={handleBestiary}>
+                            <ScrollText size={18} />
+                            <span>Bestiary</span>
                         </button>
                     </div>
                 </div>

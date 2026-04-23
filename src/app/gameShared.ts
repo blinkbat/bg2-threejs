@@ -36,6 +36,7 @@ export interface GameProps {
     onShowControls: (options?: { chainAction?: MenuChainAction }) => void;
     onShowHelp: (options?: { chainAction?: MenuChainAction }) => void;
     onShowGlossary: (options?: { chainAction?: MenuChainAction }) => void;
+    onShowBestiary: () => void;
     onCloseInfoModal: () => void;
     infoModalOpen: boolean;
     saveLoadOpen: boolean;

@@ -30,6 +30,7 @@ interface HUDProps {
     onShowControls: () => void;
     onShowHelp: () => void;
     onShowGlossary: () => void;
+    onShowBestiary: () => void;
     onRestart: () => void;
     onSaveClick: () => void;
     onLoadClick: () => void;
@@ -73,6 +74,7 @@ export const HUD = memo(function HUD({
     onShowControls,
     onShowHelp,
     onShowGlossary,
+    onShowBestiary,
     onRestart,
     onSaveClick,
     onLoadClick,
@@ -478,6 +480,7 @@ export const HUD = memo(function HUD({
                     onShowControls={onShowControls}
                     onShowHelp={onShowHelp}
                     onShowGlossary={onShowGlossary}
+                    onShowBestiary={onShowBestiary}
                     onRestart={onRestart}
                     onSaveClick={onSaveClick}
                     onLoadClick={onLoadClick}

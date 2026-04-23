@@ -848,7 +848,8 @@ export function updateWallTransparency(
     columnMeshes?: THREE.Mesh[],
     columnGroups?: THREE.Mesh[][],
     candleMeshes?: THREE.Mesh[],
-    flameMeshes?: THREE.Mesh[]
+    flameMeshes?: THREE.Mesh[],
+    wallAttachments?: THREE.Mesh[]
 ): void {
     let occlusionRecomputedThisFrame = false;
     const qCameraX = Math.round(camera.position.x * OCCLUSION_CAMERA_QUANT);
@@ -1033,6 +1034,21 @@ export function updateWallTransparency(
             syncMaterialTransparency(mat, targetOpacity, mat.opacity);
         }
         wallOpacityTransitionsActive = nextWallTransitionsActive;
+
+        // Sync wall-attached decorations (vines, tapestries) to their parent wall's opacity and visibility.
+        if (wallAttachments) {
+            for (const attachment of wallAttachments) {
+                const parent = attachment.userData.parentWall as THREE.Mesh | undefined;
+                if (!parent) continue;
+                attachment.visible = parent.visible;
+                const parentMat = parent.material as THREE.MeshStandardMaterial;
+                const mat = attachment.material as THREE.MeshStandardMaterial;
+                const baseOpacity = (attachment.userData.baseOpacity as number | undefined) ?? 1;
+                const targetOpacity = parentMat.opacity * baseOpacity;
+                syncMaterialTransparency(mat, targetOpacity, mat.opacity);
+                mat.opacity = targetOpacity;
+            }
+        }
     }
 
     // Update tree opacities if provided

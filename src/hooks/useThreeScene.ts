@@ -9,6 +9,7 @@ import { getCurrentArea, getCurrentAreaId } from "../game/areas";
 import type { Unit, FogTexture, Projectile, SwingAnimation, DamageText, UnitGroup, SanctuaryTile, HolyTile, SmokeTile, FireTile } from "../core/types";
 import type { AcidTile, LootBag } from "../core/types";
 import { createScene, updateChestStates, updateCamera, type DoorMesh, type WaystoneMesh, type SecretDoorMesh, type ChestMeshData } from "../rendering/scene";
+import type { WallAttachmentMesh } from "../rendering/scene/types";
 import { resetUpdateCaches } from "../rendering/scene/updates";
 import { disposeLoadedTextures } from "../rendering/scene/units";
 import { resetFogCache, resetSpriteFacing, clearChargeAttacks, clearFireBreaths, clearCurses, clearGlares, clearLeaps, clearTentacles, clearShadePhases, clearSubmergedKrakens, resetLootBagIds, resetProjectileState, resetAllEnemyActionCooldowns } from "../gameLoop";
@@ -47,6 +48,7 @@ export interface ThreeSceneState {
 
     // Environment
     wallMeshes: THREE.Mesh[];
+    wallAttachments: WallAttachmentMesh[];
     treeMeshes: THREE.Mesh[];
     fogOccluderMeshes: THREE.Mesh[];
     columnMeshes: THREE.Mesh[];
@@ -133,6 +135,7 @@ function createEmptySceneState(): ThreeSceneState {
         unitOriginalColors: {},
         maxHp: {},
         wallMeshes: [],
+        wallAttachments: [],
         treeMeshes: [],
         fogOccluderMeshes: [],
         columnMeshes: [],
@@ -355,6 +358,7 @@ export function useThreeScene({
             unitOriginalColors: sceneRefs.unitOriginalColors,
             maxHp: sceneRefs.maxHp,
             wallMeshes: sceneRefs.wallMeshes,
+            wallAttachments: sceneRefs.wallAttachments,
             treeMeshes: sceneRefs.treeMeshes,
             fogOccluderMeshes: sceneRefs.fogOccluderMeshes,
             columnMeshes: sceneRefs.columnMeshes,
