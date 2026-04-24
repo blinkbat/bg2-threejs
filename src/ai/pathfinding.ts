@@ -495,7 +495,7 @@ function setCachedPath(
     // Prune old entries if cache is too large
     if (pathCache.size >= PATH_CACHE_MAX_SIZE) {
         const oldestKey = pathCache.keys().next().value;
-        if (oldestKey) pathCache.delete(oldestKey);
+        if (oldestKey !== undefined) pathCache.delete(oldestKey);
     }
 
     const key = getPathCacheKey(sx, sz, ex, ez, flying, canTraverseWaterTerrain);
@@ -707,4 +707,3 @@ export function findPath(
     }
     return null;
 }
-

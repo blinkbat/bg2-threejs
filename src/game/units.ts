@@ -1,6 +1,7 @@
 import type { UnitData, EnemyStats, Unit } from "../core/types";
 import { getEffectiveUnitData } from "./playerUnits";
 import { ENEMY_STATS, getAmoebaMaxHpForSplitCount } from "./enemyStats";
+import { getEquipmentStateRevision } from "./equipmentState";
 
 // =============================================================================
 // SHARED HELPERS
@@ -17,9 +18,15 @@ const DEFAULT_MELEE_RANGE = 1.55;
 
 const statsCache: Map<string, UnitData | EnemyStats> = new Map();
 
+function getPlayerStatsCacheSignature(unit: Unit): string {
+    const stats = unit.stats;
+    if (!stats) return "base";
+    return `${stats.strength}:${stats.dexterity}:${stats.vitality}:${stats.intelligence}:${stats.faith}`;
+}
+
 function getStatsCacheKey(unit: Unit): string {
     if (unit.team === "player") {
-        return `player:${unit.id}`;
+        return `player:${unit.id}:${getEquipmentStateRevision()}:${getPlayerStatsCacheSignature(unit)}`;
     }
     const amoebaStage = unit.enemyType === "giant_amoeba" ? `:${unit.splitCount ?? 0}` : "";
     return `enemy:${unit.id}:${unit.enemyType ?? "unknown"}${amoebaStage}`;

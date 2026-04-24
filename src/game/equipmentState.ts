@@ -33,6 +33,7 @@ let inventoryState: PartyInventory = { items: [] };
 
 // Initialization flag
 let isInitialized = false;
+let equipmentStateRevision = 0;
 
 // =============================================================================
 // TYPES
@@ -85,6 +86,10 @@ function ensureInitialized(): void {
     }
 }
 
+function bumpEquipmentStateRevision(): void {
+    equipmentStateRevision += 1;
+}
+
 function getEffectivePlayerEquipmentStatsFor(unitId: number, equipment: CharacterEquipment): EffectivePlayerEquipmentStats {
     const computed = getComputedStats(equipment);
     const weapon = getMainHandWeapon(equipment);
@@ -110,6 +115,7 @@ export function initializeEquipmentState(): void {
     equipmentState = cloneAllEquipment(STARTING_EQUIPMENT);
     inventoryState = cloneInventory(STARTING_INVENTORY);
     isInitialized = true;
+    bumpEquipmentStateRevision();
 }
 
 // =============================================================================
@@ -135,6 +141,12 @@ export function getPartyInventory(): PartyInventory {
     return cloneInventory(inventoryState);
 }
 
+/** Revision token for caches that depend on equipped gear. */
+export function getEquipmentStateRevision(): number {
+    ensureInitialized();
+    return equipmentStateRevision;
+}
+
 // =============================================================================
 // SETTERS
 // =============================================================================
@@ -143,6 +155,7 @@ export function getPartyInventory(): PartyInventory {
 export function setAllEquipment(equipment: Record<number, CharacterEquipment>): void {
     equipmentState = cloneAllEquipment(equipment);
     isInitialized = true;
+    bumpEquipmentStateRevision();
 }
 
 /** Set party inventory */
@@ -218,6 +231,7 @@ export function equipItemForCharacter(unitId: number, itemId: string, slot: Equi
 
     equipmentState[unitId] = cloneEquipment(equipped.equipment);
     inventoryState = cloneInventory(equipped.inventory);
+    bumpEquipmentStateRevision();
 
     return { unitId, previousEquipment };
 }
@@ -240,6 +254,7 @@ export function unequipItemForCharacter(unitId: number, slot: EquipmentSlot): Eq
 
     equipmentState[unitId] = cloneEquipment(unequipped.equipment);
     inventoryState = cloneInventory(unequipped.inventory);
+    bumpEquipmentStateRevision();
 
     return { unitId, previousEquipment };
 }
@@ -269,6 +284,7 @@ export function moveEquippedItemForCharacter(unitId: number, fromSlot: Equipment
 
     equipmentState[unitId] = cloneEquipment(afterMove.equipment);
     inventoryState = cloneInventory(afterMove.inventory);
+    bumpEquipmentStateRevision();
 
     return { unitId, previousEquipment };
 }

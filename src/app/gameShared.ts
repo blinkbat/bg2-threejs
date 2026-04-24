@@ -124,10 +124,6 @@ export const SPEND_NIGHT_FADE_MS = 1200;
 export const SPEND_NIGHT_BLACK_HOLD_MS = 600;
 export const DIALOG_TRIGGER_POLL_MS = 120;
 
-const DIALOG_TRIGGER_SNAPSHOT_HASH_SEED = 2166136261;
-const DIALOG_TRIGGER_SNAPSHOT_HASH_PRIME = 16777619;
-const DIALOG_TRIGGER_POSITION_QUANT = 4;
-
 export function getWaystoneActivationKey(areaId: AreaId, waystoneIndex: number): string {
     return `${areaId}-waystone-${waystoneIndex}`;
 }
@@ -161,38 +157,6 @@ function formatStatusEffectLabel(statusType: StatusEffect["type"]): string {
         .split("_")
         .map(part => part.charAt(0).toUpperCase() + part.slice(1))
         .join(" ");
-}
-
-function getDialogTriggerTeamCode(team: Unit["team"]): number {
-    if (team === "player") return 1;
-    if (team === "enemy") return 2;
-    return 3;
-}
-
-export function buildDialogTriggerUnitsHash(
-    units: Unit[],
-    unitGroups: Record<number, { position: { x: number; z: number } }>
-): number {
-    let hash = Math.imul(
-        DIALOG_TRIGGER_SNAPSHOT_HASH_SEED ^ units.length,
-        DIALOG_TRIGGER_SNAPSHOT_HASH_PRIME
-    );
-
-    for (const unit of units) {
-        const group = unitGroups[unit.id];
-        const x = group?.position.x ?? unit.x;
-        const z = group?.position.z ?? unit.z;
-        const qx = Math.round(x * DIALOG_TRIGGER_POSITION_QUANT);
-        const qz = Math.round(z * DIALOG_TRIGGER_POSITION_QUANT);
-
-        hash = Math.imul(hash ^ unit.id, DIALOG_TRIGGER_SNAPSHOT_HASH_PRIME);
-        hash = Math.imul(hash ^ Math.round(unit.hp), DIALOG_TRIGGER_SNAPSHOT_HASH_PRIME);
-        hash = Math.imul(hash ^ getDialogTriggerTeamCode(unit.team), DIALOG_TRIGGER_SNAPSHOT_HASH_PRIME);
-        hash = Math.imul(hash ^ qx, DIALOG_TRIGGER_SNAPSHOT_HASH_PRIME);
-        hash = Math.imul(hash ^ qz, DIALOG_TRIGGER_SNAPSHOT_HASH_PRIME);
-    }
-
-    return hash >>> 0;
 }
 
 export function buildDialogTriggerUnitsSnapshot(

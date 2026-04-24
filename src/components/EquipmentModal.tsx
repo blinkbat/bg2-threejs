@@ -19,7 +19,7 @@ interface EquipmentModalProps {
     onClose: () => void;
     onEquipItem?: (unitId: number, itemId: string, slot: EquipmentSlot) => void;
     onUnequipItem?: (unitId: number, slot: EquipmentSlot) => void;
-    onMoveEquippedItem?: (unitId: number, fromSlot: EquipmentSlot, toSlot: EquipmentSlot) => void;
+    onMoveEquippedItem: (unitId: number, fromSlot: EquipmentSlot, toSlot: EquipmentSlot) => void;
     onChangeUnit?: (unitId: number) => void;
     formationOrder?: number[];
 }
@@ -235,16 +235,10 @@ export function EquipmentModal({
         refreshEquipmentState();
     }, [onUnequipItem, refreshEquipmentState, unitId]);
 
-    const applyMove = useCallback((itemId: string, fromSlot: EquipmentSlot, toSlot: EquipmentSlot) => {
-        if (onMoveEquippedItem) {
-            onMoveEquippedItem(unitId, fromSlot, toSlot);
-        } else {
-            // Fallback sequence for older callers that don't pass atomic move.
-            onUnequipItem?.(unitId, fromSlot);
-            onEquipItem?.(unitId, itemId, toSlot);
-        }
+    const applyMove = useCallback((fromSlot: EquipmentSlot, toSlot: EquipmentSlot) => {
+        onMoveEquippedItem(unitId, fromSlot, toSlot);
         refreshEquipmentState();
-    }, [onEquipItem, onMoveEquippedItem, onUnequipItem, refreshEquipmentState, unitId]);
+    }, [onMoveEquippedItem, refreshEquipmentState, unitId]);
 
     // -- Drag & drop helpers --------------------------------------------------
 
@@ -281,7 +275,7 @@ export function EquipmentModal({
         if (!dragData) return;
         if (dragData.source === "slot" && dragData.sourceSlot) {
             if (dragData.sourceSlot !== slot) {
-                applyMove(dragData.itemId, dragData.sourceSlot, slot);
+                applyMove(dragData.sourceSlot, slot);
             }
         } else {
             applyEquip(dragData.itemId, slot);

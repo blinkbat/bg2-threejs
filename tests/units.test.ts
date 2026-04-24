@@ -2,15 +2,20 @@ import { describe, expect, it, beforeEach, vi } from "vitest";
 import type { Unit } from "../src/core/types";
 
 vi.mock("../src/game/playerUnits", () => ({
-    getEffectiveUnitData: vi.fn((unitId: number) => ({
+    getEffectiveUnitData: vi.fn((unitId: number, unit?: Unit) => ({
         name: `Player${unitId}`,
         class: "Barbarian",
+        hp: 33,
         maxHp: 33,
+        mana: 15,
+        maxMana: 15,
         damage: [2, 5] as [number, number],
-        accuracy: 70,
+        accuracy: 70 + (unit?.stats?.dexterity ?? 0),
         armor: 0,
         range: 1.95,
         attackCooldown: 2000,
+        skills: [],
+        items: [],
     })),
 }));
 
@@ -27,6 +32,18 @@ vi.mock("../src/game/enemyStats", () => ({
 }));
 
 import { getUnitStats, getEnemyUnitStats, getAttackRange, clearUnitStatsCache, isEnemyData } from "../src/game/units";
+import { getEffectiveUnitData } from "../src/game/playerUnits";
+import { setAllEquipment } from "../src/game/equipmentState";
+
+const getEffectiveUnitDataMock = vi.mocked(getEffectiveUnitData);
+
+const EMPTY_EQUIPMENT = {
+    armor: null,
+    leftHand: null,
+    rightHand: null,
+    accessory1: null,
+    accessory2: null,
+};
 
 function makePlayer(id: number): Unit {
     return { id, x: 0, z: 0, hp: 10, team: "player", target: null, aiEnabled: true };
@@ -39,6 +56,7 @@ function makeEnemy(id: number, enemyType: string, overrides: Partial<Unit> = {})
 describe("units", () => {
     beforeEach(() => {
         clearUnitStatsCache();
+        getEffectiveUnitDataMock.mockClear();
     });
 
     describe("getUnitStats", () => {
@@ -74,6 +92,28 @@ describe("units", () => {
             const b = getUnitStats(unit);
             // Both should have same values but be fresh lookups
             expect(a.name).toBe(b.name);
+        });
+
+        it("recomputes player stats when unit stats change within the same frame", () => {
+            const unit = makePlayer(1);
+            const first = getUnitStats({ ...unit, stats: { strength: 0, dexterity: 1, vitality: 0, intelligence: 0, faith: 0 } });
+            const second = getUnitStats({ ...unit, stats: { strength: 0, dexterity: 5, vitality: 0, intelligence: 0, faith: 0 } });
+
+            expect(first.accuracy).toBe(71);
+            expect(second.accuracy).toBe(75);
+            expect(getEffectiveUnitDataMock).toHaveBeenCalledTimes(2);
+        });
+
+        it("recomputes player stats when equipment state changes within the same frame", () => {
+            const unit = makePlayer(1);
+            getUnitStats(unit);
+            getUnitStats(unit);
+            expect(getEffectiveUnitDataMock).toHaveBeenCalledTimes(1);
+
+            setAllEquipment({ 1: EMPTY_EQUIPMENT });
+            getUnitStats(unit);
+
+            expect(getEffectiveUnitDataMock).toHaveBeenCalledTimes(2);
         });
 
         it("handles giant_amoeba split count", () => {

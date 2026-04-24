@@ -59,7 +59,7 @@ import { getUnitRadius, isInRange } from "../rendering/range";
 import { getDialogTriggerPriority, getTriggerStartDialogId, isDialogTriggerSatisfied, type DialogTriggerRuntimeState } from "../dialog/triggerRuntime";
 import type { DialogChoiceCondition, DialogDefinition, DialogNode, DialogSpeaker, DialogState, DialogUiAction, MenuChainAction } from "../dialog/types";
 import { formatPerfLogLine, PERF_LOG_BUFFER_LIMIT, PERF_LOG_ENDPOINT, PERF_LOG_FLUSH_INTERVAL_MS, preloadPortraits, reviveUnitVisual, syncHoveredDoorRef } from "../app/helpers";
-import { buildDialogTriggerUnitsHash, buildDialogTriggerUnitsSnapshot, cloneDialogTriggerProgressForRuntime, DIALOG_CHARS_PER_TICK, DIALOG_MIN_BLIP_INTERVAL_MS, DIALOG_PARTY_GATHERED_DEFAULT_MAX_DISTANCE, DIALOG_TRIGGER_POLL_MS, DIALOG_TRIGGER_REPEAT_GUARD_MS, DIALOG_TYPING_INTERVAL_MS, DEFAULT_LIGHTING_TUNING, getWaystoneActivationKey, type GameProps, type LightingTuningSettings, type LootPickupModalState, PORTRAIT_URLS, serializeDialogTriggerProgressForSave, SPEND_NIGHT_BLACK_HOLD_MS, SPEND_NIGHT_FADE_MS } from "./gameShared";
+import { buildDialogTriggerUnitsSnapshot, cloneDialogTriggerProgressForRuntime, DIALOG_CHARS_PER_TICK, DIALOG_MIN_BLIP_INTERVAL_MS, DIALOG_PARTY_GATHERED_DEFAULT_MAX_DISTANCE, DIALOG_TRIGGER_POLL_MS, DIALOG_TRIGGER_REPEAT_GUARD_MS, DIALOG_TYPING_INTERVAL_MS, DEFAULT_LIGHTING_TUNING, getWaystoneActivationKey, type GameProps, type LightingTuningSettings, type LootPickupModalState, PORTRAIT_URLS, serializeDialogTriggerProgressForSave, SPEND_NIGHT_BLACK_HOLD_MS, SPEND_NIGHT_FADE_MS } from "./gameShared";
 import { GameRenderLayer } from "./GameRenderLayer";
 import { useGameDebugControls } from "./useGameDebugControls";
 
@@ -829,7 +829,8 @@ export function Game({
             const reviveX = userG.position.x + Math.cos(angle) * 1.5;
             const reviveZ = userG.position.z + Math.sin(angle) * 1.5;
 
-            updateUnit(setUnits, targetId, { hp: item.value, x: reviveX, z: reviveZ, statusEffects: undefined, target: null });
+            const reviveHp = Math.min(getEffectiveMaxHp(targetId, deadAlly), item.value);
+            updateUnit(setUnits, targetId, { hp: reviveHp, x: reviveX, z: reviveZ, statusEffects: undefined, target: null });
 
             // Make the unit visible and reposition
             reviveUnitVisual(sceneState.unitGroups, targetId, reviveX, reviveZ);
@@ -1306,24 +1307,6 @@ export function Game({
         const triggers = area.dialogTriggers ?? [];
         const sortedTriggers = [...triggers].sort((a, b) => getDialogTriggerPriority(b) - getDialogTriggerPriority(a));
         const areaDialogDefinitionsById = buildAreaDialogDefinitionMap(area.dialogs);
-        let hasCachedTriggerUnitsHash = false;
-        let cachedTriggerUnitsHash = 0;
-        let cachedTriggerUnitsSnapshot: Unit[] | null = null;
-
-        const getCachedTriggerUnitsSnapshot = (): Unit[] => {
-            const units = unitsStateRef.current;
-            const unitGroups = unitGroupsRef.current;
-            const nextHash = buildDialogTriggerUnitsHash(units, unitGroups);
-            if (hasCachedTriggerUnitsHash && cachedTriggerUnitsSnapshot && nextHash === cachedTriggerUnitsHash) {
-                return cachedTriggerUnitsSnapshot;
-            }
-
-            const nextSnapshot = buildDialogTriggerUnitsSnapshot(units, unitGroups);
-            cachedTriggerUnitsHash = nextHash;
-            hasCachedTriggerUnitsHash = true;
-            cachedTriggerUnitsSnapshot = nextSnapshot;
-            return nextSnapshot;
-        };
 
         const evaluateDialogTriggers = () => {
             if (isDialogOpen || isLootPickupModalOpen) return;
@@ -1344,7 +1327,7 @@ export function Game({
             let triggerUnits: Unit[] | null = null;
             const getTriggerUnits = (): Unit[] => {
                 if (!triggerUnits) {
-                    triggerUnits = getCachedTriggerUnitsSnapshot();
+                    triggerUnits = buildDialogTriggerUnitsSnapshot(unitsStateRef.current, unitGroupsRef.current);
                 }
                 return triggerUnits;
             };
