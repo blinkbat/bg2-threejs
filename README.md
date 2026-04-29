@@ -2,6 +2,7 @@
 
 Baldur's Gate 2-inspired isometric RPG built with React + Three.js + TypeScript + Vite.
 
+
 ## Setup
 
 ```bash
