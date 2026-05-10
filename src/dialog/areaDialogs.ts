@@ -1,6 +1,12 @@
-import type { AreaDialogChoice, AreaDialogDefinition, AreaDialogNode, AreaDialogUiAction } from "../game/areas/types";
+import type {
+    AreaDialogChoice,
+    AreaDialogChoiceCondition,
+    AreaDialogDefinition,
+    AreaDialogNode,
+    AreaDialogUiAction,
+} from "../game/areas/types";
 import { DIALOG_SPEAKERS } from "./speakers";
-import type { DialogChoice, DialogDefinition, DialogNode, DialogUiAction } from "./types";
+import type { DialogChoice, DialogChoiceCondition, DialogDefinition, DialogNode, DialogUiAction } from "./types";
 
 function cloneDialogUiAction(action: AreaDialogUiAction | undefined): DialogUiAction | undefined {
     if (!action) return undefined;
@@ -11,11 +17,29 @@ function cloneDialogUiAction(action: AreaDialogUiAction | undefined): DialogUiAc
             ...(action.chainAction ? { chainAction: { ...action.chainAction } } : {}),
         };
     }
+    if (action.type === "quest") {
+        return {
+            type: "quest",
+            action: action.action,
+            questId: action.questId,
+        };
+    }
     return {
         type: "event",
         eventId: action.eventId,
         ...(action.goldCost !== undefined ? { goldCost: action.goldCost } : {}),
     };
+}
+
+function cloneDialogChoiceCondition(condition: AreaDialogChoiceCondition): DialogChoiceCondition {
+    if (condition.type === "quest") {
+        return {
+            type: "quest",
+            condition: { ...condition.condition },
+            ...(condition.disabledMessage !== undefined ? { disabledMessage: condition.disabledMessage } : {}),
+        };
+    }
+    return { ...condition };
 }
 
 function cloneAreaDialogChoice(choice: AreaDialogChoice): DialogChoice {
@@ -24,7 +48,7 @@ function cloneAreaDialogChoice(choice: AreaDialogChoice): DialogChoice {
         id: choice.id,
         label: choice.label,
         ...(nextNodeId ? { nextNodeId } : {}),
-        ...(choice.conditions && choice.conditions.length > 0 ? { conditions: choice.conditions.map(condition => ({ ...condition })) } : {}),
+        ...(choice.conditions && choice.conditions.length > 0 ? { conditions: choice.conditions.map(cloneDialogChoiceCondition) } : {}),
         ...(choice.onDialogEndAction ? { onDialogEndAction: cloneDialogUiAction(choice.onDialogEndAction) } : {}),
     };
 }

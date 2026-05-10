@@ -1358,3 +1358,102 @@
     max-height: min(55vh, 450px);
     overflow-y: auto;
 }
+
+/* -----------------------------------------------------------------------------
+   QUEST LOG MODAL
+   ----------------------------------------------------------------------------- */
+.quest-log-modal {
+    width: min(560px, calc(100vw - var(--ui-modal-edge-gap)));
+    max-height: calc(100vh - var(--ui-modal-edge-gap));
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.quest-log-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.quest-log-header h2 {
+    margin: 0;
+    font-size: 18px;
+    color: var(--ui-color-text);
+}
+
+.quest-log-close {
+    background: transparent;
+    border: 1px solid var(--ui-color-border);
+    color: var(--ui-color-text);
+    padding: 4px 10px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+}
+
+.quest-log-close:hover {
+    border-color: var(--ui-color-border-strong);
+}
+
+.quest-log-empty {
+    margin: 0;
+    color: var(--ui-color-text-muted);
+    font-style: italic;
+}
+
+.quest-log-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    overflow-y: auto;
+}
+
+.quest-log-entry {
+    border: 1px solid var(--ui-color-border);
+    padding: 10px 12px;
+    background: var(--ui-color-surface);
+}
+
+.quest-log-entry.quest-status-completed {
+    border-color: var(--ui-color-accent-success);
+}
+
+.quest-log-entry.quest-status-turned_in {
+    opacity: 0.6;
+}
+
+.quest-log-entry-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+}
+
+.quest-log-entry-name {
+    font-weight: 600;
+    color: var(--ui-color-text);
+}
+
+.quest-log-entry-status {
+    font-size: 11px;
+    color: var(--ui-color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.quest-log-entry-summary {
+    margin: 6px 0 0 0;
+    font-size: 13px;
+    color: var(--ui-color-text-muted);
+}
+
+.quest-log-objectives {
+    margin: 6px 0 0 0;
+    padding-left: 16px;
+    font-size: 13px;
+    color: var(--ui-color-text);
+}

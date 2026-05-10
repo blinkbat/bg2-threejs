@@ -2,8 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type {
     AreaDialogChoiceCondition,
     AreaDialogDefinition,
-    AreaDialogEventId,
-    AreaDialogMenuId,
     AreaDialogNode,
     AreaLocation,
     AreaDialogTrigger,
@@ -39,6 +37,7 @@ import {
     getTriggerStartDialogId,
     isDialogConditionValid,
     isDialogSpeakerId,
+    isMenuNodeOptionValue,
     listNodeIds,
     MENU_NODE_OPTIONS,
     SAVE_FEEDBACK_MS,
@@ -48,6 +47,7 @@ import {
     TRIGGER_CONDITION_OPTIONS,
     TRIGGER_FILTER_OPTIONS,
     type EnemySpawnOption,
+    type MenuNodeOptionValue,
     type TriggerListFilter,
     type TriggerValidationState,
 } from "./dialogEditorHelpers";
@@ -441,7 +441,7 @@ export function DialogEditorModal({
         setSelectedNodeId(nodeId);
     };
 
-    const addMenuNodeToSelectedDialog = (menuId: AreaDialogMenuId | AreaDialogEventId): void => {
+    const addMenuNodeToSelectedDialog = (menuId: MenuNodeOptionValue): void => {
         if (!selectedDialog) return;
         const existingNodeIds = new Set(Object.keys(selectedDialog.nodes));
         const nodeId = createUniqueId(menuId, existingNodeIds);
@@ -456,13 +456,29 @@ export function DialogEditorModal({
         setSelectedNodeId(nodeId);
     };
 
-    const updateMenuNodeAction = (menuId: string): void => {
+    const updateMenuNodeAction = (rawValue: string): void => {
         if (!selectedNode?.isMenuNode) return;
-        const action = toDialogEndAction(menuId);
+        if (rawValue !== "" && !isMenuNodeOptionValue(rawValue)) return;
+        const action = toDialogEndAction(rawValue as MenuNodeOptionValue | "");
         updateSelectedNode(node => ({
             ...node,
             ...(action ? { onDialogEndAction: action } : { onDialogEndAction: undefined }),
         }));
+    };
+
+    const updateMenuNodeQuestId = (questId: string): void => {
+        if (!selectedNode?.isMenuNode) return;
+        const action = selectedNode.onDialogEndAction;
+        if (!action || action.type !== "quest") return;
+
+        updateSelectedNode(node => {
+            const currentAction = node.onDialogEndAction;
+            if (!currentAction || currentAction.type !== "quest") return node;
+            return {
+                ...node,
+                onDialogEndAction: { ...currentAction, questId },
+            };
+        });
     };
 
     const updateSpendNightGoldCost = (rawValue: string): void => {
@@ -651,6 +667,7 @@ export function DialogEditorModal({
     const CHOICE_CONDITION_TYPES: { value: AreaDialogChoiceCondition["type"]; label: string }[] = [
         { value: "party_is_gathered", label: "Party Is Gathered" },
         { value: "party_has_gold", label: "Party Has Gold" },
+        { value: "quest", label: "Quest" },
     ];
 
     const addChoiceCondition = (choiceId: string, conditionType: AreaDialogChoiceCondition["type"]): void => {
@@ -660,9 +677,14 @@ export function DialogEditorModal({
                 if (choice.id !== choiceId) return choice;
                 const existing = choice.conditions ?? [];
                 if (existing.some(c => c.type === conditionType)) return choice;
-                const newCondition: AreaDialogChoiceCondition = conditionType === "party_has_gold"
-                    ? { type: "party_has_gold", amount: 100 }
-                    : { type: "party_is_gathered" };
+                let newCondition: AreaDialogChoiceCondition;
+                if (conditionType === "party_has_gold") {
+                    newCondition = { type: "party_has_gold", amount: 100 };
+                } else if (conditionType === "quest") {
+                    newCondition = { type: "quest", condition: { type: "quest_status", questId: "", status: "active" } };
+                } else {
+                    newCondition = { type: "party_is_gathered" };
+                }
                 return { ...choice, conditions: [...existing, newCondition] };
             });
             return { ...node, choices: nextChoices };
@@ -697,6 +719,38 @@ export function DialogEditorModal({
                     c.type === conditionType ? updater(c) : c
                 );
                 return { ...choice, conditions: nextConditions };
+            });
+            return { ...node, choices: nextChoices };
+        });
+    };
+
+    const updateChoiceEndAction = (choiceId: string, rawValue: string): void => {
+        if (rawValue !== "" && !isMenuNodeOptionValue(rawValue)) return;
+        const action = toDialogEndAction(rawValue as MenuNodeOptionValue | "");
+        updateSelectedNode(node => {
+            const choices = node.choices ?? [];
+            const nextChoices = choices.map(choice => {
+                if (choice.id !== choiceId) return choice;
+                return {
+                    ...choice,
+                    ...(action ? { onDialogEndAction: action } : { onDialogEndAction: undefined }),
+                };
+            });
+            return { ...node, choices: nextChoices };
+        });
+    };
+
+    const updateChoiceQuestId = (choiceId: string, questId: string): void => {
+        updateSelectedNode(node => {
+            const choices = node.choices ?? [];
+            const nextChoices = choices.map(choice => {
+                if (choice.id !== choiceId) return choice;
+                const action = choice.onDialogEndAction;
+                if (!action || action.type !== "quest") return choice;
+                return {
+                    ...choice,
+                    onDialogEndAction: { ...action, questId },
+                };
             });
             return { ...node, choices: nextChoices };
         });
@@ -1253,7 +1307,7 @@ export function DialogEditorModal({
                                         const val = event.target.value;
                                         if (!val) return;
                                         if (val === "__dialog__") { addNodeToSelectedDialog(); }
-                                        else { addMenuNodeToSelectedDialog(val as AreaDialogMenuId | AreaDialogEventId); }
+                                        else if (isMenuNodeOptionValue(val)) { addMenuNodeToSelectedDialog(val); }
                                     }}
                                     style={{ padding: "4px 8px", fontSize: 13, background: selectedDialog ? "#3484d0" : "#5b6276", color: "#fff", border: "none", borderRadius: 4, cursor: selectedDialog ? "pointer" : "not-allowed" }}
                                 >
@@ -1321,7 +1375,7 @@ export function DialogEditorModal({
                                         </select>
                                     </label>
                                     <div style={{ fontSize: 13, color: "#9aa6c5", padding: "4px 2px" }}>
-                                        This is a menu/event node. When the dialog reaches this node, it closes and opens the selected menu or fires the event. Link to this node from other nodes or choices via their "Next Node" dropdown.
+                                        This is a menu/event node. When the dialog reaches this node, it closes and opens the selected menu or fires the event. Link to this node from other nodes or choices via their "Next Node" dropdown. For quest actions, the quest fires immediately and the dialog re-opens at the "After Menu Closes" node if one is set.
                                     </div>
                                     {selectedNode.onDialogEndAction?.type === "event" && selectedNode.onDialogEndAction.eventId === "spend_the_night" && (
                                         <label style={{ width: 220, display: "flex", flexDirection: "column", gap: 4 }}>
@@ -1332,6 +1386,16 @@ export function DialogEditorModal({
                                                 step={1}
                                                 value={selectedNode.onDialogEndAction.goldCost ?? 0}
                                                 onChange={event => updateSpendNightGoldCost(event.target.value)}
+                                                style={{ padding: 8, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 14 }}
+                                            />
+                                        </label>
+                                    )}
+                                    {selectedNode.onDialogEndAction?.type === "quest" && (
+                                        <label style={{ width: 220, display: "flex", flexDirection: "column", gap: 4 }}>
+                                            <span style={{ fontSize: 14, color: "#b8c2d9" }}>Quest ID</span>
+                                            <input
+                                                value={selectedNode.onDialogEndAction.questId}
+                                                onChange={event => updateMenuNodeQuestId(event.target.value)}
                                                 style={{ padding: 8, borderRadius: 4, border: "1px solid #5a627a", background: "#1f2433", color: "#fff", fontSize: 14 }}
                                             />
                                         </label>
@@ -1427,6 +1491,31 @@ export function DialogEditorModal({
                                                             Remove
                                                         </button>
                                                     </div>
+                                                    <div className="editor-choice-main">
+                                                        <label className="editor-choice-field">
+                                                            <span className="editor-choice-label">End Action</span>
+                                                            <select
+                                                                value={toDialogEndActionMenuId(choice.onDialogEndAction)}
+                                                                onChange={event => updateChoiceEndAction(choice.id, event.target.value)}
+                                                                className="editor-trigger-input editor-choice-input"
+                                                            >
+                                                                <option value="">(none)</option>
+                                                                {MENU_NODE_OPTIONS.map(option => (
+                                                                    <option key={`choice-action-${choice.id}-${option.value}`} value={option.value}>{option.label}</option>
+                                                                ))}
+                                                            </select>
+                                                        </label>
+                                                        {choice.onDialogEndAction?.type === "quest" && (
+                                                            <label className="editor-choice-field editor-choice-field--wide">
+                                                                <span className="editor-choice-label">Quest ID</span>
+                                                                <input
+                                                                    value={choice.onDialogEndAction.questId}
+                                                                    onChange={event => updateChoiceQuestId(choice.id, event.target.value)}
+                                                                    className="editor-trigger-input editor-choice-input"
+                                                                />
+                                                            </label>
+                                                        )}
+                                                    </div>
                                                     {conditions.length > 0 && (
                                                         <div className="editor-choice-conditions">
                                                             {conditions.map(condition => (
@@ -1474,6 +1563,81 @@ export function DialogEditorModal({
                                                                                 className="editor-trigger-input editor-choice-input"
                                                                             />
                                                                         </label>
+                                                                    )}
+                                                                    {condition.type === "quest" && (
+                                                                        <>
+                                                                            <label className="editor-choice-field">
+                                                                                <span className="editor-choice-label">Check</span>
+                                                                                <select
+                                                                                    value={condition.condition.type}
+                                                                                    onChange={event => {
+                                                                                        const innerType = event.target.value;
+                                                                                        updateChoiceCondition(choice.id, "quest", c => {
+                                                                                            if (c.type !== "quest") return c;
+                                                                                            if (innerType === "quest_status") {
+                                                                                                return { ...c, condition: { type: "quest_status", questId: c.condition.questId, status: "active" } };
+                                                                                            }
+                                                                                            return { ...c, condition: { type: "quest_objective_complete", questId: c.condition.questId, objectiveId: "" } };
+                                                                                        });
+                                                                                    }}
+                                                                                    className="editor-trigger-input editor-choice-input"
+                                                                                >
+                                                                                    <option value="quest_status">Status</option>
+                                                                                    <option value="quest_objective_complete">Objective Complete</option>
+                                                                                </select>
+                                                                            </label>
+                                                                            <label className="editor-choice-field">
+                                                                                <span className="editor-choice-label">Quest ID</span>
+                                                                                <input
+                                                                                    value={condition.condition.questId}
+                                                                                    onChange={event => {
+                                                                                        const questId = event.target.value;
+                                                                                        updateChoiceCondition(choice.id, "quest", c => {
+                                                                                            if (c.type !== "quest") return c;
+                                                                                            return { ...c, condition: { ...c.condition, questId } };
+                                                                                        });
+                                                                                    }}
+                                                                                    className="editor-trigger-input editor-choice-input"
+                                                                                />
+                                                                            </label>
+                                                                            {condition.condition.type === "quest_status" && (
+                                                                                <label className="editor-choice-field">
+                                                                                    <span className="editor-choice-label">Status</span>
+                                                                                    <select
+                                                                                        value={condition.condition.status}
+                                                                                        onChange={event => {
+                                                                                            const status = event.target.value as "inactive" | "active" | "completed" | "turned_in";
+                                                                                            updateChoiceCondition(choice.id, "quest", c => {
+                                                                                                if (c.type !== "quest" || c.condition.type !== "quest_status") return c;
+                                                                                                return { ...c, condition: { ...c.condition, status } };
+                                                                                            });
+                                                                                        }}
+                                                                                        className="editor-trigger-input editor-choice-input"
+                                                                                    >
+                                                                                        <option value="inactive">Inactive</option>
+                                                                                        <option value="active">Active</option>
+                                                                                        <option value="completed">Completed</option>
+                                                                                        <option value="turned_in">Turned In</option>
+                                                                                    </select>
+                                                                                </label>
+                                                                            )}
+                                                                            {condition.condition.type === "quest_objective_complete" && (
+                                                                                <label className="editor-choice-field">
+                                                                                    <span className="editor-choice-label">Objective ID</span>
+                                                                                    <input
+                                                                                        value={condition.condition.objectiveId}
+                                                                                        onChange={event => {
+                                                                                            const objectiveId = event.target.value;
+                                                                                            updateChoiceCondition(choice.id, "quest", c => {
+                                                                                                if (c.type !== "quest" || c.condition.type !== "quest_objective_complete") return c;
+                                                                                                return { ...c, condition: { ...c.condition, objectiveId } };
+                                                                                            });
+                                                                                        }}
+                                                                                        className="editor-trigger-input editor-choice-input"
+                                                                                    />
+                                                                                </label>
+                                                                            )}
+                                                                        </>
                                                                     )}
                                                                     <label className="editor-choice-field editor-choice-field--wide">
                                                                         <span className="editor-choice-label">Disabled Message</span>

@@ -1,3 +1,5 @@
+import type { QuestCondition } from "../quests/types";
+
 export type DialogSpeakerId =
     | "barbarian"
     | "cleric"
@@ -33,7 +35,15 @@ interface DialogEventAction {
     goldCost?: number;
 }
 
-export type DialogUiAction = DialogOpenMenuAction | DialogEventAction;
+export type DialogQuestActionKind = "start" | "complete" | "turn_in";
+
+interface DialogQuestAction {
+    type: "quest";
+    action: DialogQuestActionKind;
+    questId: string;
+}
+
+export type DialogUiAction = DialogOpenMenuAction | DialogEventAction | DialogQuestAction;
 
 interface DialogChoicePartyGatheredCondition {
     type: "party_is_gathered";
@@ -47,9 +57,16 @@ interface DialogChoicePartyHasGoldCondition {
     disabledMessage?: string;
 }
 
+interface DialogChoiceQuestCondition {
+    type: "quest";
+    condition: QuestCondition;
+    disabledMessage?: string;
+}
+
 export type DialogChoiceCondition =
     | DialogChoicePartyGatheredCondition
-    | DialogChoicePartyHasGoldCondition;
+    | DialogChoicePartyHasGoldCondition
+    | DialogChoiceQuestCondition;
 
 export interface DialogChoice {
     id: string;

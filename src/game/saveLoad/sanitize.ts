@@ -12,6 +12,7 @@ import { normalizeHotbarSlots, type HotbarAssignments } from "../../hooks/localS
 import { MAX_SLOTS, SAVE_VERSION } from "./constants";
 import type { DialogTriggerProgress, EnemyPositionMap, SaveSlotData, SavedPlayer } from "./types";
 import type { FogVisibilityByArea } from "../fogMemory";
+import type { QuestProgress, QuestStateMap, QuestStatus } from "../../quests/types";
 
 const DAMAGE_TYPES: ReadonlySet<DamageType> = new Set([
     "physical",
@@ -507,6 +508,67 @@ function sanitizeFogVisibilityByArea(raw: unknown): FogVisibilityByArea {
     return sanitized;
 }
 
+const QUEST_STATUSES: ReadonlySet<QuestStatus> = new Set([
+    "inactive",
+    "active",
+    "completed",
+    "turned_in",
+]);
+
+function isQuestStatus(value: string): value is QuestStatus {
+    return QUEST_STATUSES.has(value as QuestStatus);
+}
+
+function sanitizeQuestObjectives(raw: unknown): Record<string, { progress: number }> {
+    if (!isRecord(raw)) return {};
+    const sanitized: Record<string, { progress: number }> = {};
+    for (const [objectiveIdRaw, progressRaw] of Object.entries(raw)) {
+        const objectiveId = objectiveIdRaw.trim();
+        if (objectiveId.length === 0) continue;
+        if (!isRecord(progressRaw)) continue;
+        const progress = readFiniteNumber(progressRaw, "progress");
+        if (progress === undefined) continue;
+        sanitized[objectiveId] = { progress: Math.max(0, Math.floor(progress)) };
+    }
+    return sanitized;
+}
+
+function sanitizeQuestProgress(raw: unknown): QuestProgress | null {
+    if (!isRecord(raw)) return null;
+    const questId = readString(raw, "questId")?.trim();
+    if (!questId) return null;
+    const statusRaw = readString(raw, "status");
+    if (!statusRaw || !isQuestStatus(statusRaw)) return null;
+
+    const progress: QuestProgress = {
+        questId,
+        status: statusRaw,
+        objectives: sanitizeQuestObjectives(getField(raw, "objectives")),
+    };
+
+    const startedAt = readFiniteNumber(raw, "startedAt");
+    if (startedAt !== undefined) progress.startedAt = startedAt;
+    const completedAt = readFiniteNumber(raw, "completedAt");
+    if (completedAt !== undefined) progress.completedAt = completedAt;
+    const turnedInAt = readFiniteNumber(raw, "turnedInAt");
+    if (turnedInAt !== undefined) progress.turnedInAt = turnedInAt;
+
+    return progress;
+}
+
+function sanitizeQuestState(raw: unknown): QuestStateMap {
+    if (!isRecord(raw)) return {};
+    const sanitized: QuestStateMap = {};
+    for (const [questIdRaw, progressRaw] of Object.entries(raw)) {
+        const questId = questIdRaw.trim();
+        if (questId.length === 0) continue;
+        const progress = sanitizeQuestProgress(progressRaw);
+        if (!progress) continue;
+        sanitized[questId] = progress;
+    }
+    return sanitized;
+}
+
 function sanitizeLastWaystone(raw: unknown): NonNullable<SaveSlotData["lastWaystone"]> | undefined {
     if (!isRecord(raw)) return undefined;
 
@@ -574,6 +636,10 @@ function sanitizeSaveSlotV1(raw: Record<string, unknown>): SaveSlotData | null {
         if (lastWaystone) {
             saveData.lastWaystone = lastWaystone;
         }
+    }
+
+    if (hasField(raw, "questState")) {
+        saveData.questState = sanitizeQuestState(getField(raw, "questState"));
     }
 
     return saveData;

@@ -29,6 +29,7 @@ import { ItemsModal } from "../components/ItemsModal";
 import { FormationIndicator } from "../components/FormationIndicator";
 import { HUD } from "../components/HUD";
 import { LootPickupModal } from "../components/LootPickupModal";
+import { QuestLogModal } from "../components/QuestLogModal";
 import { PartyBar } from "../components/PartyBar";
 import { UnitPanel } from "../components/UnitPanel";
 import { WaystoneTravelModal, type WaystoneDestination } from "../components/WaystoneTravelModal";
@@ -154,6 +155,9 @@ interface GameRenderLayerProps {
     setSelectedIds: React.Dispatch<React.SetStateAction<number[]>>;
     skipDialogTyping: () => void;
     takeLootPickup: () => void;
+    questLogOpen: boolean;
+    onCloseQuestLog: () => void;
+    onOpenQuestLog: () => void;
 }
 
 function getHealthStatusColor(pct: number): string {
@@ -289,6 +293,9 @@ export function GameRenderLayer({
     targetingMode,
     units,
     waystoneTravelDestinations,
+    questLogOpen,
+    onCloseQuestLog,
+    onOpenQuestLog,
 }: GameRenderLayerProps) {
     const playerUnits = React.useMemo(
         () => units.filter(unit => unit.team === "player"),
@@ -546,6 +553,7 @@ export function GameRenderLayer({
                 onCloseMenu={onCloseMenu}
                 onOpenJukebox={onOpenJukebox}
                 onCloseJukebox={onCloseJukebox}
+                onOpenQuestLog={onOpenQuestLog}
                 otherModalOpen={otherModalOpen}
                 hasSelection={selectedIds.length > 0}
             />
@@ -637,6 +645,9 @@ export function GameRenderLayer({
                     paused={paused}
                     formationOrder={formationOrder}
                 />
+            )}
+            {questLogOpen && (
+                <QuestLogModal onClose={onCloseQuestLog} />
             )}
         </div>
     );

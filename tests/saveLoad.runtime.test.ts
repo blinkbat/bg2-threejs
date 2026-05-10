@@ -81,6 +81,7 @@ describe("saveLoad runtime", () => {
             state,
             equipment,
             inventory,
+            questState: {},
         });
 
         state.players[0].hp = 1;
@@ -122,6 +123,7 @@ describe("saveLoad runtime", () => {
             state,
             equipment: createEquipmentMap(),
             inventory: createInventory(),
+            questState: {},
         });
 
         expect(slot.players[0].summonExpireAt).toBeUndefined();

@@ -3,6 +3,7 @@ import { getGameTime } from "../../core/gameClock";
 import type { HotbarAssignments } from "../../hooks/localStorage";
 import type { AreaId } from "../areas";
 import type { FogVisibilityByArea } from "../fogMemory";
+import type { QuestProgress, QuestStateMap } from "../../quests/types";
 import { SAVE_VERSION } from "./constants";
 import type { DialogTriggerProgress, EnemyPositionMap, SaveLoadFailure, SaveSlotData, SavedPlayer } from "./types";
 
@@ -28,6 +29,7 @@ interface BuildSaveSlotDataInput {
     state: SaveSnapshotState;
     equipment: Record<number, CharacterEquipment>;
     inventory: PartyInventory;
+    questState: QuestStateMap;
 }
 
 interface LoadableAreaDefinition {
@@ -51,6 +53,7 @@ interface ResolvedLoadedSaveState {
     enemyPositions: EnemyPositionMap;
     fogVisibilityByArea: FogVisibilityByArea;
     lastWaystone?: { areaId: AreaId; waystoneIndex: number };
+    questState: QuestStateMap;
 }
 
 type ResolveLoadedSaveResult =
@@ -145,6 +148,30 @@ function cloneHotbarAssignments(assignments: HotbarAssignments): HotbarAssignmen
     return clone;
 }
 
+function cloneQuestState(questState: QuestStateMap | undefined): QuestStateMap {
+    const clone: QuestStateMap = {};
+    if (!questState) return clone;
+
+    for (const [questId, progress] of Object.entries(questState)) {
+        if (!progress) continue;
+        const objectives: Record<string, { progress: number }> = {};
+        for (const [objectiveId, objectiveProgress] of Object.entries(progress.objectives)) {
+            objectives[objectiveId] = { progress: objectiveProgress.progress };
+        }
+        const cloned: QuestProgress = {
+            questId: progress.questId,
+            status: progress.status,
+            objectives,
+        };
+        if (progress.startedAt !== undefined) cloned.startedAt = progress.startedAt;
+        if (progress.completedAt !== undefined) cloned.completedAt = progress.completedAt;
+        if (progress.turnedInAt !== undefined) cloned.turnedInAt = progress.turnedInAt;
+        clone[questId] = cloned;
+    }
+
+    return clone;
+}
+
 function cloneFogVisibilityByArea(fogVisibilityByArea: FogVisibilityByArea | undefined): FogVisibilityByArea {
     const clone: FogVisibilityByArea = {};
     if (!fogVisibilityByArea) return clone;
@@ -199,7 +226,7 @@ function normalizeEnemyPositions(enemyPositions: EnemyPositionMap | undefined): 
 }
 
 export function buildSaveSlotData(input: BuildSaveSlotDataInput): SaveSlotData {
-    const { timestamp, slotName, state, equipment, inventory } = input;
+    const { timestamp, slotName, state, equipment, inventory, questState } = input;
 
     return {
         version: SAVE_VERSION,
@@ -220,6 +247,7 @@ export function buildSaveSlotData(input: BuildSaveSlotDataInput): SaveSlotData {
         enemyPositions: normalizeEnemyPositions(state.enemyPositions),
         fogVisibilityByArea: cloneFogVisibilityByArea(state.fogVisibilityByArea),
         lastWaystone: state.lastWaystone ? { ...state.lastWaystone } : undefined,
+        questState: cloneQuestState(questState),
     };
 }
 
@@ -264,6 +292,7 @@ export function resolveLoadedSaveState(
             enemyPositions: normalizeEnemyPositions(saveData.enemyPositions),
             fogVisibilityByArea: cloneFogVisibilityByArea(saveData.fogVisibilityByArea),
             lastWaystone: saveData.lastWaystone ? { ...saveData.lastWaystone } : undefined,
+            questState: cloneQuestState(saveData.questState),
         },
     };
 }

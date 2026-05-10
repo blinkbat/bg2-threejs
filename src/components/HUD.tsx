@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, memo } from "react";
 import Tippy from "@tippyjs/react";
-import { Play, Pause, Menu, Bug } from "lucide-react";
+import { Play, Pause, Menu, Bug, BookOpen } from "lucide-react";
 import { MenuModal } from "./MenuModal";
 import { JukeboxModal } from "./JukeboxModal";
 import { UIColorAdjuster } from "./UIColorAdjuster";
@@ -61,6 +61,7 @@ interface HUDProps {
     onCloseMenu: () => void;
     onOpenJukebox: () => void;
     onCloseJukebox: () => void;
+    onOpenQuestLog: () => void;
     otherModalOpen?: boolean;
     hasSelection?: boolean;
 }
@@ -105,6 +106,7 @@ export const HUD = memo(function HUD({
     onCloseMenu,
     onOpenJukebox,
     onCloseJukebox,
+    onOpenQuestLog,
     otherModalOpen,
     hasSelection
 }: HUDProps) {
@@ -193,6 +195,15 @@ export const HUD = memo(function HUD({
                         >
                             {paused ? <Play size={16} /> : <Pause size={16} />}
                             <span>{paused ? "Resume" : "Pause"}</span>
+                        </button>
+                    </Tippy>
+                    <Tippy content="Quest Log (J)" placement="bottom" delay={[300, 0]}>
+                        <button
+                            className="btn btn-with-icon"
+                            onClick={onOpenQuestLog}
+                        >
+                            <BookOpen size={16} />
+                            <span>Quests</span>
                         </button>
                     </Tippy>
                     <Tippy content="Menu (Esc)" placement="bottom" delay={[300, 0]}>

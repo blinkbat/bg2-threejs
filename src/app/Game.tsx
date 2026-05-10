@@ -58,6 +58,14 @@ import { getDialogDefinitionById } from "../dialog/registry";
 import { getUnitRadius, isInRange } from "../rendering/range";
 import { getDialogTriggerPriority, getTriggerStartDialogId, isDialogTriggerSatisfied, type DialogTriggerRuntimeState } from "../dialog/triggerRuntime";
 import type { DialogChoiceCondition, DialogDefinition, DialogNode, DialogSpeaker, DialogState, DialogUiAction, MenuChainAction } from "../dialog/types";
+import {
+    completeQuest,
+    getQuestById,
+    isQuestConditionSatisfied,
+    recordEnemyKillForQuests,
+    startQuest,
+    turnInQuest,
+} from "../quests";
 import { formatPerfLogLine, PERF_LOG_BUFFER_LIMIT, PERF_LOG_ENDPOINT, PERF_LOG_FLUSH_INTERVAL_MS, preloadPortraits, reviveUnitVisual, syncHoveredDoorRef } from "../app/helpers";
 import { buildDialogTriggerUnitsSnapshot, cloneDialogTriggerProgressForRuntime, DIALOG_CHARS_PER_TICK, DIALOG_MIN_BLIP_INTERVAL_MS, DIALOG_PARTY_GATHERED_DEFAULT_MAX_DISTANCE, DIALOG_TRIGGER_POLL_MS, DIALOG_TRIGGER_REPEAT_GUARD_MS, DIALOG_TYPING_INTERVAL_MS, DEFAULT_LIGHTING_TUNING, getWaystoneActivationKey, type GameProps, type LightingTuningSettings, type LootPickupModalState, PORTRAIT_URLS, serializeDialogTriggerProgressForSave, SPEND_NIGHT_BLACK_HOLD_MS, SPEND_NIGHT_FADE_MS } from "./gameShared";
 import { GameRenderLayer } from "./GameRenderLayer";
@@ -148,6 +156,7 @@ export function Game({
     const [itemsModalUnitId, setItemsModalUnitId] = useState<number | null>(null);
     const [lootPickupModalState, setLootPickupModalState] = useState<LootPickupModalState | null>(null);
     const [waystoneTravelDestinations, setWaystoneTravelDestinations] = useState<WaystoneDestination[] | null>(null);
+    const [questLogOpen, setQuestLogOpen] = useState(false);
 
     // =============================================================================
     // STATE SYNC REFS
@@ -283,6 +292,12 @@ export function Game({
             }
             return null;
         }
+        if (condition.type === "quest") {
+            if (!isQuestConditionSatisfied(condition.condition)) {
+                return customDisabledMessage ?? "Quest requirements are not met.";
+            }
+            return null;
+        }
         return customDisabledMessage ?? "Requirements for this option are not met.";
     }, [isPartyGatheredForDialog, gold]);
 
@@ -319,7 +334,9 @@ export function Game({
     const isDialogTyping = currentDialogNode !== null && dialogTypedChars < currentDialogNode.text.length;
     const dialogVisibleText = currentDialogNode ? currentDialogNode.text.slice(0, dialogTypedChars) : "";
     const canContinueWithoutChoices = !isDialogTyping && dialogChoiceOptions.length === 0 && currentDialogNode !== null;
-    const anyMenuOpen = isDialogOpen || isLootPickupModalOpen || isWaystoneTravelModalOpen || infoModalOpen || saveLoadOpen || menuOpen || jukeboxOpen || equipmentModalOpen || skillTreeModalOpen || itemsModalOpen;
+    const anyMenuOpen = isDialogOpen || isLootPickupModalOpen || isWaystoneTravelModalOpen || infoModalOpen || saveLoadOpen || menuOpen || jukeboxOpen || equipmentModalOpen || skillTreeModalOpen || itemsModalOpen || questLogOpen;
+    const anyNonQuestMenuOpenRef = useRef(false);
+    anyNonQuestMenuOpenRef.current = anyMenuOpen && !questLogOpen;
 
     useEffect(() => {
         pauseToggleLockedRef.current = anyMenuOpen || sleepFadeOpacity > 0;
@@ -1208,6 +1225,24 @@ export function Game({
             }
             return;
         }
+        if (action.type === "quest") {
+            const quest = getQuestById(action.questId);
+            const questName = quest?.name ?? action.questId;
+            if (action.action === "start") {
+                if (startQuest(action.questId)) {
+                    addLog(`Quest started: ${questName}`, COLORS.questEvent);
+                }
+            } else if (action.action === "complete") {
+                if (completeQuest(action.questId)) {
+                    addLog(`Quest complete: ${questName}`, COLORS.questEvent);
+                }
+            } else if (action.action === "turn_in") {
+                if (turnInQuest(action.questId)) {
+                    addLog(`Quest turned in: ${questName}`, COLORS.questEvent);
+                }
+            }
+            return;
+        }
 
         const chainAction = action.chainAction;
 
@@ -1246,7 +1281,7 @@ export function Game({
         if (action.menuId === "jukebox") {
             onOpenJukebox({ chainAction });
         }
-    }, [onShowControls, onShowHelp, onShowGlossary, onSaveClick, onLoadClick, onOpenEquipment, onOpenMenu, onOpenJukebox, runSpendNightEvent]);
+    }, [onShowControls, onShowHelp, onShowGlossary, onSaveClick, onLoadClick, onOpenEquipment, onOpenMenu, onOpenJukebox, runSpendNightEvent, addLog]);
     runDialogUiActionRef.current = runDialogUiAction;
 
     const closeDialogWithAction = useCallback((action: DialogUiAction | undefined) => {
@@ -1630,6 +1665,14 @@ export function Game({
         dialogTriggerRuntimeStateRef.current.pendingNpcEngagementSpawnIndexes.add(spawnIndex);
     }, []);
 
+    const onToggleQuestLog = useCallback(() => {
+        setQuestLogOpen(prev => {
+            if (prev) return false;
+            if (anyNonQuestMenuOpenRef.current) return false;
+            return true;
+        });
+    }, []);
+
     const inputCallbacks = useMemo(() => ({
         addLog,
         getSkillContext,
@@ -1639,8 +1682,9 @@ export function Game({
         onCloseInfoModal,
         openLootPickupModal,
         processActionQueue: doProcessQueue,
-        handleCastSkillRef
-    }), [addLog, getSkillContext, handleAreaTransition, handleWaystoneInteract, handleNpcEngaged, onCloseInfoModal, openLootPickupModal, doProcessQueue]);
+        handleCastSkillRef,
+        onToggleQuestLog
+    }), [addLog, getSkillContext, handleAreaTransition, handleWaystoneInteract, handleNpcEngaged, onCloseInfoModal, openLootPickupModal, doProcessQueue, onToggleQuestLog]);
 
     useInputHandlers({
         containerRef,
@@ -1732,7 +1776,14 @@ export function Game({
         }
 
         for (const u of newlyDeadUnits) {
-            if (u.enemyType) recordKnownEnemy(u.enemyType);
+            if (u.enemyType) {
+                recordKnownEnemy(u.enemyType);
+                const completedQuestIds = recordEnemyKillForQuests(u.enemyType);
+                for (const completedId of completedQuestIds) {
+                    const completedQuest = getQuestById(completedId);
+                    addLog(`Quest objectives complete: ${completedQuest?.name ?? completedId}`, COLORS.questEvent);
+                }
+            }
         }
 
         if (sceneState.scene) {
@@ -2425,6 +2476,9 @@ export function Game({
             targetingMode={targetingMode}
             units={units}
             waystoneTravelDestinations={waystoneTravelDestinations}
+            questLogOpen={questLogOpen}
+            onCloseQuestLog={() => setQuestLogOpen(false)}
+            onOpenQuestLog={onToggleQuestLog}
         />
     );
 }

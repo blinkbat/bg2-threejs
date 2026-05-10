@@ -46,6 +46,8 @@ import {
 import { saveFormationOrder } from "./hooks/formationStorage";
 import { saveHotbarAssignments } from "./hooks/hotbarStorage";
 import { loadPlaytestSettings } from "./hooks/localStorage";
+import { resetQuestState, restoreQuestState, serializeQuestState } from "./quests";
+import "./game/quests";
 
 // =============================================================================
 // APP WRAPPER
@@ -272,6 +274,7 @@ export default function App() {
         setInitialLastWaystone(null);
         clearFogVisibilityMemory();
         initializeEquipmentState();
+        resetQuestState();
         setCurrentAreaWithPathReset(DEFAULT_STARTING_AREA);
         setGameKey(k => k + 1);
     };
@@ -370,6 +373,7 @@ export default function App() {
             state,
             equipment: getAllEquipment(),
             inventory: getPartyInventory(),
+            questState: serializeQuestState(),
         });
     }, []);
 
@@ -409,6 +413,7 @@ export default function App() {
             state,
             equipment: getAllEquipment(),
             inventory: getPartyInventory(),
+            questState: serializeQuestState(),
         });
         return saveGame(slot, saveData);
     };
@@ -427,6 +432,7 @@ export default function App() {
         }
 
         restoreFogVisibilityMemory(saveData.fogVisibilityByArea);
+        restoreQuestState(saveData.questState);
         setAllEquipment(saveData.equipment);
         setPartyInventory(saveData.inventory);
         setCurrentAreaWithPathReset(saveData.areaId);

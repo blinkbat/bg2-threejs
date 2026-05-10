@@ -2,6 +2,7 @@
 import type { AreaId } from "../areas";
 import type { HotbarAssignments } from "../../hooks/localStorage";
 import type { FogVisibilityByArea } from "../fogMemory";
+import type { QuestStateMap } from "../../quests/types";
 
 /** Persisted player data - matches PersistedPlayer in App.tsx */
 export interface SavedPlayer {
@@ -60,6 +61,8 @@ export interface SaveSlotData {
     fogVisibilityByArea?: FogVisibilityByArea;
     // Last waystone the party interacted with (for Waystone Fragment recall)
     lastWaystone?: { areaId: AreaId; waystoneIndex: number };
+    // Quest progress, keyed by quest id.
+    questState?: QuestStateMap;
 }
 
 /** Storage structure in localStorage */

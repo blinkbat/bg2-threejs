@@ -980,6 +980,16 @@ function sanitizeAreaDialogUiAction(raw: unknown): AreaDialogUiAction | undefine
         }
         return action;
     }
+    if (raw.type === "quest") {
+        const action = raw.action;
+        if (action !== "start" && action !== "complete" && action !== "turn_in") return undefined;
+        if (typeof raw.questId !== "string" || raw.questId.trim().length === 0) return undefined;
+        return {
+            type: "quest",
+            action,
+            questId: raw.questId.trim(),
+        };
+    }
     if (raw.type === "event") {
         if (typeof raw.eventId !== "string") return undefined;
         if (!isAreaDialogEventId(raw.eventId)) return undefined;
@@ -1025,6 +1035,35 @@ function sanitizeAreaDialogChoiceCondition(raw: unknown): AreaDialogChoiceCondit
             amount: raw.amount,
             ...(disabledMessage ? { disabledMessage } : {}),
         };
+    }
+
+    if (raw.type === "quest") {
+        if (!isRecord(raw.condition)) return null;
+        const inner = raw.condition;
+        if (inner.type === "quest_status") {
+            if (typeof inner.questId !== "string" || inner.questId.trim().length === 0) return null;
+            const status = inner.status;
+            if (status !== "inactive" && status !== "active" && status !== "completed" && status !== "turned_in") return null;
+            return {
+                type: "quest",
+                condition: { type: "quest_status", questId: inner.questId.trim(), status },
+                ...(disabledMessage ? { disabledMessage } : {}),
+            };
+        }
+        if (inner.type === "quest_objective_complete") {
+            if (typeof inner.questId !== "string" || inner.questId.trim().length === 0) return null;
+            if (typeof inner.objectiveId !== "string" || inner.objectiveId.trim().length === 0) return null;
+            return {
+                type: "quest",
+                condition: {
+                    type: "quest_objective_complete",
+                    questId: inner.questId.trim(),
+                    objectiveId: inner.objectiveId.trim(),
+                },
+                ...(disabledMessage ? { disabledMessage } : {}),
+            };
+        }
+        return null;
     }
 
     return null;

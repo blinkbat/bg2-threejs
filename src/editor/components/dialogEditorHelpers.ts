@@ -3,7 +3,6 @@ import type { DialogSpeakerId } from "../../dialog/types";
 import type { EnemyType } from "../../core/types";
 import type {
     AreaDialogDefinition,
-    AreaDialogEventId,
     AreaDialogMenuId,
     AreaDialogNode,
     AreaDialogTrigger,
@@ -69,7 +68,14 @@ export function createUniqueId(base: string, existingIds: Set<string>): string {
     return `${normalizedBase}_${index}`;
 }
 
-export const MENU_NODE_OPTIONS: Array<{ value: AreaDialogMenuId | AreaDialogEventId; label: string }> = [
+export type MenuNodeOptionValue =
+    | AreaDialogMenuId
+    | "spend_the_night"
+    | "quest_start"
+    | "quest_complete"
+    | "quest_turn_in";
+
+export const MENU_NODE_OPTIONS: Array<{ value: MenuNodeOptionValue; label: string }> = [
     { value: "controls", label: "Controls" },
     { value: "help", label: "Help" },
     { value: "glossary", label: "Glossary" },
@@ -79,11 +85,24 @@ export const MENU_NODE_OPTIONS: Array<{ value: AreaDialogMenuId | AreaDialogEven
     { value: "menu", label: "Main Menu" },
     { value: "jukebox", label: "Jukebox" },
     { value: "spend_the_night", label: "Spend The Night" },
+    { value: "quest_start", label: "Start Quest" },
+    { value: "quest_complete", label: "Complete Quest" },
+    { value: "quest_turn_in", label: "Turn In Quest" },
 ];
+
+const MENU_NODE_OPTION_VALUES: ReadonlySet<string> = new Set(MENU_NODE_OPTIONS.map(o => o.value));
+
+export function isMenuNodeOptionValue(value: string): value is MenuNodeOptionValue {
+    return MENU_NODE_OPTION_VALUES.has(value);
+}
 
 export function getMenuNodeLabel(node: AreaDialogNode): string {
     if (!node.isMenuNode || !node.onDialogEndAction) return node.id;
     const action = node.onDialogEndAction;
+    if (action.type === "quest") {
+        const verb = action.action === "turn_in" ? "Turn In" : action.action === "complete" ? "Complete" : "Start";
+        return `${verb} Quest: ${action.questId}`;
+    }
     const actionId = action.type === "open_menu" ? action.menuId : action.eventId;
     const option = MENU_NODE_OPTIONS.find(opt => opt.value === actionId);
     return option?.label ?? actionId;
@@ -98,7 +117,7 @@ export function createDefaultNode(nodeId: string): AreaDialogNode {
     };
 }
 
-export function createMenuNode(nodeId: string, menuId: AreaDialogMenuId | AreaDialogEventId): AreaDialogNode {
+export function createMenuNode(nodeId: string, menuId: MenuNodeOptionValue): AreaDialogNode {
     const action = toDialogEndAction(menuId);
     return {
         id: nodeId,
@@ -124,7 +143,7 @@ const VALID_MENU_IDS: Set<string> = new Set<AreaDialogMenuId>([
     "controls", "startup_controls", "help", "glossary", "equipment", "save_game", "load_game", "menu", "jukebox",
 ]);
 
-export function toDialogEndAction(menuId: string): AreaDialogUiAction | undefined {
+export function toDialogEndAction(menuId: MenuNodeOptionValue | ""): AreaDialogUiAction | undefined {
     if (menuId === "") return undefined;
     if (menuId === "spend_the_night") {
         return {
@@ -133,16 +152,20 @@ export function toDialogEndAction(menuId: string): AreaDialogUiAction | undefine
             goldCost: 0,
         };
     }
+    if (menuId === "quest_start") return { type: "quest", action: "start", questId: "" };
+    if (menuId === "quest_complete") return { type: "quest", action: "complete", questId: "" };
+    if (menuId === "quest_turn_in") return { type: "quest", action: "turn_in", questId: "" };
     if (!VALID_MENU_IDS.has(menuId)) return undefined;
     return {
         type: "open_menu",
-        menuId: menuId as AreaDialogMenuId,
+        menuId,
     };
 }
 
 export function toDialogEndActionMenuId(action: AreaDialogUiAction | undefined): string {
     if (!action) return "";
     if (action.type === "open_menu") return action.menuId;
+    if (action.type === "quest") return `quest_${action.action}`;
     return action.eventId;
 }
 

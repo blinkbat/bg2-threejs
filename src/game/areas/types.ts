@@ -3,7 +3,8 @@
 // =============================================================================
 
 import type { CandlePosition, MergedObstacle, EnemyType } from "../../core/types";
-import type { DialogSpeakerId } from "../../dialog/types";
+import type { DialogQuestActionKind, DialogSpeakerId } from "../../dialog/types";
+import type { QuestCondition } from "../../quests/types";
 
 // Built-in areas (for autocomplete)
 export type BuiltInAreaId = "dungeon" | "forest" | "coast" | "ruins" | "sanctum" | "cliffs" | "magma_cave";
@@ -63,7 +64,13 @@ export interface AreaDialogEventAction {
     goldCost?: number;
 }
 
-export type AreaDialogUiAction = AreaDialogOpenMenuAction | AreaDialogEventAction;
+export interface AreaDialogQuestAction {
+    type: "quest";
+    action: DialogQuestActionKind;
+    questId: string;
+}
+
+export type AreaDialogUiAction = AreaDialogOpenMenuAction | AreaDialogEventAction | AreaDialogQuestAction;
 
 export interface AreaDialogChoicePartyGatheredCondition {
     type: "party_is_gathered";
@@ -77,9 +84,16 @@ export interface AreaDialogChoicePartyHasGoldCondition {
     disabledMessage?: string;
 }
 
+export interface AreaDialogChoiceQuestCondition {
+    type: "quest";
+    condition: QuestCondition;
+    disabledMessage?: string;
+}
+
 export type AreaDialogChoiceCondition =
     | AreaDialogChoicePartyGatheredCondition
-    | AreaDialogChoicePartyHasGoldCondition;
+    | AreaDialogChoicePartyHasGoldCondition
+    | AreaDialogChoiceQuestCondition;
 
 export interface AreaDialogNode {
     id: string;

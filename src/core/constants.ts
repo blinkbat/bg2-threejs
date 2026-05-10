@@ -244,6 +244,9 @@ export const COLORS = {
     damageNeutral: "#ff6600",   // Orange - enemy taking damage
     damageCrit: "#ffd700",      // Gold - critical hit
 
+    // Quest log entries
+    questEvent: "#a78bfa",      // Purple - quest start/complete/turn-in
+
     // Status effects
     poison: "#4a7c4a",
     poisonText: "#7cba7c",

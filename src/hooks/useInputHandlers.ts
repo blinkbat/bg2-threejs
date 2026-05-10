@@ -134,6 +134,7 @@ interface InputCallbacks {
     openLootPickupModal: (request: LootPickupRequest) => void;
     processActionQueue: (defeatedThisFrame: Set<number>) => void;
     handleCastSkillRef: React.MutableRefObject<((unitId: number, skill: Skill) => void) | null>;
+    onToggleQuestLog: () => void;
 }
 
 interface UseInputHandlersOptions {
@@ -1279,6 +1280,9 @@ export function useInputHandlers({
             if (e.code === "KeyD" && !stateRefs.targetingModeRef.current) {
                 setters.setSelectedIds([]);
                 setters.setCommandMode(null);
+            }
+            if (e.code === "KeyJ" && !stateRefs.targetingModeRef.current) {
+                callbacks.onToggleQuestLog();
             }
             if (e.code === "KeyG" && !stateRefs.targetingModeRef.current) {
                 const controllableIds = stateRefs.unitsStateRef.current
