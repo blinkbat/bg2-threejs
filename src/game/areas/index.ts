@@ -9,6 +9,7 @@ export * from "./types";
 import { TEXT_AREAS, getAllAreaIds, registerAreaFromText } from "./textLoader";
 
 import type { AreaId, AreaData, ComputedAreaData } from "./types";
+import { cellKey } from "./types";
 import { computeAreaData } from "./helpers";
 
 // Registry of all areas
@@ -60,11 +61,11 @@ export function getBlocked(): boolean[][] {
 }
 
 export function isTreeBlocked(x: number, z: number): boolean {
-    return getComputedAreaData().treeBlocked.has(`${x},${z}`);
+    return getComputedAreaData().treeBlocked.has(cellKey(x, z));
 }
 
 export function isTerrainBlocked(x: number, z: number): boolean {
-    return getComputedAreaData().terrainBlocked.has(`${x},${z}`);
+    return getComputedAreaData().terrainBlocked.has(cellKey(x, z));
 }
 
 export function isWaterTerrain(x: number, z: number): boolean {

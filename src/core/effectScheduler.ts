@@ -4,12 +4,8 @@
 
 type EffectAnimationStep = (gameNow: number) => boolean;
 
-interface ScheduledEffectAnimation {
-    id: number;
-    step: EffectAnimationStep;
-}
-
-const scheduledEffectAnimations: ScheduledEffectAnimation[] = [];
+// Map keyed by animation id — O(1) cancellation instead of findIndex + splice.
+const scheduledEffectAnimations: Map<number, EffectAnimationStep> = new Map();
 let nextAnimationId = 1;
 
 /**
@@ -19,13 +15,10 @@ let nextAnimationId = 1;
  */
 export function scheduleEffectAnimation(step: EffectAnimationStep): () => void {
     const id = nextAnimationId++;
-    scheduledEffectAnimations.push({ id, step });
+    scheduledEffectAnimations.set(id, step);
 
     return () => {
-        const index = scheduledEffectAnimations.findIndex(animation => animation.id === id);
-        if (index >= 0) {
-            scheduledEffectAnimations.splice(index, 1);
-        }
+        scheduledEffectAnimations.delete(id);
     };
 }
 
@@ -33,17 +26,18 @@ export function scheduleEffectAnimation(step: EffectAnimationStep): () => void {
  * Advance all scheduled effect animations for this frame.
  */
 export function updateEffectAnimations(gameNow: number): void {
-    for (let index = scheduledEffectAnimations.length - 1; index >= 0; index--) {
-        const animation = scheduledEffectAnimations[index];
+    // Map iteration tolerates deletes during iteration; steps scheduled while
+    // iterating are also visited, matching insertion order.
+    for (const [id, step] of scheduledEffectAnimations) {
         let finished = false;
         try {
-            finished = animation.step(gameNow);
+            finished = step(gameNow);
         } catch {
             finished = true;
         }
 
         if (finished) {
-            scheduledEffectAnimations.splice(index, 1);
+            scheduledEffectAnimations.delete(id);
         }
     }
 }
@@ -53,5 +47,5 @@ export function updateEffectAnimations(gameNow: number): void {
  * Useful during scene teardown/area transitions.
  */
 export function clearEffectAnimations(): void {
-    scheduledEffectAnimations.length = 0;
+    scheduledEffectAnimations.clear();
 }

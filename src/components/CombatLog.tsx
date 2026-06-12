@@ -174,12 +174,20 @@ export const CombatLog = memo(function CombatLog({ log }: CombatLogProps) {
     return (
         <div ref={containerRef} className="combat-log glass-panel-light">
             <div ref={innerRef} className="combat-log-inner">
-                {log.slice(-50).map((entry: CombatLogEntry, i: number) => (
-                    <div key={i} className="log-entry" style={{ color: toUiThemeColor(entry.color) }}>
-                        {entry.text}
-                    </div>
+                {log.slice(-50).map((entry: CombatLogEntry) => (
+                    <LogRow key={entry.id} entry={entry} />
                 ))}
             </div>
+        </div>
+    );
+});
+
+// Memoized row keyed by stable entry id — unchanged rows skip re-rendering
+// when a new entry is appended.
+const LogRow = memo(function LogRow({ entry }: { entry: CombatLogEntry }) {
+    return (
+        <div className="log-entry" style={{ color: toUiThemeColor(entry.color) }}>
+            {entry.text}
         </div>
     );
 });

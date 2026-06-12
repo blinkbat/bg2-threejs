@@ -4,6 +4,7 @@
 
 import type { CandlePosition, MergedObstacle } from "../../core/types";
 import type { AreaData, ComputedAreaData } from "./types";
+import { cellKey } from "./types";
 
 /**
  * Build blocked grid from geometry grid.
@@ -133,19 +134,19 @@ export function computeAreaData(area: AreaData): ComputedAreaData {
     });
 
     // Track terrain hazard zones for pathfinding (NOT in main blocked grid - doesn't block LOS)
-    const terrainBlocked = new Set<string>();
+    const terrainBlocked = new Set<number>();
     for (let z = 0; z < area.gridHeight && z < area.terrain.length; z++) {
         for (let x = 0; x < area.gridWidth && x < (area.terrain[z]?.length ?? 0); x++) {
             const t = area.terrain[z][x];
             if (t === "~" || t === "w") {
-                terrainBlocked.add(`${x},${z}`);
+                terrainBlocked.add(cellKey(x, z));
             }
         }
     }
 
     // Block tree positions for pathing and LOS (after wall merging).
     // Trees behave like tall poles: one blocked cell centered on the tree.
-    const treeBlocked = new Set<string>();
+    const treeBlocked = new Set<number>();
     area.trees.forEach(tree => {
         const tx = Math.floor(tree.x);
         const tz = Math.floor(tree.z);
@@ -153,7 +154,7 @@ export function computeAreaData(area: AreaData): ComputedAreaData {
         // Block the cell the tree is on for pathfinding
         if (tx >= 0 && tx < area.gridWidth && tz >= 0 && tz < area.gridHeight) {
             blocked[tx][tz] = true;
-            treeBlocked.add(`${tx},${tz}`);
+            treeBlocked.add(cellKey(tx, tz));
         }
     });
 
@@ -172,7 +173,7 @@ export function computeAreaData(area: AreaData): ComputedAreaData {
 
                 // Standing columns block LoS (they're tall)
                 if (dec.type === "column") {
-                    treeBlocked.add(`${dx},${dz}`);
+                    treeBlocked.add(cellKey(dx, dz));
                 }
             }
         });

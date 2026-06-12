@@ -16,21 +16,17 @@ const DEFAULT_MELEE_RANGE = 1.55;
 // Player unit stats are expensive to compute (equipment + stat bonuses).
 // Cache results per frame to avoid redundant recalculations.
 
-const statsCache: Map<string, UnitData | EnemyStats> = new Map();
-
-function getPlayerStatsCacheSignature(unit: Unit): string {
-    const stats = unit.stats;
-    if (!stats) return "base";
-    return `${stats.strength}:${stats.dexterity}:${stats.vitality}:${stats.intelligence}:${stats.faith}`;
+interface StatsCacheEntry {
+    team: Unit["team"];
+    statsRef: Unit["stats"];            // player: invalidates on stat changes (immutable updates)
+    equipmentRevision: number;          // player: invalidates on equipment changes
+    enemyType: Unit["enemyType"];       // enemy: invalidates on type mismatch (id reuse)
+    splitCount: number;                 // enemy: amoeba split stage
+    result: UnitData | EnemyStats;
 }
 
-function getStatsCacheKey(unit: Unit): string {
-    if (unit.team === "player") {
-        return `player:${unit.id}:${getEquipmentStateRevision()}:${getPlayerStatsCacheSignature(unit)}`;
-    }
-    const amoebaStage = unit.enemyType === "giant_amoeba" ? `:${unit.splitCount ?? 0}` : "";
-    return `enemy:${unit.id}:${unit.enemyType ?? "unknown"}${amoebaStage}`;
-}
+// Keyed by unit id — numeric keys avoid building a string per lookup on the hot path.
+const statsCache: Map<number, StatsCacheEntry> = new Map();
 
 /** Clear the per-frame stats cache. Call once at the start of each game loop frame. */
 export function clearUnitStatsCache(): void {
@@ -43,19 +39,29 @@ export function clearUnitStatsCache(): void {
  * Results are cached per frame — call clearUnitStatsCache() at frame start.
  */
 export function getUnitStats(unit: Unit): UnitData | EnemyStats {
-    const cacheKey = getStatsCacheKey(unit);
-    const cached = statsCache.get(cacheKey);
-    if (cached) return cached;
+    const splitCount = unit.splitCount ?? 0;
+    const cached = statsCache.get(unit.id);
+    if (cached && cached.team === unit.team) {
+        if (unit.team === "player") {
+            if (cached.statsRef === unit.stats && cached.equipmentRevision === getEquipmentStateRevision()) {
+                return cached.result;
+            }
+        } else if (cached.enemyType === unit.enemyType && cached.splitCount === splitCount) {
+            return cached.result;
+        }
+    }
 
     let result: UnitData | EnemyStats;
+    let equipmentRevision = 0;
     if (unit.team === "player") {
+        equipmentRevision = getEquipmentStateRevision();
         result = getEffectiveUnitData(unit.id, unit);
     } else {
         const baseEnemyStats = unit.enemyType ? ENEMY_STATS[unit.enemyType] : undefined;
         if (!baseEnemyStats) {
             result = ENEMY_STATS.kobold;
         } else if (unit.enemyType === "giant_amoeba") {
-            const stageMaxHp = getAmoebaMaxHpForSplitCount(unit.splitCount ?? 0);
+            const stageMaxHp = getAmoebaMaxHpForSplitCount(splitCount);
             result = {
                 ...baseEnemyStats,
                 hp: stageMaxHp,
@@ -66,7 +72,14 @@ export function getUnitStats(unit: Unit): UnitData | EnemyStats {
         }
     }
 
-    statsCache.set(cacheKey, result);
+    statsCache.set(unit.id, {
+        team: unit.team,
+        statsRef: unit.stats,
+        equipmentRevision,
+        enemyType: unit.enemyType,
+        splitCount,
+        result
+    });
     return result;
 }
 

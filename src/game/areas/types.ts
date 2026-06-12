@@ -298,10 +298,18 @@ export interface AreaData {
     dialogTriggers?: AreaDialogTrigger[];
 }
 
+/** Stride for packing grid coordinates into a single numeric cell key. Supports grids up to 1024x1024. */
+export const CELL_KEY_STRIDE = 1024;
+
+/** Pack grid coordinates into a numeric key for Set/Map lookups without per-call string allocation. */
+export function cellKey(x: number, z: number): number {
+    return x * CELL_KEY_STRIDE + z;
+}
+
 export interface ComputedAreaData {
     blocked: boolean[][];
     mergedObstacles: MergedObstacle[];
     candlePositions: CandlePosition[];
-    treeBlocked: Set<string>;  // Set of "x,z" keys for tree-blocked cells (for LOS)
-    terrainBlocked: Set<string>;  // Set of "x,z" keys for terrain-blocked cells (lava, water - movement only, not LOS)
+    treeBlocked: Set<number>;  // Set of cellKey(x, z) keys for tree-blocked cells (for LOS)
+    terrainBlocked: Set<number>;  // Set of cellKey(x, z) keys for terrain-blocked cells (lava, water - movement only, not LOS)
 }

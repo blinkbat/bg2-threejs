@@ -54,7 +54,10 @@ export function updateSwingAnimations(
     scene: THREE.Scene,
     now: number
 ): SwingAnimation[] {
-    return swingAnimations.filter(swing => {
+    // In-place compaction — avoids allocating a new array every frame
+    let writeIndex = 0;
+    for (let i = 0; i < swingAnimations.length; i++) {
+        const swing = swingAnimations[i];
         const elapsed = now - swing.startTime;
         const t = Math.min(1, elapsed / swing.duration);
         const angle = swing.startAngle + SWING_ARC_ANGLE * t;
@@ -64,10 +67,13 @@ export function updateSwingAnimations(
         if (t >= 1) {
             scene.remove(swing.mesh);
             (swing.mesh.material as THREE.Material).dispose();
-            return false;
+            continue;
         }
-        return true;
-    });
+        swingAnimations[writeIndex] = swing;
+        writeIndex++;
+    }
+    swingAnimations.length = writeIndex;
+    return swingAnimations;
 }
 
 // =============================================================================

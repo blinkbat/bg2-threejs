@@ -6,7 +6,13 @@ import * as THREE from "three";
 import type { Unit, DamageText, UnitGroup, FogTexture } from "../core/types";
 import { FOG_SCALE, FLASH_DURATION, ENRAGED_TINT_STRENGTH } from "../core/constants";
 import { hasStatusEffect } from "../combat/combatMath";
-import { updateVisibility, resetVisibilityTracking } from "../ai/pathfinding";
+import {
+    updateVisibility,
+    resetVisibilityTracking,
+    getChangedVisibilityCells,
+    decodeCellKeyX,
+    decodeCellKeyZ
+} from "../ai/pathfinding";
 import { getCurrentArea } from "../game/areas";
 import { isEnemyHiddenFromView } from "./enemyBehaviors";
 import { recycleDamageNumber } from "../combat/damageEffects";
@@ -173,18 +179,21 @@ export function updateEnergyShieldVisuals(
         const effects = unit.statusEffects;
         const hasBarrier = effects !== undefined && effects.length > 0
             && effects.some(e => e.type === "energy_shield" || e.type === "divine_lattice");
+        // Bubble mesh ref is cached on userData — getObjectByName walks the whole
+        // child tree and this runs per unit per frame.
+        const cachedBubble = unitGroup.userData.energyShieldBubble;
         if (!hasBarrier) {
             // Fast path: remove bubble if present
-            const existing = unitGroup.getObjectByName(ENERGY_SHIELD_BUBBLE_NAME) as THREE.Mesh | undefined;
-            if (existing) {
-                unitGroup.remove(existing);
-                (existing.material as THREE.MeshBasicMaterial).dispose();
+            if (cachedBubble) {
+                unitGroup.remove(cachedBubble);
+                (cachedBubble.material as THREE.MeshBasicMaterial).dispose();
+                delete unitGroup.userData.energyShieldBubble;
             }
             continue;
         }
 
         const hasDivineLattice = effects.some(e => e.type === "divine_lattice");
-        const existingBubble = unitGroup.getObjectByName(ENERGY_SHIELD_BUBBLE_NAME) as THREE.Mesh | undefined;
+        const existingBubble = cachedBubble;
 
         if (!existingBubble) {
             const bubbleColor = hasDivineLattice ? 0xffffff : 0x66ccff;
@@ -200,6 +209,7 @@ export function updateEnergyShieldVisuals(
             bubble.name = ENERGY_SHIELD_BUBBLE_NAME;
             bubble.position.y = 0.5;
             unitGroup.add(bubble);
+            unitGroup.userData.energyShieldBubble = bubble;
         } else {
             const bubbleMat = existingBubble.material as THREE.MeshBasicMaterial;
             if (hasDivineLattice) {
@@ -225,6 +235,11 @@ export function updateEnergyShieldVisuals(
 let lastFogVisibilityKey = 0;
 let hasFogVisibilityKey = false;
 let lastFogAreaId: string | null = null;
+let fogCanvasNeedsFullRepaint = true;
+
+// Hoisted fog fill styles (avoid re-resolving per cell)
+const FOG_SEEN_FILL = "rgba(0,0,0,0.4)";
+const FOG_UNSEEN_FILL = "rgba(0,0,0,1)";
 const ENEMY_VIEW_FADE_LERP = 0.32;
 const ENEMY_VIEW_FADE_MIN_VISIBLE = 0.02;
 
@@ -389,6 +404,7 @@ export function resetFogCache(): void {
     lastFogVisibilityKey = 0;
     hasFogVisibilityKey = false;
     lastFogAreaId = null;
+    fogCanvasNeedsFullRepaint = true;
     resetVisibilityTracking();
 }
 
@@ -405,6 +421,7 @@ export function updateFogOfWar(
     if (lastFogAreaId !== area.id) {
         lastFogAreaId = area.id;
         hasFogVisibilityKey = false;
+        fogCanvasNeedsFullRepaint = true;
         resetVisibilityTracking();
     }
 
@@ -440,8 +457,9 @@ export function updateFogOfWar(
         const fogChanged = updateVisibility(visibility, playerUnits, { current: unitsRef });
         visibilityChanged = fogChanged;
 
-        // Only redraw fog texture if visibility actually changed
-        if (fogChanged) {
+        if (fogCanvasNeedsFullRepaint) {
+            // First paint for this area: the whole canvas is stale, redraw every cell.
+            fogCanvasNeedsFullRepaint = false;
 
             const { ctx, texture } = fogTexture;
 
@@ -455,9 +473,24 @@ export function updateFogOfWar(
                     if (vis === 2) continue;  // Visible - no fog
 
                     // Simple alpha: seen = 0.4, unexplored = 1.0
-                    ctx.fillStyle = vis === 1 ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,1)";
+                    ctx.fillStyle = vis === 1 ? FOG_SEEN_FILL : FOG_UNSEEN_FILL;
                     ctx.fillRect(x * FOG_SCALE, z * FOG_SCALE, FOG_SCALE, FOG_SCALE);
                 }
+            }
+
+            texture.needsUpdate = true;
+        } else if (fogChanged) {
+            // Incremental repaint: only cells whose visibility value changed.
+            const { ctx, texture } = fogTexture;
+
+            for (const key of getChangedVisibilityCells()) {
+                const x = decodeCellKeyX(key);
+                const z = decodeCellKeyZ(key);
+                const vis = visibility[x][z];
+                ctx.clearRect(x * FOG_SCALE, z * FOG_SCALE, FOG_SCALE, FOG_SCALE);
+                if (vis === 2) continue;  // Visible - no fog
+                ctx.fillStyle = vis === 1 ? FOG_SEEN_FILL : FOG_UNSEEN_FILL;
+                ctx.fillRect(x * FOG_SCALE, z * FOG_SCALE, FOG_SCALE, FOG_SCALE);
             }
 
             texture.needsUpdate = true;

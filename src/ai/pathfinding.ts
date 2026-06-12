@@ -1,6 +1,6 @@
 import { VISION_RADIUS, PATH_RECURSION_LIMIT, ASTAR_BLOCKED_TARGET_SEARCH, ASTAR_DIAGONAL_COST } from "../core/constants";
 import { blocked } from "../game/dungeon";
-import { isTreeBlocked, isTerrainBlocked, isWaterTerrain } from "../game/areas";
+import { getComputedAreaData, isTerrainBlocked, isWaterTerrain } from "../game/areas";
 import { isWithinGrid, distance } from "../game/geometry";
 import type { PathNode, Unit, UnitGroup } from "../core/types";
 import type { UnitSpatialFrame } from "./spatialCache";
@@ -26,6 +26,18 @@ const UNIT_PROXIMITY_COST = 2;
 const UNIT_AVOIDANCE_RADIUS = 1;
 // Squared avoidance radius for fast comparison
 const UNIT_AVOIDANCE_RADIUS_SQ = UNIT_AVOIDANCE_RADIUS * UNIT_AVOIDANCE_RADIUS;
+
+// Precomputed (dx, dz, cost) offsets within the avoidance radius — avoids a
+// Math.sqrt per cell per unit on every dynamic obstacle rebuild.
+const AVOIDANCE_OFFSETS: { dx: number; dz: number; cost: number }[] = [];
+for (let offsetDx = -UNIT_AVOIDANCE_RADIUS; offsetDx <= UNIT_AVOIDANCE_RADIUS; offsetDx++) {
+    for (let offsetDz = -UNIT_AVOIDANCE_RADIUS; offsetDz <= UNIT_AVOIDANCE_RADIUS; offsetDz++) {
+        const distSq = offsetDx * offsetDx + offsetDz * offsetDz;
+        if (distSq > UNIT_AVOIDANCE_RADIUS_SQ) continue;
+        const cost = UNIT_PROXIMITY_COST * (1 - Math.sqrt(distSq) / (UNIT_AVOIDANCE_RADIUS + 1));
+        AVOIDANCE_OFFSETS.push({ dx: offsetDx, dz: offsetDz, cost });
+    }
+}
 
 // Module-level state for dynamic obstacles (updated each frame before pathfinding)
 const dynamicCostMap: Map<number, number> = new Map();
@@ -68,23 +80,15 @@ export function updateDynamicObstacles(
             const centerZ = entry.cellZ;
 
             // Add cost to cells near this unit
-            for (let dx = -UNIT_AVOIDANCE_RADIUS; dx <= UNIT_AVOIDANCE_RADIUS; dx++) {
-                for (let dz = -UNIT_AVOIDANCE_RADIUS; dz <= UNIT_AVOIDANCE_RADIUS; dz++) {
-                    const x = centerX + dx;
-                    const z = centerZ + dz;
-                    if (!isWithinGrid(x, z)) continue;
-                    if (isBlocked(x, z)) continue; // Don't add cost to walls
+            for (const offset of AVOIDANCE_OFFSETS) {
+                const x = centerX + offset.dx;
+                const z = centerZ + offset.dz;
+                if (!isWithinGrid(x, z)) continue;
+                if (isBlocked(x, z)) continue; // Don't add cost to walls
 
-                    const distSq = dx * dx + dz * dz;
-                    if (distSq <= UNIT_AVOIDANCE_RADIUS_SQ) {
-                        // Higher cost for cells closer to unit center
-                        const dist = Math.sqrt(distSq);
-                        const cost = UNIT_PROXIMITY_COST * (1 - dist / (UNIT_AVOIDANCE_RADIUS + 1));
-                        const key = cellKey(x, z);
-                        const existing = dynamicCostMap.get(key) || 0;
-                        dynamicCostMap.set(key, Math.max(existing, cost));
-                    }
-                }
+                const key = cellKey(x, z);
+                const existing = dynamicCostMap.get(key) || 0;
+                dynamicCostMap.set(key, Math.max(existing, offset.cost));
             }
         }
 
@@ -139,23 +143,15 @@ export function updateDynamicObstacles(
         const centerZ = Math.floor(g.position.z);
 
         // Add cost to cells near this unit
-        for (let dx = -UNIT_AVOIDANCE_RADIUS; dx <= UNIT_AVOIDANCE_RADIUS; dx++) {
-            for (let dz = -UNIT_AVOIDANCE_RADIUS; dz <= UNIT_AVOIDANCE_RADIUS; dz++) {
-                const x = centerX + dx;
-                const z = centerZ + dz;
-                if (!isWithinGrid(x, z)) continue;
-                if (isBlocked(x, z)) continue; // Don't add cost to walls
+        for (const offset of AVOIDANCE_OFFSETS) {
+            const x = centerX + offset.dx;
+            const z = centerZ + offset.dz;
+            if (!isWithinGrid(x, z)) continue;
+            if (isBlocked(x, z)) continue; // Don't add cost to walls
 
-                const distSq = dx * dx + dz * dz;
-                if (distSq <= UNIT_AVOIDANCE_RADIUS_SQ) {
-                    // Higher cost for cells closer to unit center
-                    const dist = Math.sqrt(distSq);
-                    const cost = UNIT_PROXIMITY_COST * (1 - dist / (UNIT_AVOIDANCE_RADIUS + 1));
-                    const key = cellKey(x, z);
-                    const existing = dynamicCostMap.get(key) || 0;
-                    dynamicCostMap.set(key, Math.max(existing, cost));
-                }
-            }
+            const key = cellKey(x, z);
+            const existing = dynamicCostMap.get(key) || 0;
+            dynamicCostMap.set(key, Math.max(existing, offset.cost));
         }
     }
 }
@@ -246,76 +242,95 @@ export function findNearestPassable(targetX: number, targetZ: number, maxRadius:
 // FOG OF WAR - Bresenham LOS, visibility states: 0=unseen, 1=seen, 2=visible
 // =============================================================================
 
-const previousVisibleCells: number[] = [];
-let visibilityTrackingDirty = true;
+// Per-unit vision caching: each unit's visible cell set is retraced only when
+// that unit crosses a tile boundary (or the cache is invalidated). A reference
+// count per cell tracks how many units currently see it, so unmoved units
+// never re-run line-of-sight tracing.
 
-function seedPreviousVisibleCells(visibility: number[][]): void {
-    previousVisibleCells.length = 0;
-    for (let x = 0; x < visibility.length; x++) {
-        for (let z = 0; z < (visibility[x]?.length ?? 0); z++) {
-            if (visibility[x][z] === 2) {
-                previousVisibleCells.push(cellKey(x, z));
-            }
-        }
-    }
+interface UnitVisionEntry {
+    tileKey: number;
+    cells: number[];
 }
+
+const unitVisionCache: Map<number, UnitVisionEntry> = new Map();
+const visibleCellRefCounts: Map<number, number> = new Map();
+const touchedCellsScratch: Set<number> = new Set();
+const presentUnitIdsScratch: Set<number> = new Set();
+const changedVisibilityCells: number[] = [];
+let visionCacheDirty = true;
 
 export function resetVisibilityTracking(): void {
-    previousVisibleCells.length = 0;
-    visibilityTrackingDirty = true;
+    unitVisionCache.clear();
+    visibleCellRefCounts.clear();
+    changedVisibilityCells.length = 0;
+    visionCacheDirty = true;
 }
 
 /**
- * Decay all visible cells to seen state.
+ * Cells whose visibility value changed during the last updateVisibility call,
+ * encoded with cellKey(). Valid until the next updateVisibility call.
  */
-function decayVisibility(visibility: number[][]): boolean {
-    if (visibilityTrackingDirty) {
-        seedPreviousVisibleCells(visibility);
-        visibilityTrackingDirty = false;
-    }
+export function getChangedVisibilityCells(): readonly number[] {
+    return changedVisibilityCells;
+}
 
-    if (previousVisibleCells.length === 0) {
-        return false;
-    }
+export function decodeCellKeyX(key: number): number {
+    return Math.floor(key / KEY_STRIDE);
+}
 
-    let changed = false;
-    for (const key of previousVisibleCells) {
-        const x = Math.floor(key / KEY_STRIDE);
-        const z = key - x * KEY_STRIDE;
-        if (visibility[x]?.[z] === 2) {
-            visibility[x][z] = 1;
-            changed = true;
+export function decodeCellKeyZ(key: number): number {
+    return key % KEY_STRIDE;
+}
+
+function acquireVisibleCells(cells: number[], touched: Set<number>): void {
+    for (const key of cells) {
+        const count = visibleCellRefCounts.get(key) ?? 0;
+        visibleCellRefCounts.set(key, count + 1);
+        if (count === 0) touched.add(key);
+    }
+}
+
+function releaseVisibleCells(cells: number[], touched: Set<number>): void {
+    for (const key of cells) {
+        const count = visibleCellRefCounts.get(key) ?? 0;
+        if (count <= 1) {
+            visibleCellRefCounts.delete(key);
+            touched.add(key);
+        } else {
+            visibleCellRefCounts.set(key, count - 1);
         }
     }
-    previousVisibleCells.length = 0;
-    return changed;
 }
 
-/**
- * Mark cells visible from a unit's position using line of sight.
- * Returns true if any cell was newly set to visible.
- */
-function markVisibleFromUnit(visibility: number[][], ux: number, uz: number): boolean {
-    let changed = false;
+/** Collect all cells visible from (ux, uz) into `out` as cellKey() values. */
+function traceVisibleCells(
+    ux: number,
+    uz: number,
+    blockedGrid: boolean[][],
+    treeBlockedCells: ReadonlySet<number>,
+    out: number[]
+): void {
     for (let dx = -VISION_RADIUS; dx <= VISION_RADIUS; dx++) {
         for (let dz = -VISION_RADIUS; dz <= VISION_RADIUS; dz++) {
             const x = ux + dx, z = uz + dz;
             if (!isWithinGrid(x, z)) continue;
             // Skip if outside vision circle
             if (dx * dx + dz * dz > VISION_RADIUS * VISION_RADIUS) continue;
-            if (hasLineOfSight(ux, uz, x, z)) {
-                if (visibility[x][z] !== 2) {
-                    changed = true;
-                    visibility[x][z] = 2;
-                    previousVisibleCells.push(cellKey(x, z));
-                }
+            if (hasLineOfSight(ux, uz, x, z, blockedGrid, treeBlockedCells)) {
+                out.push(cellKey(x, z));
             }
         }
     }
-    return changed;
 }
 
-function hasLineOfSight(x0: number, z0: number, x1: number, z1: number): boolean {
+function hasLineOfSight(
+    x0: number,
+    z0: number,
+    x1: number,
+    z1: number,
+    blockedGrid: boolean[][],
+    treeBlockedCells: ReadonlySet<number>
+): boolean {
     // Bresenham's line - returns false if any blocked cell between start and end
     const dx = Math.abs(x1 - x0), dz = Math.abs(z1 - z0);
     const sx = x0 < x1 ? 1 : -1, sz = z0 < z1 ? 1 : -1;
@@ -326,7 +341,7 @@ function hasLineOfSight(x0: number, z0: number, x1: number, z1: number): boolean
         if (x === x1 && z === z1) return true;
         // Skip start cell, check all others for blocking (walls and trees)
         if (!(x === x0 && z === z0)) {
-            if (isBlocked(x, z) || isTreeBlocked(x, z)) return false;
+            if (blockedGrid[x]?.[z] === true || treeBlockedCells.has(cellKey(x, z))) return false;
         }
         const e2 = 2 * err;
         if (e2 > -dz) { err -= dz; x += sx; }
@@ -339,18 +354,66 @@ export function updateVisibility(
     playerUnits: Unit[],
     unitsRef: React.RefObject<Record<number, UnitGroup>>
 ): boolean {
-    let changed = decayVisibility(visibility);
+    const computed = getComputedAreaData();
+    const blockedGrid = computed.blocked;
+    const treeBlockedCells = computed.treeBlocked;
 
-    // Mark cells visible from each player unit
+    changedVisibilityCells.length = 0;
+    const touched = touchedCellsScratch;
+    touched.clear();
+
+    // After a reset (area load or blocked-geometry change), demote any cells the
+    // grid still marks visible — refcounts are empty so they must be re-derived.
+    if (visionCacheDirty) {
+        visionCacheDirty = false;
+        for (let x = 0; x < visibility.length; x++) {
+            const column = visibility[x];
+            for (let z = 0; z < (column?.length ?? 0); z++) {
+                if (column[z] === 2) touched.add(cellKey(x, z));
+            }
+        }
+    }
+
+    const presentUnitIds = presentUnitIdsScratch;
+    presentUnitIds.clear();
+
     // Use Math.round to center visibility on the unit's visual position
-    playerUnits.forEach((u: Unit) => {
+    for (const u of playerUnits) {
         const g = unitsRef.current[u.id];
-        if (!g || u.hp <= 0) return;
-        const ux = Math.round(g.position.x), uz = Math.round(g.position.z);
-        if (markVisibleFromUnit(visibility, ux, uz)) changed = true;
-    });
+        if (!g || u.hp <= 0) continue;
+        presentUnitIds.add(u.id);
 
-    return changed;
+        const ux = Math.round(g.position.x), uz = Math.round(g.position.z);
+        const tileKey = cellKey(ux, uz);
+        const cached = unitVisionCache.get(u.id);
+        if (cached && cached.tileKey === tileKey) continue;
+
+        if (cached) releaseVisibleCells(cached.cells, touched);
+        const cells: number[] = [];
+        traceVisibleCells(ux, uz, blockedGrid, treeBlockedCells, cells);
+        acquireVisibleCells(cells, touched);
+        unitVisionCache.set(u.id, { tileKey, cells });
+    }
+
+    // Units that died or were removed release their vision contribution.
+    for (const [unitId, entry] of unitVisionCache) {
+        if (presentUnitIds.has(unitId)) continue;
+        releaseVisibleCells(entry.cells, touched);
+        unitVisionCache.delete(unitId);
+    }
+
+    // Resolve touched cells to final visibility values (2=visible, 1=seen).
+    for (const key of touched) {
+        const x = decodeCellKeyX(key);
+        const z = decodeCellKeyZ(key);
+        const next = visibleCellRefCounts.has(key) ? 2 : 1;
+        if (visibility[x]?.[z] !== undefined && visibility[x][z] !== next) {
+            visibility[x][z] = next;
+            changedVisibilityCells.push(key);
+        }
+    }
+
+    return changedVisibilityCells.length > 0;
 }
 
 // =============================================================================
@@ -504,9 +567,12 @@ function setCachedPath(
 
 /**
  * Clear path cache (call on area change or major obstacle updates).
+ * Also invalidates the per-unit vision cache, since callers invoke this when
+ * blocked geometry changes (e.g. a secret door opens) and cached LOS is stale.
  */
 export function clearPathCache(): void {
     pathCache.clear();
+    resetVisibilityTracking();
 }
 
 // =============================================================================

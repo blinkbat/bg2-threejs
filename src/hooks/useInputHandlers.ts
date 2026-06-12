@@ -316,6 +316,10 @@ export function useInputHandlers({
             staticHoverRaycastRoots.push(obj);
         });
         staticHoverRaycastRootsRef.current = staticHoverRaycastRoots;
+        // Ground-only roots for raycasts that consume nothing but ground hits
+        // (e.g. per-mousemove drag-line preview) — avoids rebuilding and casting
+        // against the full interaction set on every mouse event.
+        const groundRaycastRoots = staticHoverRaycastRoots.filter(obj => obj.name === "ground");
         lastHoverRootsBuildRef.current = 0;
 
         const refreshAliveUnitIds = (): Set<number> => {
@@ -534,7 +538,7 @@ export function useInputHandlers({
                 mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
                 mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
                 raycaster.setFromCamera(mouse, camera);
-                for (const hit of raycaster.intersectObjects(rebuildInteractionRaycastRoots(), true)) {
+                for (const hit of raycaster.intersectObjects(groundRaycastRoots, true)) {
                     if (hit.object.name !== "ground") continue;
                     updateDragLinePreview(hit.point.x, hit.point.z);
                     break;

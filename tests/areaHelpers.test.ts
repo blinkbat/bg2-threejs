@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AreaData } from "../src/game/areas/types";
+import { cellKey } from "../src/game/areas/types";
 import { computeAreaData } from "../src/game/areas/helpers";
 
 function toGrid(...rows: string[]): string[][] {
@@ -94,7 +95,7 @@ describe("area helpers", () => {
         expect(computed.mergedObstacles.some(obstacle => obstacle.x === 1 && obstacle.z === 1)).toBe(false);
         // Terrain hazards are not wall-blocked but are tracked separately
         expect(computed.blocked[2][2]).toBe(false);
-        expect(computed.terrainBlocked.has("2,2")).toBe(true);
+        expect(computed.terrainBlocked.has(cellKey(2, 2))).toBe(true);
         // Secret door blocks after merged-obstacle pass
         expect(computed.blocked[3][0]).toBe(true);
         expect(computed.mergedObstacles.some(obstacle => obstacle.x === 3 && obstacle.z === 0)).toBe(false);
@@ -103,12 +104,12 @@ describe("area helpers", () => {
 
         // Trees block movement and LOS
         expect(computed.blocked[0][0]).toBe(true);
-        expect(computed.treeBlocked.has("0,0")).toBe(true);
+        expect(computed.treeBlocked.has(cellKey(0, 0))).toBe(true);
         // Non-blocking decoration remains walkable
         expect(computed.blocked[2][0]).toBe(false);
         // Column blocks movement and LOS
         expect(computed.blocked[0][3]).toBe(true);
-        expect(computed.treeBlocked.has("0,3")).toBe(true);
+        expect(computed.treeBlocked.has(cellKey(0, 3))).toBe(true);
         // Chests block movement
         expect(computed.blocked[2][1]).toBe(true);
     });

@@ -453,6 +453,9 @@ export function updateProjectiles(
     defeatedThisFrame: Set<number>,
     deltaTime: number = 1.0
 ): Projectile[] {
+    // Nothing in flight: skip damage-context setup, unit scans, and bucket rebuild.
+    if (projectilesRef.length === 0) return projectilesRef;
+
     // Shared DamageContext for all projectile hit processing
     const dmgCtx = buildDamageContext(scene, damageTexts, hitFlashRef, unitsRef, unitsState, setUnits, addLog, now, defeatedThisFrame);
     aliveUnitsScratch.length = 0;

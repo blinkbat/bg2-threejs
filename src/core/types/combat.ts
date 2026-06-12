@@ -72,6 +72,7 @@ export interface Skill {
 }
 
 export interface CombatLogEntry {
+    id: number;     // Stable identity for memoized list rendering
     text: string;
     color?: string;
 }

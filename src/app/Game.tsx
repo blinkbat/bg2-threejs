@@ -77,6 +77,9 @@ import { useGameDebugControls } from "./useGameDebugControls";
 
 type AutoPauseReason = "ally_killed" | "ally_near_death" | "enemy_sighted";
 
+// Monotonic id for combat log entries (stable keys for memoized rows)
+let nextCombatLogEntryId = 1;
+
 export function Game({
     onRestart, onAreaTransition, onShowControls, onShowHelp, onShowGlossary, onShowBestiary, onCloseInfoModal, infoModalOpen, saveLoadOpen,
     menuOpen, jukeboxOpen,
@@ -121,7 +124,7 @@ export function Game({
     });
     const [selBox, setSelBox] = useState<SelectionBox | null>(null);
     const [showPanel, setShowPanel] = useState(false);
-    const [combatLog, setCombatLog] = useState<CombatLogEntry[]>(() => [{ text: `The party enters ${getCurrentArea().name}.`, color: "#f59e0b" }]);
+    const [combatLog, setCombatLog] = useState<CombatLogEntry[]>(() => [{ id: nextCombatLogEntryId++, text: `The party enters ${getCurrentArea().name}.`, color: "#f59e0b" }]);
     const [paused, setPaused] = useState(true);
     const [skillCooldowns, setSkillCooldowns] = useState<Record<string, { end: number; duration: number }>>({});
     const [targetingMode, setTargetingMode] = useState<{ casterId: number; skill: Skill; displacementTargetId?: number } | null>(null);
@@ -635,7 +638,8 @@ export function Game({
     // =============================================================================
 
     const addLog = useCallback((text: string, color?: string) => {
-        setCombatLog(prev => [...prev.slice(-50), { text, color }]);
+        const id = nextCombatLogEntryId++;
+        setCombatLog(prev => [...prev.slice(-50), { id, text, color }]);
     }, []);
 
     useEffect(() => {

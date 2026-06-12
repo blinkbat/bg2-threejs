@@ -97,6 +97,25 @@ export function processStatusEffects(
         const unitG = unitsRef[unit.id];
         if (!unitG) continue;
 
+        // Pre-pass: if no effect ticks this frame, advance the timing bookkeeping
+        // fields in place on the live effect objects (nothing renders from them)
+        // and skip the clone + React mutation entirely.
+        let anyTick = false;
+        for (const effect of unit.statusEffects) {
+            const delta = Math.min(now - effect.lastUpdateTime, 100);
+            if (effect.timeSinceTick + delta >= effect.tickInterval) {
+                anyTick = true;
+                break;
+            }
+        }
+        if (!anyTick) {
+            for (const effect of unit.statusEffects) {
+                const delta = Math.min(now - effect.lastUpdateTime, 100);
+                updateEffectTimeInPlace(effect, effect.timeSinceTick + delta, now);
+            }
+            continue;
+        }
+
         const data = getUnitStats(unit);
         let hpDelta = 0;
         let doom = false;
