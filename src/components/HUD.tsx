@@ -48,6 +48,8 @@ interface HUDProps {
     fastMoveEnabled?: boolean;
     onToggleDebugFogOfWar?: () => void;
     debugFogOfWarDisabled?: boolean;
+    onToggleDebugGridLines?: () => void;
+    debugGridLinesHidden?: boolean;
     onToggleAutoPauseEnemySighted: () => void;
     onToggleAutoPauseAllyNearDeath: () => void;
     onToggleAutoPauseAllyKilled: () => void;
@@ -93,6 +95,8 @@ export const HUD = memo(function HUD({
     fastMoveEnabled,
     onToggleDebugFogOfWar,
     debugFogOfWarDisabled,
+    onToggleDebugGridLines,
+    debugGridLinesHidden,
     onToggleAutoPauseEnemySighted,
     onToggleAutoPauseAllyNearDeath,
     onToggleAutoPauseAllyKilled,
@@ -304,16 +308,26 @@ export const HUD = memo(function HUD({
                                 )}
                             </div>
                         </div>
-                        {onToggleDebugFogOfWar && (
+                        {(onToggleDebugFogOfWar || onToggleDebugGridLines) && (
                             <div className="hud-debug-group">
                                 <div className="hud-debug-label">Visuals</div>
                                 <div className="hud-debug-buttons">
-                                    <button
-                                        className={`btn btn-tiny ${debugFogOfWarDisabled ? "btn-active" : ""}`}
-                                        onClick={onToggleDebugFogOfWar}
-                                    >
-                                        Hide FoW
-                                    </button>
+                                    {onToggleDebugFogOfWar && (
+                                        <button
+                                            className={`btn btn-tiny ${debugFogOfWarDisabled ? "btn-active" : ""}`}
+                                            onClick={onToggleDebugFogOfWar}
+                                        >
+                                            Hide FoW
+                                        </button>
+                                    )}
+                                    {onToggleDebugGridLines && (
+                                        <button
+                                            className={`btn btn-tiny ${debugGridLinesHidden ? "btn-active" : ""}`}
+                                            onClick={onToggleDebugGridLines}
+                                        >
+                                            Hide Grid
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         )}

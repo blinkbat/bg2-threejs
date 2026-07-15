@@ -3,7 +3,9 @@
 // =============================================================================
 
 export const GRID_SIZE = 50;
-export const FOG_SCALE = 4;  // Higher = sharper fog edges with linear filtering
+export const FOG_SCALE = 6;  // Fog canvas pixels per grid cell (higher = smoother reveal gradients)
+export const FOG_EDGE_PAD_CELLS = 2;  // Extra black border cells on the fog cell canvas so the edge blur stays dark at map borders
+export const FOG_EDGE_BLUR_PX = FOG_SCALE * 0.9;  // Soft Diablo-style light falloff at visibility boundaries
 export const MOVE_SPEED = 0.05;
 export const DEFAULT_UNIT_RADIUS = 0.7;
 export const DEFAULT_MOVE_SPEED = 1.0;  // Normal movement speed multiplier

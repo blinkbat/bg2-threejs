@@ -1,5 +1,9 @@
 import * as THREE from "three";
 import type { Decoration } from "../../game/areas/types";
+import { applyRockShader } from "../surfaceShaders";
+
+// Stone tints shared by boulders and pebbles - grays through warm browns.
+const ROCK_COLORS = ["#9b907d", "#8d8478", "#a39885", "#857a6b", "#98876f", "#8f8f8a"];
 
 export interface DecorationSceneBuildResult {
     columnGroups: THREE.Mesh[][];
@@ -28,6 +32,18 @@ export function buildDecorationsScene(
     const _decoSphere8x6 = new THREE.SphereGeometry(1, 8, 6);
     const _decoSphere10x8 = new THREE.SphereGeometry(1, 10, 8);
     const _decoSphere9x8 = new THREE.SphereGeometry(1, 9, 8);
+
+    // Soft dark circle that grounds a prop against the floor (mirrors tree shadows).
+    const addContactShadow = (centerX: number, centerZ: number, radius: number): void => {
+        const shadow = new THREE.Mesh(
+            new THREE.CircleGeometry(radius, 14),
+            new THREE.MeshBasicMaterial({ color: "#000000", transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide })
+        );
+        shadow.renderOrder = 10;
+        shadow.rotation.x = -Math.PI / 2;
+        shadow.position.set(centerX, 0.006, centerZ);
+        scene.add(shadow);
+    };
 
     const addWeedsCluster = (
         centerX: number,
@@ -391,32 +407,83 @@ export function buildDecorationsScene(
                 geyserGroup.add(innerCore);
                 columnMeshes.push(innerCore);
             } else if (dec.type === "rock") {
-                // Large rock - irregular boulder shape
-                const rockSize = 0.75 * size;  // Slightly bigger
+                // Large rock - main boulder plus attendant stones, world-space
+                // mineral mottling, and a soft contact shadow.
+                const rockSize = 0.75 * size;
+                const rockColor = ROCK_COLORS[Math.floor(Math.random() * ROCK_COLORS.length)];
+                const rockMat = new THREE.MeshStandardMaterial({ color: rockColor, metalness: 0.08, roughness: 0.95, transparent: true, opacity: 1 });
+                applyRockShader(rockMat);
                 const rock = new THREE.Mesh(
                     new THREE.DodecahedronGeometry(rockSize, 0),
-                    new THREE.MeshStandardMaterial({ color: "#9b907d", metalness: 0.1, roughness: 0.95, transparent: true, opacity: 1 })
+                    rockMat
                 );
-                rock.position.set(dec.x, rockSize * 0.6, dec.z);
+                rock.position.set(dec.x, rockSize * 0.55, dec.z);
                 rock.rotation.set(Math.random() * 0.3, Math.random() * Math.PI, Math.random() * 0.3);
-                rock.scale.set(1, 0.7, 1.1);  // Flatten slightly
+                rock.scale.set(
+                    0.92 + Math.random() * 0.24,
+                    0.62 + Math.random() * 0.16,
+                    1.0 + Math.random() * 0.28
+                );
                 rock.userData.disableOcclusionFade = true;
                 rock.name = "decoration";
                 scene.add(rock);
                 columnMeshes.push(rock);
+
+                const attendantCount = 1 + Math.floor(Math.random() * 2);
+                for (let j = 0; j < attendantCount; j++) {
+                    const attendantSize = rockSize * (0.3 + Math.random() * 0.2);
+                    const attendantAngle = Math.random() * Math.PI * 2;
+                    const attendantDist = rockSize * (0.95 + Math.random() * 0.45);
+                    const attendantMat = new THREE.MeshStandardMaterial({
+                        color: ROCK_COLORS[Math.floor(Math.random() * ROCK_COLORS.length)],
+                        metalness: 0.08,
+                        roughness: 0.96,
+                    });
+                    applyRockShader(attendantMat);
+                    const attendant = new THREE.Mesh(
+                        new THREE.DodecahedronGeometry(attendantSize, 0),
+                        attendantMat
+                    );
+                    attendant.position.set(
+                        dec.x + Math.cos(attendantAngle) * attendantDist,
+                        attendantSize * 0.5,
+                        dec.z + Math.sin(attendantAngle) * attendantDist
+                    );
+                    attendant.rotation.set(Math.random() * 0.6, Math.random() * Math.PI, Math.random() * 0.6);
+                    attendant.scale.set(1, 0.55 + Math.random() * 0.2, 1.05 + Math.random() * 0.25);
+                    attendant.userData.disableOcclusionFade = true;
+                    scene.add(attendant);
+                }
+
+                addContactShadow(dec.x, dec.z, rockSize * 1.35);
             } else if (dec.type === "small_rock") {
-                // Small rock - pebble
-                const rockSize = 0.35 * size;  // Slightly bigger
-                const rock = new THREE.Mesh(
-                    new THREE.DodecahedronGeometry(rockSize, 0),
-                    new THREE.MeshStandardMaterial({ color: "#afa38f", metalness: 0.1, roughness: 0.95 })
-                );
-                rock.position.set(dec.x, rockSize * 0.5, dec.z);
-                rock.rotation.set(Math.random() * 0.5, Math.random() * Math.PI, Math.random() * 0.5);
-                rock.scale.set(1, 0.6, 1.2);
-                rock.userData.disableOcclusionFade = true;
-                rock.name = "decoration";
-                scene.add(rock);
+                // Small rock - pebble pair with varied stone tints
+                const pebbleCount = 1 + Math.floor(Math.random() * 2);
+                for (let j = 0; j < pebbleCount; j++) {
+                    const rockSize = (j === 0 ? 0.35 : 0.2) * size * (0.85 + Math.random() * 0.3);
+                    const pebbleAngle = Math.random() * Math.PI * 2;
+                    const pebbleDist = j === 0 ? 0 : 0.3 * size + Math.random() * 0.15;
+                    const pebbleMat = new THREE.MeshStandardMaterial({
+                        color: ROCK_COLORS[Math.floor(Math.random() * ROCK_COLORS.length)],
+                        metalness: 0.08,
+                        roughness: 0.96,
+                    });
+                    applyRockShader(pebbleMat);
+                    const rock = new THREE.Mesh(
+                        new THREE.DodecahedronGeometry(rockSize, 0),
+                        pebbleMat
+                    );
+                    rock.position.set(
+                        dec.x + Math.cos(pebbleAngle) * pebbleDist,
+                        rockSize * 0.5,
+                        dec.z + Math.sin(pebbleAngle) * pebbleDist
+                    );
+                    rock.rotation.set(Math.random() * 0.5, Math.random() * Math.PI, Math.random() * 0.5);
+                    rock.scale.set(1, 0.6, 1.2);
+                    rock.userData.disableOcclusionFade = true;
+                    if (j === 0) rock.name = "decoration";
+                    scene.add(rock);
+                }
             } else if (dec.type === "bones") {
                 const bonesGroup = new THREE.Group();
                 bonesGroup.position.set(dec.x, 0, dec.z);

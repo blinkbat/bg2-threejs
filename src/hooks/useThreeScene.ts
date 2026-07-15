@@ -32,7 +32,6 @@ export interface ThreeSceneState {
     candleMeshes: THREE.Mesh[];
     candleLights: THREE.Light[];
     fogTexture: FogTexture | null;
-    fogMesh: THREE.Mesh | null;
     moveMarker: THREE.Mesh | null;
     rangeIndicator: THREE.Mesh | null;
     aoeIndicator: THREE.Mesh | null;
@@ -61,6 +60,7 @@ export interface ThreeSceneState {
     chestMeshes: ChestMeshData[];
     billboards: THREE.Mesh[];
     hpBarGroups: Record<number, THREE.Group>;
+    gridLines: THREE.LineSegments | null;
 }
 
 /** Mutable refs for game state that persists across frames */
@@ -123,7 +123,6 @@ function createEmptySceneState(): ThreeSceneState {
         candleMeshes: [],
         candleLights: [],
         fogTexture: null,
-        fogMesh: null,
         moveMarker: null,
         rangeIndicator: null,
         aoeIndicator: null,
@@ -147,7 +146,8 @@ function createEmptySceneState(): ThreeSceneState {
         rainOverlay: null,
         chestMeshes: [],
         billboards: [],
-        hpBarGroups: {}
+        hpBarGroups: {},
+        gridLines: null
     };
 }
 
@@ -346,7 +346,6 @@ export function useThreeScene({
             candleMeshes: sceneRefs.candleMeshes,
             candleLights: sceneRefs.candleLights,
             fogTexture: sceneRefs.fogTexture,
-            fogMesh: sceneRefs.fogMesh,
             moveMarker: sceneRefs.moveMarker,
             rangeIndicator: sceneRefs.rangeIndicator,
             aoeIndicator: sceneRefs.aoeIndicator,
@@ -370,7 +369,8 @@ export function useThreeScene({
             rainOverlay: sceneRefs.rainOverlay,
             chestMeshes: sceneRefs.chestMeshes,
             billboards: sceneRefs.billboards,
-            hpBarGroups: sceneRefs.hpBarGroups
+            hpBarGroups: sceneRefs.hpBarGroups,
+            gridLines: sceneRefs.gridLines
         };
         setSceneState(initializedState);
 
@@ -405,6 +405,9 @@ export function useThreeScene({
             }
             clearEffectAnimations();
             disposeSceneResources(sceneRefs.scene);
+            // The fog visibility texture lives in shader uniforms rather than a
+            // material map, so the scene traversal above never sees it.
+            sceneRefs.fogTexture.texture.dispose();
             if (sceneRefs.renderer) {
                 sceneRefs.renderer.dispose();
                 if (sceneRefs.renderer.domElement.parentElement === container) {

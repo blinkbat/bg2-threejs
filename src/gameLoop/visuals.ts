@@ -4,7 +4,8 @@
 
 import * as THREE from "three";
 import type { Unit, DamageText, UnitGroup, FogTexture } from "../core/types";
-import { FOG_SCALE, FLASH_DURATION, ENRAGED_TINT_STRENGTH } from "../core/constants";
+import { FOG_SCALE, FOG_EDGE_PAD_CELLS, FOG_EDGE_BLUR_PX, FLASH_DURATION, ENRAGED_TINT_STRENGTH } from "../core/constants";
+import { setFogOfWarEnabled } from "../rendering/fogOfWar";
 import { hasStatusEffect } from "../combat/combatMath";
 import {
     updateVisibility,
@@ -238,8 +239,32 @@ let lastFogAreaId: string | null = null;
 let fogCanvasNeedsFullRepaint = true;
 
 // Hoisted fog fill styles (avoid re-resolving per cell)
-const FOG_SEEN_FILL = "rgba(0,0,0,0.4)";
+const FOG_SEEN_FILL = "rgba(0,0,0,0.45)";
 const FOG_UNSEEN_FILL = "rgba(0,0,0,1)";
+const FOG_PAD_PX = FOG_EDGE_PAD_CELLS * FOG_SCALE;
+
+/** Repaint one grid cell on the padded hard-edged cell canvas. */
+function paintFogCell(cellCtx: CanvasRenderingContext2D, x: number, z: number, vis: number): void {
+    const px = FOG_PAD_PX + x * FOG_SCALE;
+    const pz = FOG_PAD_PX + z * FOG_SCALE;
+    cellCtx.clearRect(px, pz, FOG_SCALE, FOG_SCALE);
+    if (vis === 2) return;  // Visible - no fog
+    cellCtx.fillStyle = vis === 1 ? FOG_SEEN_FILL : FOG_UNSEEN_FILL;
+    cellCtx.fillRect(px, pz, FOG_SCALE, FOG_SCALE);
+}
+
+/**
+ * Blit the hard cell canvas onto the display canvas with a blur pass so the
+ * fog boundary reads as a soft Diablo-style light falloff instead of tile steps.
+ */
+function blitFogCanvas(fogTexture: FogTexture): void {
+    const { canvas, ctx, cellCanvas, texture } = fogTexture;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.filter = `blur(${FOG_EDGE_BLUR_PX}px)`;
+    ctx.drawImage(cellCanvas, -FOG_PAD_PX, -FOG_PAD_PX);
+    ctx.filter = "none";
+    texture.needsUpdate = true;
+}
 const ENEMY_VIEW_FADE_LERP = 0.32;
 const ENEMY_VIEW_FADE_MIN_VISIBLE = 0.02;
 
@@ -414,7 +439,6 @@ export function updateFogOfWar(
     unitsRef: Record<number, UnitGroup>,
     fogTexture: FogTexture,
     unitsState: Unit[],
-    fogMesh: THREE.Mesh,
     debugFogOfWarDisabled: boolean = false
 ): boolean {
     const area = getCurrentArea();
@@ -425,9 +449,9 @@ export function updateFogOfWar(
         resetVisibilityTracking();
     }
 
-    // If area doesn't have fog of war, clear and hide it
+    // If area doesn't have fog of war, disable the shader darkening entirely
     if (!area.hasFogOfWar || debugFogOfWarDisabled) {
-        fogMesh.visible = false;
+        setFogOfWarEnabled(false);
         hasFogVisibilityKey = false;
         // Make all enemies visible (except hidden enemy states).
         for (const u of unitsState) {
@@ -443,8 +467,8 @@ export function updateFogOfWar(
         return false;
     }
 
-    // Ensure fog mesh is visible for areas with fog
-    fogMesh.visible = true;
+    // Ensure fog darkening is active for areas with fog
+    setFogOfWarEnabled(true);
 
     const visibilityKey = computePlayerVisibilityKey(playerUnits, unitsRef);
     const shouldRecomputeVisibility = !hasFogVisibilityKey || visibilityKey !== lastFogVisibilityKey;
@@ -458,42 +482,34 @@ export function updateFogOfWar(
         visibilityChanged = fogChanged;
 
         if (fogCanvasNeedsFullRepaint) {
-            // First paint for this area: the whole canvas is stale, redraw every cell.
+            // First paint for this area: the whole cell canvas is stale, redraw every cell.
             fogCanvasNeedsFullRepaint = false;
 
-            const { ctx, texture } = fogTexture;
+            const { cellCtx, cellCanvas } = fogTexture;
+            cellCtx.clearRect(0, 0, cellCanvas.width, cellCanvas.height);
+            cellCtx.fillStyle = FOG_UNSEEN_FILL;
+            cellCtx.fillRect(0, 0, cellCanvas.width, cellCanvas.height);
 
-            ctx.clearRect(0, 0, area.gridWidth * FOG_SCALE, area.gridHeight * FOG_SCALE);
-
-            // Simple fog rendering without expensive distance calculations
-            // Use fixed alpha values - the texture filtering provides some softness
             for (let x = 0; x < area.gridWidth; x++) {
                 for (let z = 0; z < area.gridHeight; z++) {
                     const vis = visibility[x][z];
-                    if (vis === 2) continue;  // Visible - no fog
-
-                    // Simple alpha: seen = 0.4, unexplored = 1.0
-                    ctx.fillStyle = vis === 1 ? FOG_SEEN_FILL : FOG_UNSEEN_FILL;
-                    ctx.fillRect(x * FOG_SCALE, z * FOG_SCALE, FOG_SCALE, FOG_SCALE);
+                    if (vis === 0) continue;  // Already painted unseen
+                    paintFogCell(cellCtx, x, z, vis);
                 }
             }
 
-            texture.needsUpdate = true;
+            blitFogCanvas(fogTexture);
         } else if (fogChanged) {
             // Incremental repaint: only cells whose visibility value changed.
-            const { ctx, texture } = fogTexture;
+            const { cellCtx } = fogTexture;
 
             for (const key of getChangedVisibilityCells()) {
                 const x = decodeCellKeyX(key);
                 const z = decodeCellKeyZ(key);
-                const vis = visibility[x][z];
-                ctx.clearRect(x * FOG_SCALE, z * FOG_SCALE, FOG_SCALE, FOG_SCALE);
-                if (vis === 2) continue;  // Visible - no fog
-                ctx.fillStyle = vis === 1 ? FOG_SEEN_FILL : FOG_UNSEEN_FILL;
-                ctx.fillRect(x * FOG_SCALE, z * FOG_SCALE, FOG_SCALE, FOG_SCALE);
+                paintFogCell(cellCtx, x, z, visibility[x][z]);
             }
 
-            texture.needsUpdate = true;
+            blitFogCanvas(fogTexture);
         }
     }
 

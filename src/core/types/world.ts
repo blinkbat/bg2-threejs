@@ -40,8 +40,10 @@ export interface SelectionBox {
 }
 
 export interface FogTexture {
-    canvas: HTMLCanvasElement;
+    canvas: HTMLCanvasElement;           // Blurred display canvas sampled by environment materials
     ctx: CanvasRenderingContext2D;
+    cellCanvas: HTMLCanvasElement;       // Hard per-cell visibility paint (padded by FOG_EDGE_PAD_CELLS)
+    cellCtx: CanvasRenderingContext2D;
     texture: THREE.CanvasTexture;
 }
 

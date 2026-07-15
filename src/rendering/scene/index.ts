@@ -3,7 +3,9 @@
 // =============================================================================
 
 import * as THREE from "three";
-import { FOG_SCALE, DEFAULT_CANDLE_LIGHT_COLOR, DEFAULT_TORCH_LIGHT_COLOR } from "../../core/constants";
+import { FOG_SCALE, FOG_EDGE_PAD_CELLS, DEFAULT_CANDLE_LIGHT_COLOR, DEFAULT_TORCH_LIGHT_COLOR } from "../../core/constants";
+import { applyFogOfWarToObject, configureFogOfWar } from "../fogOfWar";
+import { applyGroundGrainShader, applyStoneWallShader } from "../surfaceShaders";
 import { getCurrentArea, getComputedAreaData } from "../../game/areas";
 import {
     DEFAULT_AREA_LIGHT_ANGLE,
@@ -79,6 +81,7 @@ export {
 // Re-export unit functions
 export { addUnitToScene } from "./units";
 import { buildDecorationsScene } from "./decorations";
+import { createPalmCanopyGeometry } from "./palmTree";
 import { buildWallAttachments } from "./wallAttachments";
 import type { WallAttachmentMesh } from "./types";
 import { createUnitSceneGroup, ensureTexturesLoaded } from "./units";
@@ -220,6 +223,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
 
     // Ground - base layer for non-room areas (corridors, etc)
     const groundMat = new THREE.MeshStandardMaterial({ color: area.groundColor, metalness: 0.2, roughness: 0.9 });
+    applyGroundGrainShader(groundMat, 5.0, 0.07);
     const ground = new THREE.Mesh(
         new THREE.PlaneGeometry(area.gridWidth, area.gridHeight),
         groundMat
@@ -298,13 +302,30 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
             && isTerrainLava(layer[z]?.[x + 1]);
     }
     const skipRaycast: THREE.Object3D["raycast"] = () => undefined;
-    function getFloorMat(color: string): THREE.MeshStandardMaterial {
+    // World-space grain parameters per floor type - breaks up flat tile colors
+    // without any texture repetition (pattern lives in world coordinates).
+    const FLOOR_GRAIN_PARAMS: Record<string, { scale: number; amplitude: number }> = {
+        "s": { scale: 11.0, amplitude: 0.09 },  // Sand - fine speckle
+        "d": { scale: 7.5, amplitude: 0.11 },   // Dirt - blotchy
+        "g": { scale: 8.0, amplitude: 0.12 },   // Grass - mottled
+        "t": { scale: 4.5, amplitude: 0.08 },   // Stone - broad worn patches
+        ".": { scale: 5.0, amplitude: 0.06 },
+    };
+    function applyFloorGrain(material: THREE.MeshStandardMaterial, char: string): void {
+        const type = getFloorType(char);
+        if (!type || type === "w" || type === "~") return;
+        const params = FLOOR_GRAIN_PARAMS[type] ?? FLOOR_GRAIN_PARAMS["."];
+        applyGroundGrainShader(material, params.scale, params.amplitude);
+    }
+    function getFloorMat(color: string, char: string): THREE.MeshStandardMaterial {
         if (!floorMatPool[color]) {
-            floorMatPool[color] = new THREE.MeshStandardMaterial({
+            const material = new THREE.MeshStandardMaterial({
                 color,
                 metalness: 0.2,
                 roughness: 0.9
             });
+            applyFloorGrain(material, char);
+            floorMatPool[color] = material;
         }
         return floorMatPool[color];
     }
@@ -453,7 +474,10 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
                 } else if (isWater) {
                     tileMaterial = getWaterMat(color);
                 } else {
-                    tileMaterial = getFloorMat(color);
+                    tileMaterial = getFloorMat(color, char);
+                }
+                if (hasRounding && !isWater) {
+                    applyFloorGrain(tileMaterial, char);
                 }
 
                 if (isWater && hasRounding) {
@@ -950,14 +974,26 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     const treeMeshes: THREE.Mesh[] = [];
     const fogOccluderMeshes: THREE.Mesh[] = [];
 
-    // Fog mesh Y position - trees in unexplored cells will be capped below this
-    const FOG_Y = 2.6;
-
     // Tree size multiplier - forest trees are larger
     const treeSizeMultiplier = area.id === "forest" ? 1.5 : 1.0;
 
     // Palm-specific colors
     const palmFoliageColors = ["#458B64", "#5AB382", "#3C8B3C", "#65AF68"];
+    const PALM_TRUNK_COLORS = ["#8a7563", "#94806b", "#7c6a58"];
+
+    // Deterministic per-tree hue/saturation/lightness jitter so no two trees
+    // share the exact same green.
+    const jitterFoliageColor = (hex: string, seedA: number, seedB: number): string => {
+        const color = new THREE.Color(hex);
+        const hsl = { h: 0, s: 0, l: 0 };
+        color.getHSL(hsl);
+        color.setHSL(
+            (hsl.h + (hashNoise(seedA, seedB, 41.3) - 0.5) * 0.05 + 1) % 1,
+            THREE.MathUtils.clamp(hsl.s + (hashNoise(seedA, seedB, 73.9) - 0.5) * 0.14, 0, 1),
+            THREE.MathUtils.clamp(hsl.l + (hashNoise(seedA, seedB, 27.1) - 0.5) * 0.09, 0, 1)
+        );
+        return `#${color.getHexString()}`;
+    };
 
     const registerFoliageMesh = (
         foliageMesh: THREE.Mesh,
@@ -977,7 +1013,6 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         foliageMesh.userData.treeZ = treeZ;
         foliageMesh.userData.isFoliage = true;
         foliageMesh.userData.trunkHeight = trunkHeight;
-        foliageMesh.userData.fogY = FOG_Y;
         scene.add(foliageMesh);
         treeMeshes.push(foliageMesh);
         treePartMeshes.push(foliageMesh);
@@ -991,13 +1026,12 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         fullHeight: number
     ): void => {
         if (fullHeight <= 0) return;
+        void baseY;
         const bounds = new THREE.Box3().setFromObject(mesh);
         const footprint = buildFogFootprintFromBounds(bounds, 0.18, area.gridWidth, area.gridHeight);
 
         mesh.userData.fogClipX = footprint.centerX;
         mesh.userData.fogClipZ = footprint.centerZ;
-        mesh.userData.fogClipBaseY = baseY;
-        mesh.userData.fogClipFullHeight = fullHeight;
         mesh.userData.fogClipFullY = mesh.position.y;
         mesh.userData.fogClipFullScaleY = mesh.scale.y;
         mesh.userData.fogClipFallbackX = tileX;
@@ -1030,13 +1064,11 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         let foliageHeight: number;
         const centerX = tree.x + 0.5;
         const centerZ = tree.z + 0.5;
-        let trunkPosX = centerX;
-        let trunkPosY: number;
-        let trunkPosZ = centerZ;
+        let trunkPosY = 0;
         let trunkRotX = 0;
         let trunkRotZ = 0;
         let palmTopX = centerX;
-        let palmTopY: number;
+        let palmTopY = 0;
         let palmTopZ = centerZ;
 
         if (treeType === "palm") {
@@ -1049,25 +1081,14 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
             trunkBottomRadius = trunkRadius * 1.5;
             // Taller palms get broader base foliage.
             foliageRadius = 0.58 * scale * canopyBaseScale;
-            foliageHeight = 2 * foliageRadius;  // Sphere diameter for fog-of-war
+            foliageHeight = 2 * foliageRadius;  // Approximate canopy extent for fog-of-war
 
-            // Lean each palm in a unique direction and compute top anchor point.
+            // Lean each palm in a unique direction; the segmented trunk build
+            // below accumulates the actual crown anchor point.
             const leanDirection = Math.random() * Math.PI * 2;
             const leanAngle = THREE.MathUtils.degToRad(4 + Math.random() * 8);
             trunkRotX = Math.cos(leanDirection) * leanAngle;
             trunkRotZ = Math.sin(leanDirection) * leanAngle;
-
-            const leanQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(trunkRotX, 0, trunkRotZ));
-            const trunkCenterOffset = new THREE.Vector3(0, trunkHeight / 2, 0).applyQuaternion(leanQuat);
-            const trunkTopOffset = new THREE.Vector3(0, trunkHeight, 0).applyQuaternion(leanQuat);
-
-            trunkPosX = centerX + trunkCenterOffset.x;
-            trunkPosY = trunkCenterOffset.y;
-            trunkPosZ = centerZ + trunkCenterOffset.z;
-
-            palmTopX = centerX + trunkTopOffset.x;
-            palmTopY = trunkTopOffset.y;
-            palmTopZ = centerZ + trunkTopOffset.z;
         } else if (treeType === "oak") {
             // Oak: shorter thick trunk, wide round bushy foliage
             trunkHeight = 0.8 * scale;
@@ -1089,96 +1110,165 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         }
 
         const trunkColor = trunkColors[i % trunkColors.length];
-        const trunk = new THREE.Mesh(
-            new THREE.CylinderGeometry(trunkRadius, trunkBottomRadius, trunkHeight, 8),
-            new THREE.MeshStandardMaterial({ color: trunkColor, metalness: 0.0, roughness: 1.0, transparent: true, opacity: 1 })
-        );
-        trunk.position.set(trunkPosX, trunkPosY, trunkPosZ);
         if (treeType === "palm") {
-            trunk.rotation.set(trunkRotX, 0, trunkRotZ);
+            // Curved palm trunk: stacked tapering segments whose lean increases
+            // toward the top, tracing a gentle arc in the lean direction.
+            const PALM_TRUNK_SEGMENTS = 3;
+            const segmentLength = trunkHeight / PALM_TRUNK_SEGMENTS;
+            const segmentRadii = [1.55, 1.18, 0.94, 0.72];
+            let px = centerX;
+            let py = 0;
+            let pz = centerZ;
+            for (let seg = 0; seg < PALM_TRUNK_SEGMENTS; seg++) {
+                const segFrac = (seg + 0.5) / PALM_TRUNK_SEGMENTS;
+                const segRotX = trunkRotX * segFrac * 1.6;
+                const segRotZ = trunkRotZ * segFrac * 1.6;
+                const segQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(segRotX, 0, segRotZ));
+                const segVec = new THREE.Vector3(0, segmentLength, 0).applyQuaternion(segQuat);
+                const segMesh = new THREE.Mesh(
+                    new THREE.CylinderGeometry(trunkRadius * segmentRadii[seg + 1], trunkRadius * segmentRadii[seg], segmentLength * 1.04, 7),
+                    new THREE.MeshStandardMaterial({ color: PALM_TRUNK_COLORS[(i + seg) % PALM_TRUNK_COLORS.length], metalness: 0.0, roughness: 1.0, transparent: true, opacity: 1 })
+                );
+                segMesh.position.set(px + segVec.x / 2, py + segVec.y / 2, pz + segVec.z / 2);
+                segMesh.rotation.set(segRotX, 0, segRotZ);
+                segMesh.name = "tree";
+                segMesh.userData.fullHeight = segmentLength;
+                segMesh.userData.fullY = py + segVec.y / 2;
+                segMesh.userData.treeX = tree.x;
+                segMesh.userData.treeZ = tree.z;
+                segMesh.userData.isTrunk = true;
+                scene.add(segMesh);
+                treeMeshes.push(segMesh);
+                treePartMeshes.push(segMesh);
+                px += segVec.x;
+                py += segVec.y;
+                pz += segVec.z;
+            }
+            palmTopX = px;
+            palmTopY = py;
+            palmTopZ = pz;
+        } else {
+            const trunk = new THREE.Mesh(
+                new THREE.CylinderGeometry(trunkRadius, trunkBottomRadius, trunkHeight, 8),
+                new THREE.MeshStandardMaterial({ color: trunkColor, metalness: 0.0, roughness: 1.0, transparent: true, opacity: 1 })
+            );
+            trunk.position.set(centerX, trunkPosY, centerZ);
+            trunk.name = "tree";
+            trunk.userData.fullHeight = trunkHeight;
+            trunk.userData.treeX = tree.x;
+            trunk.userData.treeZ = tree.z;
+            trunk.userData.isTrunk = true;
+            scene.add(trunk);
+            treeMeshes.push(trunk);
+            treePartMeshes.push(trunk);
         }
-        trunk.name = "tree";
-        trunk.userData.fullHeight = trunkHeight;
-        trunk.userData.treeX = tree.x;
-        trunk.userData.treeZ = tree.z;
-        trunk.userData.isTrunk = true;
-        scene.add(trunk);
-        treeMeshes.push(trunk);
-        treePartMeshes.push(trunk);
 
         // Foliage geometry depends on tree type
         const foliageColor = treeType === "palm"
             ? palmFoliageColors[i % palmFoliageColors.length]
             : foliageColors[i % foliageColors.length];
         if (treeType === "palm") {
-            // Palm foliage as a sideways spiked star canopy.
-            const canopyScale = 0.95 + Math.random() * 0.55;
-            const starSpikes = 10 + Math.floor(Math.random() * 11);  // 10-20 points
-            const starInnerRatio = 0.1 + Math.random() * 0.22;     // deeper spike insets into canopy core
-            const palmFoliageHeight = foliageHeight * (1.03 + Math.random() * 0.22);
-            const fullFoliageY = palmTopY;
-            const starOuterRadius = foliageRadius * 1.22 * canopyScale;
-            const starInnerRadius = starOuterRadius * starInnerRatio;
-            const starThickness = Math.max(0.06, foliageRadius * (0.14 + Math.random() * 0.09) * canopyScale);
-
+            // Palm canopy: arching folded fronds merged into one geometry,
+            // with per-frond tint variation baked into vertex colors.
+            const canopyScale = 0.95 + Math.random() * 0.45;
+            const frondLength = foliageRadius * 1.5 * canopyScale;
+            const frondCount = 8 + Math.floor(Math.random() * 4);  // 8-11 fronds
+            const canopyColor = new THREE.Color(jitterFoliageColor(foliageColor, tree.x + i, tree.z));
+            const canopyGeometry = createPalmCanopyGeometry({
+                frondCount,
+                frondLength,
+                frondWidth: frondLength * 0.2,
+                droop: 0.5 + Math.random() * 0.2,
+                baseColor: canopyColor,
+                random: Math.random,
+            });
             const palmMat = new THREE.MeshStandardMaterial({
-                color: foliageColor,
+                vertexColors: true,
                 metalness: 0.0,
-                roughness: 0.78,
+                roughness: 0.8,
                 transparent: true,
                 opacity: 1,
-                emissive: "#103224",
-                emissiveIntensity: 0.08
+                side: THREE.DoubleSide,
             });
+            const canopy = new THREE.Mesh(canopyGeometry, palmMat);
+            canopy.position.set(palmTopX, palmTopY, palmTopZ);
+            // Tilt the crown with the trunk's lean so the arc reads continuous.
+            canopy.rotation.set(trunkRotX * 1.2, Math.random() * Math.PI * 2, trunkRotZ * 1.2);
+            const palmFoliageHeight = frondLength * 0.8;
+            registerFoliageMesh(canopy, tree.x, tree.z, palmTopY, palmFoliageHeight, frondLength, trunkHeight, treePartMeshes);
 
-            const starShape = new THREE.Shape();
-            for (let p = 0; p <= starSpikes * 2; p++) {
-                const angle = (p / (starSpikes * 2)) * Math.PI * 2 - Math.PI / 2;
-                const radius = p % 2 === 0 ? starOuterRadius : starInnerRadius;
-                const sx = Math.cos(angle) * radius;
-                const sy = Math.sin(angle) * radius;
-                if (p === 0) {
-                    starShape.moveTo(sx, sy);
-                } else {
-                    starShape.lineTo(sx, sy);
-                }
-            }
-
-            const starGeometry = new THREE.ExtrudeGeometry(starShape, {
-                depth: starThickness,
-                bevelEnabled: false
-            });
-            starGeometry.center();
-            starGeometry.rotateX(-Math.PI / 2);
-
-            const starFoliage = new THREE.Mesh(starGeometry, palmMat);
-            const canopyTiltDir = Math.random() * Math.PI * 2;
-            const canopyTilt = THREE.MathUtils.degToRad(6 + Math.random() * 8);
-            const canopyTiltX = trunkRotX * 0.5 + Math.cos(canopyTiltDir) * canopyTilt;
-            const canopyTiltZ = trunkRotZ * 0.5 + Math.sin(canopyTiltDir) * canopyTilt;
-            starFoliage.position.set(palmTopX, fullFoliageY, palmTopZ);
-            starFoliage.rotation.set(canopyTiltX, Math.random() * Math.PI * 2, canopyTiltZ);
-            registerFoliageMesh(starFoliage, tree.x, tree.z, fullFoliageY, palmFoliageHeight, starOuterRadius, trunkHeight, treePartMeshes);
-
+            // Crown core hides the frond attachment seam.
             const crownCore = new THREE.Mesh(
-                new THREE.SphereGeometry(Math.max(0.07, foliageRadius * 0.14 * canopyScale), 7, 6),
-                palmMat
+                new THREE.SphereGeometry(Math.max(0.06, trunkRadius * 1.35), 7, 6),
+                new THREE.MeshStandardMaterial({ color: "#7a6648", metalness: 0.0, roughness: 0.95, transparent: true, opacity: 1 })
             );
-            crownCore.position.set(palmTopX, fullFoliageY + starThickness * 0.4, palmTopZ);
-            registerFoliageMesh(crownCore, tree.x, tree.z, fullFoliageY, palmFoliageHeight, starOuterRadius, trunkHeight, treePartMeshes);
+            crownCore.position.set(palmTopX, palmTopY + 0.02, palmTopZ);
+            registerFoliageMesh(crownCore, tree.x, tree.z, palmTopY, palmFoliageHeight, frondLength, trunkHeight, treePartMeshes);
+
+            // Coconut cluster tucked under the crown.
+            const coconutCount = 2 + Math.floor(Math.random() * 2);
+            for (let c = 0; c < coconutCount; c++) {
+                const coconutAngle = Math.random() * Math.PI * 2;
+                const coconutRadius = Math.max(0.05, trunkRadius * (0.85 + Math.random() * 0.3));
+                const coconut = new THREE.Mesh(
+                    new THREE.SphereGeometry(coconutRadius, 6, 5),
+                    new THREE.MeshStandardMaterial({ color: "#6b4e31", metalness: 0.0, roughness: 0.9, transparent: true, opacity: 1 })
+                );
+                const coconutY = palmTopY - trunkRadius * 1.2 - coconutRadius * 0.4;
+                coconut.position.set(
+                    palmTopX + Math.cos(coconutAngle) * trunkRadius * 1.5,
+                    coconutY,
+                    palmTopZ + Math.sin(coconutAngle) * trunkRadius * 1.5
+                );
+                registerFoliageMesh(coconut, tree.x, tree.z, coconutY, coconutRadius * 2, coconutRadius, trunkHeight, treePartMeshes);
+            }
+        } else if (treeType === "oak") {
+            // Oak: bushy canopy built from a main crown plus satellite clumps.
+            const canopyColor = jitterFoliageColor(foliageColor, tree.x + i, tree.z);
+            const canopyMat = new THREE.MeshStandardMaterial({ color: canopyColor, metalness: 0.0, roughness: 0.82, transparent: true, opacity: 1 });
+            const crownY = trunkHeight + foliageRadius * 0.7;  // Sphere engulfs top of trunk
+            const crown = new THREE.Mesh(new THREE.SphereGeometry(foliageRadius, 8, 6), canopyMat);
+            crown.position.set(centerX, crownY, centerZ);
+            crown.scale.y = 0.88;
+            registerFoliageMesh(crown, tree.x, tree.z, crownY, foliageHeight, foliageRadius, trunkHeight, treePartMeshes);
+
+            const clumpCount = 3;
+            for (let c = 0; c < clumpCount; c++) {
+                const clumpAngle = (c / clumpCount) * Math.PI * 2 + hashNoise(tree.x, tree.z, c * 13.7) * 1.2;
+                const clumpRadius = foliageRadius * (0.5 + hashNoise(tree.x, tree.z, c * 31.1) * 0.14);
+                const clumpDist = foliageRadius * 0.62;
+                const clumpColor = jitterFoliageColor(foliageColor, tree.x + c * 3.7, tree.z + c * 5.1);
+                const clumpMat = new THREE.MeshStandardMaterial({ color: clumpColor, metalness: 0.0, roughness: 0.85, transparent: true, opacity: 1 });
+                const clumpY = crownY + (hashNoise(tree.x, tree.z, c * 47.3) - 0.6) * foliageRadius * 0.5;
+                const clump = new THREE.Mesh(new THREE.SphereGeometry(clumpRadius, 7, 5), clumpMat);
+                clump.position.set(
+                    centerX + Math.cos(clumpAngle) * clumpDist,
+                    clumpY,
+                    centerZ + Math.sin(clumpAngle) * clumpDist
+                );
+                clump.scale.y = 0.82;
+                registerFoliageMesh(clump, tree.x, tree.z, clumpY, clumpRadius * 2, clumpRadius, trunkHeight, treePartMeshes);
+            }
         } else {
-            const foliageGeometry = treeType === "oak"
-                ? new THREE.SphereGeometry(foliageRadius, 8, 6)
-                : new THREE.ConeGeometry(foliageRadius, foliageHeight, 8);
-            const foliage = new THREE.Mesh(
-                foliageGeometry,
-                new THREE.MeshStandardMaterial({ color: foliageColor, metalness: 0.0, roughness: 0.8, transparent: true, opacity: 1 })
-            );
-            const fullFoliageY = treeType === "oak"
-                ? trunkHeight + foliageRadius * 0.7 // Sphere engulfs top of trunk
-                : trunkHeight + foliageHeight / 2;  // Cone base at trunk top
-            foliage.position.set(centerX, fullFoliageY, centerZ);
-            registerFoliageMesh(foliage, tree.x, tree.z, fullFoliageY, foliageHeight, foliageRadius, trunkHeight, treePartMeshes);
+            // Pine: three stacked cone tiers, darker toward the base.
+            const tierRadiusFactors = [1.0, 0.76, 0.5];
+            const tierHeightFactors = [0.5, 0.44, 0.4];
+            const tierBaseOffsets = [0, 0.3, 0.58];
+            const pineBaseColor = jitterFoliageColor(foliageColor, tree.x + i, tree.z);
+            for (let tier = 0; tier < tierRadiusFactors.length; tier++) {
+                const tierColor = new THREE.Color(pineBaseColor);
+                const tierHsl = { h: 0, s: 0, l: 0 };
+                tierColor.getHSL(tierHsl);
+                tierColor.setHSL(tierHsl.h, tierHsl.s, THREE.MathUtils.clamp(tierHsl.l - (tierRadiusFactors.length - 1 - tier) * 0.028, 0, 1));
+                const tierMat = new THREE.MeshStandardMaterial({ color: tierColor, metalness: 0.0, roughness: 0.8, transparent: true, opacity: 1 });
+                const tierHeight = foliageHeight * tierHeightFactors[tier];
+                const tierRadius = foliageRadius * tierRadiusFactors[tier];
+                const tierY = trunkHeight + foliageHeight * tierBaseOffsets[tier] + tierHeight / 2;
+                const cone = new THREE.Mesh(new THREE.ConeGeometry(tierRadius, tierHeight, 8), tierMat);
+                cone.position.set(centerX, tierY, centerZ);
+                cone.rotation.y = hashNoise(tree.x, tree.z, tier * 19.3) * Math.PI;
+                registerFoliageMesh(cone, tree.x, tree.z, tierY, tierHeight, tierRadius, trunkHeight, treePartMeshes);
+            }
         }
 
         if (treePartMeshes.length > 0) {
@@ -1203,7 +1293,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         const shadowRadius = treeType === "pine"
             ? foliageRadius * 0.9
             : treeType === "palm"
-                ? foliageRadius * 1.25
+                ? foliageRadius * 1.4
                 : foliageRadius * 0.99;
         const treeShadow = new THREE.Mesh(
             new THREE.CircleGeometry(shadowRadius, 16),
@@ -1232,9 +1322,11 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
     const wallMeshes: THREE.Mesh[] = [];
     computed.mergedObstacles.forEach((o, i) => {
         const shade = 0x5a677d + (i % 3) * 0x040404;
+        const wallMaterial = new THREE.MeshStandardMaterial({ color: shade, metalness: 0.12, roughness: 0.88, transparent: true, opacity: 1 });
+        applyStoneWallShader(wallMaterial);
         const mesh = new THREE.Mesh(
             new THREE.BoxGeometry(o.w, 2.5, o.h),
-            new THREE.MeshStandardMaterial({ color: shade, metalness: 0.2, roughness: 0.8, transparent: true, opacity: 1 })
+            wallMaterial
         );
         mesh.position.set(o.x + o.w / 2, 1.25, o.z + o.h / 2);
         mesh.name = "obstacle";
@@ -1402,9 +1494,11 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
             const { blockingWall } = secretDoor;
 
             // Create the blocking wall mesh (same style as other walls)
+            const secretWallMaterial = new THREE.MeshStandardMaterial({ color: 0x5a677d, metalness: 0.12, roughness: 0.88 });
+            applyStoneWallShader(secretWallMaterial);
             const wallMesh = new THREE.Mesh(
                 new THREE.BoxGeometry(blockingWall.w, 2.5, blockingWall.h),
-                new THREE.MeshStandardMaterial({ color: 0x5a677d, metalness: 0.2, roughness: 0.8 })
+                secretWallMaterial
             );
             wallMesh.position.set(
                 blockingWall.x + blockingWall.w / 2,
@@ -1528,42 +1622,46 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
 
     applyStaticRenderOrder(scene);
 
-    // Fog of war (scaled resolution for smoother edges with linear filtering)
+    // Fog of war - world-projected per-pixel darkening (no floating overlay
+    // plane). The cell canvas holds hard per-tile visibility; the display
+    // canvas is its blurred copy and is sampled by every environment material
+    // via the shared fog uniforms (see rendering/fogOfWar.ts).
+    const fogPadPx = FOG_EDGE_PAD_CELLS * FOG_SCALE;
+    const fogCellCanvas = document.createElement("canvas");
+    fogCellCanvas.width = area.gridWidth * FOG_SCALE + fogPadPx * 2;
+    fogCellCanvas.height = area.gridHeight * FOG_SCALE + fogPadPx * 2;
+    const fogCellCtx = fogCellCanvas.getContext("2d")!;
+    fogCellCtx.fillStyle = "#000";
+    fogCellCtx.fillRect(0, 0, fogCellCanvas.width, fogCellCanvas.height);
+
     const fogCanvas = document.createElement("canvas");
     fogCanvas.width = area.gridWidth * FOG_SCALE;
     fogCanvas.height = area.gridHeight * FOG_SCALE;
     const fogCtx = fogCanvas.getContext("2d")!;
     fogCtx.fillStyle = "#000";
-    fogCtx.fillRect(0, 0, area.gridWidth * FOG_SCALE, area.gridHeight * FOG_SCALE);
+    fogCtx.fillRect(0, 0, fogCanvas.width, fogCanvas.height);
+
     const fogTextureObj = new THREE.CanvasTexture(fogCanvas);
     fogTextureObj.magFilter = THREE.LinearFilter;
     fogTextureObj.minFilter = THREE.LinearFilter;
     fogTextureObj.colorSpace = THREE.NoColorSpace;
     fogTextureObj.generateMipmaps = false;
-    const fogTexture: FogTexture = { canvas: fogCanvas, ctx: fogCtx, texture: fogTextureObj };
+    fogTextureObj.flipY = false;  // Canvas row 0 = grid z 0; the shader maps v = worldZ / gridHeight
+    fogTextureObj.wrapS = THREE.ClampToEdgeWrapping;
+    fogTextureObj.wrapT = THREE.ClampToEdgeWrapping;
+    const fogTexture: FogTexture = {
+        canvas: fogCanvas,
+        ctx: fogCtx,
+        cellCanvas: fogCellCanvas,
+        cellCtx: fogCellCtx,
+        texture: fogTextureObj,
+    };
 
-    const fogMaterial = new THREE.MeshBasicMaterial({
-        map: fogTextureObj,
-        color: "#000000",
-        transparent: true,
-        opacity: 1,
-        depthWrite: false,
-        toneMapped: false,
-        fog: false,
-        blending: THREE.NormalBlending,
-        premultipliedAlpha: false
-    });
-    fogMaterial.depthTest = false;
-
-    const fogMesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(area.gridWidth, area.gridHeight),
-        fogMaterial
-    );
-    fogMesh.rotation.x = -Math.PI / 2;
-    fogMesh.position.set(area.gridWidth / 2, 2.6, area.gridHeight / 2);
-    fogMesh.renderOrder = RENDER_ORDER_FOG;
-    fogMesh.frustumCulled = false;
-    scene.add(fogMesh);
+    // Everything added to the scene up to this point is environment and gets
+    // fog-of-war darkening; rain, markers, and units are added afterwards and
+    // stay unaffected.
+    configureFogOfWar(fogTextureObj, area.gridWidth, area.gridHeight, area.hasFogOfWar === true);
+    applyFogOfWarToObject(scene);
 
     if (hasRainEffect) {
         const rainTexture = createRainTexture();
@@ -1668,7 +1766,6 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         candleMeshes,
         candleLights,
         fogTexture,
-        fogMesh,
         moveMarker,
         rangeIndicator,
         aoeIndicator,
@@ -1693,6 +1790,7 @@ export function createScene(container: HTMLDivElement, units: Unit[]): SceneRefs
         chestMeshes,
         billboards,
         hpBarGroups,
+        gridLines,
     };
 }
 

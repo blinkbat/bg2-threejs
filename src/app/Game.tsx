@@ -145,6 +145,7 @@ export function Game({
     const [fps, setFps] = useState(0);
     const [debug, setDebug] = useState(false);
     const [debugFogOfWarDisabled, setDebugFogOfWarDisabled] = useState(false);
+    const [debugGridLinesHidden, setDebugGridLinesHidden] = useState(false);
     const [fastMove, setFastMove] = useState(false);
     const [commandMode, setCommandMode] = useState<"attackMove" | null>(null);
     const [hotbarAssignments, setHotbarAssignments] = useState<HotbarAssignments>(loadHotbarAssignments);
@@ -1965,6 +1966,14 @@ export function Game({
         }
     }, [debug, sceneState.scene]);
 
+    // Debug: hide/show the subtle tile grid overlay. Re-applies on area
+    // transitions since the grid mesh is rebuilt with each new scene.
+    useEffect(() => {
+        const gridLines = sceneState.gridLines;
+        if (!gridLines) return;
+        gridLines.visible = !debugGridLinesHidden;
+    }, [debugGridLinesHidden, sceneState.gridLines]);
+
     // =============================================================================
     // SKILL HANDLERS
     // =============================================================================
@@ -2243,6 +2252,14 @@ export function Game({
             nextValue ? "#9b59b6" : "#888"
         );
     }, [addLog, debugFogOfWarDisabled]);
+    const handleToggleDebugGridLines = useCallback(() => {
+        const nextValue = !debugGridLinesHidden;
+        setDebugGridLinesHidden(nextValue);
+        addLog(
+            `Debug: Grid lines ${nextValue ? "hidden" : "restored"}.`,
+            nextValue ? "#9b59b6" : "#888"
+        );
+    }, [addLog, debugGridLinesHidden]);
     const handleToggleFastMove = useCallback(() => setFastMove(f => !f), []);
     const handleAttackMove = useCallback(() => setCommandMode("attackMove"), []);
     const handleClosePanel = useCallback(() => setShowPanel(false), []);
@@ -2381,6 +2398,7 @@ export function Game({
             currentDialogSpeaker={currentDialogSpeaker}
             debug={debug}
             debugFogOfWarDisabled={debugFogOfWarDisabled}
+            debugGridLinesHidden={debugGridLinesHidden}
             dialogChoiceOptions={dialogChoiceOptions}
             dialogVisibleText={dialogVisibleText}
             equipmentModalOpen={equipmentModalOpen}
@@ -2420,6 +2438,7 @@ export function Game({
             handleToggleAI={handleToggleAI}
             handleToggleDebug={handleToggleDebug}
             handleToggleDebugFogOfWar={handleToggleDebugFogOfWar}
+            handleToggleDebugGridLines={handleToggleDebugGridLines}
             handleToggleFastMove={handleToggleFastMove}
             handleToggleAutoPauseAllyKilled={handleToggleAutoPauseAllyKilled}
             handleToggleAutoPauseAllyNearDeath={handleToggleAutoPauseAllyNearDeath}

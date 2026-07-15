@@ -51,6 +51,7 @@ interface GameRenderLayerProps {
     currentDialogSpeaker: DialogSpeaker | null;
     debug: boolean;
     debugFogOfWarDisabled: boolean;
+    debugGridLinesHidden: boolean;
     dialogChoiceOptions: DialogChoiceOption[];
     dialogVisibleText: string;
     equipmentModalOpen: boolean;
@@ -123,6 +124,7 @@ interface GameRenderLayerProps {
     handleToggleAI: (id: number) => void;
     handleToggleDebug: () => void;
     handleToggleDebugFogOfWar: () => void;
+    handleToggleDebugGridLines: () => void;
     handleToggleFastMove: () => void;
     handleToggleAutoPauseAllyKilled: () => void;
     handleToggleAutoPauseAllyNearDeath: () => void;
@@ -195,6 +197,7 @@ export function GameRenderLayer({
     currentDialogSpeaker,
     debug,
     debugFogOfWarDisabled,
+    debugGridLinesHidden,
     dialogChoiceOptions,
     dialogVisibleText,
     equipmentModalOpen,
@@ -234,6 +237,7 @@ export function GameRenderLayer({
     handleToggleAI,
     handleToggleDebug,
     handleToggleDebugFogOfWar,
+    handleToggleDebugGridLines,
     handleToggleFastMove,
     handleToggleAutoPauseAllyKilled,
     handleToggleAutoPauseAllyNearDeath,
@@ -540,6 +544,8 @@ export function GameRenderLayer({
                 fastMoveEnabled={fastMove}
                 onToggleDebugFogOfWar={handleToggleDebugFogOfWar}
                 debugFogOfWarDisabled={debugFogOfWarDisabled}
+                onToggleDebugGridLines={handleToggleDebugGridLines}
+                debugGridLinesHidden={debugGridLinesHidden}
                 onToggleAutoPauseEnemySighted={handleToggleAutoPauseEnemySighted}
                 onToggleAutoPauseAllyNearDeath={handleToggleAutoPauseAllyNearDeath}
                 onToggleAutoPauseAllyKilled={handleToggleAutoPauseAllyKilled}

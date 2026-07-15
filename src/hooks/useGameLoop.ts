@@ -663,7 +663,7 @@ export function useGameLoop({
         }
 
         const {
-            scene, camera, renderer, flames, candleLights, fogTexture, fogMesh, moveMarker,
+            scene, camera, renderer, flames, candleLights, fogTexture, moveMarker,
             rangeIndicator, unitGroups, selectRings, targetRings, shieldIndicators,
             unitMeshes, unitOriginalColors, maxHp, wallMeshes, wallAttachments, treeMeshes, fogOccluderMeshes,
             columnMeshes, columnGroups, billboards, candleMeshes, waterMesh, rainOverlay,
@@ -964,14 +964,13 @@ export function useGameLoop({
             }
             const playerUnits = playerUnitsBuffer;
             let fogVisibilityChanged = false;
-            if (fogTexture && fogMesh) {
+            if (fogTexture) {
                 fogVisibilityChanged = updateFogOfWar(
                     refs.visibility,
                     playerUnits,
                     unitGroups,
                     fogTexture,
                     currentUnits,
-                    fogMesh,
                     debugFogOfWarDisabled
                 );
             }

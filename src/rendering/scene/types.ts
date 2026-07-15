@@ -52,7 +52,6 @@ export interface SceneRefs {
     candleMeshes: THREE.Mesh[];  // Candle body meshes for occlusion transparency
     candleLights: THREE.Light[];
     fogTexture: FogTexture;
-    fogMesh: THREE.Mesh;
     moveMarker: THREE.Mesh;
     rangeIndicator: THREE.Mesh;
     aoeIndicator: THREE.Mesh;
@@ -66,7 +65,7 @@ export interface SceneRefs {
     wallMeshes: THREE.Mesh[];
     wallAttachments: WallAttachmentMesh[];  // Vines/tapestries hung on wall faces
     treeMeshes: THREE.Mesh[];  // Tree foliage meshes for transparency
-    fogOccluderMeshes: THREE.Mesh[];  // Tall non-tree meshes clipped under unexplored fog
+    fogOccluderMeshes: THREE.Mesh[];  // Tall non-tree meshes hidden while unexplored
     columnMeshes: THREE.Mesh[];  // Column meshes for transparency
     columnGroups: THREE.Mesh[][];  // Groups of column parts (body, base, capital) that fade together
     doorMeshes: DoorMesh[];
@@ -77,4 +76,5 @@ export interface SceneRefs {
     chestMeshes: ChestMeshData[];  // Chest lid pivots for open/close animation
     billboards: THREE.Mesh[];  // Billboard meshes that face the camera
     hpBarGroups: Record<number, THREE.Group>;  // Player HP bar billboard groups
+    gridLines: THREE.LineSegments;  // Subtle tile grid overlay (toggleable via debug)
 }
